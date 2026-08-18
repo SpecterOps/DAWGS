@@ -199,6 +199,54 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 	require.Equal(t, canonical.declarationSHA256, confirmationSelection.DeclarationSHA256)
 }
 
+// TestSuffixReverseRetryV1OpenControlsStayFresh verifies the P1 development
+// roster has dedicated open identities for reverse-fan-in, no-path exhaustion,
+// and candidate-buffer byte retry. These controls must never borrow a frozen
+// orientation holdout merely because it has a superficially similar shape.
+func TestSuffixReverseRetryV1OpenControlsStayFresh(t *testing.T) {
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+
+	want := map[string]struct {
+		depth   int
+		fanIn   int
+		payload int
+		rows    int64
+	}{
+		"GFSE-P1-TRAIN-D09-F017-R0-X2-I1024-M1-Q1-high_reverse_fanin_path": {depth: 9, fanIn: 1024, rows: 1},
+		"GFSE-P1-TRAIN-D09-F513-R0-X512-no_path_exhaustion":                {depth: 9, rows: 0},
+		"GFSE-P1-TRAIN-D00-F001-R0-X0-M4-P2100000-output_byte_retry_path":  {depth: 0, payload: 2_100_000, rows: 4},
+	}
+	found := map[string]bool{}
+	for _, testCase := range corpus.Cases {
+		expectation, selected := want[testCase.Name]
+		if !selected {
+			continue
+		}
+		found[testCase.Name] = true
+		require.Contains(t, testCase.Tags, "suffix-reverse-retry-v1-training")
+		require.Contains(t, testCase.Tags, "p1-open")
+		require.NotContains(t, testCase.Tags, "holdout")
+		require.Equal(t, "training", testCase.Shape.QualificationSplit)
+		require.True(t, testCase.Observes.Paths)
+		require.True(t, testCase.Shape.PathMaterializationRequired)
+		require.NotNil(t, testCase.Expected.RowCount)
+		require.Equal(t, expectation.rows, *testCase.Expected.RowCount)
+		require.Len(t, testCase.Expected.PathRows, int(expectation.rows))
+
+		config, ok := parseFixedSuffixExpansionV2DatasetName(testCase.Dataset)
+		require.True(t, ok, testCase.Name)
+		require.Equal(t, expectation.depth, config.ExpansionDepth)
+		require.Equal(t, expectation.fanIn, config.ReverseFanIn)
+		require.Equal(t, expectation.payload, config.PropertyPayloadSize)
+	}
+	require.Equal(t, map[string]bool{
+		"GFSE-P1-TRAIN-D09-F017-R0-X2-I1024-M1-Q1-high_reverse_fanin_path": true,
+		"GFSE-P1-TRAIN-D09-F513-R0-X512-no_path_exhaustion":                true,
+		"GFSE-P1-TRAIN-D00-F001-R0-X0-M4-P2100000-output_byte_retry_path":  true,
+	}, found)
+}
+
 // TestEndpointSeededExpansionCorpusCoversGuardOutcomes verifies corpus representatives for admitted execution plus endpoint-guard and state-guard overflow fallbacks.
 func TestEndpointSeededExpansionCorpusCoversGuardOutcomes(t *testing.T) {
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")

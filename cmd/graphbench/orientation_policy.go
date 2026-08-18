@@ -25,6 +25,10 @@ func isSuffixReverseGuardPolicy(identity string) bool {
 	return optimize.ExpansionSearchPolicy(identity) == optimize.ExpansionSearchPolicySuffixReverseGuardV1
 }
 
+func isSuffixReverseRetryPolicy(identity string) bool {
+	return optimize.ExpansionSearchPolicy(identity) == optimize.ExpansionSearchPolicySuffixReverseRetryV1
+}
+
 // isGuardedExpansionPolicy recognizes same-statement ordinary-expansion
 // policies that must expose exactly one candidate or fallback runtime branch.
 func isGuardedExpansionPolicy(identity string) bool {

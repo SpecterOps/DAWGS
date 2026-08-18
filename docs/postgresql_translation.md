@@ -118,6 +118,13 @@ Current PostgreSQL optimization coverage includes:
   manifest, driver-policy, automatic-selector, or rollback path. The exact
   reverse executor and ordered-ID hydration remain reusable by a newly
   preregistered architecture.
+- `suffix-reverse-retry-v1` is that new tool-only development generation. Its
+  translated statement contains only the bounded reverse arm and a transaction-
+  local completion status. GraphBench buffers candidate output behind 4,096-row
+  and 16 MiB caps, uses a savepoint, and runs the independently translated exact
+  forward incumbent only after a declared overflow in the same Repeatable Read
+  transaction. Missing status and execution errors fail closed. No production
+  policy recognizes this identity.
 - Guarded endpoint-seeded expansion selection covers a separate
   `fixed_prefix_terminal_expansion` family: exactly one directed fixed prefix followed by one terminal, directed,
   single-kind variable expansion with minimum depth one and a local selective terminal predicate. Production emits

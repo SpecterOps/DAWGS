@@ -1498,6 +1498,33 @@ func TestParseConfigValidatesSuffixReverseGuardMeasurementMode(t *testing.T) {
 	}
 }
 
+func TestParseConfigValidatesSuffixReverseRetryMeasurementMode(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-postgres-expansion-suffix-reverse-retry",
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", "diagnostic",
+		"-postgres-suffix-guard-suffix-limit", "64",
+		"-postgres-suffix-guard-state-limit", "128",
+		"-postgres-suffix-retry-output-row-limit", "256",
+		"-postgres-suffix-retry-output-bytes-limit", "1048576",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.PostgresExpansionSuffixReverseRetry)
+	require.Equal(t, int64(256), cfg.PostgresSuffixRetryOutputRowLimit)
+	require.Equal(t, int64(1048576), cfg.PostgresSuffixRetryOutputBytesLimit)
+
+	for _, args := range [][]string{
+		{"-postgres-expansion-suffix-reverse-retry"},
+		{"-postgres-expansion-suffix-reverse-retry", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "summary"},
+		{"-postgres-expansion-suffix-reverse-retry", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-pool-size", "2"},
+		{"-postgres-suffix-retry-output-row-limit", "1"},
+		{"-postgres-expansion-suffix-reverse-retry", "-postgres-expansion-suffix-reverse-guard", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
 // bidirectionalCaseTelemetry prepares or inspects test evidence for bidirectional case telemetry.
 func bidirectionalCaseTelemetry(t *testing.T, level TraversalTelemetryLevel) *TraversalExecutionTelemetry {
 	t.Helper()

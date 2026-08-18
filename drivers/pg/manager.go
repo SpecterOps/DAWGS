@@ -234,7 +234,7 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 		return err
 	} else {
 		defer conn.Release()
-		if stableSnapshotIsolation(cfg.Options.IsoLevel) {
+		if stableSnapshotIsolation(cfg.Options.IsoLevel) && !cfg.skipStableSnapshotTraversalWorkspaces {
 			if err := initializeStableSnapshotTraversalWorkspaces(ctx, conn); err != nil {
 				return err
 			}

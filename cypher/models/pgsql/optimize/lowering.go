@@ -677,6 +677,11 @@ const (
 	// degree probes.
 	ExpansionSearchPolicySuffixReverseGuardV1 ExpansionSearchPolicy = "suffix-reverse-guard-v1"
 
+	// ExpansionSearchPolicySuffixReverseRetryV1 identifies the probe-free,
+	// reverse-only fixed-suffix candidate whose exact forward fallback executes
+	// as a second statement in the same stable-snapshot transaction.
+	ExpansionSearchPolicySuffixReverseRetryV1 ExpansionSearchPolicy = "suffix-reverse-retry-v1"
+
 	// ExpansionSearchSelectorFixedSuffixPathV1 identifies the tool-only static
 	// selector for full-path fixed-suffix observations.
 	ExpansionSearchSelectorFixedSuffixPathV1 = "fixed-suffix-path-static-v1"
@@ -688,6 +693,14 @@ const (
 	// ExpansionSearchSuffixReverseGuardStateLimit caps complete reverse recursive
 	// state before exact forward fallback is selected.
 	ExpansionSearchSuffixReverseGuardStateLimit int64 = 512
+
+	// ExpansionSearchSuffixReverseRetryOutputRowLimit caps candidate rows buffered
+	// before the transaction-local retry boundary exposes any result.
+	ExpansionSearchSuffixReverseRetryOutputRowLimit int64 = 4_096
+
+	// ExpansionSearchSuffixReverseRetryOutputBytesLimit caps the encoded candidate
+	// payload buffered by the PostgreSQL driver before exact forward retry.
+	ExpansionSearchSuffixReverseRetryOutputBytesLimit int64 = 16 * 1024 * 1024
 
 	// ExpansionSearchOrientationRootRowLimit caps complete forward-root evidence
 	// for the initial fixed-suffix orientation tournament.
@@ -727,6 +740,10 @@ const (
 	// ExpansionSearchExecutionBoundaryGuardedDualArm identifies a
 	// same-statement expansion policy with exact candidate and fallback arms.
 	ExpansionSearchExecutionBoundaryGuardedDualArm = "guarded_dual_arm"
+
+	// ExpansionSearchExecutionBoundaryTransactionRetry identifies a reverse-only
+	// statement plus exact incumbent retry inside one stable-snapshot transaction.
+	ExpansionSearchExecutionBoundaryTransactionRetry = "transaction_retry"
 )
 
 // ExpansionSearchProbeCaps records the maximum complete evidence admitted by
@@ -747,6 +764,10 @@ type ExpansionSearchProbeCaps struct {
 type ExpansionSearchAdmission struct {
 	// StateLimit caps specialized search state before incumbent fallback.
 	StateLimit int64 `json:"state_limit,omitempty"`
+	// OutputRowLimit caps candidate rows buffered before publication.
+	OutputRowLimit int64 `json:"output_row_limit,omitempty"`
+	// OutputBytesLimit caps the encoded candidate payload buffered before publication.
+	OutputBytesLimit int64 `json:"output_bytes_limit,omitempty"`
 	// RequiresCompleteProbes requires every candidate input probe to remain at
 	// or below its declared cap before specialized rows may be exposed.
 	RequiresCompleteProbes bool `json:"requires_complete_probes,omitempty"`

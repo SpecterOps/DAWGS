@@ -112,16 +112,54 @@ func TestSuffixReverseGuardToolCapsAreExplicit(t *testing.T) {
 	require.Contains(t, formatted, "offset 11")
 }
 
+// TestSuffixReverseRetryEmitsOnlyBoundedCandidate verifies the P1 development
+// statement contains no incumbent body and reports a transaction-local status
+// before any buffered row can be published.
+func TestSuffixReverseRetryEmitsOnlyBoundedCandidate(t *testing.T) {
+	translation, formatted := translateSuffixReverseGuard(t, guardedSuffixOrientationQuery, ToolOptions{
+		EnableExpansionSuffixReverseRetry: true,
+	})
+	decision := translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0]
+	require.Equal(t, optimize.ExpansionSearchPolicySuffixReverseRetryV1, decision.PlannedPolicy)
+	require.Equal(t, optimize.ExpansionSearchPolicySuffixReverseRetryV1, decision.EmittedPolicy)
+	require.Equal(t, "transaction_retry_tool", decision.SelectionMode)
+	require.Equal(t, optimize.ExpansionSearchExecutionBoundaryTransactionRetry, decision.ExecutionBoundary)
+	require.Equal(t, optimize.ExpansionSearchSuffixSeededReverse, decision.SelectedStrategy)
+	require.Equal(t, []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}, decision.EmittedCandidates)
+	require.Equal(t, optimize.ExpansionSearchAdmission{
+		StateLimit:             optimize.ExpansionSearchSuffixReverseGuardStateLimit,
+		OutputRowLimit:         optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit,
+		OutputBytesLimit:       optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit,
+		RequiresCompleteProbes: true,
+		FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
+	}, decision.Admission)
+	require.Contains(t, formatted, "set_config('dawgs.suffix_reverse_retry_status'")
+	require.Contains(t, formatted, "forward_retry_suffix_overflow")
+	require.Contains(t, formatted, "forward_retry_state_overflow")
+	require.Contains(t, formatted, "reverse_complete")
+	require.Contains(t, formatted, "limit 4097")
+	require.Contains(t, formatted, "_suffix_guard_candidate_body")
+	require.NotContains(t, formatted, "_suffix_guard_fallback_body")
+	require.NotContains(t, formatted, "_suffix_guard_fallback_rows")
+}
+
 // TestSuffixReverseGuardRejectsEndpointOnlyObservation verifies that endpoint
 // cases remain on the incumbent and cannot be silently enrolled by tooling.
 func TestSuffixReverseGuardRejectsEndpointOnlyObservation(t *testing.T) {
 	query := strings.Replace(guardedSuffixOrientationQuery, "RETURN path", "RETURN id(terminal)", 1)
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), query)
 	require.NoError(t, err)
-	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
-		"root_key": "suffix-guard-endpoint",
-	}, DefaultGraphID, ToolOptions{EnableExpansionSuffixReverseGuard: true})
-	require.ErrorContains(t, err, "no statically eligible full-path fixed-suffix target")
+	for name, options := range map[string]ToolOptions{
+		"guard": {EnableExpansionSuffixReverseGuard: true},
+		"retry": {EnableExpansionSuffixReverseRetry: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+				"root_key": "suffix-guard-endpoint",
+			}, DefaultGraphID, options)
+			require.ErrorContains(t, err, "statically eligible full-path fixed-suffix target")
+		})
+	}
 
 	incumbent, err := Translate(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
 		"root_key": "suffix-guard-endpoint",
@@ -138,10 +176,17 @@ func TestSuffixReverseGuardRejectsMutation(t *testing.T) {
 	query := strings.Replace(guardedSuffixOrientationQuery, "RETURN path", "CREATE (created) RETURN path", 1)
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), query)
 	require.NoError(t, err)
-	_, err = TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
-		"root_key": "suffix-guard-mutation",
-	}, DefaultGraphID, ToolOptions{EnableExpansionSuffixReverseGuard: true})
-	require.ErrorContains(t, err, "no statically eligible full-path fixed-suffix target")
+	for name, options := range map[string]ToolOptions{
+		"guard": {EnableExpansionSuffixReverseGuard: true},
+		"retry": {EnableExpansionSuffixReverseRetry: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+				"root_key": "suffix-guard-mutation",
+			}, DefaultGraphID, options)
+			require.ErrorContains(t, err, "statically eligible full-path fixed-suffix target")
+		})
+	}
 }
 
 // TestSuffixReverseGuardTemplateIsParameterStable verifies that tool policy
@@ -178,9 +223,15 @@ func TestSuffixReverseGuardOptionsAreIsolated(t *testing.T) {
 			EnableExpansionSuffixReverseGuard: true,
 			ForceExpansionSearchStrategy:      optimize.ExpansionSearchSuffixSeededReverse,
 		},
+		{
+			EnableExpansionSuffixReverseGuard: true,
+			EnableExpansionSuffixReverseRetry: true,
+		},
 		{SuffixReverseGuardSuffixRowLimit: 1},
 		{EnableExpansionSuffixReverseGuard: true, SuffixReverseGuardSuffixRowLimit: -1},
 		{EnableExpansionSuffixReverseGuard: true, SuffixReverseGuardStateLimit: -1},
+		{EnableExpansionSuffixReverseRetry: true, SuffixReverseRetryOutputRowLimit: -1},
+		{EnableExpansionSuffixReverseRetry: true, SuffixReverseRetryOutputBytesLimit: -1},
 	} {
 		planCopy := plan
 		require.Error(t, applyToolOptions(&planCopy, options))

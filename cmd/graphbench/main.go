@@ -168,10 +168,17 @@ type config struct {
 	// PostgresExpansionSuffixReverseGuard executes the static, full-path-only
 	// suffix-reverse guard and its exact forward fallback in one statement.
 	PostgresExpansionSuffixReverseGuard bool
+	// PostgresExpansionSuffixReverseRetry executes the reverse-only P1 candidate
+	// with exact forward retry in the same Repeatable Read transaction.
+	PostgresExpansionSuffixReverseRetry bool
 	// PostgresSuffixGuardSuffixLimit overrides the tool-only cap+1 suffix payload limit.
 	PostgresSuffixGuardSuffixLimit int64
 	// PostgresSuffixGuardStateLimit overrides the tool-only cap+1 reverse-state limit.
 	PostgresSuffixGuardStateLimit int64
+	// PostgresSuffixRetryOutputRowLimit overrides the buffered output-row cap.
+	PostgresSuffixRetryOutputRowLimit int64
+	// PostgresSuffixRetryOutputBytesLimit overrides the buffered output-byte cap.
+	PostgresSuffixRetryOutputBytesLimit int64
 	// ConfirmLeft selects the left artifact used for paired confirmation.
 	ConfirmLeft string
 	// ConfirmRight selects the right artifact used for paired confirmation.
@@ -457,8 +464,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.PostgresExpansionOrientationTournament, "postgres-expansion-orientation-tournament", false, "tool-only guarded orientation-probe mode; executes the selected exact arm")
 	flags.StringVar(&cfg.PostgresExpansionOrientationPolicy, "postgres-expansion-orientation-policy", "", "tool-only immutable orientation policy (orientation-probe-v1 or orientation-probe-v2; default: v1)")
 	flags.BoolVar(&cfg.PostgresExpansionSuffixReverseGuard, "postgres-expansion-suffix-reverse-guard", false, "tool-only full-path suffix-reverse guard with exact forward fallback")
+	flags.BoolVar(&cfg.PostgresExpansionSuffixReverseRetry, "postgres-expansion-suffix-reverse-retry", false, "tool-only reverse-only fixed-suffix candidate with same-transaction exact forward retry")
 	flags.Int64Var(&cfg.PostgresSuffixGuardSuffixLimit, "postgres-suffix-guard-suffix-limit", 0, "tool-only suffix payload cap override (0 uses the immutable policy default)")
 	flags.Int64Var(&cfg.PostgresSuffixGuardStateLimit, "postgres-suffix-guard-state-limit", 0, "tool-only reverse-state cap override (0 uses the immutable policy default)")
+	flags.Int64Var(&cfg.PostgresSuffixRetryOutputRowLimit, "postgres-suffix-retry-output-row-limit", 0, "tool-only retry candidate output-row cap override (0 uses the immutable policy default)")
+	flags.Int64Var(&cfg.PostgresSuffixRetryOutputBytesLimit, "postgres-suffix-retry-output-bytes-limit", 0, "tool-only retry candidate output-byte cap override (0 uses the immutable policy default)")
 	flags.StringVar(&cfg.ConfirmLeft, "confirm-left", "", "left JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmRight, "confirm-right", "", "right JSONL artifact for paired confirmation mode")
 	flags.StringVar(&cfg.ConfirmAA, "confirm-aa", "", "optional block/reload A/A resolution report")
@@ -1160,20 +1170,36 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if orientationMode && (cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "") {
 		return config{}, fmt.Errorf("PostgreSQL expansion orientation and forced traversal selectors are mutually exclusive")
 	}
-	if cfg.PostgresExpansionSuffixReverseGuard && (orientationMode || cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "" || cfg.PostgresProductionManifest != "") {
-		return config{}, fmt.Errorf("PostgreSQL suffix-reverse guard is mutually exclusive with orientation, forced traversal, and production-manifest selectors")
+	suffixMode := cfg.PostgresExpansionSuffixReverseGuard || cfg.PostgresExpansionSuffixReverseRetry
+	if cfg.PostgresExpansionSuffixReverseGuard && cfg.PostgresExpansionSuffixReverseRetry {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse guard and transaction retry modes are mutually exclusive")
 	}
-	if !cfg.PostgresExpansionSuffixReverseGuard && (cfg.PostgresSuffixGuardSuffixLimit != 0 || cfg.PostgresSuffixGuardStateLimit != 0) {
-		return config{}, fmt.Errorf("PostgreSQL suffix-guard cap overrides require postgres-expansion-suffix-reverse-guard")
+	if suffixMode && (orientationMode || cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "" || cfg.PostgresProductionManifest != "") {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse modes are mutually exclusive with orientation, forced traversal, and production-manifest selectors")
 	}
-	if cfg.PostgresSuffixGuardSuffixLimit < 0 || cfg.PostgresSuffixGuardStateLimit < 0 {
-		return config{}, fmt.Errorf("PostgreSQL suffix-guard cap overrides must not be negative")
+	if !suffixMode && (cfg.PostgresSuffixGuardSuffixLimit != 0 || cfg.PostgresSuffixGuardStateLimit != 0) {
+		return config{}, fmt.Errorf("PostgreSQL suffix cap overrides require a suffix-reverse mode")
 	}
-	if cfg.PostgresExpansionSuffixReverseGuard && !cfg.PostgresRepeatableRead {
-		return config{}, fmt.Errorf("PostgreSQL suffix-reverse guard measurements require postgres-repeatable-read")
+	if !cfg.PostgresExpansionSuffixReverseRetry && (cfg.PostgresSuffixRetryOutputRowLimit != 0 || cfg.PostgresSuffixRetryOutputBytesLimit != 0) {
+		return config{}, fmt.Errorf("PostgreSQL suffix retry output caps require postgres-expansion-suffix-reverse-retry")
+	}
+	if cfg.PostgresSuffixGuardSuffixLimit < 0 || cfg.PostgresSuffixGuardStateLimit < 0 || cfg.PostgresSuffixRetryOutputRowLimit < 0 || cfg.PostgresSuffixRetryOutputBytesLimit < 0 {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse cap overrides must not be negative")
+	}
+	if suffixMode && !cfg.PostgresRepeatableRead {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse measurements require postgres-repeatable-read")
 	}
 	if cfg.PostgresExpansionSuffixReverseGuard && cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryDiagnostic {
 		return config{}, fmt.Errorf("PostgreSQL suffix-reverse guard measurements require diagnostic traversal telemetry")
+	}
+	if cfg.PostgresExpansionSuffixReverseRetry && cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryDiagnostic {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse retry measurements require diagnostic traversal telemetry")
+	}
+	if cfg.PostgresExpansionSuffixReverseRetry && cfg.PoolSize != 1 {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse retry measurements require pool-size 1 for exact runtime receipts")
+	}
+	if cfg.PostgresExpansionSuffixReverseRetry && (cfg.PostgresReferences || len(cfg.Concurrency) != 0) {
+		return config{}, fmt.Errorf("PostgreSQL suffix-reverse retry development captures do not support reference or concurrency side measurements")
 	}
 	if cfg.PostgresExpansionOrientationPolicy != "" && !orientationMode {
 		return config{}, fmt.Errorf("PostgreSQL expansion orientation policy requires shadow or tournament mode")
@@ -1873,8 +1899,11 @@ func main() {
 			runner.toolOptions.EnableExpansionOrientationTournament = cfg.PostgresExpansionOrientationTournament
 			runner.toolOptions.ExpansionOrientationPolicy = optimize.ExpansionSearchPolicy(cfg.PostgresExpansionOrientationPolicy)
 			runner.toolOptions.EnableExpansionSuffixReverseGuard = cfg.PostgresExpansionSuffixReverseGuard
+			runner.toolOptions.EnableExpansionSuffixReverseRetry = cfg.PostgresExpansionSuffixReverseRetry
 			runner.toolOptions.SuffixReverseGuardSuffixRowLimit = cfg.PostgresSuffixGuardSuffixLimit
 			runner.toolOptions.SuffixReverseGuardStateLimit = cfg.PostgresSuffixGuardStateLimit
+			runner.toolOptions.SuffixReverseRetryOutputRowLimit = cfg.PostgresSuffixRetryOutputRowLimit
+			runner.toolOptions.SuffixReverseRetryOutputBytesLimit = cfg.PostgresSuffixRetryOutputBytesLimit
 			if err := runner.setProductionManifest(cfg.PostgresProductionManifest); err != nil {
 				_ = runner.Close(ctx)
 				fatal("configure PostgreSQL production candidate: %v", err)

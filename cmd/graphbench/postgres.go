@@ -795,28 +795,54 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			if translateErr != nil {
 				err = translateErr
 			} else {
-				requestedIdentity := timedRuntimeAttestationIdentity(translation)
-				if requestedIdentity == "" {
-					if len(readOptions) == 0 {
-						rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+				measurementDB := s.db
+				if s.toolOptions.EnableExpansionSuffixReverseRetry {
+					fallbackTranslation, fallbackSQL, fallbackErr := s.translateIncumbentCypher(ctx, testCase.Cypher, params)
+					if fallbackErr != nil {
+						err = fallbackErr
 					} else {
-						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, readOptions...)
+						decision, found := suffixReverseRetryDecision(translation)
+						if !found {
+							err = fmt.Errorf("suffix reverse retry translation did not expose one retry decision")
+						} else {
+							measurementDB = &suffixReverseRetryDatabase{
+								Database:            s.db,
+								candidateSQL:        sqlQuery,
+								fallbackSQL:         fallbackSQL,
+								candidateParameters: translation.Parameters,
+								fallbackParameters:  fallbackTranslation.Parameters,
+								limits: pg.SuffixReverseRetryLimits{
+									OutputRows:  decision.Admission.OutputRowLimit,
+									OutputBytes: decision.Admission.OutputBytesLimit,
+								},
+							}
+						}
 					}
-				} else if s.poolSize != 1 {
-					// Exact per-sample receipts require one physical session. Larger
-					// pools remain useful for operational smoke testing, but their
-					// samples intentionally lack promotion-grade attestation.
-					if len(readOptions) == 0 {
-						rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+				}
+				if err == nil {
+					requestedIdentity := timedRuntimeAttestationIdentity(translation)
+					if requestedIdentity == "" {
+						if len(readOptions) == 0 {
+							rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, measurementDB, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+						} else {
+							rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, measurementDB, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, readOptions...)
+						}
+					} else if s.poolSize != 1 {
+						// Exact per-sample receipts require one physical session. Larger
+						// pools remain useful for operational smoke testing, but their
+						// samples intentionally lack promotion-grade attestation.
+						if len(readOptions) == 0 {
+							rowCount, observedRows, stats, err = measureRawSQLWithWarmups(ctx, measurementDB, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations)
+						} else {
+							rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, measurementDB, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, readOptions...)
+						}
+					} else if attestor, attestorErr := newPostgresTimedReadAttestor(s.pool, s.poolSize, requestedIdentity); attestorErr != nil {
+						err = attestorErr
+					} else if len(readOptions) == 0 {
+						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestation(ctx, measurementDB, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor)
 					} else {
-						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, readOptions...)
+						rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestationOptions(ctx, measurementDB, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor, readOptions...)
 					}
-				} else if attestor, attestorErr := newPostgresTimedReadAttestor(s.pool, s.poolSize, requestedIdentity); attestorErr != nil {
-					err = attestorErr
-				} else if len(readOptions) == 0 {
-					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestation(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor)
-				} else {
-					rowCount, observedRows, stats, err = measureRawSQLWithWarmupsAndAttestationOptions(ctx, s.db, sqlQuery, translation.Parameters, testCase.Expected, idMap, warmupIterations, iterations, attestor, readOptions...)
 				}
 			}
 		}
@@ -1004,7 +1030,11 @@ func (s *postgresSQLRunner) readTransactionOptions() []graph.TransactionOption {
 	if s.productionManifest == nil && !s.repeatableRead {
 		return nil
 	}
-	return []graph.TransactionOption{pg.OptionSetTransactionIsolation(pgx.RepeatableRead)}
+	options := []graph.TransactionOption{pg.OptionSetTransactionIsolation(pgx.RepeatableRead)}
+	if s.toolOptions.EnableExpansionSuffixReverseRetry {
+		options = append(options, pg.OptionSkipStableSnapshotTraversalWorkspacesForTool())
+	}
+	return options
 }
 
 // timedRuntimeAttestationIdentity derives the stable identity used to compare timed runtime attestation.
@@ -1026,7 +1056,8 @@ func timedRuntimeAttestationIdentity(translation translate.Result) string {
 		isV2GraphBenchExecutor(requested) ||
 		requested == string(optimize.ShortestPathExecutorASPI1DAG) ||
 		isOrientationProbePolicy(outcome.EmittedPolicy) ||
-		isSuffixReverseGuardPolicy(outcome.EmittedPolicy) {
+		isSuffixReverseGuardPolicy(outcome.EmittedPolicy) ||
+		isSuffixReverseRetryPolicy(outcome.EmittedPolicy) {
 		return requested
 	}
 	return ""
@@ -1173,6 +1204,35 @@ func (s *postgresSQLRunner) translateCypher(ctx context.Context, cypherQuery str
 	return translation, sqlQuery, nil
 }
 
+func (s *postgresSQLRunner) translateIncumbentCypher(ctx context.Context, cypherQuery string, params map[string]any) (translate.Result, string, error) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+	if err != nil {
+		return translate.Result{}, "", err
+	}
+	translation, err := translate.Translate(ctx, regularQuery, s.pgDriver.KindMapper(), params, s.graphID)
+	if err != nil {
+		return translate.Result{}, "", err
+	}
+	formatted, err := translate.Translated(translation)
+	return translation, formatted, err
+}
+
+func suffixReverseRetryDecision(translation translate.Result) (optimize.ExpansionSearchStrategyDecision, bool) {
+	if translation.Optimization.LoweringPlan == nil {
+		return optimize.ExpansionSearchStrategyDecision{}, false
+	}
+	var selected []optimize.ExpansionSearchStrategyDecision
+	for _, decision := range translation.Optimization.LoweringPlan.ExpansionSearchStrategy {
+		if decision.EmittedPolicy == optimize.ExpansionSearchPolicySuffixReverseRetryV1 {
+			selected = append(selected, decision)
+		}
+	}
+	if len(selected) != 1 {
+		return optimize.ExpansionSearchStrategyDecision{}, false
+	}
+	return selected[0], true
+}
+
 // verifyProductionManifestSQLAnchor permits an unanchored preflight and makes
 // every subsequent provisional-manifest capture fail before SQL execution when
 // production translation drifts from the frozen operational statement.
@@ -1197,7 +1257,8 @@ func hasForcedToolOptions(options translate.ToolOptions) bool {
 		options.GuardedDistanceStateLimit != 0 || options.GuardedDistanceFrontierLimit != 0 ||
 		options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow ||
 		options.ExpansionOrientationPolicy != "" || options.EnableExpansionSuffixReverseGuard ||
-		options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0
+		options.EnableExpansionSuffixReverseRetry || options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0 ||
+		options.SuffixReverseRetryOutputRowLimit != 0 || options.SuffixReverseRetryOutputBytesLimit != 0
 }
 
 // encodePostgresPlanJSON normalizes byte, string, or structured EXPLAIN JSON into json.RawMessage.

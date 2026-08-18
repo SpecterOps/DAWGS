@@ -39,6 +39,10 @@ type Config struct {
 
 	// initializeTraversalRuntimeAttestation indicates whether initialize traversal runtime attestation applies.
 	initializeTraversalRuntimeAttestation bool
+
+	// skipStableSnapshotTraversalWorkspaces prevents ordinary-expansion tool
+	// studies from paying unrelated SP/ASP temporary-workspace setup.
+	skipStableSnapshotTraversalWorkspaces bool
 }
 
 // OptionSetQueryExecMode classifies option set query exec mode for downstream policy decisions.
@@ -77,6 +81,17 @@ func OptionInitializeTraversalRuntimeAttestation() graph.TransactionOption {
 	return func(config *graph.TransactionConfig) {
 		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
 			pgCfg.initializeTraversalRuntimeAttestation = true
+		}
+	}
+}
+
+// OptionSkipStableSnapshotTraversalWorkspacesForTool keeps a Repeatable Read
+// ordinary-expansion measurement free of unrelated shortest-path workspace
+// setup. It is intentionally tool-scoped and does not alter production policy.
+func OptionSkipStableSnapshotTraversalWorkspacesForTool() graph.TransactionOption {
+	return func(config *graph.TransactionConfig) {
+		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
+			pgCfg.skipStableSnapshotTraversalWorkspaces = true
 		}
 	}
 }

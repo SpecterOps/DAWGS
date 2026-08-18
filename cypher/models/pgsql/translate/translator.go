@@ -1377,12 +1377,22 @@ type ToolOptions struct {
 	// execution with exact stepwise-forward fallback for one statically eligible
 	// full-path observation. It is deliberately tool-only during qualification.
 	EnableExpansionSuffixReverseGuard bool
+	// EnableExpansionSuffixReverseRetry emits only the bounded fixed-suffix
+	// reverse candidate. The PostgreSQL tool transaction owns exact forward
+	// retry; this option never installs a production selector.
+	EnableExpansionSuffixReverseRetry bool
 	// SuffixReverseGuardSuffixRowLimit overrides the tool-only fixed-suffix
 	// payload cap. Zero selects ExpansionSearchSuffixReverseGuardSuffixRowLimit.
 	SuffixReverseGuardSuffixRowLimit int64
 	// SuffixReverseGuardStateLimit overrides the tool-only reverse-state cap.
 	// Zero selects ExpansionSearchSuffixReverseGuardStateLimit.
 	SuffixReverseGuardStateLimit int64
+	// SuffixReverseRetryOutputRowLimit caps buffered candidate rows. Zero selects
+	// ExpansionSearchSuffixReverseRetryOutputRowLimit.
+	SuffixReverseRetryOutputRowLimit int64
+	// SuffixReverseRetryOutputBytesLimit caps buffered candidate bytes. Zero
+	// selects ExpansionSearchSuffixReverseRetryOutputBytesLimit.
+	SuffixReverseRetryOutputBytesLimit int64
 	// DisableEndpointSeededReverse is an emergency production rollback switch.
 	DisableEndpointSeededReverse bool
 }
@@ -1709,17 +1719,21 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if options.EnableExpansionOrientationTournament && options.EnableExpansionOrientationShadow {
 		return fmt.Errorf("expansion orientation tournament and shadow modes are mutually exclusive")
 	}
-	if options.EnableExpansionSuffixReverseGuard && (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) {
-		return fmt.Errorf("expansion suffix reverse guard and orientation modes are mutually exclusive")
+	suffixMode := options.EnableExpansionSuffixReverseGuard || options.EnableExpansionSuffixReverseRetry
+	if suffixMode && (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) {
+		return fmt.Errorf("expansion suffix reverse modes and orientation modes are mutually exclusive")
 	}
 	if (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) && options.ForceExpansionSearchStrategy != "" {
 		return fmt.Errorf("expansion orientation policy and forced expansion-search strategy are mutually exclusive")
 	}
-	if options.EnableExpansionSuffixReverseGuard && options.ForceExpansionSearchStrategy != "" {
-		return fmt.Errorf("expansion suffix reverse guard and forced expansion-search strategy are mutually exclusive")
+	if suffixMode && options.ForceExpansionSearchStrategy != "" {
+		return fmt.Errorf("expansion suffix reverse modes and forced expansion-search strategy are mutually exclusive")
 	}
-	if !options.EnableExpansionSuffixReverseGuard && (options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0) {
-		return fmt.Errorf("expansion suffix reverse guard caps require the guard to be enabled")
+	if !suffixMode && (options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0) {
+		return fmt.Errorf("expansion suffix reverse caps require a suffix mode to be enabled")
+	}
+	if !options.EnableExpansionSuffixReverseRetry && (options.SuffixReverseRetryOutputRowLimit != 0 || options.SuffixReverseRetryOutputBytesLimit != 0) {
+		return fmt.Errorf("expansion suffix reverse retry output caps require retry to be enabled")
 	}
 	if options.GuardedDistanceStateLimit != 0 || options.GuardedDistanceFrontierLimit != 0 {
 		if !isGuardedDistanceExecutor(options.ForceShortestPathExecutor) {
@@ -1765,10 +1779,77 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if options.EnableExpansionOrientationShadow {
 		return applyExpansionOrientationShadowPolicy(plan, orientationPolicy)
 	}
+	if options.EnableExpansionSuffixReverseGuard && options.EnableExpansionSuffixReverseRetry {
+		return fmt.Errorf("expansion suffix reverse guard and transaction retry are mutually exclusive")
+	}
 	if options.EnableExpansionSuffixReverseGuard {
 		return applyExpansionSuffixReverseGuardPolicy(plan, options.SuffixReverseGuardSuffixRowLimit, options.SuffixReverseGuardStateLimit)
 	}
+	if options.EnableExpansionSuffixReverseRetry {
+		return applyExpansionSuffixReverseRetryPolicy(
+			plan,
+			options.SuffixReverseGuardSuffixRowLimit,
+			options.SuffixReverseGuardStateLimit,
+			options.SuffixReverseRetryOutputRowLimit,
+			options.SuffixReverseRetryOutputBytesLimit,
+		)
+	}
 	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
+}
+
+// applyExpansionSuffixReverseRetryPolicy selects one reverse-only full-path
+// candidate. Exact forward fallback is deliberately absent from emitted SQL;
+// the PostgreSQL tool transaction executes it only after a complete overflow.
+func applyExpansionSuffixReverseRetryPolicy(plan *optimize.Plan, suffixRowLimit, stateLimit, outputRowLimit, outputBytesLimit int64) error {
+	if suffixRowLimit == 0 {
+		suffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
+	}
+	if stateLimit == 0 {
+		stateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
+	}
+	if outputRowLimit == 0 {
+		outputRowLimit = optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit
+	}
+	if outputBytesLimit == 0 {
+		outputBytesLimit = optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit
+	}
+	if suffixRowLimit <= 0 || stateLimit <= 0 || outputRowLimit <= 0 || outputBytesLimit <= 0 {
+		return fmt.Errorf("expansion suffix reverse retry requires positive suffix, state, output-row, and output-byte limits")
+	}
+
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family == "fixed_suffix_expansion" &&
+			decision.CandidateStrategy == optimize.ExpansionSearchSuffixSeededReverse &&
+			decision.StructurallyEligible && decision.StaticallyEligible &&
+			decision.ObservationMode == optimize.ExpansionSearchObservationFullPath {
+			matching = append(matching, idx)
+		}
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("expansion suffix reverse retry matched %d statically eligible full-path fixed-suffix targets; expected exactly one", len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.PlannedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
+	decision.EmittedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
+	decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryTransactionRetry
+	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
+	decision.Admission = optimize.ExpansionSearchAdmission{
+		StateLimit:             stateLimit,
+		OutputRowLimit:         outputRowLimit,
+		OutputBytesLimit:       outputBytesLimit,
+		RequiresCompleteProbes: true,
+		FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
+	}
+	decision.StateLimit = stateLimit
+	decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.SelectionMode = "transaction_retry_tool"
+	decision.SelectorVersion = string(optimize.ExpansionSearchPolicySuffixReverseRetryV1)
+	decision.FallbackReason = ""
+	return nil
 }
 
 // applyExpansionSuffixReverseGuardPolicy selects one full-path fixed-suffix

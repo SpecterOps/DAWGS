@@ -19,6 +19,7 @@ const (
 	suffixGuardUseFallback    pgsql.Identifier = "use_fallback"
 	suffixGuardRuntimeReceipt pgsql.Identifier = "runtime_receipt"
 	suffixGuardAttestationFn  pgsql.Identifier = "record_requested_traversal_runtime_attestation_v1"
+	suffixRetryStatusSetting                   = "dawgs.suffix_reverse_retry_status"
 )
 
 // suffixReverseGuardIdentifiers assigns stable, policy-specific names to the
@@ -62,7 +63,8 @@ func newSuffixReverseGuardIdentifiers(finalFrame pgsql.Identifier) suffixReverse
 // chain with a static full-path reverse candidate and the unchanged incumbent
 // behind a bounded, same-statement fallback boundary.
 func (s *Translator) rewriteTraversalPatternAsSuffixReverseGuard(part *PatternPart, decision optimize.ExpansionSearchStrategyDecision, firstCTE int) error {
-	if decision.EmittedPolicy != optimize.ExpansionSearchPolicySuffixReverseGuardV1 ||
+	if (decision.EmittedPolicy != optimize.ExpansionSearchPolicySuffixReverseGuardV1 &&
+		decision.EmittedPolicy != optimize.ExpansionSearchPolicySuffixReverseRetryV1) ||
 		decision.ObservationMode != optimize.ExpansionSearchObservationFullPath || part.PatternBinding == nil {
 		return fmt.Errorf("suffix reverse guard requires the full-path policy envelope")
 	}
@@ -171,26 +173,9 @@ func (s *Translator) buildSuffixReverseGuardQuery(
 		decision.Admission.StateLimit,
 	)
 	admission := buildSuffixReverseGuardAdmission(ids, decision.ProbeCaps.ReverseSeedRowLimit, decision.Admission.StateLimit)
-	decisionCTE := buildSuffixReverseGuardDecision(ids)
+	retryOnly := decision.EmittedPolicy == optimize.ExpansionSearchPolicySuffixReverseRetryV1
+	decisionCTE := buildSuffixReverseGuardDecision(ids, retryOnly)
 	markers := buildSuffixReverseGuardMarkers(ids)
-
-	incumbentPath, err := expressionForPathComposite(part.PatternBinding, s.scope)
-	if err != nil {
-		return pgsql.Query{}, err
-	}
-	fallbackRows, fallbackProjection, err := buildSuffixReverseGuardFallbackCTE(
-		ids.fallbackRows,
-		incumbentChain,
-		incumbentFinal,
-		incumbentProjection,
-		pgsql.Projection{&pgsql.AliasedExpression{
-			Expression: incumbentPath,
-			Alias:      models.OptionalValue(part.PatternBinding.Identifier),
-		}},
-	)
-	if err != nil {
-		return pgsql.Query{}, err
-	}
 
 	candidateProjection, err := suffixSeededFinalProjection(part, expansionStep, suffix, rootFrame, suffixIDs, ids.states, incumbentProjection, nil)
 	if err != nil {
@@ -248,6 +233,53 @@ func (s *Translator) buildSuffixReverseGuardQuery(
 		return pgsql.Query{}, err
 	}
 
+	candidateRows := pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: ids.candidateBody},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query:        pgsql.Query{Body: candidate},
+	}
+	candidateOutput, err := suffixReverseGuardOutputSelect(ids.candidateBody, candidateProjection)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	if retryOnly {
+		return pgsql.Query{
+			CommonTableExpressions: &pgsql.With{
+				Recursive: true,
+				Expressions: []pgsql.CommonTableExpression{
+					rootPresence,
+					suffixProbe,
+					boundaries,
+					reverse,
+					states,
+					admission,
+					decisionCTE,
+					markers[0],
+					candidateRows,
+				},
+			},
+			Body:  candidateOutput,
+			Limit: pgsql.NewLiteral(decision.Admission.OutputRowLimit+1, pgsql.Int8),
+		}, nil
+	}
+
+	incumbentPath, err := expressionForPathComposite(part.PatternBinding, s.scope)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	fallbackRows, fallbackProjection, err := buildSuffixReverseGuardFallbackCTE(
+		ids.fallbackRows,
+		incumbentChain,
+		incumbentFinal,
+		incumbentProjection,
+		pgsql.Projection{&pgsql.AliasedExpression{
+			Expression: incumbentPath,
+			Alias:      models.OptionalValue(part.PatternBinding.Identifier),
+		}},
+	)
+	if err != nil {
+		return pgsql.Query{}, err
+	}
 	fallbackQuery := pgsql.Query{Body: pgsql.Select{
 		Projection: fallbackProjection,
 		From:       []pgsql.FromClause{tableFrom(ids.fallbackRows)},
@@ -257,20 +289,10 @@ func (s *Translator) buildSuffixReverseGuardQuery(
 	if err != nil {
 		return pgsql.Query{}, err
 	}
-
-	candidateRows := pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: ids.candidateBody},
-		Materialized: &pgsql.Materialized{Materialized: true},
-		Query:        pgsql.Query{Body: candidate},
-	}
 	fallbackOutput := pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: ids.fallbackBody},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query:        pgsql.Query{Body: fallback},
-	}
-	candidateOutput, err := suffixReverseGuardOutputSelect(ids.candidateBody, candidateProjection)
-	if err != nil {
-		return pgsql.Query{}, err
 	}
 	fallbackOutputSelect, err := suffixReverseGuardOutputSelect(ids.fallbackBody, fallbackProjection)
 	if err != nil {
@@ -370,7 +392,7 @@ func buildSuffixReverseGuardAdmission(ids suffixReverseGuardIdentifiers, suffixR
 
 // buildSuffixReverseGuardDecision records exactly one requested-runtime
 // attestation and exposes complementary booleans consumed by execution markers.
-func buildSuffixReverseGuardDecision(ids suffixReverseGuardIdentifiers) pgsql.CommonTableExpression {
+func buildSuffixReverseGuardDecision(ids suffixReverseGuardIdentifiers, retryOnly bool) pgsql.CommonTableExpression {
 	suffixOverflow := pgsql.CompoundIdentifier{ids.admission, suffixGuardSuffixOverflow}
 	stateOverflow := pgsql.CompoundIdentifier{ids.admission, suffixGuardStateOverflow}
 	overflow := pgsql.NewBinaryExpression(suffixOverflow, pgsql.OperatorOr, stateOverflow)
@@ -387,23 +409,50 @@ func buildSuffixReverseGuardDecision(ids suffixReverseGuardIdentifiers) pgsql.Co
 		},
 		Else: pgsql.NewLiteral("suffix_seeded_reverse", pgsql.Text),
 	}
+	if retryOnly {
+		branch = pgsql.Case{
+			Conditions: []pgsql.Expression{suffixOverflow, stateOverflow},
+			Then: []pgsql.Expression{
+				pgsql.NewLiteral("forward_retry_suffix_overflow", pgsql.Text),
+				pgsql.NewLiteral("forward_retry_state_overflow", pgsql.Text),
+			},
+			Else: pgsql.NewLiteral("reverse_complete", pgsql.Text),
+		}
+	}
+	fallbackExecuted := pgsql.Expression(overflow)
+	recordedExecutor := pgsql.Expression(runtimeExecutor)
+	if retryOnly {
+		fallbackExecuted = pgsql.NewLiteral(false, pgsql.Boolean)
+		recordedExecutor = pgsql.NewLiteral(string(optimize.ExpansionSearchStepwiseForward), pgsql.Text)
+	}
+	projection := pgsql.Projection{
+		aspI1Aliased(pgd.Not(pgsql.NewParenthetical(overflow)), suffixGuardUseCandidate),
+		aspI1Aliased(overflow, suffixGuardUseFallback),
+		aspI1Aliased(pgsql.FunctionCall{
+			Function: suffixGuardAttestationFn,
+			Parameters: []pgsql.Expression{
+				branch,
+				fallbackExecuted,
+				recordedExecutor,
+			},
+		}, suffixGuardRuntimeReceipt),
+	}
+	if retryOnly {
+		projection = append(projection, aspI1Aliased(pgsql.FunctionCall{
+			Function: pgsql.Identifier("set_config"),
+			Parameters: []pgsql.Expression{
+				pgsql.NewLiteral(suffixRetryStatusSetting, pgsql.Text),
+				branch,
+				pgsql.NewLiteral(true, pgsql.Boolean),
+			},
+		}, pgsql.Identifier("retry_status")))
+	}
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: ids.decision},
 		Materialized: &pgsql.Materialized{Materialized: true},
 		Query: pgsql.Query{Body: pgsql.Select{
-			Projection: pgsql.Projection{
-				aspI1Aliased(pgd.Not(pgsql.NewParenthetical(overflow)), suffixGuardUseCandidate),
-				aspI1Aliased(overflow, suffixGuardUseFallback),
-				aspI1Aliased(pgsql.FunctionCall{
-					Function: suffixGuardAttestationFn,
-					Parameters: []pgsql.Expression{
-						branch,
-						overflow,
-						runtimeExecutor,
-					},
-				}, suffixGuardRuntimeReceipt),
-			},
-			From: []pgsql.FromClause{tableFrom(ids.admission)},
+			Projection: projection,
+			From:       []pgsql.FromClause{tableFrom(ids.admission)},
 		}},
 	}
 }

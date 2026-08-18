@@ -315,11 +315,11 @@ func (s *Translator) buildTraversalPatternPart(part *PatternPart) error {
 		s.allowLimitPushdownForStep(part, idx, traversalStep)
 	}
 
-	if useFixedSuffixStrategy {
-		return s.rewriteTraversalPatternAsSuffixSeededReverse(part, fixedSuffixDecision, firstCTE)
-	}
 	if useSuffixReverseGuard {
 		return s.rewriteTraversalPatternAsSuffixReverseGuard(part, suffixReverseGuardDecision, firstCTE)
+	}
+	if useFixedSuffixStrategy {
+		return s.rewriteTraversalPatternAsSuffixSeededReverse(part, fixedSuffixDecision, firstCTE)
 	}
 	if useGuardedSuffixStrategy {
 		return s.rewriteTraversalPatternAsGuardedSuffixOrientation(part, guardedSuffixDecision, firstCTE)

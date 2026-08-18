@@ -209,6 +209,15 @@ production uses guarded `EXPANSION-ENDPOINT-SEEDED-REVERSE`: 32 endpoint and
 4096 reverse-state caps select either the reverse candidate or an exact
 same-statement forward fallback without exposing partial candidate rows.
 
+The next fixed-suffix generation is available only to GraphBench through
+`-postgres-expansion-suffix-reverse-retry`. It executes a reverse-only bounded
+statement, buffers all candidate rows, and retries the exact forward incumbent
+after a savepoint rollback in the same Repeatable Read transaction. Its
+statement contains no topology probes or inactive forward body. The frozen
+development contract and stop gate are documented in
+[Suffix reverse transaction retry v1](docs/experiments/suffix_reverse_retry_v1.md).
+It is not a production selector.
+
 PostgreSQL recursive shortest-path execution includes contained S3/S4
 singleton selection, a guarded canonical inline witness canary, and an
 all-shortest predecessor-DAG executor, with exact same-statement fallback,

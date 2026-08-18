@@ -314,7 +314,7 @@ func traversalSummaryFromOutcome(outcome translate.TargetLoweringOutcome, metric
 	if isOrientationProbePolicy(outcome.EmittedPolicy) ||
 		outcome.EmittedPolicy == string(optimize.ExpansionSearchPolicyEndpointGuardV1) {
 		family = TraversalTelemetryFamilyOrientation
-	} else if isSuffixReverseGuardPolicy(outcome.EmittedPolicy) {
+	} else if isSuffixReverseGuardPolicy(outcome.EmittedPolicy) || isSuffixReverseRetryPolicy(outcome.EmittedPolicy) {
 		family = TraversalTelemetryFamilySuffixGuard
 	}
 	if runtimeIdentity == "" {
@@ -394,6 +394,23 @@ func runtimeTraversalIdentity(outcome translate.TargetLoweringOutcome, metrics P
 	}
 
 	plan := postgresTraversalPlanReplay(metrics)
+	if isSuffixReverseRetryPolicy(outcome.EmittedPolicy) {
+		candidateRows, candidatePresent := plan.Counters["suffix_guard_candidate_marker_rows"]
+		suffixOverflow, stateOverflow, overflowAvailable := suffixGuardPlanOverflows(outcome, plan)
+		if !candidatePresent || !overflowAvailable {
+			return "", "runtime_outcome_unavailable", false, false
+		}
+		if candidateRows == 1 && !suffixOverflow && !stateOverflow {
+			return string(optimize.ExpansionSearchSuffixSeededReverse), "reverse_complete", false, false
+		}
+		if candidateRows == 0 && suffixOverflow {
+			return string(optimize.ExpansionSearchSuffixSeededReverse), "forward_retry_suffix_overflow", false, true
+		}
+		if candidateRows == 0 && stateOverflow {
+			return string(optimize.ExpansionSearchSuffixSeededReverse), "forward_retry_state_overflow", false, true
+		}
+		return "", "runtime_outcome_unavailable", false, suffixOverflow || stateOverflow
+	}
 	if outcome.EmittedPolicy == optimize.ShortestPathPolicyASPI1GuardedV1 {
 		candidateRows, candidatePresent := plan.Counters["asp_i1_candidate_marker_rows"]
 		fallbackRows, fallbackPresent := plan.Counters["asp_i1_fallback_marker_rows"]
@@ -580,7 +597,8 @@ func outcomeTraversalCaps(outcome translate.TargetLoweringOutcome) map[string]in
 			caps["forward_seed_rows"] = outcome.ProbeCaps.RootRowLimit
 		}
 		if outcome.ProbeCaps.ReverseSeedRowLimit > 0 {
-			if isSuffixReverseGuardPolicy(outcome.EmittedPolicy) || isSuffixReverseGuardPolicy(outcome.PlannedPolicy) {
+			if isSuffixReverseGuardPolicy(outcome.EmittedPolicy) || isSuffixReverseGuardPolicy(outcome.PlannedPolicy) ||
+				isSuffixReverseRetryPolicy(outcome.EmittedPolicy) || isSuffixReverseRetryPolicy(outcome.PlannedPolicy) {
 				caps["suffix_rows"] = outcome.ProbeCaps.ReverseSeedRowLimit
 			} else {
 				caps["reverse_seed_rows"] = outcome.ProbeCaps.ReverseSeedRowLimit
@@ -591,6 +609,14 @@ func outcomeTraversalCaps(outcome translate.TargetLoweringOutcome) map[string]in
 		}
 		if outcome.ProbeCaps.SurvivalRowLimit > 0 {
 			caps["survival_rows"] = outcome.ProbeCaps.SurvivalRowLimit
+		}
+	}
+	if outcome.Admission != nil {
+		if outcome.Admission.OutputRowLimit > 0 {
+			caps["output_rows"] = outcome.Admission.OutputRowLimit
+		}
+		if outcome.Admission.OutputBytesLimit > 0 {
+			caps["output_bytes"] = outcome.Admission.OutputBytesLimit
 		}
 	}
 	return caps
@@ -639,7 +665,7 @@ func traversalFamilyForIdentity(identity, family string) TraversalTelemetryFamil
 	if strings.HasPrefix(identity, "SP-") || family == "SP" {
 		return TraversalTelemetryFamilySP
 	}
-	if isSuffixReverseGuardPolicy(identity) {
+	if isSuffixReverseGuardPolicy(identity) || isSuffixReverseRetryPolicy(identity) {
 		return TraversalTelemetryFamilySuffixGuard
 	}
 	if isOrientationProbePolicy(identity) || strings.Contains(identity, "ORIENTATION") {
@@ -667,7 +693,8 @@ func traversalRequiredFamilies(summary TraversalExecutionSummary, base Traversal
 	if identity == "" {
 		identity = summary.RequestedIdentity
 	}
-	if isSuffixReverseGuardPolicy(summary.EmittedIdentity) || isSuffixReverseGuardPolicy(summary.SelectorVersion) {
+	if isSuffixReverseGuardPolicy(summary.EmittedIdentity) || isSuffixReverseGuardPolicy(summary.SelectorVersion) ||
+		isSuffixReverseRetryPolicy(summary.EmittedIdentity) || isSuffixReverseRetryPolicy(summary.SelectorVersion) {
 		add(TraversalTelemetryFamilySuffixGuard)
 		add(TraversalTelemetryFamilyOrdinary)
 		if observationRequiresHydration(summary.ObservationMode) {

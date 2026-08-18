@@ -152,6 +152,13 @@ Implemented modes are:
 AGE is reference-design input only and is not a direct comparison mode. The command can emit JSONL records plus
 Markdown and JSON summaries, and can compare current timings against a previous JSONL baseline.
 
+The tool-only `-postgres-expansion-suffix-reverse-retry` mode measures the
+reverse-only fixed-suffix P1 candidate with exact forward retry inside one
+Repeatable Read transaction. It requires diagnostic traversal telemetry and a
+pool size of one; see the
+[frozen development protocol](experiments/suffix_reverse_retry_v1.md) before
+selecting cases or overriding caps.
+
 The PostgreSQL scale-plan correctness gate shares the scale runner. It checks the
 required stable query-form IDs, declared read/write cardinalities, rollback-safe
 mutation post-state, `EXPLAIN ANALYZE` capture, and stable plan invariants. It

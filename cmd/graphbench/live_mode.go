@@ -308,10 +308,16 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		PostgresExpansionOrientationPolicy string `json:"postgres_expansion_orientation_policy"`
 		// PostgresExpansionSuffixReverseGuard selects the static guarded suffix-reverse statement.
 		PostgresExpansionSuffixReverseGuard bool `json:"postgres_expansion_suffix_reverse_guard"`
+		// PostgresExpansionSuffixReverseRetry selects the transaction-local retry candidate.
+		PostgresExpansionSuffixReverseRetry bool `json:"postgres_expansion_suffix_reverse_retry"`
 		// PostgresSuffixGuardSuffixLimit binds the tool-only suffix cap override.
 		PostgresSuffixGuardSuffixLimit int64 `json:"postgres_suffix_guard_suffix_limit"`
 		// PostgresSuffixGuardStateLimit binds the tool-only reverse-state cap override.
 		PostgresSuffixGuardStateLimit int64 `json:"postgres_suffix_guard_state_limit"`
+		// PostgresSuffixRetryOutputRowLimit binds the buffered row cap.
+		PostgresSuffixRetryOutputRowLimit int64 `json:"postgres_suffix_retry_output_row_limit"`
+		// PostgresSuffixRetryOutputBytesLimit binds the buffered byte cap.
+		PostgresSuffixRetryOutputBytesLimit int64 `json:"postgres_suffix_retry_output_bytes_limit"`
 		// Discovery enables adaptive live-graph discovery instead of the fixed confirmation protocol.
 		Discovery bool `json:"discovery"`
 		// TimeoutClasses lists the increasing per-attempt deadlines included in resumable run identity.
@@ -347,8 +353,11 @@ func runConfigurationIdentity(cfg config, environment RunEnvironment) string {
 		PostgresExpansionOrientationTournament: cfg.PostgresExpansionOrientationTournament,
 		PostgresExpansionOrientationPolicy:     cfg.PostgresExpansionOrientationPolicy,
 		PostgresExpansionSuffixReverseGuard:    cfg.PostgresExpansionSuffixReverseGuard,
+		PostgresExpansionSuffixReverseRetry:    cfg.PostgresExpansionSuffixReverseRetry,
 		PostgresSuffixGuardSuffixLimit:         cfg.PostgresSuffixGuardSuffixLimit,
 		PostgresSuffixGuardStateLimit:          cfg.PostgresSuffixGuardStateLimit,
+		PostgresSuffixRetryOutputRowLimit:      cfg.PostgresSuffixRetryOutputRowLimit,
+		PostgresSuffixRetryOutputBytesLimit:    cfg.PostgresSuffixRetryOutputBytesLimit,
 		Discovery:                              cfg.Discovery,
 		TimeoutClasses:                         append([]time.Duration(nil), cfg.TimeoutClasses...),
 		DiscoverySampleFloor:                   cfg.DiscoverySampleFloor,
