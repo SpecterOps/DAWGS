@@ -291,5 +291,5 @@ executor, selector, corpus, rollback, and evidence identity only after this P1
 generation reaches a passing or terminal disposition. Its first artifact is a
 prospectively frozen power study based on archived open V1/V2 traces; candidate
 timing and implementation changes are forbidden until that study passes. That
-study is now frozen in
+study was frozen and terminally rejected in
 [`sp_i2_successor_power_study_v3.md`](sp_i2_successor_power_study_v3.md).

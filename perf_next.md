@@ -268,6 +268,15 @@ already shown large wins. The blocker is not lack of another SQL variant: V1
 failed its cycle tail and V2's fixed design had inadequate prospective power.
 Further work therefore begins with a new evidence design, not a V2 recapture.
 
+### P2 disposition
+
+The distinct V3 prospective power study is terminally rejected before any
+candidate or corpus work: its frozen 800-block design could not establish the
+required physical-order A/A admission power. The source, scenario vectors, and
+terminal record are in
+[`docs/experiments/sp_i2_successor_power_study_v3.md`](docs/experiments/sp_i2_successor_power_study_v3.md).
+Do not enlarge or retune that study. P3 is the next eligible workstream.
+
 ### Preconditions
 
 1. Assign a new generation, executor, policy, selector, corpus, and rollback

@@ -125,8 +125,8 @@ func simulateSPI2StudyV2(protocol spI2ProtocolV2, scenario spI2SimulationScenari
 	z := 2.241402727604947
 	logSE := protocol.Simulation.LogStandardErrors
 	absSE := protocol.Simulation.AbsoluteStandardErrorsUS
-	p50Drift := meanResampledSPI2DriftV2(rng, protocol.Simulation.P50RoundDrift)
-	p95Drift := meanResampledSPI2DriftV2(rng, protocol.Simulation.P95RoundDrift)
+	p50Drift := meanResampledSPI2DriftV2(rng, protocol.Simulation.P50RoundDrift, protocol.Design.Rounds)
+	p95Drift := meanResampledSPI2DriftV2(rng, protocol.Simulation.P95RoundDrift, protocol.Design.Rounds)
 
 	pooledP50 := simulatedSPI2RatioIntervalV2(rng, scenario.CandidateP50US/scenario.BaselineP50US, logSE.Pooled, z)
 	pooledP95 := simulatedSPI2RatioIntervalV2(rng, scenario.CandidateP95US/scenario.BaselineP95US, logSE.Pooled, z)
@@ -186,12 +186,12 @@ func standardNormalSPI2V2(rng *randv2.Rand) float64 {
 	return math.Sqrt(-2*math.Log(u1)) * math.Cos(2*math.Pi*u2)
 }
 
-func meanResampledSPI2DriftV2(rng *randv2.Rand, drift []float64) float64 {
+func meanResampledSPI2DriftV2(rng *randv2.Rand, drift []float64, blocks int) float64 {
 	total := 0.0
-	for range 40 {
+	for range blocks {
 		total += drift[rng.Uint64N(uint64(len(drift)))]
 	}
-	return total / 40
+	return total / float64(blocks)
 }
 
 func intervalInsideSPI2V2(interval spI2SimulationIntervalV2, lower, upper float64) bool {

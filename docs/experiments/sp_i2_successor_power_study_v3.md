@@ -1,9 +1,9 @@
 # SP-I2 successor prospective power study V3
 
-Status: prospective and pre-implementation. This study is the only permitted
-P2 activity after the terminal `suffix-reverse-retry-v1` result. It does not
-authorize a hidden-fan-in executor, selector, corpus fixture, database timing,
-or protected-holdout access.
+Status: terminally rejected before implementation. This study was the only
+permitted P2 activity after the terminal `suffix-reverse-retry-v1` result. It
+does not authorize a hidden-fan-in executor, selector, corpus fixture,
+database timing, or protected-holdout access.
 
 ## Separation from terminal identities
 
@@ -75,3 +75,16 @@ report and test vectors. A failed simulation terminally stops this study before
 any P2 executor or corpus work. A passing simulation authorizes only a fresh
 V3 corpus and architecture-tournament protocol; it does not authorize a
 candidate implementation, database timing, or a holdout.
+
+## Result
+
+The deterministic 20,000-run simulation failed the frozen admission-power
+gate. The `aa_order_odd_high` and `aa_order_even_high` scenarios reached only
+Wilson lower bounds of `0.14201232557116983` and `0.14723913101703448`, versus
+the required `0.90`. All other scenario vectors are locked in
+`TestSPI2SuccessorPowerStudyV3TerminatesFrozenDesign`; the terminal tombstone is
+`benchmark/testdata/scale/protocols/sp_i2_successor_power_study_v3_rejection.json`.
+
+This 800-block study is terminal. Do not enlarge it, alter its model, reuse its
+identity, or use it to authorize a V3 candidate. No candidate implementation,
+fresh corpus, database timing, or holdout access occurred.
