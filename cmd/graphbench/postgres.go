@@ -79,6 +79,16 @@ type postgresSQLRunner struct {
 	repeatableRead bool
 	// traversalTelemetry selects opt-in summary or untimed diagnostic traversal evidence.
 	traversalTelemetry string
+	// suffixRouteComponentClosure records the measurement-only boundary closure
+	// required by the fixed-suffix routing preflight. It does not influence SQL
+	// selection or execution.
+	suffixRouteComponentClosure bool
+	// sessionMemoryCeilingBytes bounds workspace observed by a closure on one
+	// physical PostgreSQL session.
+	sessionMemoryCeilingBytes int64
+	// poolMemoryCeilingBytes bounds workspace observed by all sessions in a
+	// closure's PostgreSQL pool.
+	poolMemoryCeilingBytes int64
 	// existingGraph supplies live-graph anchors, checkpoints, and callbacks to the runner.
 	existingGraph *existingGraphRunnerOptions
 }
@@ -937,6 +947,42 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			}
 		}
 		record.FallbackReason = strings.Join(fallbackReasons, ",")
+	}
+	if s.suffixRouteComponentClosure && testCase.WriteScenario == nil {
+		var rawIsolation []pgx.TxIsoLevel
+		if len(s.readTransactionOptions()) > 0 {
+			rawIsolation = []pgx.TxIsoLevel{pgx.RepeatableRead}
+		}
+		waterfall, err := measureCompileWaterfall(ctx, testCase.Cypher, params, s.pgDriver.KindMapper(), s.graphID, iterations, s.toolOptions)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("suffix-route closure client compile waterfall: %v", err)
+			return record
+		}
+		record.ClientWaterfall = &waterfall
+		closure, err := measurePostgresBoundaryClosure(
+			ctx,
+			s.pool,
+			explain.SQL,
+			explain.Parameters,
+			iterations,
+			s.sessionMemoryCeilingBytes,
+			s.poolMemoryCeilingBytes,
+			rawIsolation...,
+		)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("suffix-route closure raw pgx waterfall: %v", err)
+			return record
+		}
+		for _, sample := range postgresBoundaryClosureSamples(closure) {
+			if sample.Rows != record.RowCount {
+				record.Status = StatusError
+				record.Error = fmt.Sprintf("suffix-route closure raw pgx row count %d differs from CySQL row count %d", sample.Rows, record.RowCount)
+				return record
+			}
+		}
+		record.PostgresBoundaryClosure = &closure
 	}
 	if s.references && testCase.WriteScenario == nil {
 		var rawIsolation []pgx.TxIsoLevel

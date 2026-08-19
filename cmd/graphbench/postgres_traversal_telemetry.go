@@ -1425,6 +1425,7 @@ func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context
 			if level == TraversalTelemetryLevelDiagnostic {
 				enrichSuffixGuardTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount, record.ObservedRows)
 				enrichSuffixRouteComponentTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount)
+				enrichSuffixRouteComponentClosureWorkspaceTelemetry(telemetry, record.PostgresBoundaryClosure)
 				enrichOrientationTraversalTelemetry(
 					telemetry,
 					*record.PostgresMetrics,
@@ -1546,6 +1547,33 @@ func enrichSuffixRouteComponentTraversalTelemetry(telemetry *TraversalExecutionT
 	telemetry.Diagnostic.Provenance["suffix_component.execution_time_ns"] = "postgres_metrics.execution_ms:" + metrics.Provenance["execution_ms"]
 	telemetry.Diagnostic.CounterStatus = TraversalTelemetryCounterStatusComplete
 	telemetry.Diagnostic.IncompleteReasons = nil
+}
+
+// enrichSuffixRouteComponentClosureWorkspaceTelemetry binds the component's
+// complete typed telemetry to separately measured raw-PGX workspace evidence.
+// It is intentionally unavailable outside the explicit closure mode so an
+// ordinary component capture cannot imply a measured high-water mark.
+func enrichSuffixRouteComponentClosureWorkspaceTelemetry(telemetry *TraversalExecutionTelemetry, closure *PostgresBoundaryClosure) {
+	if telemetry == nil || telemetry.Diagnostic == nil || closure == nil ||
+		telemetry.Summary.SelectorVersion != optimize.ExpansionSearchSelectorSuffixRouteComponentV1 {
+		return
+	}
+	if closure.Workspace.SessionPeakBytes < 0 || closure.Workspace.PoolPeakBytes < 0 {
+		markTraversalCountersUnavailable(telemetry.Diagnostic, "suffix-route closure workspace high-water must not be negative")
+		return
+	}
+	if !slices.Contains(telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyWorkspace) {
+		telemetry.Diagnostic.RequiredFamilies = append(telemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyWorkspace)
+	}
+	telemetry.Diagnostic.Counters.Workspace = &TraversalWorkspaceCounters{
+		SessionPeakBytes: traversalTelemetryPointer(closure.Workspace.SessionPeakBytes),
+		PoolPeakBytes:    traversalTelemetryPointer(closure.Workspace.PoolPeakBytes),
+	}
+	if telemetry.Diagnostic.Provenance == nil {
+		telemetry.Diagnostic.Provenance = map[string]string{}
+	}
+	telemetry.Diagnostic.Provenance["workspace.session_peak_bytes"] = "postgres_boundary_closure.workspace.session_peak_bytes"
+	telemetry.Diagnostic.Provenance["workspace.pool_peak_bytes"] = "postgres_boundary_closure.workspace.pool_peak_bytes"
 }
 
 // suffixComponentOrderedHydration reports only the two aliases emitted by the

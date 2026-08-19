@@ -1053,6 +1053,41 @@ func TestPostgresTraversalTelemetryCompletesSuffixRouteComponentCounters(t *test
 	require.Equal(t, int64(23), observed["hydration_rows"])
 }
 
+// TestPostgresTraversalTelemetryAddsClosureWorkspace verifies direct-component
+// workspace telemetry becomes complete only when an explicit boundary closure
+// supplies measured size-one session and pool high-water values.
+func TestPostgresTraversalTelemetryAddsSuffixRouteComponentClosureWorkspace(t *testing.T) {
+	telemetry := validTraversalTelemetry()
+	telemetry.Level = TraversalTelemetryLevelDiagnostic
+	telemetry.Diagnostic = ordinaryDiagnostic()
+	telemetry.Diagnostic.RequiredFamilies = []TraversalTelemetryFamily{TraversalTelemetryFamilySuffixComponent}
+	telemetry.Diagnostic.Counters = TraversalDiagnosticCounters{SuffixComponent: &SuffixComponentTraversalCounters{
+		SuffixRows: traversalTelemetryPointer(int64(1)), BoundaryRows: traversalTelemetryPointer(int64(1)), ReverseStateRows: traversalTelemetryPointer(int64(1)),
+		OrderedNodeHydrationLoops: traversalTelemetryPointer(int64(0)), OrderedNodeHydrationRows: traversalTelemetryPointer(int64(0)),
+		OrderedEdgeHydrationLoops: traversalTelemetryPointer(int64(0)), OrderedEdgeHydrationRows: traversalTelemetryPointer(int64(0)),
+		OutputRows: traversalTelemetryPointer(int64(1)), ReceiptRows: traversalTelemetryPointer(int64(1)),
+		PlanningTimeNS: traversalTelemetryPointer(int64(1)), ExecutionTimeNS: traversalTelemetryPointer(int64(1)),
+	}}
+	telemetry.Diagnostic.Provenance = map[string]string{}
+	telemetry.Summary.SelectorVersion = optimize.ExpansionSearchSelectorSuffixRouteComponentV1
+	for _, name := range []string{
+		"suffix_component.suffix_rows", "suffix_component.boundary_rows", "suffix_component.reverse_state_rows", "suffix_component.ordered_node_hydration_loops",
+		"suffix_component.ordered_node_hydration_rows", "suffix_component.ordered_edge_hydration_loops", "suffix_component.ordered_edge_hydration_rows",
+		"suffix_component.output_rows", "suffix_component.receipt_rows", "suffix_component.planning_time_ns", "suffix_component.execution_time_ns",
+	} {
+		telemetry.Diagnostic.Provenance[name] = "test"
+	}
+
+	enrichSuffixRouteComponentClosureWorkspaceTelemetry(&telemetry, &PostgresBoundaryClosure{
+		Workspace: PostgresBoundaryWorkspaceHighWater{SessionPeakBytes: 0, PoolPeakBytes: 0},
+	})
+
+	require.NoError(t, telemetry.Validate())
+	require.Equal(t, []TraversalTelemetryFamily{TraversalTelemetryFamilySuffixComponent, TraversalTelemetryFamilyWorkspace}, telemetry.Diagnostic.RequiredFamilies)
+	require.Zero(t, *telemetry.Diagnostic.Counters.Workspace.SessionPeakBytes)
+	require.Zero(t, *telemetry.Diagnostic.Counters.Workspace.PoolPeakBytes)
+}
+
 // TestSuffixRouteComponentCountersFailClosedWithoutReceipt ensures a statement
 // that lacks the one-row runtime receipt never becomes qualifying evidence.
 func TestSuffixRouteComponentCountersFailClosedWithoutReceipt(t *testing.T) {
@@ -1702,6 +1737,36 @@ func TestParseConfigValidatesSuffixRouteComponentMeasurementMode(t *testing.T) {
 		{"-postgres-expansion-suffix-route-component", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-pool-size", "2"},
 		{"-postgres-expansion-suffix-route-component", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-postgres-suffix-guard-state-limit", "1"},
 		{"-postgres-expansion-suffix-route-component", "-postgres-expansion-suffix-reverse-retry", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
+// TestParseConfigValidatesSuffixRouteComponentClosureMode verifies the
+// closure cannot accidentally acquire selectors, reference arms, or unbounded
+// workspace while collecting diagnostic boundary evidence.
+func TestParseConfigValidatesSuffixRouteComponentClosureMode(t *testing.T) {
+	base := []string{
+		"-postgres-suffix-route-component-closure",
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", "diagnostic",
+		"-session-memory-ceiling-bytes", "1048576",
+		"-pool-memory-ceiling-bytes", "1048576",
+	}
+	cfg, err := parseConfig(base, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.PostgresSuffixRouteComponentClosure)
+
+	componentCfg, err := parseConfig(append(append([]string{}, base...), "-postgres-expansion-suffix-route-component"), func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, componentCfg.PostgresExpansionSuffixRouteComponent)
+
+	for _, args := range [][]string{
+		{"-postgres-suffix-route-component-closure"},
+		{"-postgres-suffix-route-component-closure", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-session-memory-ceiling-bytes", "1", "-pool-memory-ceiling-bytes", "1", "-pool-size", "2"},
+		{"-postgres-suffix-route-component-closure", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-session-memory-ceiling-bytes", "1", "-pool-memory-ceiling-bytes", "1", "-postgres-references"},
+		{"-postgres-suffix-route-component-closure", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-session-memory-ceiling-bytes", "1", "-pool-memory-ceiling-bytes", "1", "-postgres-expansion-suffix-reverse-retry"},
 	} {
 		_, err := parseConfig(args, func(string) string { return "" })
 		require.Error(t, err, args)

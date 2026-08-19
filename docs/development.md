@@ -166,6 +166,17 @@ pool size of one. It forbids probes, retries, cap overrides, cache behavior,
 and production manifests; see the
 [preimplementation contract](experiments/sql_strategy_routing_preflight_v1.md).
 
+`-postgres-suffix-route-component-closure` is the separately frozen,
+measurement-only closure for that preflight. It is valid for either the
+ordinary incumbent or the explicitly forced direct component, but requires the
+same Repeatable Read/diagnostic/size-one-pool contract plus positive declared
+session and pool workspace ceilings. It records fresh prepared-miss,
+same-session prepared-hit, and release/reacquisition strata with client and
+raw-PGX waterfalls. It cannot be combined with reference, concurrency,
+orientation, retry, guard, force, or production-manifest modes and does not
+select an executor. The exact roster and acceptance conditions are in the
+[closure protocol](../benchmark/testdata/scale/protocols/sql_strategy_routing_component_closure_v1.json).
+
 The PostgreSQL scale-plan correctness gate shares the scale runner. It checks the
 required stable query-form IDs, declared read/write cardinalities, rollback-safe
 mutation post-state, `EXPLAIN ANALYZE` capture, and stable plan invariants. It

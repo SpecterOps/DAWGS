@@ -187,6 +187,62 @@ reacquired the same backend before an exact replay. This remains descriptive
 component evidence only: it does not authorize routing, cache work, protected
 access, or promotion.
 
+## Boundary and workspace closure
+
+The clean recapture closes exactness, typed component counters, plan-visible
+buffers/temp/WAL, cancellation, and pool reuse. It does not yet decompose the
+client/raw-PGX boundary into prepared-statement states, nor does it bind the
+component telemetry to measured temporary-workspace high water. Those are
+separate required observations; the existing `planning_ms` and `execution_ms`
+fields must not be treated as a substitute for bind, first-row, decode, drain,
+or session-reuse timings.
+
+[`sql_strategy_routing_component_closure_v1.json`](../../benchmark/testdata/scale/protocols/sql_strategy_routing_component_closure_v1.json)
+freezes the only permitted closure. It reuses the same eleven open fixtures,
+four counterbalanced incumbent/component rounds, caller-owned Repeatable Read
+contract, and size-one PostgreSQL pool. It adds no selector, retry, cache,
+schema state, reference arm, or concurrency mode.
+
+For each arm/case, the closure records one newly opened-session prepared miss,
+five same-session prepared hits, one pooled prepared miss, and five hits after
+release/reacquisition of the same pooled backend. Every raw execution must
+match the public row/path observation. The raw-PGX samples separately retain
+transaction setup, bind/prepare, first row, complete decode, drain/close, and
+total timing; workspace observation runs only after result drain and is
+excluded from those timing intervals. The exact client parse/optimize/translate/render
+waterfall is retained beside it.
+
+The command must supply the frozen one-MiB session and pool workspace ceilings
+even though direct reverse is expected to allocate no component workspace. The
+measurement sums non-diagnostic temporary relations visible in the query
+transaction, excluding the runtime-attestation and telemetry scaffolding. The
+size-one pool makes pooled-session and pool peaks directly comparable. Direct
+component telemetry must then declare both `suffix_component` and `workspace`
+families with complete provenance.
+
+For example, the reverse arm of round one is:
+
+```bash
+graphbench \
+  -modes postgres_sql -tags suffix-route-component-v1 \
+  -warmup-iterations 1 -iterations 5 -pool-size 1 \
+  -round 1 -block 1 -run-uuid "$RUN_UUID" -arm reverse_component -arm-order 2 \
+  -require-clean-source \
+  -postgres-repeatable-read -postgres-traversal-telemetry diagnostic \
+  -postgres-expansion-suffix-route-component \
+  -postgres-suffix-route-component-closure \
+  -session-memory-ceiling-bytes 1048576 \
+  -pool-memory-ceiling-bytes 1048576 \
+  -jsonl-output .coverage/sql-routing-component-closure-v1/round-1-reverse-component.jsonl
+```
+
+The incumbent uses the same closure and ceiling flags but omits
+`-postgres-expansion-suffix-route-component`; it remains the exact ordinary
+forward statement. A failed row count, absent stage, changed pooled backend,
+missing workspace observation, ceiling breach, incomplete component telemetry,
+or target performance reversal stops this generation. No closure result is a
+cache hit or automatic-selection result.
+
 ## Required implementation slice
 
 The first slice is diagnostic only:
@@ -222,7 +278,7 @@ protected holdout access if any of the following occur:
   A/A floor to an already-fast direct reverse execution;
 - the design requires a persistent synopsis, graph epoch, or schema change.
 
-If the first four conditions pass, the next decision is a separate
+After the boundary/workspace closure passes, the next decision is a separate
 non-native architecture feasibility protocol for a transaction-scoped routing
 cache. It must declare cache keys, invalidation, stale-data behavior,
 transaction ownership, write/WAL budget, and rollback/removal before code is

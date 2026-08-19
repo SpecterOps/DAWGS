@@ -359,6 +359,18 @@ strategy as applied. It is mutually exclusive with forced shortest execution.
 Automatic suffix-seeded reverse dispatch remains disabled because query shape
 does not bound suffix density or reverse fan-in.
 
+`-postgres-suffix-route-component-closure` is a measurement-only closure for
+the default-off direct fixed-suffix component preflight. It can accompany the
+ordinary incumbent or `-postgres-expansion-suffix-route-component`, but it
+never influences executor selection. It requires Repeatable Read, diagnostic
+telemetry, pool size one, and positive session/pool workspace ceilings; it is
+incompatible with reference, concurrency, guard, retry, orientation, forced,
+and production-manifest modes. Each case records the client compile waterfall
+and raw-PGX fresh prepared miss, same-session prepared hits, pooled prepared
+miss, and same-backend release/reacquisition hits, including temporary
+workspace high-water evidence. The frozen roster and acceptance conditions are
+in [`sql_strategy_routing_component_closure_v1.json`](../../benchmark/testdata/scale/protocols/sql_strategy_routing_component_closure_v1.json).
+
 `-postgres-expansion-suffix-reverse-guard` enables the distinct tool-only
 `suffix-reverse-guard-v1` experiment for complete-path fixed-suffix cases. It
 requires `-postgres-repeatable-read`, diagnostic traversal telemetry, and pool

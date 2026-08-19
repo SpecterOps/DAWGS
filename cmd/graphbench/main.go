@@ -174,6 +174,10 @@ type config struct {
 	// PostgresExpansionSuffixRouteComponent executes one exact reverse-only
 	// fixed-suffix statement for the default-off SQL-routing preflight.
 	PostgresExpansionSuffixRouteComponent bool
+	// PostgresSuffixRouteComponentClosure records compile, raw-PGX prepared-state,
+	// and workspace high-water evidence for the fixed-suffix routing preflight.
+	// It never selects an executor or changes the statement being measured.
+	PostgresSuffixRouteComponentClosure bool
 	// PostgresSuffixGuardSuffixLimit overrides the tool-only cap+1 suffix payload limit.
 	PostgresSuffixGuardSuffixLimit int64
 	// PostgresSuffixGuardStateLimit overrides the tool-only cap+1 reverse-state limit.
@@ -475,6 +479,7 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.BoolVar(&cfg.PostgresExpansionSuffixReverseGuard, "postgres-expansion-suffix-reverse-guard", false, "tool-only full-path suffix-reverse guard with exact forward fallback")
 	flags.BoolVar(&cfg.PostgresExpansionSuffixReverseRetry, "postgres-expansion-suffix-reverse-retry", false, "tool-only reverse-only fixed-suffix candidate with same-transaction exact forward retry")
 	flags.BoolVar(&cfg.PostgresExpansionSuffixRouteComponent, "postgres-expansion-suffix-route-component", false, "tool-only exact fixed-suffix reverse component with no retry, probe, or cache")
+	flags.BoolVar(&cfg.PostgresSuffixRouteComponentClosure, "postgres-suffix-route-component-closure", false, "measurement-only fixed-suffix routing closure with compile, raw-PGX prepared-state, and workspace evidence")
 	flags.Int64Var(&cfg.PostgresSuffixGuardSuffixLimit, "postgres-suffix-guard-suffix-limit", 0, "tool-only suffix payload cap override (0 uses the immutable policy default)")
 	flags.Int64Var(&cfg.PostgresSuffixGuardStateLimit, "postgres-suffix-guard-state-limit", 0, "tool-only reverse-state cap override (0 uses the immutable policy default)")
 	flags.Int64Var(&cfg.PostgresSuffixRetryOutputRowLimit, "postgres-suffix-retry-output-row-limit", 0, "tool-only retry candidate output-row cap override (0 uses the immutable policy default)")
@@ -1229,6 +1234,25 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	if cfg.PostgresExpansionSuffixRouteComponent && (cfg.PostgresReferences || len(cfg.Concurrency) != 0) {
 		return config{}, fmt.Errorf("PostgreSQL suffix-route component captures do not support reference or concurrency side measurements")
 	}
+	if cfg.PostgresSuffixRouteComponentClosure && (orientationMode || cfg.PostgresForceShortest != "" || cfg.PostgresForceExpansion != "" ||
+		cfg.PostgresExpansionSuffixReverseGuard || cfg.PostgresExpansionSuffixReverseRetry || cfg.PostgresProductionManifest != "") {
+		return config{}, fmt.Errorf("PostgreSQL suffix-route closure is mutually exclusive with other selector and suffix-reverse modes")
+	}
+	if cfg.PostgresSuffixRouteComponentClosure && !cfg.PostgresRepeatableRead {
+		return config{}, fmt.Errorf("PostgreSQL suffix-route closure measurements require postgres-repeatable-read")
+	}
+	if cfg.PostgresSuffixRouteComponentClosure && cfg.PostgresTraversalTelemetry != postgresTraversalTelemetryDiagnostic {
+		return config{}, fmt.Errorf("PostgreSQL suffix-route closure measurements require diagnostic traversal telemetry")
+	}
+	if cfg.PostgresSuffixRouteComponentClosure && cfg.PoolSize != 1 {
+		return config{}, fmt.Errorf("PostgreSQL suffix-route closure measurements require pool-size 1")
+	}
+	if cfg.PostgresSuffixRouteComponentClosure && (cfg.PostgresReferences || len(cfg.Concurrency) != 0) {
+		return config{}, fmt.Errorf("PostgreSQL suffix-route closure does not support reference or concurrency side measurements")
+	}
+	if cfg.PostgresSuffixRouteComponentClosure && (cfg.SessionMemoryCeilingBytes <= 0 || cfg.PoolMemoryCeilingBytes <= 0) {
+		return config{}, fmt.Errorf("PostgreSQL suffix-route closure requires positive session and pool memory ceilings")
+	}
 	if cfg.PostgresExpansionOrientationPolicy != "" && !orientationMode {
 		return config{}, fmt.Errorf("PostgreSQL expansion orientation policy requires shadow or tournament mode")
 	}
@@ -1976,6 +2000,9 @@ func main() {
 			runner.toolOptions.EnableExpansionSuffixReverseGuard = cfg.PostgresExpansionSuffixReverseGuard
 			runner.toolOptions.EnableExpansionSuffixReverseRetry = cfg.PostgresExpansionSuffixReverseRetry
 			runner.toolOptions.EnableExpansionSuffixRouteComponent = cfg.PostgresExpansionSuffixRouteComponent
+			runner.suffixRouteComponentClosure = cfg.PostgresSuffixRouteComponentClosure
+			runner.sessionMemoryCeilingBytes = cfg.SessionMemoryCeilingBytes
+			runner.poolMemoryCeilingBytes = cfg.PoolMemoryCeilingBytes
 			runner.toolOptions.SuffixReverseGuardSuffixRowLimit = cfg.PostgresSuffixGuardSuffixLimit
 			runner.toolOptions.SuffixReverseGuardStateLimit = cfg.PostgresSuffixGuardStateLimit
 			runner.toolOptions.SuffixReverseRetryOutputRowLimit = cfg.PostgresSuffixRetryOutputRowLimit

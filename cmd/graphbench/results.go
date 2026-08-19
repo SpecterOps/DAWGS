@@ -282,6 +282,12 @@ type BoundarySample struct {
 	Allocations uint64 `json:"allocations"`
 	// AllocatedBytes records bytes allocated while measuring the client-side stage.
 	AllocatedBytes uint64 `json:"allocated_bytes"`
+	// ConnectionID identifies the PostgreSQL backend that ran a closure sample.
+	// It is set only for prepared-state closure evidence.
+	ConnectionID string `json:"connection_id,omitempty"`
+	// WorkspaceBytes records PostgreSQL temporary workspace bytes sampled before
+	// the raw query transaction rolls back. It is set only by closure capture.
+	WorkspaceBytes *int64 `json:"workspace_bytes,omitempty"`
 }
 
 // PostgresBoundaryWaterfall summarizes PostgreSQL planning, execution, and client overhead samples.
@@ -296,6 +302,42 @@ type PostgresBoundaryWaterfall struct {
 	MeasurementOrder int `json:"measurement_order,omitempty"`
 	// Samples contains the individual measurements.
 	Samples []BoundarySample `json:"samples"`
+}
+
+// PostgresBoundaryWorkspaceHighWater records direct PostgreSQL temporary
+// workspace high-water marks observed while a closure boundary is active.
+// Pool measurements are exact for the closure's required size-one pool.
+type PostgresBoundaryWorkspaceHighWater struct {
+	// PerQueryPeakBytes is the maximum workspace observed within one raw-PGX query transaction.
+	PerQueryPeakBytes int64 `json:"per_query_peak_bytes"`
+	// FreshSessionPeakBytes is the maximum workspace observed on the dedicated fresh connection.
+	FreshSessionPeakBytes int64 `json:"fresh_session_peak_bytes"`
+	// SessionPeakBytes is the maximum workspace observed on the pooled physical session.
+	SessionPeakBytes int64 `json:"session_peak_bytes"`
+	// PoolPeakBytes is the maximum workspace across all pooled sessions.
+	PoolPeakBytes int64 `json:"pool_peak_bytes"`
+}
+
+// PostgresBoundaryClosure records the non-production timing and workspace
+// strata needed to distinguish fresh-session preparation from reusable pooled
+// execution. It is diagnostic-only and never contains routing decisions.
+type PostgresBoundaryClosure struct {
+	// Boundary identifies the exact client/database boundary being measured.
+	Boundary string `json:"boundary"`
+	// SQLFingerprint binds each stratum to the exact translated SQL.
+	SQLFingerprint string `json:"sql_fingerprint"`
+	// FreshSessionPreparedMiss is one first execution on a newly opened session.
+	// It is simultaneously the fresh-session and prepared-statement miss stratum.
+	FreshSessionPreparedMiss BoundarySample `json:"fresh_session_prepared_miss"`
+	// SameSessionPreparedHits records repeated executions on that same fresh session.
+	SameSessionPreparedHits []BoundarySample `json:"same_session_prepared_hits"`
+	// PoolPreparedMiss is the first execution on the size-one pooled session.
+	PoolPreparedMiss BoundarySample `json:"pool_prepared_miss"`
+	// PoolReacquiredPreparedHits records executions after releasing and reacquiring
+	// the closure's size-one pooled session.
+	PoolReacquiredPreparedHits []BoundarySample `json:"pool_reacquired_prepared_hits"`
+	// Workspace contains per-query, session, and pool temporary-workspace high-water marks.
+	Workspace PostgresBoundaryWorkspaceHighWater `json:"workspace"`
 }
 
 // PostgresPlanMetrics aggregates structural, cardinality, timing, and buffer evidence from a PostgreSQL plan.
@@ -476,6 +518,9 @@ type CaseResult struct {
 	RawPGXWaterfall *PostgresBoundaryWaterfall `json:"raw_pgx_waterfall,omitempty"`
 	// RawPGXRoundTrip records legacy aggregate raw-PGX round-trip latency.
 	RawPGXRoundTrip *PostgresBoundaryWaterfall `json:"raw_pgx_round_trip,omitempty"`
+	// PostgresBoundaryClosure records diagnostic-only prepared-state and
+	// temporary-workspace closure evidence for fixed-suffix routing.
+	PostgresBoundaryClosure *PostgresBoundaryClosure `json:"postgres_boundary_closure,omitempty"`
 	// SQL contains the rendered SQL statement.
 	SQL string `json:"sql,omitempty"`
 	// SQLFingerprint identifies normalized SQL without retaining the statement text.

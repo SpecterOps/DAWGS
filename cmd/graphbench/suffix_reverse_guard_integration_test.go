@@ -259,6 +259,68 @@ func TestPostgreSQLSuffixRouteComponentPreservesExactRowsAndReceipt(t *testing.T
 	}
 }
 
+// TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace
+// verifies the closure records the first fresh miss, reusable prepared hits,
+// same-backend pool reacquisition, and complete component workspace evidence
+// without enabling a selector or retry.
+func TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{
+		Cases: []string{"GFSE-SRC-V1-TARGET-D16-F1024-sparse_endpoint_ids"},
+	})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+	runner.repeatableRead = true
+	runner.traversalTelemetry = postgresTraversalTelemetryDiagnostic
+	runner.toolOptions.EnableExpansionSuffixRouteComponent = true
+	runner.suffixRouteComponentClosure = true
+	runner.sessionMemoryCeilingBytes = 1 << 20
+	runner.poolMemoryCeilingBytes = 1 << 20
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	record := records[0]
+	require.Equal(t, StatusOK, record.Status, record.Error)
+	require.NotNil(t, record.ClientWaterfall)
+	require.Len(t, record.ClientWaterfall.Samples, 1)
+	require.NotNil(t, record.PostgresBoundaryClosure)
+	closure := record.PostgresBoundaryClosure
+	require.NotEmpty(t, closure.SQLFingerprint)
+	require.Len(t, closure.SameSessionPreparedHits, 1)
+	require.Len(t, closure.PoolReacquiredPreparedHits, 1)
+	require.Equal(t, closure.PoolPreparedMiss.ConnectionID, closure.PoolReacquiredPreparedHits[0].ConnectionID)
+	for _, sample := range postgresBoundaryClosureSamples(*closure) {
+		require.Equal(t, record.RowCount, sample.Rows)
+		require.NotNil(t, sample.WorkspaceBytes)
+		require.NotEmpty(t, sample.ConnectionID)
+	}
+	require.LessOrEqual(t, closure.Workspace.SessionPeakBytes, runner.sessionMemoryCeilingBytes)
+	require.Equal(t, closure.Workspace.SessionPeakBytes, closure.Workspace.PoolPeakBytes)
+	require.NotNil(t, record.TraversalTelemetry)
+	require.NoError(t, record.TraversalTelemetry.Validate())
+	require.Contains(t, record.TraversalTelemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyWorkspace)
+	require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.Workspace)
+	require.Equal(t, closure.Workspace.SessionPeakBytes, *record.TraversalTelemetry.Diagnostic.Counters.Workspace.SessionPeakBytes)
+}
+
 // TestPostgreSQLSuffixRouteComponentRecordsNoPathReceipt verifies the direct
 // component records execution even when its exact reverse query returns no
 // public rows. This keeps no-path component measurements fail-closed.
