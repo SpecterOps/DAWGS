@@ -993,6 +993,94 @@ func TestSuffixReverseGuardDiagnosticRejectsPlanOutputMismatch(t *testing.T) {
 	require.Contains(t, telemetry.Diagnostic.IncompleteReasons, "suffix-reverse guard plan output does not match the exact public observation")
 }
 
+// TestPostgresTraversalTelemetryCompletesSuffixRouteComponentCounters verifies
+// the direct component has its own complete one-arm counter contract rather
+// than borrowing guarded-selector or generic recursive counters.
+func TestPostgresTraversalTelemetryCompletesSuffixRouteComponentCounters(t *testing.T) {
+	planningMS, executionMS := 1.25, 2.5
+	outcome := translate.TargetLoweringOutcome{
+		Family:            "fixed_suffix_expansion",
+		Candidate:         string(optimize.ExpansionSearchSuffixSeededReverse),
+		Selected:          string(optimize.ExpansionSearchSuffixSeededReverse),
+		Applied:           string(optimize.ExpansionSearchSuffixSeededReverse),
+		PlannedCandidates: []string{string(optimize.ExpansionSearchSuffixSeededReverse)},
+		EmittedCandidates: []string{string(optimize.ExpansionSearchSuffixSeededReverse)},
+		SelectionMode:     "component_tool",
+		SelectorVersion:   optimize.ExpansionSearchSelectorSuffixRouteComponentV1,
+		ExecutionBoundary: optimize.ExpansionSearchExecutionBoundaryInlineStatement,
+		ObservationMode:   string(optimize.ExpansionSearchObservationFullPath),
+	}
+	metrics := PostgresPlanMetrics{
+		PlanningMS:  &planningMS,
+		ExecutionMS: &executionMS,
+		Provenance: map[string]string{
+			"planning_ms":  "measured_plan_json",
+			"execution_ms": "measured_plan_json",
+		},
+		PlanNodes: []PostgresPlanNodeMetric{
+			{NodeType: "Nested Loop", SubplanName: "CTE s5_suffix_seeded_suffix", ActualRows: 3, ActualLoops: 1},
+			{NodeType: "Aggregate", SubplanName: "CTE s5_suffix_seeded_boundaries", ActualRows: 2, ActualLoops: 1},
+			{NodeType: "Recursive Union", SubplanName: "CTE s5_suffix_seeded_reverse", ActualRows: 9, ActualLoops: 1},
+			{NodeType: "Result", SubplanName: "CTE s5_suffix_seeded_component_receipt", ActualRows: 1, ActualLoops: 1},
+			{NodeType: "Index Scan", RelationName: "node_3", Alias: "_ordered_path_node", ActualRows: 1, ActualLoops: 12},
+			{NodeType: "Index Scan", RelationName: "edge_3", Alias: "_ordered_path_edge", ActualRows: 1, ActualLoops: 11},
+		},
+	}
+	telemetry, err := buildPostgresCaseTraversalTelemetry(
+		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
+	)
+	require.NoError(t, err)
+	enrichSuffixRouteComponentTraversalTelemetry(telemetry, metrics, 2)
+	require.NoError(t, telemetry.Validate())
+	require.Equal(t, TraversalTelemetryCounterStatusComplete, telemetry.Diagnostic.CounterStatus)
+	require.Equal(t, []TraversalTelemetryFamily{TraversalTelemetryFamilySuffixComponent}, telemetry.Diagnostic.RequiredFamilies)
+	require.NotNil(t, telemetry.Diagnostic.Counters.SuffixComponent)
+	require.Nil(t, telemetry.Diagnostic.Counters.SuffixGuard)
+	require.Equal(t, int64(3), *telemetry.Diagnostic.Counters.SuffixComponent.SuffixRows)
+	require.Equal(t, int64(2), *telemetry.Diagnostic.Counters.SuffixComponent.BoundaryRows)
+	require.Equal(t, int64(9), *telemetry.Diagnostic.Counters.SuffixComponent.ReverseStateRows)
+	require.Equal(t, int64(12), *telemetry.Diagnostic.Counters.SuffixComponent.OrderedNodeHydrationLoops)
+	require.Equal(t, int64(12), *telemetry.Diagnostic.Counters.SuffixComponent.OrderedNodeHydrationRows)
+	require.Equal(t, int64(11), *telemetry.Diagnostic.Counters.SuffixComponent.OrderedEdgeHydrationLoops)
+	require.Equal(t, int64(11), *telemetry.Diagnostic.Counters.SuffixComponent.OrderedEdgeHydrationRows)
+	require.Equal(t, int64(2), *telemetry.Diagnostic.Counters.SuffixComponent.OutputRows)
+	require.Equal(t, int64(1), *telemetry.Diagnostic.Counters.SuffixComponent.ReceiptRows)
+	require.Equal(t, int64(1_250_000), *telemetry.Diagnostic.Counters.SuffixComponent.PlanningTimeNS)
+	require.Equal(t, int64(2_500_000), *telemetry.Diagnostic.Counters.SuffixComponent.ExecutionTimeNS)
+	observed := traversalNumericObservations(telemetry.Diagnostic.Counters)
+	require.Equal(t, int64(3), observed["suffix_rows"])
+	require.Equal(t, int64(9), observed["state_rows"])
+	require.Equal(t, int64(23), observed["hydration_rows"])
+}
+
+// TestSuffixRouteComponentCountersFailClosedWithoutReceipt ensures a statement
+// that lacks the one-row runtime receipt never becomes qualifying evidence.
+func TestSuffixRouteComponentCountersFailClosedWithoutReceipt(t *testing.T) {
+	planningMS, executionMS := 1.0, 2.0
+	outcome := translate.TargetLoweringOutcome{
+		Family: "fixed_suffix_expansion", Candidate: string(optimize.ExpansionSearchSuffixSeededReverse),
+		Selected: string(optimize.ExpansionSearchSuffixSeededReverse), Applied: string(optimize.ExpansionSearchSuffixSeededReverse),
+		SelectorVersion: optimize.ExpansionSearchSelectorSuffixRouteComponentV1,
+	}
+	metrics := PostgresPlanMetrics{
+		PlanningMS: &planningMS, ExecutionMS: &executionMS,
+		Provenance: map[string]string{"planning_ms": "measured_plan_json", "execution_ms": "measured_plan_json"},
+		PlanNodes: []PostgresPlanNodeMetric{
+			{NodeType: "Result", SubplanName: "CTE s5_suffix_seeded_suffix", ActualRows: 2, ActualLoops: 1},
+			{NodeType: "Result", SubplanName: "CTE s5_suffix_seeded_boundaries", ActualRows: 1, ActualLoops: 1},
+			{NodeType: "Recursive Union", SubplanName: "CTE s5_suffix_seeded_reverse", ActualRows: 8, ActualLoops: 1},
+		},
+	}
+	telemetry, err := buildPostgresCaseTraversalTelemetry(
+		translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}}, metrics, "9123", TraversalTelemetryLevelDiagnostic,
+	)
+	require.NoError(t, err)
+	enrichSuffixRouteComponentTraversalTelemetry(telemetry, metrics, 1)
+	require.Equal(t, TraversalTelemetryCounterStatusHiddenUnavailable, telemetry.Diagnostic.CounterStatus)
+	require.Contains(t, telemetry.Diagnostic.IncompleteReasons, "suffix-route component is missing exact plan counter suffix_component_receipt_rows")
+	require.Nil(t, telemetry.Diagnostic.Counters.SuffixComponent)
+}
+
 func suffixGuardTestOutcome() translate.TargetLoweringOutcome {
 	return translate.TargetLoweringOutcome{
 		Family: "fixed_suffix_expansion", Candidate: string(optimize.ExpansionSearchSuffixSeededReverse),
@@ -1591,6 +1679,29 @@ func TestParseConfigValidatesSuffixReverseRetryMeasurementMode(t *testing.T) {
 		{"-postgres-expansion-suffix-reverse-retry", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-pool-size", "2"},
 		{"-postgres-suffix-retry-output-row-limit", "1"},
 		{"-postgres-expansion-suffix-reverse-retry", "-postgres-expansion-suffix-reverse-guard", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic"},
+	} {
+		_, err := parseConfig(args, func(string) string { return "" })
+		require.Error(t, err, args)
+	}
+}
+
+func TestParseConfigValidatesSuffixRouteComponentMeasurementMode(t *testing.T) {
+	cfg, err := parseConfig([]string{
+		"-postgres-expansion-suffix-route-component",
+		"-postgres-repeatable-read",
+		"-postgres-traversal-telemetry", "diagnostic",
+		"-require-clean-source",
+	}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.True(t, cfg.PostgresExpansionSuffixRouteComponent)
+	require.True(t, cfg.RequireCleanSource)
+
+	for _, args := range [][]string{
+		{"-postgres-expansion-suffix-route-component"},
+		{"-postgres-expansion-suffix-route-component", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "summary"},
+		{"-postgres-expansion-suffix-route-component", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-pool-size", "2"},
+		{"-postgres-expansion-suffix-route-component", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic", "-postgres-suffix-guard-state-limit", "1"},
+		{"-postgres-expansion-suffix-route-component", "-postgres-expansion-suffix-reverse-retry", "-postgres-repeatable-read", "-postgres-traversal-telemetry", "diagnostic"},
 	} {
 		_, err := parseConfig(args, func(string) string { return "" })
 		require.Error(t, err, args)

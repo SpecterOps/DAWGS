@@ -49,6 +49,14 @@ func TestParseConfigDefaultsQualificationConfidence(t *testing.T) {
 	require.Equal(t, minimumTimingNoiseRatio, cfg.Regression)
 }
 
+// TestCleanSourceCaptureGateFailsClosed verifies capture provenance rejects
+// both dirty and indeterminate fingerprints before database setup.
+func TestCleanSourceCaptureGateFailsClosed(t *testing.T) {
+	require.NoError(t, validateCleanSourceFingerprint(cleanWorkingTreeSHA256()))
+	require.ErrorContains(t, validateCleanSourceFingerprint("unknown"), "requires a clean committed source tree")
+	require.ErrorContains(t, validateCleanSourceFingerprint("deadbeef"), "requires a clean committed source tree")
+}
+
 // TestParseConfigRequiresGateAAForPromotion verifies only explicit diagnostic comparisons may omit host calibration.
 func TestParseConfigRequiresGateAAForPromotion(t *testing.T) {
 	_, err := parseConfig([]string{"-gate-baseline", "baseline.jsonl", "-gate-candidate", "candidate.jsonl"}, func(string) string { return "" })

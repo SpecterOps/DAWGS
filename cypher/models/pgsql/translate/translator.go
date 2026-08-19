@@ -1381,6 +1381,10 @@ type ToolOptions struct {
 	// reverse candidate. The PostgreSQL tool transaction owns exact forward
 	// retry; this option never installs a production selector.
 	EnableExpansionSuffixReverseRetry bool
+	// EnableExpansionSuffixRouteComponent emits one exact suffix-seeded reverse
+	// statement with a runtime receipt. It is a default-off GraphBench component
+	// arm and has no retry, probe, cache, or production policy.
+	EnableExpansionSuffixRouteComponent bool
 	// SuffixReverseGuardSuffixRowLimit overrides the tool-only fixed-suffix
 	// payload cap. Zero selects ExpansionSearchSuffixReverseGuardSuffixRowLimit.
 	SuffixReverseGuardSuffixRowLimit int64
@@ -1580,6 +1584,9 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 	if options.EnableExpansionSuffixReverseGuard && len(translator.emittedExpansionSearchPolicies) == 0 {
 		return Result{}, fmt.Errorf("expansion suffix reverse guard was selected but not emitted")
 	}
+	if options.EnableExpansionSuffixRouteComponent && len(translator.appliedExpansionSearchStrategies) == 0 {
+		return Result{}, fmt.Errorf("suffix route component was selected but not emitted")
+	}
 	if options.ForceShortestPathExecutor != "" && len(translator.appliedShortestPathExecutors) == 0 {
 		return Result{}, fmt.Errorf("forced shortest-path executor %q was selected but not emitted", options.ForceShortestPathExecutor)
 	}
@@ -1719,7 +1726,7 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if options.EnableExpansionOrientationTournament && options.EnableExpansionOrientationShadow {
 		return fmt.Errorf("expansion orientation tournament and shadow modes are mutually exclusive")
 	}
-	suffixMode := options.EnableExpansionSuffixReverseGuard || options.EnableExpansionSuffixReverseRetry
+	suffixMode := options.EnableExpansionSuffixReverseGuard || options.EnableExpansionSuffixReverseRetry || options.EnableExpansionSuffixRouteComponent
 	if suffixMode && (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) {
 		return fmt.Errorf("expansion suffix reverse modes and orientation modes are mutually exclusive")
 	}
@@ -1779,8 +1786,10 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 	if options.EnableExpansionOrientationShadow {
 		return applyExpansionOrientationShadowPolicy(plan, orientationPolicy)
 	}
-	if options.EnableExpansionSuffixReverseGuard && options.EnableExpansionSuffixReverseRetry {
-		return fmt.Errorf("expansion suffix reverse guard and transaction retry are mutually exclusive")
+	if (options.EnableExpansionSuffixReverseGuard && options.EnableExpansionSuffixReverseRetry) ||
+		(options.EnableExpansionSuffixReverseGuard && options.EnableExpansionSuffixRouteComponent) ||
+		(options.EnableExpansionSuffixReverseRetry && options.EnableExpansionSuffixRouteComponent) {
+		return fmt.Errorf("expansion suffix reverse guard, transaction retry, and direct component modes are mutually exclusive")
 	}
 	if options.EnableExpansionSuffixReverseGuard {
 		return applyExpansionSuffixReverseGuardPolicy(plan, options.SuffixReverseGuardSuffixRowLimit, options.SuffixReverseGuardStateLimit)
@@ -1794,7 +1803,43 @@ func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
 			options.SuffixReverseRetryOutputBytesLimit,
 		)
 	}
+	if options.EnableExpansionSuffixRouteComponent {
+		return applyExpansionSuffixRouteComponentPolicy(plan)
+	}
 	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
+}
+
+// applyExpansionSuffixRouteComponentPolicy selects one exact, reverse-only
+// fixed-suffix arm for GraphBench component measurement. It deliberately has
+// no admission caps or fallback because those belong to a later, separately
+// frozen automatic-routing experiment.
+func applyExpansionSuffixRouteComponentPolicy(plan *optimize.Plan) error {
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family == "fixed_suffix_expansion" &&
+			decision.CandidateStrategy == optimize.ExpansionSearchSuffixSeededReverse &&
+			decision.StructurallyEligible && decision.StaticallyEligible {
+			matching = append(matching, idx)
+		}
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("suffix route component matched %d statically eligible fixed-suffix targets; expected exactly one", len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.PlannedPolicy = ""
+	decision.EmittedPolicy = ""
+	decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
+	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{}
+	decision.Admission = optimize.ExpansionSearchAdmission{}
+	decision.StateLimit = 0
+	decision.FallbackStrategy = ""
+	decision.SelectionMode = "component_tool"
+	decision.SelectorVersion = optimize.ExpansionSearchSelectorSuffixRouteComponentV1
+	decision.FallbackReason = ""
+	return nil
 }
 
 // applyExpansionSuffixReverseRetryPolicy selects one reverse-only full-path

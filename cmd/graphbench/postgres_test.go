@@ -425,6 +425,23 @@ func TestSuffixReverseGuardToolOptionsAreExecutableAndAttested(t *testing.T) {
 	}))
 }
 
+func TestSuffixRouteComponentToolOptionsAreExecutableAndAttested(t *testing.T) {
+	options := translate.ToolOptions{EnableExpansionSuffixRouteComponent: true}
+	require.True(t, hasForcedToolOptions(options))
+
+	outcome := translate.TargetLoweringOutcome{
+		TargetKind:    "traversal",
+		Family:        "fixed_suffix_expansion",
+		Candidate:     string(optimize.ExpansionSearchSuffixSeededReverse),
+		Selected:      string(optimize.ExpansionSearchSuffixSeededReverse),
+		Applied:       string(optimize.ExpansionSearchSuffixSeededReverse),
+		SelectionMode: "component_tool",
+	}
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), timedRuntimeAttestationIdentity(translate.Result{
+		Optimization: translate.OptimizationSummary{TargetOutcomes: []translate.TargetLoweringOutcome{outcome}},
+	}))
+}
+
 // TestResolveCaseParams verifies that scalar, explicit-list, and generated-list fixture keys become ordered int64 IDs without disturbing ordinary parameters.
 func TestResolveCaseParams(t *testing.T) {
 	params, err := resolveCaseParams(ScaleCase{

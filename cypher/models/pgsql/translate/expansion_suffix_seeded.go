@@ -24,16 +24,19 @@ type suffixSeededIdentifiers struct {
 	boundaries pgsql.Identifier
 	// reverse names the recursive relation that searches from each boundary toward the root.
 	reverse pgsql.Identifier
+	// componentReceipt names the forced direct-component runtime receipt.
+	componentReceipt pgsql.Identifier
 }
 
 // newSuffixSeededIdentifiers derives collision-resistant CTE names from the incumbent final frame.
 func newSuffixSeededIdentifiers(finalFrame pgsql.Identifier) suffixSeededIdentifiers {
 	prefix := string(finalFrame) + "_suffix_seeded_"
 	return suffixSeededIdentifiers{
-		rootPresence: pgsql.Identifier(prefix + "root_presence"),
-		suffix:       pgsql.Identifier(prefix + "suffix"),
-		boundaries:   pgsql.Identifier(prefix + "boundaries"),
-		reverse:      pgsql.Identifier(prefix + "reverse"),
+		rootPresence:     pgsql.Identifier(prefix + "root_presence"),
+		suffix:           pgsql.Identifier(prefix + "suffix"),
+		boundaries:       pgsql.Identifier(prefix + "boundaries"),
+		reverse:          pgsql.Identifier(prefix + "reverse"),
+		componentReceipt: pgsql.Identifier(prefix + "component_receipt"),
 	}
 }
 
@@ -658,6 +661,26 @@ func (s *Translator) buildSuffixSeededReverseQuery(
 		})
 	}
 
+	var componentReceipt *pgsql.CommonTableExpression
+	if decision.SelectionMode == "component_tool" {
+		receipt := pgsql.CommonTableExpression{
+			Alias:        pgsql.TableAlias{Name: ids.componentReceipt},
+			Materialized: &pgsql.Materialized{Materialized: true},
+			Query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{&pgsql.AliasedExpression{
+				Expression: pgsql.FunctionCall{
+					Function: suffixGuardAttestationFn,
+					Parameters: []pgsql.Expression{
+						pgsql.NewLiteral("suffix_route_component", pgsql.Text),
+						pgsql.NewLiteral(false, pgsql.Boolean),
+						pgsql.NewLiteral(string(optimize.ExpansionSearchSuffixSeededReverse), pgsql.Text),
+					},
+				},
+				Alias: models.OptionalValue(pgsql.Identifier("runtime_receipt")),
+			}}}},
+		}
+		componentReceipt = &receipt
+	}
+
 	suffixEdgeIDs := pgsql.ArrayLiteral{
 		CastType: pgsql.Int8Array,
 	}
@@ -675,52 +698,66 @@ func (s *Translator) buildSuffixSeededReverseQuery(
 		pgd.Not(pgsql.NewBinaryExpression(reversePath, pgsql.OperatorArrayOverlap, suffixEdgeIDs)),
 	)
 
+	expressions := []pgsql.CommonTableExpression{
+		rootPresence,
+		suffixCTE,
+		boundaries,
+		reverse,
+	}
+	if componentReceipt != nil {
+		expressions = append(expressions, *componentReceipt)
+	}
+	from := []pgsql.FromClause{{
+		Source: pgsql.TableReference{
+			Name: rootFrame.AsCompoundIdentifier(),
+		},
+		Joins: []pgsql.Join{
+			{
+				Table: pgsql.TableReference{
+					Name: ids.reverse.AsCompoundIdentifier(),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.NewBinaryExpression(
+						projectedNodeIDReference(rootFrame, expansionStep.LeftNode),
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{ids.reverse, expansionNextID},
+					),
+				},
+			},
+			{
+				Table: pgsql.TableReference{
+					Name: ids.suffix.AsCompoundIdentifier(),
+				},
+				JoinOperator: pgsql.JoinOperator{
+					JoinType: pgsql.JoinTypeInner,
+					Constraint: pgsql.NewBinaryExpression(
+						pgsql.CompoundIdentifier{ids.suffix, fixedSuffixBoundaryID},
+						pgsql.OperatorEquals,
+						pgsql.CompoundIdentifier{ids.reverse, fixedSuffixBoundaryID},
+					),
+				},
+			},
+		},
+	}}
+	if componentReceipt != nil {
+		finalWhere = pgsql.OptionalAnd(finalWhere, pgsql.ExistsExpression{Subquery: pgsql.Subquery{Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: pgsql.Projection{pgsql.NewLiteral(int64(1), pgsql.Int8)},
+				From:       []pgsql.FromClause{tableFrom(ids.componentReceipt)},
+			},
+		}}})
+	}
+
 	return pgsql.Query{
 		CommonTableExpressions: &pgsql.With{
-			Recursive: true,
-			Expressions: []pgsql.CommonTableExpression{
-				rootPresence,
-				suffixCTE,
-				boundaries,
-				reverse,
-			},
+			Recursive:   true,
+			Expressions: expressions,
 		},
 		Body: pgsql.Select{
 			Projection: projection,
-			From: []pgsql.FromClause{{
-				Source: pgsql.TableReference{
-					Name: rootFrame.AsCompoundIdentifier(),
-				},
-				Joins: []pgsql.Join{
-					{
-						Table: pgsql.TableReference{
-							Name: ids.reverse.AsCompoundIdentifier(),
-						},
-						JoinOperator: pgsql.JoinOperator{
-							JoinType: pgsql.JoinTypeInner,
-							Constraint: pgsql.NewBinaryExpression(
-								projectedNodeIDReference(rootFrame, expansionStep.LeftNode),
-								pgsql.OperatorEquals,
-								pgsql.CompoundIdentifier{ids.reverse, expansionNextID},
-							),
-						},
-					},
-					{
-						Table: pgsql.TableReference{
-							Name: ids.suffix.AsCompoundIdentifier(),
-						},
-						JoinOperator: pgsql.JoinOperator{
-							JoinType: pgsql.JoinTypeInner,
-							Constraint: pgsql.NewBinaryExpression(
-								pgsql.CompoundIdentifier{ids.suffix, fixedSuffixBoundaryID},
-								pgsql.OperatorEquals,
-								pgsql.CompoundIdentifier{ids.reverse, fixedSuffixBoundaryID},
-							),
-						},
-					},
-				},
-			}},
-			Where: finalWhere,
+			From:       from,
+			Where:      finalWhere,
 		},
 	}, nil
 }

@@ -686,6 +686,11 @@ const (
 	// selector for full-path fixed-suffix observations.
 	ExpansionSearchSelectorFixedSuffixPathV1 = "fixed-suffix-path-static-v1"
 
+	// ExpansionSearchSelectorSuffixRouteComponentV1 identifies the default-off
+	// GraphBench component arm for one exact suffix-seeded reverse statement.
+	// It is not a production selector, cache identity, or routing policy.
+	ExpansionSearchSelectorSuffixRouteComponentV1 = "suffix-route-component-v1"
+
 	// ExpansionSearchSuffixReverseGuardSuffixRowLimit caps complete fixed-suffix
 	// payload rows before reverse execution is admitted.
 	ExpansionSearchSuffixReverseGuardSuffixRowLimit int64 = 512

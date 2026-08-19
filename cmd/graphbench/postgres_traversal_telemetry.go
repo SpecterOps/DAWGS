@@ -320,6 +320,8 @@ func traversalSummaryFromOutcome(outcome translate.TargetLoweringOutcome, metric
 		family = TraversalTelemetryFamilyOrientation
 	} else if isSuffixReverseGuardPolicy(outcome.EmittedPolicy) || isSuffixReverseRetryPolicy(outcome.EmittedPolicy) {
 		family = TraversalTelemetryFamilySuffixGuard
+	} else if outcome.SelectorVersion == optimize.ExpansionSearchSelectorSuffixRouteComponentV1 {
+		family = TraversalTelemetryFamilySuffixComponent
 	}
 	if runtimeIdentity == "" {
 		telemetry := TraversalExecutionTelemetry{Summary: summary}
@@ -697,7 +699,9 @@ func traversalRequiredFamilies(summary TraversalExecutionSummary, base Traversal
 	if identity == "" {
 		identity = summary.RequestedIdentity
 	}
-	if isSuffixReverseGuardPolicy(summary.EmittedIdentity) || isSuffixReverseGuardPolicy(summary.SelectorVersion) ||
+	if summary.SelectorVersion == optimize.ExpansionSearchSelectorSuffixRouteComponentV1 {
+		add(TraversalTelemetryFamilySuffixComponent)
+	} else if isSuffixReverseGuardPolicy(summary.EmittedIdentity) || isSuffixReverseGuardPolicy(summary.SelectorVersion) ||
 		isSuffixReverseRetryPolicy(summary.EmittedIdentity) || isSuffixReverseRetryPolicy(summary.SelectorVersion) {
 		add(TraversalTelemetryFamilySuffixGuard)
 		add(TraversalTelemetryFamilyOrdinary)
@@ -841,6 +845,7 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 	}
 	inlineCTEBodies := map[string][]PostgresPlanNodeMetric{}
 	suffixGuardCTEBodies := map[string][]PostgresPlanNodeMetric{}
+	suffixComponentCTEBodies := map[string][]PostgresPlanNodeMetric{}
 	for _, node := range metrics.PlanNodes {
 		rows := node.ActualRows * node.ActualLoops
 		for cteName := range inlineCTECounters {
@@ -865,6 +870,16 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 				}
 				replay.Counters[name] = measuredRows
 				replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.measured_plan_json"
+			}
+		}
+		for suffix := range map[string]struct{}{
+			"suffix_seeded_suffix":            {},
+			"suffix_seeded_boundaries":        {},
+			"suffix_seeded_reverse":           {},
+			"suffix_seeded_component_receipt": {},
+		} {
+			if namedCTEBody(node, suffix) {
+				suffixComponentCTEBodies[suffix] = append(suffixComponentCTEBodies[suffix], node)
 			}
 		}
 		for suffix, name := range map[string]string{
@@ -1007,6 +1022,20 @@ func postgresTraversalPlanReplay(metrics PostgresPlanMetrics) *TraversalPlanRepl
 			replay.Counters["suffix_guard_output_rows"] = candidateRows + fallbackRows
 			replay.Provenance["counters.suffix_guard_output_rows"] = "postgres_metrics.plan_nodes.summed_suffix_guard_output_branches"
 		}
+	}
+	for suffix, name := range map[string]string{
+		"suffix_seeded_suffix":            "suffix_component_suffix_rows",
+		"suffix_seeded_boundaries":        "suffix_component_boundary_rows",
+		"suffix_seeded_reverse":           "suffix_component_reverse_state_rows",
+		"suffix_seeded_component_receipt": "suffix_component_receipt_rows",
+	} {
+		bodies := suffixComponentCTEBodies[suffix]
+		if len(bodies) != 1 {
+			continue
+		}
+		body := bodies[0]
+		replay.Counters[name] = body.ActualRows * body.ActualLoops
+		replay.Provenance["counters."+name] = "postgres_metrics.plan_nodes.exact_suffix_component_cte_materialization_body"
 	}
 	return replay
 }
@@ -1395,6 +1424,7 @@ func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context
 		if telemetry != nil {
 			if level == TraversalTelemetryLevelDiagnostic {
 				enrichSuffixGuardTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount, record.ObservedRows)
+				enrichSuffixRouteComponentTraversalTelemetry(telemetry, *record.PostgresMetrics, record.RowCount)
 				enrichOrientationTraversalTelemetry(
 					telemetry,
 					*record.PostgresMetrics,
@@ -1434,6 +1464,116 @@ func (s *postgresSQLRunner) attachPostgresTraversalTelemetry(ctx context.Context
 		reference.TraversalTelemetry = telemetry
 	}
 	return nil
+}
+
+// enrichSuffixRouteComponentTraversalTelemetry completes the direct component
+// contract from the one emitted reverse statement. It fails closed unless all
+// exact CTE materializations, the one receipt, and both replay timings are
+// present. The output row count is the exact public observation from the
+// production query; a consumer CTE scan may repeat it and is not authoritative.
+func enrichSuffixRouteComponentTraversalTelemetry(telemetry *TraversalExecutionTelemetry, metrics PostgresPlanMetrics, outputRows int64) {
+	if telemetry == nil || telemetry.Diagnostic == nil ||
+		telemetry.Summary.SelectorVersion != optimize.ExpansionSearchSelectorSuffixRouteComponentV1 {
+		return
+	}
+	plan := telemetry.Diagnostic.PlanReplay
+	if plan == nil {
+		markTraversalCountersUnavailable(telemetry.Diagnostic, "suffix-route component has no PostgreSQL plan replay")
+		return
+	}
+	required := []string{
+		"suffix_component_suffix_rows",
+		"suffix_component_boundary_rows",
+		"suffix_component_reverse_state_rows",
+		"suffix_component_receipt_rows",
+	}
+	for _, name := range required {
+		if _, present := plan.Counters[name]; !present {
+			markTraversalCountersUnavailable(telemetry.Diagnostic, "suffix-route component is missing exact plan counter "+name)
+			return
+		}
+	}
+	if plan.Counters["suffix_component_receipt_rows"] != 1 {
+		markTraversalCountersUnavailable(telemetry.Diagnostic, "suffix-route component receipt must be exactly one row")
+		return
+	}
+	if metrics.PlanningMS == nil || metrics.ExecutionMS == nil ||
+		metrics.Provenance["planning_ms"] == "" || metrics.Provenance["execution_ms"] == "" {
+		markTraversalCountersUnavailable(telemetry.Diagnostic, "suffix-route component requires measured PostgreSQL planning and execution timings")
+		return
+	}
+	nodeHydrationLoops, nodeHydrationRows, edgeHydrationLoops, edgeHydrationRows, err := suffixComponentOrderedHydration(
+		metrics.PlanNodes,
+		observationRequiresHydration(telemetry.Summary.ObservationMode),
+	)
+	if err != nil {
+		markTraversalCountersUnavailable(telemetry.Diagnostic, "suffix-route component "+err.Error())
+		return
+	}
+	planningNS := int64(*metrics.PlanningMS * float64(time.Millisecond))
+	executionNS := int64(*metrics.ExecutionMS * float64(time.Millisecond))
+	if planningNS < 0 || executionNS < 0 {
+		markTraversalCountersUnavailable(telemetry.Diagnostic, "suffix-route component replay timings must not be negative")
+		return
+	}
+	telemetry.Diagnostic.Counters.SuffixComponent = &SuffixComponentTraversalCounters{
+		SuffixRows:                traversalTelemetryPointer(plan.Counters["suffix_component_suffix_rows"]),
+		BoundaryRows:              traversalTelemetryPointer(plan.Counters["suffix_component_boundary_rows"]),
+		ReverseStateRows:          traversalTelemetryPointer(plan.Counters["suffix_component_reverse_state_rows"]),
+		OrderedNodeHydrationLoops: traversalTelemetryPointer(nodeHydrationLoops),
+		OrderedNodeHydrationRows:  traversalTelemetryPointer(nodeHydrationRows),
+		OrderedEdgeHydrationLoops: traversalTelemetryPointer(edgeHydrationLoops),
+		OrderedEdgeHydrationRows:  traversalTelemetryPointer(edgeHydrationRows),
+		OutputRows:                traversalTelemetryPointer(outputRows),
+		ReceiptRows:               traversalTelemetryPointer(plan.Counters["suffix_component_receipt_rows"]),
+		PlanningTimeNS:            traversalTelemetryPointer(planningNS),
+		ExecutionTimeNS:           traversalTelemetryPointer(executionNS),
+	}
+	if telemetry.Diagnostic.Provenance == nil {
+		telemetry.Diagnostic.Provenance = map[string]string{}
+	}
+	for _, name := range []string{"suffix_rows", "boundary_rows", "reverse_state_rows", "receipt_rows"} {
+		telemetry.Diagnostic.Provenance["suffix_component."+name] = "untimed_timing_off_plan.exact_suffix_component_cte_materialization"
+	}
+	for _, name := range []string{
+		"ordered_node_hydration_loops", "ordered_node_hydration_rows",
+		"ordered_edge_hydration_loops", "ordered_edge_hydration_rows",
+	} {
+		telemetry.Diagnostic.Provenance["suffix_component."+name] = "untimed_timing_off_plan.exact_ordered_path_hydration_alias"
+	}
+	telemetry.Diagnostic.Provenance["suffix_component.output_rows"] = "exact_public_observation.row_count"
+	telemetry.Diagnostic.Provenance["suffix_component.planning_time_ns"] = "postgres_metrics.planning_ms:" + metrics.Provenance["planning_ms"]
+	telemetry.Diagnostic.Provenance["suffix_component.execution_time_ns"] = "postgres_metrics.execution_ms:" + metrics.Provenance["execution_ms"]
+	telemetry.Diagnostic.CounterStatus = TraversalTelemetryCounterStatusComplete
+	telemetry.Diagnostic.IncompleteReasons = nil
+}
+
+// suffixComponentOrderedHydration reports only the two aliases emitted by the
+// direct component's ordered-ID rehydration expressions. Root, suffix, and
+// reverse-search node lookups are deliberately excluded. A path observation
+// must expose exactly one node and one edge rehydration scan, even when both
+// scans truthfully execute zero loops for a no-path result.
+func suffixComponentOrderedHydration(nodes []PostgresPlanNodeMetric, required bool) (nodeLoops, nodeRows, edgeLoops, edgeRows int64, err error) {
+	var nodeMatches, edgeMatches int
+	for _, node := range nodes {
+		switch strings.ToLower(strings.TrimSpace(node.Alias)) {
+		case "_ordered_path_node":
+			nodeMatches++
+			nodeLoops += node.ActualLoops
+			nodeRows += node.ActualRows * node.ActualLoops
+		case "_ordered_path_edge":
+			edgeMatches++
+			edgeLoops += node.ActualLoops
+			edgeRows += node.ActualRows * node.ActualLoops
+		}
+	}
+	if nodeMatches > 1 || edgeMatches > 1 {
+		return 0, 0, 0, 0, fmt.Errorf("ordered hydration plan aliases are ambiguous")
+	}
+	if required && (nodeMatches != 1 || edgeMatches != 1) {
+		return 0, 0, 0, 0, fmt.Errorf("is missing exact ordered hydration plan aliases")
+	}
+	return nodeLoops, nodeRows, edgeLoops, edgeRows, nil
 }
 
 // enrichSuffixGuardTraversalTelemetry completes the reverse-first guard's

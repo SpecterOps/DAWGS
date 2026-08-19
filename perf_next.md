@@ -1,6 +1,6 @@
 # PostgreSQL traversal performance plan
 
-Date: 2026-08-14
+Date: 2026-08-19
 
 Status: proposed; no candidate in this document is authorized for production
 
@@ -101,6 +101,25 @@ one study's holdout to tune another.
   separately. A faster median cannot hide a resource or cold-session failure.
 
 ## P0: clean baseline and opportunity accounting
+
+### 2026-08-19 recapture
+
+P0 was recaptured from clean committed source `a4b29f2` with binary SHA-256
+`6745fca9c3b79b48875a0d5555f375f458af34d938e20e545bb6bce27379fca2`.
+Two independently reloaded rounds used one warm-up and three timed iterations
+with a one-connection PostgreSQL pool. The ignored raw artifacts are
+`.coverage/p0-sql-routing-20260819/round-1.jsonl`
+(`a50836f08eaf85fac839f09d15420f060445ffb5312bf3bf609552fc86ad26ca`)
+and `.coverage/p0-sql-routing-20260819/round-2.jsonl`
+(`fb6198257d15c71f2dcb348e1d2c3d7a9579b27ef44d983b3d5fc50f0336e262`).
+
+All 704 backend records were `ok`; 184 complete observations were comparable
+and equal across the two backends. The refreshed descriptive ledger identifies
+`GFSE-V2-D16-F1000-R1-X1-M1-sparse_path` as the largest repeated loss at
+`91.06x` PostgreSQL/Neo4j, followed by hidden-fan-in distance at `79.03x`.
+All-shortest cases now make up the broadest high-loss cluster, with several
+`26-36x` losses. This remains opportunity accounting only: it opens no
+protected corpus, production selector, or terminal identity.
 
 ### Purpose
 
@@ -255,9 +274,21 @@ The clean six-round `suffix-reverse-retry-v1` capture is terminally rejected:
 the retry fast path exceeded the frozen exact-reverse overhead gate on every
 open case. Its exact receipt and timing evidence is recorded in
 [`docs/experiments/suffix_reverse_retry_v1.md`](docs/experiments/suffix_reverse_retry_v1.md).
-No P1 holdout was opened. P2 may therefore proceed only through the separately
-frozen, pre-implementation power study in
-[`docs/experiments/sp_i2_successor_power_study_v3.md`](docs/experiments/sp_i2_successor_power_study_v3.md).
+No P1 holdout was opened. The subsequently frozen P2 V3 power study is also
+terminal, so no existing P1 or P2 candidate may proceed.
+
+### P1-SR1: externally selected single-arm reverse feasibility
+
+The fresh P0 record demonstrates that fixed-suffix remains the highest single
+SQL-only opportunity, but it does not authorize another retry, probe, or
+always-reverse policy. The separately named, default-off
+`sql-strategy-routing-preflight-v1` generation isolates only the existing
+exact reverse component and the cost of an external decision boundary. It
+cannot use terminal P1 receipts as qualifying evidence and cannot enable a
+production cache or selector. Its frozen preimplementation contract is
+[`docs/experiments/sql_strategy_routing_preflight_v1.md`](docs/experiments/sql_strategy_routing_preflight_v1.md)
+with machine-readable inputs in
+[`benchmark/testdata/scale/protocols/sql_strategy_routing_preflight_v1.json`](benchmark/testdata/scale/protocols/sql_strategy_routing_preflight_v1.json).
 
 ## P2: hidden-fan-in distance successor
 

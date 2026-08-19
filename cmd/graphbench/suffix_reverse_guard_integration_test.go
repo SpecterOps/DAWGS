@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/stretchr/testify/require"
 )
@@ -191,4 +193,211 @@ func TestPostgreSQLSuffixReverseRetryPreservesExactRowsAndReceipts(t *testing.T)
 			}
 		})
 	}
+}
+
+// TestPostgreSQLSuffixRouteComponentPreservesExactRowsAndReceipt exercises the
+// default-off direct component arm on an open training fixture. It verifies
+// the component is one reverse statement with no guard, retry, or incumbent
+// arm; it is not a performance qualification.
+func TestPostgreSQLSuffixRouteComponentPreservesExactRowsAndReceipt(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	const caseName = "GFSE-V3-TRAIN-Q4-C1-S1-productive_cycle_self_loop_path"
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{caseName}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+	runner.repeatableRead = true
+	runner.traversalTelemetry = postgresTraversalTelemetryDiagnostic
+	runner.toolOptions.EnableExpansionSuffixRouteComponent = true
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	record := records[0]
+	require.Equal(t, StatusOK, record.Status, record.Error)
+	require.NotNil(t, record.TraversalTelemetry)
+	require.NoError(t, record.TraversalTelemetry.Validate())
+	require.NotNil(t, record.TraversalTelemetry.Diagnostic)
+	require.Equal(t, TraversalTelemetryCounterStatusComplete, record.TraversalTelemetry.Diagnostic.CounterStatus)
+	require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.SuffixComponent)
+	require.Equal(t, int64(1), *record.TraversalTelemetry.Diagnostic.Counters.SuffixComponent.ReceiptRows)
+	require.Contains(t, record.SQL, "_suffix_seeded_component_receipt")
+	require.NotContains(t, record.SQL, "_suffix_guard_")
+	require.NotContains(t, record.SQL, "EXPANSION-STEPWISE-FORWARD")
+
+	summary := record.TraversalTelemetry.Summary
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), summary.EmittedIdentity)
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), summary.RuntimeIdentity)
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), summary.AppliedIdentity)
+	require.Equal(t, optimize.ExpansionSearchSelectorSuffixRouteComponentV1, summary.SelectorVersion)
+	require.Equal(t, "selected", summary.RuntimeBranch)
+	require.False(t, *summary.FallbackExecuted)
+
+	for _, sample := range record.Stats.Samples {
+		if sample.RuntimeAttestation != "timed_invocation" {
+			continue
+		}
+		require.Len(t, sample.RuntimeReceiptEvents, 1)
+		require.Equal(t, "suffix_route_component", sample.RuntimeReceiptEvents[0].RuntimeBranch)
+		require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), sample.RuntimeReceiptEvents[0].RuntimeIdentity)
+	}
+}
+
+// TestPostgreSQLSuffixRouteComponentRecordsNoPathReceipt verifies the direct
+// component records execution even when its exact reverse query returns no
+// public rows. This keeps no-path component measurements fail-closed.
+func TestPostgreSQLSuffixRouteComponentRecordsNoPathReceipt(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{Cases: []string{"GFSE-P1-TRAIN-D09-F513-R0-X512-no_path_exhaustion"}})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+	runner.repeatableRead = true
+	runner.traversalTelemetry = postgresTraversalTelemetryDiagnostic
+	runner.toolOptions.EnableExpansionSuffixRouteComponent = true
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	record := records[0]
+	require.Equal(t, StatusOK, record.Status, record.Error)
+	for _, sample := range record.Stats.Samples {
+		if sample.RuntimeAttestation != "timed_invocation" {
+			continue
+		}
+		require.Len(t, sample.RuntimeReceiptEvents, 1)
+		require.Equal(t, "suffix_route_component", sample.RuntimeReceiptEvents[0].RuntimeBranch)
+		require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), sample.RuntimeReceiptEvents[0].RuntimeIdentity)
+	}
+}
+
+// TestPostgreSQLSuffixRouteComponentCancellationReusesPoolSession proves the
+// direct component handles PostgreSQL cancellation, rolls the failed
+// transaction back, returns its single connection to the pool, and remains
+// usable from the reacquired physical backend. It is operational evidence,
+// not a timing qualification.
+func TestPostgreSQLSuffixRouteComponentCancellationReusesPoolSession(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	if connection == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+	connectionURL, err := url.Parse(connection)
+	require.NoError(t, err)
+	if connectionURL.Scheme != "postgres" && connectionURL.Scheme != "postgresql" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
+	require.NoError(t, err)
+	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{
+		Cases: []string{"GFSE-SRC-V1-TARGET-D17-F1025-sparse_path"},
+	})
+	require.NoError(t, err)
+	require.Len(t, selected.Cases, 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	runner, err := newPostgresSQLRunner(ctx, "../../integration/testdata", connection, selected, 1, 1, nil, false, nil, "", "")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, runner.Close(context.Background())) })
+	runner.repeatableRead = true
+	runner.traversalTelemetry = postgresTraversalTelemetryDiagnostic
+	runner.toolOptions.EnableExpansionSuffixRouteComponent = true
+
+	records, err := runner.Run(ctx, 0, 1, selected)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	record := records[0]
+	require.Equal(t, StatusOK, record.Status, record.Error)
+	require.NotNil(t, record.TraversalTelemetry)
+	require.NoError(t, record.TraversalTelemetry.Validate())
+	require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.SuffixComponent)
+	require.Equal(t, TraversalTelemetryCounterStatusComplete, record.TraversalTelemetry.Diagnostic.CounterStatus)
+
+	translation, sqlQuery, err := runner.translateCypher(ctx, selected.Cases[0].Cypher, record.Params)
+	require.NoError(t, err)
+	require.Contains(t, sqlQuery, "_suffix_seeded_component_receipt")
+	require.NotContains(t, sqlQuery, "EXPANSION-STEPWISE-FORWARD")
+	queryArgs := []any{pgx.QueryExecModeCacheStatement, pgx.QueryResultFormats{pgx.BinaryFormatCode}, pgx.NamedArgs(translation.Parameters)}
+
+	connectionHandle, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	backendPID := connectionHandle.Conn().PgConn().PID()
+	tx, err := connectionHandle.BeginTx(ctx, postgresConcurrencyTxOptions())
+	require.NoError(t, err)
+	_, err = tx.Exec(ctx, "set local statement_timeout = '1ms'")
+	require.NoError(t, err)
+	started := time.Now()
+	rows, queryErr := tx.Query(ctx, sqlQuery, queryArgs...)
+	if queryErr == nil {
+		for rows.Next() {
+			_, queryErr = rows.Values()
+			if queryErr != nil {
+				break
+			}
+		}
+		rows.Close()
+		if queryErr == nil {
+			queryErr = rows.Err()
+		}
+	}
+	cancellationLatency := time.Since(started)
+	var postgresError *pgconn.PgError
+	require.ErrorAs(t, queryErr, &postgresError)
+	require.Equal(t, "57014", postgresError.Code)
+	require.Less(t, cancellationLatency, 250*time.Millisecond)
+	require.NoError(t, tx.Rollback(ctx))
+	connectionHandle.Release()
+
+	reusedHandle, err := runner.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer reusedHandle.Release()
+	var reusedPID uint32
+	require.NoError(t, reusedHandle.QueryRow(ctx, "select pg_backend_pid()").Scan(&reusedPID))
+	require.Equal(t, backendPID, reusedPID)
+
+	rows, err = reusedHandle.Query(ctx, sqlQuery, queryArgs...)
+	require.NoError(t, err)
+	rowCount := int64(0)
+	for rows.Next() {
+		_, err = rows.Values()
+		require.NoError(t, err)
+		rowCount++
+	}
+	rows.Close()
+	require.NoError(t, rows.Err())
+	require.Equal(t, record.RowCount, rowCount)
+	t.Logf("cancelled direct suffix-route component in %s; pool reused backend PID %d", cancellationLatency, backendPID)
 }

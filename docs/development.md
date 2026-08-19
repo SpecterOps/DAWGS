@@ -159,6 +159,13 @@ pool size of one; see the
 [frozen development protocol](experiments/suffix_reverse_retry_v1.md) before
 selecting cases or overriding caps.
 
+The tool-only `-postgres-expansion-suffix-route-component` mode measures one
+exact suffix-seeded reverse statement for the default-off SQL-routing
+preflight. It requires Repeatable Read, diagnostic traversal telemetry, and a
+pool size of one. It forbids probes, retries, cap overrides, cache behavior,
+and production manifests; see the
+[preimplementation contract](experiments/sql_strategy_routing_preflight_v1.md).
+
 The PostgreSQL scale-plan correctness gate shares the scale runner. It checks the
 required stable query-form IDs, declared read/write cardinalities, rollback-safe
 mutation post-state, `EXPLAIN ANALYZE` capture, and stable plan invariants. It

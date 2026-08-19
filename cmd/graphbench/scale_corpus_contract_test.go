@@ -98,7 +98,9 @@ func TestGeneratedFixedSuffixV3OrientationCorpusFreezesTrainingAndHoldoutMatrice
 	trainingCount, holdoutCount := 0, 0
 
 	for _, testCase := range corpus.Cases {
-		if !strings.HasPrefix(testCase.Dataset, "generated_fixed_suffix_expansion_v3_") {
+		if !strings.HasPrefix(testCase.Dataset, "generated_fixed_suffix_expansion_v3_") ||
+			!slices.Contains(testCase.Tags, "orientation-v2-training") &&
+				!slices.Contains(testCase.Tags, "orientation-v2-holdout") {
 			continue
 		}
 

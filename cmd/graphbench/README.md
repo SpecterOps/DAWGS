@@ -233,6 +233,11 @@ Omit `-bundle-require-clean` for a diagnostic capture that deliberately carries
 a source patch. Structural or checksum failures always produce a nonzero exit;
 the optional clean-source policy additionally rejects any dirty capture.
 
+For a live capture that must be clean before it touches a database, add
+`-require-clean-source`. This checks tracked and untracked source content
+before target validation, fixture setup, or destructive-run locking; it is
+independent of the later bundle-verification policy.
+
 Compare matched arms with the matching checksummed host A/A report. Only a
 same-executable block/reload A/A comparison may omit this input:
 

@@ -914,6 +914,15 @@ func traversalNumericObservations(counters TraversalDiagnosticCounters) map[stri
 		set("state_rows", guard.StateRows)
 		set("output_rows", guard.OutputRows)
 	}
+	if component := counters.SuffixComponent; component != nil {
+		set("suffix_rows", component.SuffixRows)
+		set("reverse_seed_rows", component.SuffixRows)
+		set("state_rows", component.ReverseStateRows)
+		set("output_rows", component.OutputRows)
+		if component.OrderedNodeHydrationRows != nil && component.OrderedEdgeHydrationRows != nil {
+			observed["hydration_rows"] = *component.OrderedNodeHydrationRows + *component.OrderedEdgeHydrationRows
+		}
+	}
 	if shortest := counters.ShortestPath; shortest != nil {
 		set("state_rows", shortest.SeenPeak)
 		set("frontier_rows", shortest.FrontierPeak)

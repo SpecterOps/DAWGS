@@ -251,6 +251,23 @@ func workingTreeSHA256() string {
 	return fingerprint
 }
 
+// requireCleanSourceCapture refuses a live capture when either tracked edits
+// or untracked source files would make the binary's provenance non-reproducible.
+// It is intentionally evaluated before GraphBench validates a destructive
+// target or opens its run lock.
+func requireCleanSourceCapture() error {
+	return validateCleanSourceFingerprint(workingTreeSHA256())
+}
+
+// validateCleanSourceFingerprint isolates the fail-closed clean-source rule
+// so capture wiring can be tested without consulting the caller's repository.
+func validateCleanSourceFingerprint(fingerprint string) error {
+	if fingerprint != cleanWorkingTreeSHA256() {
+		return fmt.Errorf("clean-source capture requires a clean committed source tree")
+	}
+	return nil
+}
+
 // calculateWorkingTreeSHA256 computes working tree sha256.
 func calculateWorkingTreeSHA256(excludedRoot string) (string, error) {
 	digest := sha256.New()

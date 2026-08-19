@@ -1,13 +1,56 @@
 # PostgreSQL versus Neo4j performance summary
 
-The latest broad automatic-production benchmark shows that PostgreSQL now
+The historical broad automatic-production benchmark below shows that PostgreSQL
 wins most of the measured DAWGS corpus. The gains are shape-dependent:
 qualified ordinary shortest paths have largely moved from severe losses to
 PostgreSQL wins, while unbounded shortest paths, hidden fan-in, all-shortest
 enumeration, and sparse fixed-suffix traversal remain the principal Neo4j
 advantages.
 
-## Headline
+The current optimization ranking is the clean 2026-08-19 P0 recapture recorded
+in `docs/experiments/sql_strategy_routing_preflight_v1.md`. It supersedes the
+historical raw-gap ordering in this document but remains descriptive rather
+than release-gate evidence.
+
+## Current P0 opportunity ranking
+
+Two independently reloaded PostgreSQL/Neo4j rounds from clean commit `a4b29f2`
+produced 704 successful backend records. The backend-delta ledger has 184
+complete, comparable, semantically equal observations and 61 repeated
+PostgreSQL losses. The combined raw artifact is
+`.coverage/p0-sql-routing-20260819/p0.jsonl`
+(`a32b3156d19c178a2879ec645b221d363b883c5422dbbe89ec416db22df00e6b`);
+the descriptive ledger is
+`.coverage/p0-sql-routing-20260819/backend-delta.json`
+(`7be78bef932ee10a2c5d7b11237c419ece655e8cedc239adaa13f6997adf0e55`).
+
+| Workload | Current P0 PostgreSQL/Neo4j |
+| --- | ---: |
+| V2 sparse fixed-suffix path | `91.06x` slower |
+| Hidden-fan-in distance stress | `79.03x` slower |
+| All-shortest depth 8 | `36.25x` slower |
+| V2 sparse fixed-suffix endpoint IDs | `34.22x` slower |
+| Inbound early-depth all-shortest | `32.61x` slower |
+| Inbound all-shortest depth 8 | `32.24x` slower |
+
+Sparse fixed suffix remains the highest single SQL-only opportunity. The
+default remains `EXPANSION-STEPWISE-FORWARD`: no terminal guard, retry, or
+probe policy has been revived. The newly frozen `sql-strategy-routing-preflight-v1`
+generation measures only a default-off direct reverse component before any
+future cache or automatic-routing proposal.
+
+Its first dirty-source, four-round diagnostic component capture matched all
+11 fresh target/control oracles across 440 timed samples. Direct reverse was
+very favorable on the two sparse targets (component/incumbent median `0.087x`
+for endpoint IDs and `0.050x` for complete paths), while high-fan-in, dense,
+and 511/512/513 suffix controls regressed (`1.33-1.84x`). All 220 component
+samples were reverse-only and fallback-free. Because the source was dirty and
+the recorded component counters are `plan_derived_partial`, this is not a
+cache, routing, protected-holdout, or promotion authorization; the capture
+ledger and required clean recapture are recorded in
+[`docs/experiments/sql_strategy_routing_preflight_v1.md`](docs/experiments/sql_strategy_routing_preflight_v1.md).
+
+## Historical headline (pre-P0)
 
 | Metric | Result |
 | --- | ---: |

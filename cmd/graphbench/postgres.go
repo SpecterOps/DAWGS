@@ -1055,6 +1055,7 @@ func timedRuntimeAttestationIdentity(translation translate.Result) string {
 		requested == string(optimize.ShortestPathExecutorI2GuardedDistance) ||
 		isV2GraphBenchExecutor(requested) ||
 		requested == string(optimize.ShortestPathExecutorASPI1DAG) ||
+		outcome.SelectionMode == "component_tool" ||
 		isOrientationProbePolicy(outcome.EmittedPolicy) ||
 		isSuffixReverseGuardPolicy(outcome.EmittedPolicy) ||
 		isSuffixReverseRetryPolicy(outcome.EmittedPolicy) {
@@ -1257,7 +1258,7 @@ func hasForcedToolOptions(options translate.ToolOptions) bool {
 		options.GuardedDistanceStateLimit != 0 || options.GuardedDistanceFrontierLimit != 0 ||
 		options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow ||
 		options.ExpansionOrientationPolicy != "" || options.EnableExpansionSuffixReverseGuard ||
-		options.EnableExpansionSuffixReverseRetry || options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0 ||
+		options.EnableExpansionSuffixReverseRetry || options.EnableExpansionSuffixRouteComponent || options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0 ||
 		options.SuffixReverseRetryOutputRowLimit != 0 || options.SuffixReverseRetryOutputBytesLimit != 0
 }
 

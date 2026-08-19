@@ -45,6 +45,9 @@ const (
 	// TraversalTelemetryFamilySuffixGuard identifies bounded reverse-first
 	// fixed-suffix admission and its exact fallback boundary.
 	TraversalTelemetryFamilySuffixGuard TraversalTelemetryFamily = "suffix_guard"
+	// TraversalTelemetryFamilySuffixComponent identifies the direct, one-arm
+	// fixed-suffix reverse component used by the routing preflight.
+	TraversalTelemetryFamilySuffixComponent TraversalTelemetryFamily = "suffix_component"
 	// TraversalTelemetryFamilySP identifies singleton shortest-path work.
 	TraversalTelemetryFamilySP TraversalTelemetryFamily = "shortest_path"
 	// TraversalTelemetryFamilyASP identifies all-shortest-path work.
@@ -160,6 +163,10 @@ type TraversalDiagnosticCounters struct {
 	// SuffixGuard records reverse-first fixed-suffix admission independently of
 	// topology-scored orientation probes.
 	SuffixGuard *SuffixGuardTraversalCounters `json:"suffix_guard,omitempty"`
+	// SuffixComponent records the direct fixed-suffix reverse component. It is
+	// deliberately distinct from SuffixGuard: the component has one exact arm,
+	// no selector probe, no cap admission, and no fallback branch.
+	SuffixComponent *SuffixComponentTraversalCounters `json:"suffix_component,omitempty"`
 	// ShortestPath identifies the filesystem shortest path.
 	ShortestPath *ShortestPathTraversalCounters `json:"shortest_path,omitempty"`
 	// AllShortestPaths identifies the filesystem all shortest paths.
@@ -216,6 +223,24 @@ type SuffixGuardTraversalCounters struct {
 	FallbackExecutorLoops  *int64 `json:"fallback_executor_loops"`
 	SuffixOverflow         *bool  `json:"suffix_overflow"`
 	StateOverflow          *bool  `json:"state_overflow"`
+}
+
+// SuffixComponentTraversalCounters records the complete plan-visible work of
+// the direct suffix-route component. Planning and execution timings come from
+// the separate untimed EXPLAIN replay; the public output count is bound to the
+// exact observed query result rather than inferred from a consumer CTE scan.
+type SuffixComponentTraversalCounters struct {
+	SuffixRows                *int64 `json:"suffix_rows"`
+	BoundaryRows              *int64 `json:"boundary_rows"`
+	ReverseStateRows          *int64 `json:"reverse_state_rows"`
+	OrderedNodeHydrationLoops *int64 `json:"ordered_node_hydration_loops"`
+	OrderedNodeHydrationRows  *int64 `json:"ordered_node_hydration_rows"`
+	OrderedEdgeHydrationLoops *int64 `json:"ordered_edge_hydration_loops"`
+	OrderedEdgeHydrationRows  *int64 `json:"ordered_edge_hydration_rows"`
+	OutputRows                *int64 `json:"output_rows"`
+	ReceiptRows               *int64 `json:"receipt_rows"`
+	PlanningTimeNS            *int64 `json:"planning_time_ns"`
+	ExecutionTimeNS           *int64 `json:"execution_time_ns"`
 }
 
 // InlinePredecessorTraversalCounters records the complete set of bounded
@@ -607,6 +632,8 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 			validateOrientationCounters(diagnostic.Counters.Orientation, diagnostic.Provenance, problems)
 		case TraversalTelemetryFamilySuffixGuard:
 			validateSuffixGuardCounters(diagnostic.Counters.SuffixGuard, diagnostic.Provenance, problems)
+		case TraversalTelemetryFamilySuffixComponent:
+			validateSuffixComponentCounters(diagnostic.Counters.SuffixComponent, diagnostic.Provenance, problems)
 		case TraversalTelemetryFamilySP:
 			if diagnostic.Counters.InlineShortestDistance != nil {
 				validateInlineDistanceCounters(diagnostic.Counters.InlineShortestDistance, diagnostic.Provenance, problems)
@@ -635,13 +662,14 @@ func validateTraversalDiagnostic(diagnostic *TraversalExecutionDiagnostic, probl
 	}
 
 	for family, present := range map[TraversalTelemetryFamily]bool{
-		TraversalTelemetryFamilyOrdinary:    diagnostic.Counters.Ordinary != nil,
-		TraversalTelemetryFamilyOrientation: diagnostic.Counters.Orientation != nil,
-		TraversalTelemetryFamilySuffixGuard: diagnostic.Counters.SuffixGuard != nil,
-		TraversalTelemetryFamilySP:          diagnostic.Counters.ShortestPath != nil || diagnostic.Counters.InlineShortestPath != nil || diagnostic.Counters.InlineShortestDistance != nil,
-		TraversalTelemetryFamilyASP:         diagnostic.Counters.AllShortestPaths != nil || diagnostic.Counters.InlineASP != nil,
-		TraversalTelemetryFamilyHydration:   diagnostic.Counters.Hydration != nil,
-		TraversalTelemetryFamilyWorkspace:   diagnostic.Counters.Workspace != nil,
+		TraversalTelemetryFamilyOrdinary:        diagnostic.Counters.Ordinary != nil,
+		TraversalTelemetryFamilyOrientation:     diagnostic.Counters.Orientation != nil,
+		TraversalTelemetryFamilySuffixGuard:     diagnostic.Counters.SuffixGuard != nil,
+		TraversalTelemetryFamilySuffixComponent: diagnostic.Counters.SuffixComponent != nil,
+		TraversalTelemetryFamilySP:              diagnostic.Counters.ShortestPath != nil || diagnostic.Counters.InlineShortestPath != nil || diagnostic.Counters.InlineShortestDistance != nil,
+		TraversalTelemetryFamilyASP:             diagnostic.Counters.AllShortestPaths != nil || diagnostic.Counters.InlineASP != nil,
+		TraversalTelemetryFamilyHydration:       diagnostic.Counters.Hydration != nil,
+		TraversalTelemetryFamilyWorkspace:       diagnostic.Counters.Workspace != nil,
 	} {
 		if present && !slices.Contains(diagnostic.RequiredFamilies, family) {
 			*problems = append(*problems, fmt.Sprintf("diagnostic counter family %q is present but not declared", family))
@@ -672,6 +700,28 @@ func validateSuffixGuardCounters(counters *SuffixGuardTraversalCounters, provena
 	})
 	requirePointerAndProvenance("suffix_guard.suffix_overflow", counters.SuffixOverflow, provenance, problems)
 	requirePointerAndProvenance("suffix_guard.state_overflow", counters.StateOverflow, provenance, problems)
+}
+
+// validateSuffixComponentCounters validates the one-arm component's exact
+// CTE materializations, runtime receipt, observed output, and replay timings.
+func validateSuffixComponentCounters(counters *SuffixComponentTraversalCounters, provenance map[string]string, problems *[]string) {
+	if counters == nil {
+		*problems = append(*problems, "diagnostic.counters.suffix_component is missing")
+		return
+	}
+	requireCounters("suffix_component", provenance, problems, map[string]*int64{
+		"suffix_rows":                  counters.SuffixRows,
+		"boundary_rows":                counters.BoundaryRows,
+		"reverse_state_rows":           counters.ReverseStateRows,
+		"ordered_node_hydration_loops": counters.OrderedNodeHydrationLoops,
+		"ordered_node_hydration_rows":  counters.OrderedNodeHydrationRows,
+		"ordered_edge_hydration_loops": counters.OrderedEdgeHydrationLoops,
+		"ordered_edge_hydration_rows":  counters.OrderedEdgeHydrationRows,
+		"output_rows":                  counters.OutputRows,
+		"receipt_rows":                 counters.ReceiptRows,
+		"planning_time_ns":             counters.PlanningTimeNS,
+		"execution_time_ns":            counters.ExecutionTimeNS,
+	})
 }
 
 func validateInlineDistanceCounters(counters *InlineDistanceTraversalCounters, provenance map[string]string, problems *[]string) {

@@ -143,6 +143,54 @@ func TestSuffixReverseRetryEmitsOnlyBoundedCandidate(t *testing.T) {
 	require.NotContains(t, formatted, "_suffix_guard_fallback_rows")
 }
 
+// TestSuffixRouteComponentEmitsOneExactReverseStatement verifies the new
+// default-off preflight arm has no probe, fallback, retry, or production-policy
+// identity while retaining one runtime receipt for diagnostic attestation.
+func TestSuffixRouteComponentEmitsOneExactReverseStatement(t *testing.T) {
+	translation, formatted := translateSuffixReverseGuard(t, guardedSuffixOrientationQuery, ToolOptions{
+		EnableExpansionSuffixRouteComponent: true,
+	})
+	decision := translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0]
+	require.Empty(t, decision.PlannedPolicy)
+	require.Empty(t, decision.EmittedPolicy)
+	require.Equal(t, "component_tool", decision.SelectionMode)
+	require.Equal(t, optimize.ExpansionSearchSelectorSuffixRouteComponentV1, decision.SelectorVersion)
+	require.Equal(t, optimize.ExpansionSearchExecutionBoundaryInlineStatement, decision.ExecutionBoundary)
+	require.Equal(t, optimize.ExpansionSearchSuffixSeededReverse, decision.SelectedStrategy)
+	require.Equal(t, []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}, decision.EmittedCandidates)
+	require.Empty(t, decision.ProbeCaps)
+	require.Empty(t, decision.Admission)
+	require.Empty(t, decision.FallbackStrategy)
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringExpansionSearchStrategy, decision.Target)
+	require.Equal(t, "component_tool", outcome.SelectionMode)
+	require.Equal(t, optimize.ExpansionSearchSelectorSuffixRouteComponentV1, outcome.SelectorVersion)
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), outcome.Selected)
+	require.Equal(t, string(optimize.ExpansionSearchSuffixSeededReverse), outcome.Applied)
+	require.Empty(t, outcome.EmittedPolicy)
+
+	require.Contains(t, formatted, "_suffix_seeded_component_receipt")
+	require.Contains(t, formatted, "record_requested_traversal_runtime_attestation_v1('suffix_route_component', false, 'EXPANSION-SUFFIX-SEEDED-REVERSE')")
+	require.Contains(t, formatted, "EXPANSION-SUFFIX-SEEDED-REVERSE")
+	require.NotContains(t, formatted, "_suffix_guard_")
+	require.NotContains(t, formatted, "_orientation_")
+	require.NotContains(t, formatted, "EXPANSION-STEPWISE-FORWARD")
+	require.NotContains(t, formatted, "forward_retry_")
+}
+
+// TestSuffixRouteComponentAdmitsEndpointObservation verifies the direct
+// component measures both output shapes while retry/guard remain path-only.
+func TestSuffixRouteComponentAdmitsEndpointObservation(t *testing.T) {
+	query := strings.Replace(guardedSuffixOrientationQuery, "RETURN path", "RETURN id(terminal)", 1)
+	translation, formatted := translateSuffixReverseGuard(t, query, ToolOptions{
+		EnableExpansionSuffixRouteComponent: true,
+	})
+	decision := translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0]
+	require.Equal(t, optimize.ExpansionSearchObservationEndpointIDs, decision.ObservationMode)
+	require.Equal(t, optimize.ExpansionSearchSuffixSeededReverse, decision.SelectedStrategy)
+	require.Contains(t, formatted, "_suffix_seeded_component_receipt")
+}
+
 // TestSuffixReverseGuardRejectsEndpointOnlyObservation verifies that endpoint
 // cases remain on the incumbent and cannot be silently enrolled by tooling.
 func TestSuffixReverseGuardRejectsEndpointOnlyObservation(t *testing.T) {
