@@ -277,10 +277,13 @@ func TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace(t
 	corpus, err := loadScaleCorpus("../../benchmark/testdata/scale")
 	require.NoError(t, err)
 	selected, _, err := selectScaleCorpus(corpus, CorpusSelectors{
-		Cases: []string{"GFSE-SRC-V1-TARGET-D16-F1024-sparse_endpoint_ids"},
+		Cases: []string{
+			"GFSE-SRC-V1-TARGET-D16-F1024-sparse_endpoint_ids",
+			"GFSE-SRC-V1-TARGET-D17-F1025-sparse_path",
+		},
 	})
 	require.NoError(t, err)
-	require.Len(t, selected.Cases, 1)
+	require.Len(t, selected.Cases, 2)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -296,37 +299,38 @@ func TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace(t
 
 	records, err := runner.Run(ctx, 0, 1, selected)
 	require.NoError(t, err)
-	require.Len(t, records, 1)
-	record := records[0]
-	require.Equal(t, StatusOK, record.Status, record.Error)
-	require.NotNil(t, record.ClientWaterfall)
-	require.Len(t, record.ClientWaterfall.Samples, 1)
-	require.NotNil(t, record.PostgresBoundaryClosure)
-	closure := record.PostgresBoundaryClosure
-	require.NotEmpty(t, closure.SQLFingerprint)
-	expectedObservation, err := stableObservationSHA256(record.ObservedRows)
-	require.NoError(t, err)
-	require.Len(t, closure.SameSessionPreparedHits, 1)
-	require.Len(t, closure.PoolReacquiredPreparedHits, 1)
-	require.Equal(t, closure.PoolPreparedMiss.ConnectionID, closure.PoolReacquiredPreparedHits[0].ConnectionID)
-	for _, sample := range postgresBoundaryClosureSamples(*closure) {
-		require.Equal(t, record.RowCount, sample.Rows)
-		require.NotNil(t, sample.WorkspaceBytes)
-		require.NotEmpty(t, sample.ConnectionID)
-		require.Equal(t, expectedObservation, sample.ObservationSHA256)
+	require.Len(t, records, 2)
+	for _, record := range records {
+		require.Equal(t, StatusOK, record.Status, record.Error)
+		require.NotNil(t, record.ClientWaterfall)
+		require.Len(t, record.ClientWaterfall.Samples, 1)
+		require.NotNil(t, record.PostgresBoundaryClosure)
+		closure := record.PostgresBoundaryClosure
+		require.NotEmpty(t, closure.SQLFingerprint)
+		expectedObservation, err := stableObservationSHA256(record.ObservedRows)
+		require.NoError(t, err)
+		require.Len(t, closure.SameSessionPreparedHits, 1)
+		require.Len(t, closure.PoolReacquiredPreparedHits, 1)
+		require.Equal(t, closure.PoolPreparedMiss.ConnectionID, closure.PoolReacquiredPreparedHits[0].ConnectionID)
+		for _, sample := range postgresBoundaryClosureSamples(*closure) {
+			require.Equal(t, record.RowCount, sample.Rows)
+			require.NotNil(t, sample.WorkspaceBytes)
+			require.NotEmpty(t, sample.ConnectionID)
+			require.Equal(t, expectedObservation, sample.ObservationSHA256)
+		}
+		require.LessOrEqual(t, closure.Workspace.SessionPeakBytes, runner.sessionMemoryCeilingBytes)
+		require.Equal(t, closure.Workspace.SessionPeakBytes, closure.Workspace.PoolPeakBytes)
+		require.LessOrEqual(t, closure.Workspace.PerQueryPeakBytes, runner.poolMemoryCeilingBytes)
+		require.Zero(t, closure.Workspace.PerQueryPeakBytes)
+		require.Zero(t, closure.Workspace.FreshSessionPeakBytes)
+		require.Zero(t, closure.Workspace.SessionPeakBytes)
+		require.Zero(t, closure.Workspace.PoolPeakBytes)
+		require.NotNil(t, record.TraversalTelemetry)
+		require.NoError(t, record.TraversalTelemetry.Validate())
+		require.Contains(t, record.TraversalTelemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyWorkspace)
+		require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.Workspace)
+		require.Equal(t, closure.Workspace.SessionPeakBytes, *record.TraversalTelemetry.Diagnostic.Counters.Workspace.SessionPeakBytes)
 	}
-	require.LessOrEqual(t, closure.Workspace.SessionPeakBytes, runner.sessionMemoryCeilingBytes)
-	require.Equal(t, closure.Workspace.SessionPeakBytes, closure.Workspace.PoolPeakBytes)
-	require.LessOrEqual(t, closure.Workspace.PerQueryPeakBytes, runner.poolMemoryCeilingBytes)
-	require.Zero(t, closure.Workspace.PerQueryPeakBytes)
-	require.Zero(t, closure.Workspace.FreshSessionPeakBytes)
-	require.Zero(t, closure.Workspace.SessionPeakBytes)
-	require.Zero(t, closure.Workspace.PoolPeakBytes)
-	require.NotNil(t, record.TraversalTelemetry)
-	require.NoError(t, record.TraversalTelemetry.Validate())
-	require.Contains(t, record.TraversalTelemetry.Diagnostic.RequiredFamilies, TraversalTelemetryFamilyWorkspace)
-	require.NotNil(t, record.TraversalTelemetry.Diagnostic.Counters.Workspace)
-	require.Equal(t, closure.Workspace.SessionPeakBytes, *record.TraversalTelemetry.Diagnostic.Counters.Workspace.SessionPeakBytes)
 }
 
 // TestPostgreSQLSuffixRouteComponentRecordsNoPathReceipt verifies the direct

@@ -53,6 +53,17 @@ func (s postgresBoundaryObservationNormalizer) normalize(values []any, fields []
 	if err != nil {
 		return "", err
 	}
+	if s.pathValues {
+		// The path-set corpus contract has exactly one returned path column per
+		// row. Do not let an unregistered composite OID become an opaque binary
+		// value and receive a misleading, but stable, observation digest.
+		if len(stableValues) != 1 {
+			return "", fmt.Errorf("expected one decoded path column, got %d", len(stableValues))
+		}
+		if _, ok := stableValues[0].(stablePathObservation); !ok {
+			return "", fmt.Errorf("expected decoded path value, got %T", values[0])
+		}
+	}
 	encoded, err := json.Marshal(stableValues)
 	if err != nil {
 		return "", err
@@ -384,18 +395,28 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 	if sessionCeilingBytes <= 0 || poolCeilingBytes <= 0 {
 		return PostgresBoundaryClosure{}, fmt.Errorf("closure workspace ceilings must be positive")
 	}
-	freshConfig := pool.Config().ConnConfig.Copy()
+	poolConfig := pool.Config().Copy()
+	freshConfig := poolConfig.ConnConfig.Copy()
 	fresh, err := pgx.ConnectConfig(ctx, freshConfig)
 	if err != nil {
 		return PostgresBoundaryClosure{}, fmt.Errorf("open fresh PostgreSQL closure session: %w", err)
 	}
 	defer fresh.Close(ctx)
+	// pgx.ConnectConfig does not invoke pgxpool.AfterConnect. Run the same
+	// hook used by the benchmark pool before collecting the backend ID or
+	// timing the first statement so direct and pooled sessions decode driver
+	// composites identically while retaining an honest statement-cache miss.
+	if poolConfig.AfterConnect != nil {
+		if err := poolConfig.AfterConnect(ctx, fresh); err != nil {
+			return PostgresBoundaryClosure{}, fmt.Errorf("initialize fresh PostgreSQL closure session: %w", err)
+		}
+	}
 	// The runner pool has already executed the primary benchmark statement, so
 	// it cannot establish an honest prepared-statement miss. Build a separate
 	// size-one pool from the same connection configuration for the raw closure.
 	// This pool is used only below: its first query is the recorded miss and its
 	// later release/reacquisition samples prove reusable prepared-hit behavior.
-	closurePoolConfig := pool.Config().Copy()
+	closurePoolConfig := poolConfig.Copy()
 	closurePoolConfig.MaxConns = 1
 	closurePoolConfig.MinConns = 0
 	closurePool, err := pgxpool.NewWithConfig(ctx, closurePoolConfig)

@@ -112,3 +112,11 @@ func TestPostgresBoundaryObservationNormalizerUsesStablePublicRows(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, `[{"value":42}]`, jsonRow)
 }
+
+func TestPostgresBoundaryObservationNormalizerRejectsOpaquePathValue(t *testing.T) {
+	normalizer := postgresBoundaryObservationNormalizer{pathValues: true}
+
+	_, err := normalizer.normalize([]any{[]byte{1, 2, 3}}, nil)
+
+	require.ErrorContains(t, err, "expected decoded path value")
+}
