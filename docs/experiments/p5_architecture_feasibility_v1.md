@@ -71,3 +71,14 @@ matrix, mutation fixture and write/WAL/storage budget, graph-generation and
 cache behavior, rollback/removal path, and a read-only exact baseline. Only
 after that prerequisite passes may it create a candidate roster. P4 artifacts
 and the current platform inventory cannot tune or promote such a successor.
+
+## Selected successor
+
+On 2026-08-19, the distinct
+[`P5-NATIVE-ADJACENCY-SCAN-V1`](p5_native_adjacency_extension_feasibility_v1.md)
+architecture was selected for prospective feasibility planning. It is a
+backend-local, read-only PostgreSQL extension over the existing edge indexes;
+it is not a continuation of the rejected duplicate relation. Its frozen first
+gate is matched PostgreSQL 17/18 delivery followed by an exact raw-adjacency
+probe. No native traversal candidate exists unless that non-candidate protocol
+passes.
