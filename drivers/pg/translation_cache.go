@@ -170,8 +170,11 @@ func newCypherTranslationCache(capacity int) *cypherTranslationCache {
 	}
 }
 
-// translationParameterTypeKey encodes sorted parameter names and negotiated data types into an unambiguous cache-key component.
-func translationParameterTypeKey(parameters map[string]any) string {
+// TranslationParameterTypeKey encodes sorted parameter names and negotiated
+// PostgreSQL data types into an unambiguous cache-key component. It is shared
+// by connection-local caches so their translation partitioning remains
+// identical to the default PostgreSQL driver cache.
+func TranslationParameterTypeKey(parameters map[string]any) string {
 	keys := make([]string, 0, len(parameters))
 	for key := range parameters {
 		keys = append(keys, key)
@@ -199,6 +202,12 @@ func translationParameterTypeKey(parameters map[string]any) string {
 		key.WriteString(typeName)
 	}
 	return key.String()
+}
+
+// translationParameterTypeKey is retained for package-internal callers and
+// tests that predate the exported cache extension seam.
+func translationParameterTypeKey(parameters map[string]any) string {
+	return TranslationParameterTypeKey(parameters)
 }
 
 // cacheableTranslation reports whether every translated parameter can be rebound from a current caller parameter.
@@ -236,7 +245,7 @@ func (s *cypherTranslationCache) Translate(query string, graphID int32, paramete
 // production policy, making gate disablement immediately cache safe.
 func (s *cypherTranslationCache) TranslateWithPolicy(query string, graphID int32, parameters map[string]any, policyIdentity string, build func() (translate.Result, string, error)) (string, map[string]any, error) {
 	trimmed := strings.TrimSpace(query)
-	if s == nil || s.capacity <= 0 || len(query) > maxCachedCypherQueryBytes {
+	if s == nil || s.capacity <= 0 || len(query) > MaxCachedCypherQueryBytes {
 		if result, sql, err := build(); err != nil {
 			return "", nil, err
 		} else {

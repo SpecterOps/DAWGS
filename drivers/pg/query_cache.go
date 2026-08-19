@@ -14,9 +14,9 @@ const (
 	// retained when no cache capacity is configured.
 	defaultCypherParseCacheEntries = 256
 
-	// maxCachedCypherQueryBytes excludes oversized query strings from the parse
-	// cache while still allowing them to be parsed.
-	maxCachedCypherQueryBytes = 64 * 1024
+	// MaxCachedCypherQueryBytes excludes oversized query strings from reusable
+	// parse and translation caches while still allowing them to execute.
+	MaxCachedCypherQueryBytes = 64 * 1024
 )
 
 // cypherParseCacheEntry pairs an immutable parsed AST with the normalized query text used as its LRU key.
@@ -118,7 +118,7 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 	}
 
 	s.lock.Lock()
-	if s.closed || s.capacity <= 0 || len(input) > maxCachedCypherQueryBytes {
+	if s.closed || s.capacity <= 0 || len(input) > MaxCachedCypherQueryBytes {
 		s.stats.Bypasses++
 		s.lock.Unlock()
 		parsed, err := frontend.ParseCypher(frontend.NewContext(), query)

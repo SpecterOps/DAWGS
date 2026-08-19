@@ -57,13 +57,13 @@ func TestCypherParseCacheDoesNotRetainErrorsOrOversizedQueries(t *testing.T) {
 	require.False(t, hit)
 	require.Empty(t, cache.entries)
 
-	oversized := "MATCH (n) RETURN n // " + strings.Repeat("x", maxCachedCypherQueryBytes)
+	oversized := "MATCH (n) RETURN n // " + strings.Repeat("x", MaxCachedCypherQueryBytes)
 	_, hit, err = cache.Parse(oversized)
 	require.NoError(t, err)
 	require.False(t, hit)
 	require.Empty(t, cache.entries)
 
-	padded := strings.Repeat(" ", maxCachedCypherQueryBytes) + "MATCH (n) RETURN n"
+	padded := strings.Repeat(" ", MaxCachedCypherQueryBytes) + "MATCH (n) RETURN n"
 	_, hit, err = cache.Parse(padded)
 	require.NoError(t, err)
 	require.False(t, hit)
