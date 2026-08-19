@@ -135,6 +135,16 @@ func (s *Pool) Close() {
 	})
 }
 
+// Reset closes idle physical connections and causes acquired connections to be
+// closed when released. BeforeClose retires every affected connection cache.
+// Use it after an out-of-band schema change that can affect registered types
+// or generated SQL.
+func (s *Pool) Reset() {
+	if s != nil && s.pool != nil {
+		s.pool.Reset()
+	}
+}
+
 func (s *Pool) closeProvider() {
 	if s != nil && s.provider != nil {
 		s.provider.close()

@@ -16,6 +16,38 @@ and parameter-source mappings, never request values or defaults, and fail closed
 Cached query text is released by LRU eviction or driver close, and diagnostics expose aggregate counters without query
 text.
 
+### Opt-in PostgreSQL v2 translation cache
+
+`drivers/pg/v2` is an explicit Go API for evaluating connection-local SQL translation caches. It is not registered with
+`dawgs.Open`, adds no connection-string scheme, and does not alter the established `pg` driver. Construct the pool and
+driver directly:
+
+```go
+poolConfig, err := pgxpool.ParseConfig(connectionString)
+if err != nil {
+	return err
+}
+
+pool, err := pgv2.NewDefaultPool(ctx, poolConfig)
+if err != nil {
+	return err
+}
+database := pgv2.NewDriver(0, pool)
+defer database.Close(ctx)
+```
+
+`pgv2.DefaultConfig()` uses 64 retained translation entries per live physical PostgreSQL connection. Pass
+`pgv2.Config{TranslationCacheEntries: 0}` to `pgv2.NewPool` to disable retention, or a positive value for that exact
+per-connection SIEVE capacity; negative values are rejected. The theoretical aggregate entry bound is live physical
+connections multiplied by this capacity, not a global bound.
+
+A cache remains with its physical `*pgx.Conn` across pool lease release and reacquisition, and is removed when that
+connection closes or the driver closes. `TranslationCacheStats` reports opaque diagnostic connection IDs and aggregate,
+query-text-free counters only. Cached entries retain immutable SQL and parameter-source metadata; every hit binds the
+current caller values. V2 keeps the parse cache driver-wide, caches neither results nor routing decisions, and advances
+its generation after successful schema assertion and kind refresh. For out-of-band schema changes that affect types or
+generated SQL, reset or recreate the pool before continuing.
+
 ## Quick Start
 
 Build the repository:

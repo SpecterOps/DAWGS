@@ -237,7 +237,7 @@ func TestV2ConnectionCloseAndRejectedReleaseDestroyCaches(t *testing.T) {
 		require.Len(t, before.Connections, 1)
 		oldID := before.Connections[0].ID
 
-		driver.pool.pool.Reset()
+		driver.pool.Reset()
 		requireEventually(t, func() bool {
 			stats := driver.TranslationCacheStats()
 			return stats.LiveConnections == 0 && stats.RetiredConnections >= 1
