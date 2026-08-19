@@ -172,7 +172,9 @@ ordinary incumbent or the explicitly forced direct component, but requires the
 same Repeatable Read/diagnostic/size-one-pool contract plus positive declared
 session and pool workspace ceilings. It records fresh prepared-miss,
 same-session prepared-hit, and release/reacquisition strata with client and
-raw-PGX waterfalls. It cannot be combined with reference, concurrency,
+raw-PGX waterfalls. Each raw sample records a normalized public-observation
+SHA-256 that must agree with the primary CySQL result and every closure
+stratum. It cannot be combined with reference, concurrency,
 orientation, retry, guard, force, or production-manifest modes and does not
 select an executor. The exact roster and acceptance conditions are in the
 [closure protocol](../benchmark/testdata/scale/protocols/sql_strategy_routing_component_closure_v1.json).

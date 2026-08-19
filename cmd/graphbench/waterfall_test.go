@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/stretchr/testify/require"
@@ -34,9 +36,11 @@ func TestMeasureCompileWaterfallMarksOverlappingIntervals(t *testing.T) {
 // only from complete prepared-state strata.
 func TestFinalizePostgresBoundaryClosureCompletesWorkspaceHighWater(t *testing.T) {
 	workspace := func(bytes int64) *int64 { return &bytes }
+	observation, err := stableObservationSHA256([]string{"[1]"})
+	require.NoError(t, err)
 	sample := func(connection string, bytes int64) BoundarySample {
 		return BoundarySample{
-			Total: time.Millisecond, Rows: 1, ConnectionID: connection, WorkspaceBytes: workspace(bytes),
+			Total: time.Millisecond, Rows: 1, ConnectionID: connection, WorkspaceBytes: workspace(bytes), ObservationSHA256: observation,
 		}
 	}
 	closure, err := finalizePostgresBoundaryClosure(PostgresBoundaryClosure{
@@ -60,17 +64,19 @@ func TestFinalizePostgresBoundaryClosureCompletesWorkspaceHighWater(t *testing.T
 // evidence.
 func TestFinalizePostgresBoundaryClosureFailsClosed(t *testing.T) {
 	workspace := int64(1)
+	observation, err := stableObservationSHA256([]string{"[1]"})
+	require.NoError(t, err)
 	base := PostgresBoundaryClosure{
 		SQLFingerprint:           "sql",
-		FreshSessionPreparedMiss: BoundarySample{Total: time.Millisecond, ConnectionID: "fresh", WorkspaceBytes: &workspace},
-		SameSessionPreparedHits:  []BoundarySample{{Total: time.Millisecond, ConnectionID: "fresh", WorkspaceBytes: &workspace}},
-		PoolPreparedMiss:         BoundarySample{Total: time.Millisecond, ConnectionID: "pool", WorkspaceBytes: &workspace},
+		FreshSessionPreparedMiss: BoundarySample{Total: time.Millisecond, ConnectionID: "fresh", WorkspaceBytes: &workspace, ObservationSHA256: observation},
+		SameSessionPreparedHits:  []BoundarySample{{Total: time.Millisecond, ConnectionID: "fresh", WorkspaceBytes: &workspace, ObservationSHA256: observation}},
+		PoolPreparedMiss:         BoundarySample{Total: time.Millisecond, ConnectionID: "pool", WorkspaceBytes: &workspace, ObservationSHA256: observation},
 		PoolReacquiredPreparedHits: []BoundarySample{{
-			Total: time.Millisecond, ConnectionID: "pool", WorkspaceBytes: &workspace,
+			Total: time.Millisecond, ConnectionID: "pool", WorkspaceBytes: &workspace, ObservationSHA256: observation,
 		}},
 	}
 
-	_, err := finalizePostgresBoundaryClosure(base, 0, 1)
+	_, err = finalizePostgresBoundaryClosure(base, 0, 1)
 	require.ErrorContains(t, err, "exceeds ceiling")
 
 	changedConnection := base
@@ -82,4 +88,27 @@ func TestFinalizePostgresBoundaryClosureFailsClosed(t *testing.T) {
 	missingWorkspace.SameSessionPreparedHits[0].WorkspaceBytes = nil
 	_, err = finalizePostgresBoundaryClosure(missingWorkspace, 1, 1)
 	require.ErrorContains(t, err, "incomplete boundary sample")
+	base.SameSessionPreparedHits[0].WorkspaceBytes = &workspace
+
+	missingObservation := base
+	missingObservation.SameSessionPreparedHits[0].ObservationSHA256 = ""
+	_, err = finalizePostgresBoundaryClosure(missingObservation, 1, 1)
+	require.ErrorContains(t, err, "incomplete boundary sample")
+	base.SameSessionPreparedHits[0].ObservationSHA256 = observation
+
+	mismatchedObservation := base
+	mismatchedObservation.SameSessionPreparedHits[0].ObservationSHA256 = "different"
+	_, err = finalizePostgresBoundaryClosure(mismatchedObservation, 1, 1)
+	require.ErrorContains(t, err, "raw observations differ")
+}
+
+func TestPostgresBoundaryObservationNormalizerUsesStablePublicRows(t *testing.T) {
+	normalizer := postgresBoundaryObservationNormalizer{}
+	row, err := normalizer.normalize([]any{int64(42)}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "[42]", row)
+
+	jsonRow, err := normalizer.normalize([]any{[]byte(`{"value":42}`)}, []pgconn.FieldDescription{{DataTypeOID: pgtype.JSONBOID}})
+	require.NoError(t, err)
+	require.Equal(t, `[{"value":42}]`, jsonRow)
 }

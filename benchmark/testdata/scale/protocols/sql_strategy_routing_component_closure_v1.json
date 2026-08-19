@@ -86,7 +86,7 @@
     }
   },
   "required_observations": [
-    "exact_public_rows_and_paths_for_every_timed_and_raw_pgx_execution",
+    "exact_public_rows_and_paths_for_every_timed_and_raw_pgx_execution_with_per_sample_normalized_observation_sha256",
     "component_reverse_runtime_identity_and_zero_inactive_forward_work",
     "complete_suffix_boundary_reverse_receipt_ordered_hydration_and_workspace_counters",
     "client_parse_optimize_translate_render_waterfall",

@@ -960,11 +960,18 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			return record
 		}
 		record.ClientWaterfall = &waterfall
+		normalizer := postgresBoundaryObservationNormalizer{
+			mapper:        pg.NewValueMapper(ctx, s.pgDriver.KindMapper()),
+			reversedIDs:   reverseIDMap(idMap),
+			scalarNodeIDs: resultContainsNodeIDs(testCase.Expected),
+			pathValues:    resultContainsPaths(testCase.Expected),
+		}
 		closure, err := measurePostgresBoundaryClosure(
 			ctx,
 			s.pool,
 			explain.SQL,
 			explain.Parameters,
+			normalizer,
 			iterations,
 			s.sessionMemoryCeilingBytes,
 			s.poolMemoryCeilingBytes,
@@ -975,10 +982,21 @@ func (s *postgresSQLRunner) runCase(ctx context.Context, warmupIterations, itera
 			record.Error = fmt.Sprintf("suffix-route closure raw pgx waterfall: %v", err)
 			return record
 		}
+		expectedObservationSHA256, err := stableObservationSHA256(record.ObservedRows)
+		if err != nil {
+			record.Status = StatusError
+			record.Error = fmt.Sprintf("suffix-route closure encode public observation: %v", err)
+			return record
+		}
 		for _, sample := range postgresBoundaryClosureSamples(closure) {
 			if sample.Rows != record.RowCount {
 				record.Status = StatusError
 				record.Error = fmt.Sprintf("suffix-route closure raw pgx row count %d differs from CySQL row count %d", sample.Rows, record.RowCount)
+				return record
+			}
+			if sample.ObservationSHA256 != expectedObservationSHA256 {
+				record.Status = StatusError
+				record.Error = "suffix-route closure raw pgx observation differs from CySQL public observation"
 				return record
 			}
 		}

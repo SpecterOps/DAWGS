@@ -209,7 +209,9 @@ raw-PGX pool, and five hits after release/reacquisition of that same pooled
 backend. Every raw execution must
 match the public row/path observation. The raw-PGX samples separately retain
 transaction setup, bind/prepare, first row, complete decode, drain/close, and
-total timing; workspace observation runs only after result drain and is
+total timing. Each sample also records a SHA-256 of its sorted normalized
+public rows; the runner rejects disagreement with the primary CySQL observation
+or any other prepared-state stratum. Workspace observation runs only after result drain and is
 excluded from those timing intervals. The exact client parse/optimize/translate/render
 waterfall is retained beside it.
 
@@ -243,6 +245,22 @@ forward statement. A failed row count, absent stage, changed pooled backend,
 missing workspace observation, ceiling breach, incomplete component telemetry,
 or target performance reversal stops this generation. No closure result is a
 cache hit or automatic-selection result.
+
+### Current closure disposition
+
+The complete four-round artifact from source `94fe902` is retained as
+diagnostic pre-enforcement evidence: it has all 88 successful main records,
+the required prepared-state strata, zero measured temporary workspace, and
+both sparse targets materially faster. It predates the per-sample normalized
+observation SHA-256 requirement, however, and therefore records only raw row
+counts for its direct pgx executions. It must not be used to assert that this
+closure has passed.
+
+The next capture must use a clean committed tree containing the observation
+hash enforcement, a fresh nonempty run UUID, a new ignored artifact directory,
+and the same four counterbalanced rounds. Run the cancellation/pool-reuse
+operational test before timed arms. Do not append to or replace the retained
+`94fe902` artifact.
 
 ## Required implementation slice
 

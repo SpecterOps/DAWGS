@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,17 @@ import (
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
 )
+
+// stableObservationSHA256 binds an ordered set of normalized public rows to a
+// compact evidence value. Callers must sort rows before fingerprinting them.
+func stableObservationSHA256(rows []string) (string, error) {
+	encoded, err := json.Marshal(rows)
+	if err != nil {
+		return "", fmt.Errorf("encode stable observations: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", sum), nil
+}
 
 // errScaleWriteRollback signals the intentional rollback used to isolate a measured write.
 var errScaleWriteRollback = errors.New("scale write rollback")

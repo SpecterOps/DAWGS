@@ -7,16 +7,22 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"runtime"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/graph"
 )
 
 // postgresBoundarySession is the small shared execution surface of a dedicated
@@ -28,6 +34,68 @@ type postgresBoundarySession interface {
 // postgresBoundaryPIDReader provides a physical PostgreSQL backend identity.
 type postgresBoundaryPIDReader interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+// postgresBoundaryObservationNormalizer converts raw pgx values into the
+// same fixture-stable public observations used by the primary measurement.
+// It is intentionally part of the decode stage: a closure cannot claim exact
+// raw-PGX output evidence without decoding the returned values.
+type postgresBoundaryObservationNormalizer struct {
+	mapper        graph.ValueMapper
+	reversedIDs   map[graph.ID]string
+	scalarNodeIDs bool
+	pathValues    bool
+}
+
+func (s postgresBoundaryObservationNormalizer) normalize(values []any, fields []pgconn.FieldDescription) (string, error) {
+	decodePostgresBoundaryJSONValues(values, fields)
+	stableValues, err := stableRowValues(values, s.mapper, s.reversedIDs, s.scalarNodeIDs, s.pathValues)
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(stableValues)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+// decodePostgresBoundaryJSONValues mirrors the PostgreSQL driver's raw-result
+// normalization so a direct pgx boundary records the same public value shape.
+func decodePostgresBoundaryJSONValues(values []any, fields []pgconn.FieldDescription) {
+	for idx, field := range fields {
+		if field.DataTypeOID != pgtype.JSONOID && field.DataTypeOID != pgtype.JSONBOID {
+			continue
+		}
+		if decoded, ok := decodePostgresBoundaryJSONValue(values[idx]); ok {
+			values[idx] = decoded
+		}
+	}
+}
+
+func decodePostgresBoundaryJSONValue(value any) (any, bool) {
+	switch typedValue := value.(type) {
+	case []byte:
+		var decoded any
+		if err := json.Unmarshal(typedValue, &decoded); err == nil {
+			return decoded, true
+		}
+	case string:
+		trimmedValue := strings.TrimSpace(typedValue)
+		if len(trimmedValue) == 0 {
+			return nil, false
+		}
+		switch trimmedValue[0] {
+		case '{', '[', '"':
+		default:
+			return nil, false
+		}
+		var decoded any
+		if err := json.Unmarshal([]byte(trimmedValue), &decoded); err == nil {
+			return decoded, true
+		}
+	}
+	return nil, false
 }
 
 // measureCompileWaterfall times Cypher parse, translate, and SQL rendering separately.
@@ -110,7 +178,7 @@ func measureRawPGXWaterfall(ctx context.Context, pool *pgxpool.Pool, sqlQuery st
 			return BoundarySample{}, err
 		}
 		defer connection.Release()
-		return measureRawPGXOnSession(ctx, connection, sqlQuery, params, iteration, totalStart, time.Since(acquireStart), retain, false, isolation...)
+		return measureRawPGXOnSession(ctx, connection, sqlQuery, params, nil, iteration, totalStart, time.Since(acquireStart), retain, false, isolation...)
 	}
 	for idx := 0; idx < warmupIterations; idx++ {
 		if _, err := run(-(idx + 1), false); err != nil {
@@ -148,6 +216,7 @@ func measureRawPGXOnSession(
 	session postgresBoundarySession,
 	sqlQuery string,
 	params map[string]any,
+	normalizer *postgresBoundaryObservationNormalizer,
 	iteration int,
 	totalStart time.Time,
 	poolWait time.Duration,
@@ -184,9 +253,24 @@ func measureRawPGXOnSession(
 	bindDuration := time.Since(bindStart)
 	firstRowStart := time.Now()
 	var rowCount int64
+	var observedRows []string
+	observeRow := func() error {
+		values, err := rows.Values()
+		if err != nil {
+			return err
+		}
+		if normalizer != nil {
+			observed, err := normalizer.normalize(values, rows.FieldDescriptions())
+			if err != nil {
+				return err
+			}
+			observedRows = append(observedRows, observed)
+		}
+		return nil
+	}
 	if rows.Next() {
 		rowCount++
-		if _, err := rows.Values(); err != nil {
+		if err := observeRow(); err != nil {
 			rows.Close()
 			return BoundarySample{}, err
 		}
@@ -195,7 +279,7 @@ func measureRawPGXOnSession(
 	allRowsStart := time.Now()
 	for rows.Next() {
 		rowCount++
-		if _, err := rows.Values(); err != nil {
+		if err := observeRow(); err != nil {
 			rows.Close()
 			return BoundarySample{}, err
 		}
@@ -206,6 +290,14 @@ func measureRawPGXOnSession(
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return BoundarySample{}, err
+	}
+	var observationSHA256 string
+	if normalizer != nil {
+		sort.Strings(observedRows)
+		observationSHA256, err = stableObservationSHA256(observedRows)
+		if err != nil {
+			return BoundarySample{}, err
+		}
 	}
 	drainDuration := time.Since(drainStart)
 	var workspaceBytes *int64
@@ -228,16 +320,17 @@ func measureRawPGXOnSession(
 	drainDuration += time.Since(rollbackStart)
 	runtime.ReadMemStats(&after)
 	sample := BoundarySample{
-		Iteration:      iteration,
-		PoolWait:       poolWait,
-		Transaction:    transactionDuration,
-		BindPrepare:    bindDuration,
-		FirstRow:       firstRowDuration,
-		AllRowsDecode:  allRowsDuration,
-		DrainClose:     drainDuration,
-		Total:          time.Since(totalStart),
-		Rows:           rowCount,
-		WorkspaceBytes: workspaceBytes,
+		Iteration:         iteration,
+		PoolWait:          poolWait,
+		Transaction:       transactionDuration,
+		BindPrepare:       bindDuration,
+		FirstRow:          firstRowDuration,
+		AllRowsDecode:     allRowsDuration,
+		DrainClose:        drainDuration,
+		Total:             time.Since(totalStart),
+		Rows:              rowCount,
+		WorkspaceBytes:    workspaceBytes,
+		ObservationSHA256: observationSHA256,
 	}
 	if retainAllocations {
 		sample.Allocations = after.Mallocs - before.Mallocs
@@ -284,7 +377,7 @@ func postgresBackendPID(ctx context.Context, connection postgresBoundaryPIDReade
 
 // measurePostgresBoundaryClosure captures explicit fresh-session, prepared-hit,
 // and release/reacquisition strata without changing the SQL under measurement.
-func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sqlQuery string, params map[string]any, iterations int, sessionCeilingBytes, poolCeilingBytes int64, isolation ...pgx.TxIsoLevel) (PostgresBoundaryClosure, error) {
+func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sqlQuery string, params map[string]any, normalizer postgresBoundaryObservationNormalizer, iterations int, sessionCeilingBytes, poolCeilingBytes int64, isolation ...pgx.TxIsoLevel) (PostgresBoundaryClosure, error) {
 	if iterations < 1 {
 		return PostgresBoundaryClosure{}, fmt.Errorf("closure iterations must be positive")
 	}
@@ -321,13 +414,13 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 	if err != nil {
 		return PostgresBoundaryClosure{}, err
 	}
-	closure.FreshSessionPreparedMiss, err = measureRawPGXOnSession(ctx, fresh, sqlQuery, params, 1, time.Now(), 0, true, true, isolation...)
+	closure.FreshSessionPreparedMiss, err = measureRawPGXOnSession(ctx, fresh, sqlQuery, params, &normalizer, 1, time.Now(), 0, true, true, isolation...)
 	if err != nil {
 		return PostgresBoundaryClosure{}, fmt.Errorf("fresh-session prepared miss: %w", err)
 	}
 	closure.FreshSessionPreparedMiss.ConnectionID = freshPID
 	for iteration := 1; iteration <= iterations; iteration++ {
-		sample, err := measureRawPGXOnSession(ctx, fresh, sqlQuery, params, iteration, time.Now(), 0, true, true, isolation...)
+		sample, err := measureRawPGXOnSession(ctx, fresh, sqlQuery, params, &normalizer, iteration, time.Now(), 0, true, true, isolation...)
 		if err != nil {
 			return PostgresBoundaryClosure{}, fmt.Errorf("same-session prepared hit %d: %w", iteration, err)
 		}
@@ -343,7 +436,7 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 	poolWait := time.Since(acquireStart)
 	pooledPID, err := postgresBackendPID(ctx, pooled)
 	if err == nil {
-		closure.PoolPreparedMiss, err = measureRawPGXOnSession(ctx, pooled, sqlQuery, params, 1, acquireStart, poolWait, true, true, isolation...)
+		closure.PoolPreparedMiss, err = measureRawPGXOnSession(ctx, pooled, sqlQuery, params, &normalizer, 1, acquireStart, poolWait, true, true, isolation...)
 	}
 	pooled.Release()
 	if err != nil {
@@ -364,7 +457,7 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 		}
 		var sample BoundarySample
 		if pidErr == nil {
-			sample, pidErr = measureRawPGXOnSession(ctx, pooled, sqlQuery, params, iteration, acquireStart, poolWait, true, true, isolation...)
+			sample, pidErr = measureRawPGXOnSession(ctx, pooled, sqlQuery, params, &normalizer, iteration, acquireStart, poolWait, true, true, isolation...)
 		}
 		pooled.Release()
 		if pidErr != nil {
@@ -384,7 +477,7 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 // finalizePostgresBoundaryClosure fails closed on an incomplete stratum,
 // changing pooled connection, absent workspace observation, or ceiling breach.
 func finalizePostgresBoundaryClosure(closure PostgresBoundaryClosure, sessionCeilingBytes, poolCeilingBytes int64) (PostgresBoundaryClosure, error) {
-	if closure.SQLFingerprint == "" || closure.FreshSessionPreparedMiss.WorkspaceBytes == nil ||
+	if closure.SQLFingerprint == "" || closure.FreshSessionPreparedMiss.WorkspaceBytes == nil || closure.FreshSessionPreparedMiss.ObservationSHA256 == "" ||
 		len(closure.SameSessionPreparedHits) == 0 || closure.PoolPreparedMiss.WorkspaceBytes == nil ||
 		len(closure.PoolReacquiredPreparedHits) == 0 {
 		return PostgresBoundaryClosure{}, fmt.Errorf("closure lacks a complete fresh, same-session, or pooled prepared-state stratum")
@@ -396,8 +489,11 @@ func finalizePostgresBoundaryClosure(closure PostgresBoundaryClosure, sessionCei
 	all = append(all, closure.SameSessionPreparedHits...)
 	all = append(all, closure.PoolReacquiredPreparedHits...)
 	for _, sample := range all {
-		if sample.WorkspaceBytes == nil || sample.Rows < 0 || sample.Total <= 0 || sample.ConnectionID == "" {
+		if sample.WorkspaceBytes == nil || sample.Rows < 0 || sample.Total <= 0 || sample.ConnectionID == "" || sample.ObservationSHA256 == "" {
 			return PostgresBoundaryClosure{}, fmt.Errorf("closure contains an incomplete boundary sample")
+		}
+		if sample.ObservationSHA256 != closure.FreshSessionPreparedMiss.ObservationSHA256 {
+			return PostgresBoundaryClosure{}, fmt.Errorf("closure raw observations differ between prepared-state strata")
 		}
 		if *sample.WorkspaceBytes > closure.Workspace.PerQueryPeakBytes {
 			closure.Workspace.PerQueryPeakBytes = *sample.WorkspaceBytes

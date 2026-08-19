@@ -289,6 +289,10 @@ production cache or selector. Its frozen preimplementation contract is
 [`docs/experiments/sql_strategy_routing_preflight_v1.md`](docs/experiments/sql_strategy_routing_preflight_v1.md)
 with machine-readable inputs in
 [`benchmark/testdata/scale/protocols/sql_strategy_routing_preflight_v1.json`](benchmark/testdata/scale/protocols/sql_strategy_routing_preflight_v1.json).
+The direct component's clean recapture passed its descriptive target and
+resource checks, but its first boundary/workspace artifact predates per-sample
+raw-PGX public-observation hashes. Recapture that closure before freezing or
+implementing any cache-feasibility work.
 
 ## P2: hidden-fan-in distance successor
 
@@ -539,12 +543,12 @@ deferred before protected timing with a documented reason.
 
 ## Immediate next actions
 
-1. Retain the completed P4 A1 baseline and the terminal I1 preflight. The
-   earlier first round remains a stopped artifact because A1's Function Scan
-   hid those counters; the later I1 artifact fails shallow/reconvergent
-   controls despite its no-path target win.
-2. Do not run a power study, broader I1 timing, protected cases, or selector
-   work from the P4 artifacts.
-3. Reopen P4 only with a distinct executor and separately frozen clean-source
-   roster. Capture only the frozen P5 shadow-adjacency feasibility inventory;
-   decide its budget before considering any Cypher candidate.
+1. Retain the completed P4 A1 baseline and terminal I1 preflight; do not run a
+   power study, broader I1 timing, protected cases, or selector work from them.
+2. Recapture the SQL-routing boundary/workspace closure from a clean committed
+   tree with per-sample raw-PGX observation hashes, a fresh UUID, and the
+   frozen four-round order. Keep the prior `94fe902` artifact unchanged.
+3. If and only if that closure passes, freeze the separate transaction-scoped
+   `suffix-route-cache-feasibility-v1` protocol before adding cache code. It
+   must define cache keys, snapshot ownership, misses, invalidation, rollback,
+   bounded memory, and read-path WAL behavior.

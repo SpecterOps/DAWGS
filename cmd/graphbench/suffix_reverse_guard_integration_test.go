@@ -304,6 +304,8 @@ func TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace(t
 	require.NotNil(t, record.PostgresBoundaryClosure)
 	closure := record.PostgresBoundaryClosure
 	require.NotEmpty(t, closure.SQLFingerprint)
+	expectedObservation, err := stableObservationSHA256(record.ObservedRows)
+	require.NoError(t, err)
 	require.Len(t, closure.SameSessionPreparedHits, 1)
 	require.Len(t, closure.PoolReacquiredPreparedHits, 1)
 	require.Equal(t, closure.PoolPreparedMiss.ConnectionID, closure.PoolReacquiredPreparedHits[0].ConnectionID)
@@ -311,6 +313,7 @@ func TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace(t
 		require.Equal(t, record.RowCount, sample.Rows)
 		require.NotNil(t, sample.WorkspaceBytes)
 		require.NotEmpty(t, sample.ConnectionID)
+		require.Equal(t, expectedObservation, sample.ObservationSHA256)
 	}
 	require.LessOrEqual(t, closure.Workspace.SessionPeakBytes, runner.sessionMemoryCeilingBytes)
 	require.Equal(t, closure.Workspace.SessionPeakBytes, closure.Workspace.PoolPeakBytes)

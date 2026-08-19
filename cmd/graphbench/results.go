@@ -288,6 +288,9 @@ type BoundarySample struct {
 	// WorkspaceBytes records PostgreSQL temporary workspace bytes sampled before
 	// the raw query transaction rolls back. It is set only by closure capture.
 	WorkspaceBytes *int64 `json:"workspace_bytes,omitempty"`
+	// ObservationSHA256 binds the normalized public rows decoded by this exact
+	// raw-PGX execution. It is set only by closure capture.
+	ObservationSHA256 string `json:"observation_sha256,omitempty"`
 }
 
 // PostgresBoundaryWaterfall summarizes PostgreSQL planning, execution, and client overhead samples.

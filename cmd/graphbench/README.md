@@ -368,7 +368,9 @@ incompatible with reference, concurrency, guard, retry, orientation, forced,
 and production-manifest modes. Each case records the client compile waterfall
 and raw-PGX fresh prepared miss, same-session prepared hits, pooled prepared
 miss, and same-backend release/reacquisition hits, including temporary
-workspace high-water evidence. The frozen roster and acceptance conditions are
+workspace high-water evidence. Each raw sample also carries a SHA-256 digest
+of its normalized public rows; every digest must match the primary CySQL
+observation and the other prepared-state strata. The frozen roster and acceptance conditions are
 in [`sql_strategy_routing_component_closure_v1.json`](../../benchmark/testdata/scale/protocols/sql_strategy_routing_component_closure_v1.json).
 
 `-postgres-expansion-suffix-reverse-guard` enables the distinct tool-only

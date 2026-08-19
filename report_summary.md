@@ -39,15 +39,15 @@ probe policy has been revived. The newly frozen `sql-strategy-routing-preflight-
 generation measures only a default-off direct reverse component before any
 future cache or automatic-routing proposal.
 
-Its first dirty-source, four-round diagnostic component capture matched all
-11 fresh target/control oracles across 440 timed samples. Direct reverse was
-very favorable on the two sparse targets (component/incumbent median `0.087x`
-for endpoint IDs and `0.050x` for complete paths), while high-fan-in, dense,
-and 511/512/513 suffix controls regressed (`1.33-1.84x`). All 220 component
-samples were reverse-only and fallback-free. Because the source was dirty and
-the recorded component counters are `plan_derived_partial`, this is not a
-cache, routing, protected-holdout, or promotion authorization; the capture
-ledger and required clean recapture are recorded in
+The first dirty-source capture was superseded by a clean committed component
+recapture: direct reverse reached component/incumbent medians of `0.081x` for
+endpoint IDs and `0.048x` for complete paths, while high-fan-in, dense, and
+511/512/513 suffix controls regressed. A subsequent four-round boundary and
+workspace artifact retained the prepared-state and zero-workspace evidence,
+but it predates per-sample normalized raw-PGX observation hashes. It remains
+diagnostic only and must be cleanly recaptured before any cache-feasibility
+decision. Neither artifact authorizes cache work, routing, protected-holdout,
+or promotion; see
 [`docs/experiments/sql_strategy_routing_preflight_v1.md`](docs/experiments/sql_strategy_routing_preflight_v1.md).
 
 ## Historical headline (pre-P0)
