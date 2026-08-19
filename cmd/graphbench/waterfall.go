@@ -258,6 +258,14 @@ func measurePostgresTemporaryWorkspace(ctx context.Context, tx pgx.Tx) (int64, e
 		where c.relnamespace = pg_my_temp_schema()
 		  and c.relname <> 'traversal_runtime_attestation_v1'
 		  and c.relname not like '%telemetry%'
+		  and not exists (
+		    select 1
+		    from pg_index i
+		    join pg_class indexed on indexed.oid = i.indrelid
+		    where i.indexrelid = c.oid
+		      and indexed.relnamespace = pg_my_temp_schema()
+		      and (indexed.relname = 'traversal_runtime_attestation_v1' or indexed.relname like '%telemetry%')
+		  )
 	`).Scan(&workspace); err != nil {
 		return 0, fmt.Errorf("measure temporary workspace high-water: %w", err)
 	}
