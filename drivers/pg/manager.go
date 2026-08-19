@@ -31,12 +31,10 @@ type KindMapper interface {
 
 // KindMapperFromGraphDatabase coordinates PostgreSQL driver behavior for kind mapper from graph database.
 func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
-	switch typedGraphDB := graphDB.(type) {
-	case *Driver:
-		return typedGraphDB.SchemaManager, nil
-	default:
-		return nil, fmt.Errorf("unsupported graph database type: %T", typedGraphDB)
+	if kindMapperProvider, supported := graphDB.(interface{ KindMapper() KindMapper }); supported {
+		return kindMapperProvider.KindMapper(), nil
 	}
+	return nil, fmt.Errorf("unsupported graph database type: %T", graphDB)
 }
 
 // SchemaManager coordinates graph and kind metadata with the query caches that depend on that schema state.
