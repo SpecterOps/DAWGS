@@ -97,6 +97,31 @@ func TestCypherTranslationCacheRebindsNamedParameters(t *testing.T) {
 	}, cache.Stats())
 }
 
+// TestDriverTranslationCacheStatsUsesDriverWideCache characterizes the v1
+// ownership model: all transactions created by one driver select its one
+// driver-wide translation cache, and the public stats method reports that
+// cache without exposing query text or parameter values.
+func TestDriverTranslationCacheStatsUsesDriverWideCache(t *testing.T) {
+	driver := NewDriver(0, nil)
+	build := func() (translate.Result, string, error) {
+		return translate.Result{
+			Parameters:       map[string]any{},
+			ParameterSources: map[string]string{},
+		}, "select 1", nil
+	}
+
+	_, _, err := driver.SchemaManager.translationCache.Translate("RETURN 1", 1, nil, build)
+	require.NoError(t, err)
+	_, _, err = driver.SchemaManager.translationCache.Translate("RETURN 1", 1, nil, build)
+	require.NoError(t, err)
+
+	require.Equal(t, TranslationCacheStats{
+		Hits:    1,
+		Misses:  1,
+		Entries: 1,
+	}, driver.TranslationCacheStats())
+}
+
 // TestCypherTranslationCacheSeparatesGraphAndParameterTypes verifies graph identity and negotiated types partition cache entries.
 func TestCypherTranslationCacheSeparatesGraphAndParameterTypes(t *testing.T) {
 	cache := newCypherTranslationCache(4)
