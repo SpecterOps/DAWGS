@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/graph"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatGraphResults(t *testing.T) {
@@ -46,11 +46,36 @@ func TestFormatGraphResults(t *testing.T) {
 		},
 	}
 	actualList, err := formatGraphResults(nodes)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	expectedList := []string{"(:A{name: 'a'})", "(:B{name: 'b'})", "({name: 'c'})"}
 
 	for i := range len(expectedList) {
-		assert.Equal(t, actualList[i], expectedList[i])
+		require.Equal(t, actualList[i], expectedList[i])
+	}
+}
+
+func TestFormatString(t *testing.T) {
+	tests := []struct {
+		input          string
+		expectedOutput string
+	}{
+		{
+			input:          `(:B {prefix: 'c', name: 'b'})`,
+			expectedOutput: `(:B{prefix:'c',name:'b'})`,
+		},
+		{
+			input:          `(:B {prefix: "c", name: "b"})`,
+			expectedOutput: `(:B{prefix:'c',name:'b'})`,
+		},
+		{
+			input:          `(:B {prefix:"c",name:"b"})`,
+			expectedOutput: `(:B{prefix:'c',name:'b'})`,
+		},
+	}
+
+	for _, test := range tests {
+		actual := formatString(test.input)
+		require.Equal(t, test.expectedOutput, actual)
 	}
 }

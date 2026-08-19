@@ -87,6 +87,8 @@ jobs:
   integration-test-pg:
     name: Run integration tests (pg)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       postgres:
         image: index.docker.io/library/postgres@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941 # ratchet:postgres:18
@@ -104,6 +106,8 @@ jobs:
     steps:
       - name: Checkout source code for this repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
@@ -121,6 +125,8 @@ jobs:
   integration-test-neo4j:
     name: Run integration tests (neo4j)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       neo4j:
         image: index.docker.io/library/neo4j@sha256:73b5a47eb9952f47fcc42fcc80bdd6bd0d6b71eea9a1a345c216675498c790e4 # ratchet:neo4j:4.4.42
@@ -137,6 +143,8 @@ jobs:
     steps:
       - name: Checkout source code for this repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
@@ -154,6 +162,8 @@ jobs:
   bdd-integration-test-pg:
     name: Run BDD integration tests (pg)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       postgres:
         image: index.docker.io/library/postgres@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941 # ratchet:postgres:18
@@ -171,6 +181,8 @@ jobs:
     steps:
       - name: Checkout source code for this repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
@@ -188,6 +200,8 @@ jobs:
   bdd-integration-test-neo4j:
     name: Run BDD integration tests (neo4j)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       neo4j:
         image: index.docker.io/library/neo4j@sha256:73b5a47eb9952f47fcc42fcc80bdd6bd0d6b71eea9a1a345c216675498c790e4 # ratchet:neo4j:4.4.42
@@ -204,6 +218,8 @@ jobs:
     steps:
       - name: Checkout source code for this repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # ratchet:actions/setup-go@v5
