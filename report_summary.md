@@ -48,8 +48,9 @@ raw-PGX observation-hash closure: all 88 records and all twelve prepared-state
 samples per record are exact, with zero measured temporary workspace. Its
 paired component/incumbent median ratios are `0.0839` for endpoint IDs and
 `0.0445` for complete paths. The closure authorizes freezing a separate
-cache-feasibility protocol only; it does not authorize cache work, routing,
-protected-holdout, or promotion. See
+cache-feasibility protocol only. That contract is now frozen in
+[`docs/experiments/suffix_route_cache_feasibility_v1.md`](docs/experiments/suffix_route_cache_feasibility_v1.md);
+it does not authorize cache work, routing, protected-holdout, or promotion. See
 [`docs/experiments/sql_strategy_routing_preflight_v1.md`](docs/experiments/sql_strategy_routing_preflight_v1.md).
 
 ## Historical headline (pre-P0)

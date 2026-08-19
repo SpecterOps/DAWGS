@@ -303,4 +303,7 @@ After the boundary/workspace closure passes, the next decision is a separate
 non-native architecture feasibility protocol for a transaction-scoped routing
 cache. It must declare cache keys, invalidation, stale-data behavior,
 transaction ownership, write/WAL budget, and rollback/removal before code is
-added.
+added. That contract is now frozen as
+[`suffix_route_cache_feasibility_v1.md`](suffix_route_cache_feasibility_v1.md);
+it permits no cache implementation or automatic routing until a separately
+reviewed feasibility slice is authorized.

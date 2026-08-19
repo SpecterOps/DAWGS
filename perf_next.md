@@ -548,7 +548,8 @@ deferred before protected timing with a documented reason.
 2. Retain the passed SQL-routing boundary/workspace closure from clean commit
    `c490f3c` at `.coverage/sql-routing-component-closure-v1-c490f3c`; keep the
    earlier `94fe902` and failed `36b1bac` artifacts unchanged as diagnostics.
-3. Freeze the separate transaction-scoped
-   `suffix-route-cache-feasibility-v1` protocol before adding cache code. It
-   must define cache keys, snapshot ownership, misses, invalidation, rollback,
-   bounded memory, and read-path WAL behavior.
+3. Retain the frozen transaction-scoped
+   `suffix-route-cache-feasibility-v1` protocol. Before any separately
+   authorized feasibility implementation, review its key, same-snapshot
+   ownership, incumbent-only misses, invalidation, rollback, bounded-memory,
+   and zero read-path-WAL requirements.
