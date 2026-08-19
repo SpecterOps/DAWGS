@@ -150,6 +150,43 @@ promotion. A clean-source recapture with complete component telemetry and the
 remaining cancellation/pool-reuse evidence is required before the separate
 cache-feasibility decision.
 
+## Clean-source four-round recapture
+
+The replacement capture completed on 2026-08-19 from committed source
+`aaecb745c328128115273b4da7fa71a8de3351b7`, with the clean-tree SHA-256
+(`e3b0...b855`), binary SHA-256
+`4c65ff1f7d642a47bcc4e96b9aee19f57fe8a30c9fe2218cd91514a0bdc71860`,
+and corpus SHA-256
+`2aa00d2df9a32e7fbca6e9682058ba30e82a4b2968f87b123c7fa161924cac18`.
+All 88 records were exact and successful; all 44 component records carried
+complete suffix, boundary, reverse-state, receipt, ordered-hydration, and
+planning/execution telemetry. The 220 timed component samples each had one
+direct `suffix_route_component` receipt with no fallback or forward SQL body.
+
+The replacement ledger is:
+
+```text
+2fcd84240a3466facff45e8074b7630491a639d86bd7e532dd42ffd45271389a  round-1-incumbent.jsonl
+92bee28dc8363ee3165bf4cf3ba9863e1b5254204f8273a15b7b20030ca063ab  round-1-reverse-component.jsonl
+14b49b15364c6ecf073ab52bb89a6e56710c881eab487e808287ceecf69294b8  round-2-reverse-component.jsonl
+e485a599c08863571ebeec847412a8f70628dfbf43c665f074f9872e407b95f3  round-2-incumbent.jsonl
+45c853856e30a193649ad097ceb0000464c7e1e5939bee47d5217a5dc6696a5d  round-3-reverse-component.jsonl
+f95e9fb9c0d489e0f9f5012140b0a9b419f5da221b62454498c323700f5f5c9c  round-3-incumbent.jsonl
+38bd271656362fb7a850e5137360588a20fa90de5e2a8321801fa809906134fe  round-4-reverse-component.jsonl
+da5e39fd4e2a4292ef9af5bfac9650787130d6396d19202194f6da7828eaadfe  round-4-incumbent.jsonl
+86241c76a01bd23c80d21437126f0e55f6b792bbd7d6b9cbb710189c25c4164c  cancellation-pool-reuse.log
+```
+
+The four-round median-of-round-medians component/incumbent ratios were
+`0.081x` for sparse endpoint IDs (about `44.86ms` saved) and `0.048x` for the
+sparse complete path (about `81.87ms` saved). The high-fan-in, dense-suffix,
+and 511/512/513 controls regressed (`1.42-1.87x`); no-path and the three
+relationship-distinct controls improved. A timeout cancellation returned
+`57014` in `1.159ms`, rolled back successfully, and the size-one pool
+reacquired the same backend before an exact replay. This remains descriptive
+component evidence only: it does not authorize routing, cache work, protected
+access, or promotion.
+
 ## Required implementation slice
 
 The first slice is diagnostic only:
