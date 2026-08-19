@@ -28,6 +28,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/drivers/pg/model"
+	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/opengraph"
@@ -36,9 +38,16 @@ import (
 	_ "github.com/specterops/dawgs/drivers/neo4j"
 )
 
+const pgV2BenchmarkDriver = "pg-v2"
+
+type postgresBenchmarkDriver interface {
+	KindMapper() pg.KindMapper
+	DefaultGraph() (model.Graph, bool)
+}
+
 func main() {
 	var (
-		driver       = flag.String("driver", "pg", "database driver (pg, neo4j)")
+		driver       = flag.String("driver", "pg", "database driver (pg, pg-v2, neo4j)")
 		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
 		output       = flag.String("output", "", "output file (default: stdout)")
@@ -67,27 +76,8 @@ func main() {
 		fatal("no connection string: set -connection flag or CONNECTION_STRING env var")
 	}
 
-	var (
-		ctx = context.Background()
-		cfg = dawgs.Config{
-			GraphQueryMemoryLimit: size.Gibibyte,
-			ConnectionString:      conn,
-		}
-	)
-
-	if *driver == pg.DriverName {
-		poolCfg, err := pgxpool.ParseConfig(conn)
-		if err != nil {
-			fatal("failed to parse pool configuration: %v", err)
-		}
-		pool, err := pg.NewPool(poolCfg)
-		if err != nil {
-			fatal("failed to create pool: %v", err)
-		}
-		cfg.Pool = pool
-	}
-
-	db, err := dawgs.Open(ctx, *driver, cfg)
+	ctx := context.Background()
+	db, err := openBenchmarkDatabase(ctx, *driver, conn, size.Gibibyte)
 	if err != nil {
 		fatal("failed to open database: %v", err)
 	}
@@ -122,9 +112,9 @@ func main() {
 
 	var runOptions RunOptions
 	if *explain {
-		if *driver != pg.DriverName {
-			fmt.Fprintf(os.Stderr, "  explain capture is only supported for pg; continuing without plans\n")
-		} else if pgDB, ok := db.(*pg.Driver); !ok {
+		if !isPostgresBenchmarkDriver(*driver) {
+			fmt.Fprintf(os.Stderr, "  explain capture is only supported for pg and pg-v2; continuing without plans\n")
+		} else if pgDB, ok := db.(postgresBenchmarkDriver); !ok {
 			fmt.Fprintf(os.Stderr, "  explain capture unavailable for %T; continuing without plans\n", db)
 		} else if defaultGraph, hasDefaultGraph := pgDB.DefaultGraph(); !hasDefaultGraph {
 			fatal("failed to resolve default graph for explain capture")
@@ -216,6 +206,45 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, "wrote %s\n", *jsonOutput)
 	}
+}
+
+func openBenchmarkDatabase(ctx context.Context, driverName, connection string, graphQueryMemoryLimit size.Size) (graph.Database, error) {
+	cfg := dawgs.Config{
+		GraphQueryMemoryLimit: graphQueryMemoryLimit,
+		ConnectionString:      connection,
+	}
+
+	switch driverName {
+	case pg.DriverName:
+		poolConfig, err := pgxpool.ParseConfig(connection)
+		if err != nil {
+			return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
+		}
+		pool, err := pg.NewPool(poolConfig)
+		if err != nil {
+			return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
+		}
+		cfg.Pool = pool
+		return dawgs.Open(ctx, driverName, cfg)
+
+	case pgV2BenchmarkDriver:
+		poolConfig, err := pgxpool.ParseConfig(connection)
+		if err != nil {
+			return nil, fmt.Errorf("parse PostgreSQL v2 pool configuration: %w", err)
+		}
+		pool, err := pgv2.NewDefaultPool(ctx, poolConfig)
+		if err != nil {
+			return nil, fmt.Errorf("create PostgreSQL v2 pool: %w", err)
+		}
+		return pgv2.NewDriver(graphQueryMemoryLimit, pool), nil
+
+	default:
+		return dawgs.Open(ctx, driverName, cfg)
+	}
+}
+
+func isPostgresBenchmarkDriver(driverName string) bool {
+	return driverName == pg.DriverName || driverName == pgV2BenchmarkDriver
 }
 
 func scanKinds(datasetDir string, datasets []string) (graph.Kinds, graph.Kinds) {

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/specterops/dawgs/drivers/pg"
+	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
 )
@@ -118,6 +119,11 @@ func (s *Driver) OptimizeStorage(ctx context.Context) error {
 // KindMapper forwards the PostgreSQL-specific kind mapper extension.
 func (s *Driver) KindMapper() pg.KindMapper {
 	return s.delegate.KindMapper()
+}
+
+// DefaultGraph forwards the PostgreSQL-specific default graph metadata.
+func (s *Driver) DefaultGraph() (model.Graph, bool) {
+	return s.delegate.DefaultGraph()
 }
 
 // TranslationCacheStats reports v2 connection-local cache statistics.
