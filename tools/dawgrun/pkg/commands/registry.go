@@ -26,6 +26,7 @@ var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
 	"save-opengraph":   saveOpenGraphCmd(),
 	"translate-psql":   translateToPsqlCmd(),
 	"optimize-storage": optimizeStorageCmd(),
+	"optimize-cypher":  optimizeCypherCmd(),
 }
 
 func init() {
