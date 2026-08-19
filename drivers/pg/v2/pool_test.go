@@ -12,7 +12,7 @@ import (
 
 func testPoolConfig(t *testing.T) *pgxpool.Config {
 	t.Helper()
-	config, err := pgxpool.ParseConfig("postgresql://dawgs:password@localhost:5432/dawgs")
+	config, err := pgxpool.ParseConfig("postgresql://localhost:5432/dawgs")
 	require.NoError(t, err)
 	return config
 }
