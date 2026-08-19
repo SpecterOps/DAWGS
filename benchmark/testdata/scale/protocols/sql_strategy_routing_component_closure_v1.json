@@ -29,7 +29,7 @@
     "transaction": "caller-owned repeatable_read with rollback-only raw-PGX closure transactions",
     "fresh_session": "one dedicated newly opened PostgreSQL session executes its first prepared-statement miss",
     "same_session": "the same dedicated session executes exactly the declared prepared-statement hits",
-    "pool_reacquisition": "a size-one pool executes one prepared miss, releases it, then every declared hit reacquires the same backend PID",
+    "pool_reacquisition": "a dedicated newly opened size-one raw-PGX pool executes one prepared miss, releases it, then every declared hit reacquires the same backend PID",
     "inactive_forward_body": "forbidden in component SQL",
     "same_statement_probe": "forbidden",
     "transaction_retry": "forbidden",
@@ -104,7 +104,7 @@
       "telemetry-named temporary relations"
     ],
     "timing_effect": "the workspace observation is outside bind/first-row/decode/drain/total timing intervals",
-    "pool_interpretation": "pool size one makes pooled-session and pool high water directly comparable"
+    "pool_interpretation": "the dedicated raw-PGX pool has size one, making pooled-session and pool high water directly comparable without inheriting the runner pool statement cache"
   },
   "acceptance": {
     "all_records_status_ok": true,

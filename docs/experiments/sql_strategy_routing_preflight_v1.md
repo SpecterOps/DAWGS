@@ -204,8 +204,9 @@ contract, and size-one PostgreSQL pool. It adds no selector, retry, cache,
 schema state, reference arm, or concurrency mode.
 
 For each arm/case, the closure records one newly opened-session prepared miss,
-five same-session prepared hits, one pooled prepared miss, and five hits after
-release/reacquisition of the same pooled backend. Every raw execution must
+five same-session prepared hits, one miss on a separate newly opened size-one
+raw-PGX pool, and five hits after release/reacquisition of that same pooled
+backend. Every raw execution must
 match the public row/path observation. The raw-PGX samples separately retain
 transaction setup, bind/prepare, first row, complete decode, drain/close, and
 total timing; workspace observation runs only after result drain and is

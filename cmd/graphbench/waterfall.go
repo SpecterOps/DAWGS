@@ -297,6 +297,19 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 		return PostgresBoundaryClosure{}, fmt.Errorf("open fresh PostgreSQL closure session: %w", err)
 	}
 	defer fresh.Close(ctx)
+	// The runner pool has already executed the primary benchmark statement, so
+	// it cannot establish an honest prepared-statement miss. Build a separate
+	// size-one pool from the same connection configuration for the raw closure.
+	// This pool is used only below: its first query is the recorded miss and its
+	// later release/reacquisition samples prove reusable prepared-hit behavior.
+	closurePoolConfig := pool.Config().Copy()
+	closurePoolConfig.MaxConns = 1
+	closurePoolConfig.MinConns = 0
+	closurePool, err := pgxpool.NewWithConfig(ctx, closurePoolConfig)
+	if err != nil {
+		return PostgresBoundaryClosure{}, fmt.Errorf("open dedicated PostgreSQL closure pool: %w", err)
+	}
+	defer closurePool.Close()
 
 	closure := PostgresBoundaryClosure{
 		Boundary:                   "identical translated SQL through fresh and size-one raw pgx sessions/transactions/decode/drain",
@@ -323,7 +336,7 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 	}
 
 	acquireStart := time.Now()
-	pooled, err := pool.Acquire(ctx)
+	pooled, err := closurePool.Acquire(ctx)
 	if err != nil {
 		return PostgresBoundaryClosure{}, fmt.Errorf("acquire pooled prepared miss session: %w", err)
 	}
@@ -340,7 +353,7 @@ func measurePostgresBoundaryClosure(ctx context.Context, pool *pgxpool.Pool, sql
 
 	for iteration := 1; iteration <= iterations; iteration++ {
 		acquireStart := time.Now()
-		pooled, err := pool.Acquire(ctx)
+		pooled, err := closurePool.Acquire(ctx)
 		if err != nil {
 			return PostgresBoundaryClosure{}, fmt.Errorf("reacquire pooled prepared-hit session %d: %w", iteration, err)
 		}
