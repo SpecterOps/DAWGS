@@ -57,6 +57,10 @@ type transaction struct {
 	// schemaManager resolves target graphs, kind identifiers, and cached Cypher translations.
 	schemaManager *SchemaManager
 
+	// translationCache is selected for the physical connection leased by this
+	// transaction. Nil deliberately bypasses translation retention.
+	translationCache CypherTranslationCache
+
 	// queryExecMode selects the pgx execution protocol supplied with each query.
 	queryExecMode pgx.QueryExecMode
 
@@ -84,8 +88,14 @@ type transaction struct {
 
 // newTransactionWrapper configures a graph transaction and optionally begins an explicit PostgreSQL transaction.
 func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManager *SchemaManager, cfg *Config, allocateTransaction bool) (*transaction, error) {
+	var physicalConnection *pgx.Conn
+	if conn != nil {
+		physicalConnection = conn.Conn()
+	}
+
 	wrapper := &transaction{
 		schemaManager:      schemaManager,
+		translationCache:   schemaManager.cypherTranslationCacheForConnection(physicalConnection),
 		queryExecMode:      cfg.QueryExecMode,
 		queryResultsFormat: cfg.QueryResultFormats,
 		ctx:                ctx,
@@ -331,7 +341,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		return graph.NewErrorResult(err)
 	}
 	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicy(query, s.isolation)
-	sqlQuery, translatedParameters, err := s.schemaManager.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, policyIdentity, func() (translate.Result, string, error) {
+	buildTranslation := func() (translate.Result, string, error) {
 		var translated translate.Result
 		var translateErr error
 		if policy.enabled() {
@@ -353,9 +363,22 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 			}
 		}
 		return translated, formatted, formatErr
-	})
-	if err != nil {
-		return graph.NewErrorResult(err)
+	}
+
+	var sqlQuery string
+	var translatedParameters map[string]any
+	if s.translationCache == nil {
+		translated, translatedSQL, translateErr := buildTranslation()
+		if translateErr != nil {
+			return graph.NewErrorResult(translateErr)
+		}
+		sqlQuery, translatedParameters = translatedSQL, translated.Parameters
+	} else {
+		var translateErr error
+		sqlQuery, translatedParameters, translateErr = s.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, policyIdentity, buildTranslation)
+		if translateErr != nil {
+			return graph.NewErrorResult(translateErr)
+		}
 	}
 	return s.Raw(sqlQuery, translatedParameters)
 }

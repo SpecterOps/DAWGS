@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
@@ -120,6 +121,29 @@ func TestDriverTranslationCacheStatsUsesDriverWideCache(t *testing.T) {
 		Misses:  1,
 		Entries: 1,
 	}, driver.TranslationCacheStats())
+}
+
+// TestSchemaManagerDefaultTranslationCacheProvider preserves v1's single
+// driver-wide cache selection for every physical connection.
+func TestSchemaManagerDefaultTranslationCacheProvider(t *testing.T) {
+	manager := NewSchemaManager(nil, 0)
+
+	cache := manager.cypherTranslationCacheForConnection(nil)
+	require.Same(t, manager.translationCache, cache)
+}
+
+type nilCypherTranslationCacheProvider struct{}
+
+func (nilCypherTranslationCacheProvider) CacheForConnection(_ *pgx.Conn) CypherTranslationCache {
+	return nil
+}
+
+// TestSchemaManagerNilTranslationCacheSelectionBypassesRetention verifies a
+// provider may safely opt a transaction out of translation retention.
+func TestSchemaManagerNilTranslationCacheSelectionBypassesRetention(t *testing.T) {
+	driver := NewDriverWithTranslationCacheProvider(0, nil, nilCypherTranslationCacheProvider{})
+
+	require.Nil(t, driver.SchemaManager.cypherTranslationCacheForConnection(nil))
 }
 
 // TestCypherTranslationCacheSeparatesGraphAndParameterTypes verifies graph identity and negotiated types partition cache entries.

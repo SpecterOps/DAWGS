@@ -106,9 +106,21 @@ type Driver struct {
 
 // NewDriver coordinates PostgreSQL driver behavior for new driver.
 func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
+	return NewDriverWithTranslationCacheProvider(graphQueryMemoryLimit, pool, nil)
+}
+
+// NewDriverWithTranslationCacheProvider creates a PostgreSQL driver whose
+// transactions select translations through provider. A nil provider preserves
+// the default v1 driver-wide cache behavior.
+func NewDriverWithTranslationCacheProvider(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, provider CypherTranslationCacheProvider) *Driver {
+	schemaManager := NewSchemaManager(pool, graphQueryMemoryLimit)
+	if provider != nil {
+		schemaManager.translationCacheProvider = provider
+	}
+
 	return &Driver{
 		pool:          pool,
-		SchemaManager: NewSchemaManager(pool, graphQueryMemoryLimit),
+		SchemaManager: schemaManager,
 	}
 }
 

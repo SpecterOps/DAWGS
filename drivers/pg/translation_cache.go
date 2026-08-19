@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
 	model "github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 )
@@ -15,6 +16,25 @@ import (
 // defaultCypherTranslationCacheEntries is the maximum number of translated SQL
 // entries retained when no cache capacity is configured.
 const defaultCypherTranslationCacheEntries = 256
+
+// CypherTranslationCache implements reusable Cypher-to-SQL translation.
+// Implementations must not retain caller parameter values or mutable maps.
+type CypherTranslationCache interface {
+	TranslateWithPolicy(
+		query string,
+		graphID int32,
+		parameters map[string]any,
+		policyIdentity string,
+		build func() (translate.Result, string, error),
+	) (string, map[string]any, error)
+}
+
+// CypherTranslationCacheProvider selects cache ownership for the physical
+// connection used by a transaction. Returning nil safely bypasses translation
+// retention for that transaction.
+type CypherTranslationCacheProvider interface {
+	CacheForConnection(conn *pgx.Conn) CypherTranslationCache
+}
 
 // cypherTranslationCacheKey identifies SQL that can be reused for one query, graph, and parameter type shape.
 type cypherTranslationCacheKey struct {
@@ -98,6 +118,23 @@ type cypherTranslationCache struct {
 	// stats accumulates cache activity for this instance.
 	stats TranslationCacheStats
 }
+
+var _ CypherTranslationCache = (*cypherTranslationCache)(nil)
+
+// sharedCypherTranslationCacheProvider preserves v1's driver-wide cache
+// ownership while allowing a transaction to select its cache through the same
+// narrow provider seam used by opt-in drivers.
+type sharedCypherTranslationCacheProvider struct {
+	cache CypherTranslationCache
+}
+
+// CacheForConnection returns the one shared v1 cache for every physical
+// connection owned by the driver.
+func (s sharedCypherTranslationCacheProvider) CacheForConnection(_ *pgx.Conn) CypherTranslationCache {
+	return s.cache
+}
+
+var _ CypherTranslationCacheProvider = (*sharedCypherTranslationCacheProvider)(nil)
 
 // TranslationCacheStats is a query-text-free snapshot of translation cache activity and occupancy.
 type TranslationCacheStats struct {

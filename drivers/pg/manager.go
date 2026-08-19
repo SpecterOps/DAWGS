@@ -53,6 +53,11 @@ type SchemaManager struct {
 	// translationCache retains parameter-rebindable SQL translations by graph and parameter shape.
 	translationCache *cypherTranslationCache
 
+	// translationCacheProvider selects the translation cache for each physical
+	// PostgreSQL connection. V1 installs a provider for translationCache;
+	// absent or nil selections safely bypass retention.
+	translationCacheProvider CypherTranslationCacheProvider
+
 	// hasDefaultGraph distinguishes a cached default graph from the zero-value graph model.
 	hasDefaultGraph bool
 
@@ -80,10 +85,14 @@ type SchemaManager struct {
 
 // NewSchemaManager creates an empty metadata manager with bounded parse and translation caches for pool.
 func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *SchemaManager {
+	translationCache := newCypherTranslationCache(defaultCypherTranslationCacheEntries)
 	return &SchemaManager{
-		pool:                  pool,
-		parseCache:            newCypherParseCache(defaultCypherParseCacheEntries),
-		translationCache:      newCypherTranslationCache(defaultCypherTranslationCacheEntries),
+		pool:             pool,
+		parseCache:       newCypherParseCache(defaultCypherParseCacheEntries),
+		translationCache: translationCache,
+		translationCacheProvider: sharedCypherTranslationCacheProvider{
+			cache: translationCache,
+		},
 		hasDefaultGraph:       false,
 		graphs:                map[string]model.Graph{},
 		kindsByID:             map[graph.Kind]int16{},
@@ -91,6 +100,16 @@ func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *Sche
 		lock:                  &sync.RWMutex{},
 		graphQueryMemoryLimit: graphQueryMemoryLimit,
 	}
+}
+
+// cypherTranslationCacheForConnection selects a cache for conn. A missing
+// provider or a nil cache is an intentional uncached fallback.
+func (s *SchemaManager) cypherTranslationCacheForConnection(conn *pgx.Conn) CypherTranslationCache {
+	if s == nil || s.translationCacheProvider == nil {
+		return nil
+	}
+
+	return s.translationCacheProvider.CacheForConnection(conn)
 }
 
 // WriteTransaction coordinates PostgreSQL driver behavior for write transaction.
