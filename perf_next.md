@@ -545,10 +545,10 @@ deferred before protected timing with a documented reason.
 
 1. Retain the completed P4 A1 baseline and terminal I1 preflight; do not run a
    power study, broader I1 timing, protected cases, or selector work from them.
-2. Recapture the SQL-routing boundary/workspace closure from a clean committed
-   tree with per-sample raw-PGX observation hashes, a fresh UUID, and the
-   frozen four-round order. Keep the prior `94fe902` artifact unchanged.
-3. If and only if that closure passes, freeze the separate transaction-scoped
+2. Retain the passed SQL-routing boundary/workspace closure from clean commit
+   `c490f3c` at `.coverage/sql-routing-component-closure-v1-c490f3c`; keep the
+   earlier `94fe902` and failed `36b1bac` artifacts unchanged as diagnostics.
+3. Freeze the separate transaction-scoped
    `suffix-route-cache-feasibility-v1` protocol before adding cache code. It
    must define cache keys, snapshot ownership, misses, invalidation, rollback,
    bounded memory, and read-path WAL behavior.

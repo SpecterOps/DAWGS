@@ -249,18 +249,20 @@ cache hit or automatic-selection result.
 ### Current closure disposition
 
 The complete four-round artifact from source `94fe902` is retained as
-diagnostic pre-enforcement evidence: it has all 88 successful main records,
-the required prepared-state strata, zero measured temporary workspace, and
-both sparse targets materially faster. It predates the per-sample normalized
-observation SHA-256 requirement, however, and therefore records only raw row
-counts for its direct pgx executions. It must not be used to assert that this
-closure has passed.
+diagnostic pre-enforcement evidence. It predates the per-sample normalized
+observation SHA-256 requirement and cannot assert closure passage.
 
-The next capture must use a clean committed tree containing the observation
-hash enforcement, a fresh nonempty run UUID, a new ignored artifact directory,
-and the same four counterbalanced rounds. Run the cancellation/pool-reuse
-operational test before timed arms. Do not append to or replace the retained
-`94fe902` artifact.
+The replacement capture from clean commit `c490f3c` is
+`.coverage/sql-routing-component-closure-v1-c490f3c`. Its fresh run UUID is
+`e4800916-4eee-4dcf-ae99-d68068dcf4d5`; all 88 records are successful, every
+record retains all twelve raw-PGX prepared-state samples, each sample has a
+normalized-observation SHA-256 matching the primary CySQL observation, pool
+reacquisition retained its backend identity, and measured temporary workspace
+is zero. The component/incumbent paired-median ratios are `0.0839` for sparse
+endpoint IDs and `0.0445` for sparse complete paths. This passes the frozen
+closure but remains non-promotional: it authorizes only freezing the separate
+transaction-scoped cache-feasibility protocol, not cache code, routing,
+holdout access, or a release claim.
 
 ## Required implementation slice
 

@@ -43,11 +43,13 @@ The first dirty-source capture was superseded by a clean committed component
 recapture: direct reverse reached component/incumbent medians of `0.081x` for
 endpoint IDs and `0.048x` for complete paths, while high-fan-in, dense, and
 511/512/513 suffix controls regressed. A subsequent four-round boundary and
-workspace artifact retained the prepared-state and zero-workspace evidence,
-but it predates per-sample normalized raw-PGX observation hashes. It remains
-diagnostic only and must be cleanly recaptured before any cache-feasibility
-decision. Neither artifact authorizes cache work, routing, protected-holdout,
-or promotion; see
+workspace artifact from clean commit `c490f3c` passes the per-sample normalized
+raw-PGX observation-hash closure: all 88 records and all twelve prepared-state
+samples per record are exact, with zero measured temporary workspace. Its
+paired component/incumbent median ratios are `0.0839` for endpoint IDs and
+`0.0445` for complete paths. The closure authorizes freezing a separate
+cache-feasibility protocol only; it does not authorize cache work, routing,
+protected-holdout, or promotion. See
 [`docs/experiments/sql_strategy_routing_preflight_v1.md`](docs/experiments/sql_strategy_routing_preflight_v1.md).
 
 ## Historical headline (pre-P0)
