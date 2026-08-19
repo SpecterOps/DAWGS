@@ -113,7 +113,7 @@ func (c *dbContext) theResultShouldBe(expectedTable *godog.Table) error {
 	for _, value := range expectedTable.Rows {
 		for _, cell := range value.Cells {
 			if cell.Value != "n" {
-				expectedRows = append(expectedRows, cell.Value)
+				expectedRows = append(expectedRows, formatString(cell.Value))
 			}
 		}
 	}
@@ -122,14 +122,22 @@ func (c *dbContext) theResultShouldBe(expectedTable *godog.Table) error {
 		return fmt.Errorf("Invalid row count expected %d actual %d", c.rowCount, len(expectedTable.Rows))
 	}
 
-	for i := range len(expectedRows) {
-		// TODO normalize exptected and actual rows by removing empty spaces and sorting kinds and their properties
-		if expectedRows[i] != c.actualRows[i] {
+	for i := 0; i < len(expectedRows); i++ {
+		// TODO normalize exptected actual rows by sorting kinds and their properties
+		if formatString(expectedRows[i]) != formatString(c.actualRows[i]) {
 			return fmt.Errorf("Detected a drift expected %s, actual %s", expectedRows[i], c.actualRows[i])
 		}
 	}
 
 	return nil
+}
+
+func formatString(s string) string {
+	removeSpace := strings.ReplaceAll(s, " ", "")
+	if strings.Contains(s, `"`) {
+		return strings.ReplaceAll(removeSpace, `"`, `'`)
+	}
+	return removeSpace
 }
 
 func formatGraphResults(nodes []graph.Node) ([]string, error) {
