@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -122,4 +123,59 @@ func TestP5NativeAdjacencyExtensionFeasibilityProtocolFreezesNonCandidateBoundar
 	require.False(t, protocol.RawReadGates.CandidateEvidence)
 	require.Len(t, protocol.NextAuthorization.PassAuthorizes, 2)
 	require.NotEmpty(t, protocol.NextAuthorization.PassDoesNotAuthorize)
+}
+
+func TestP5NativeAdjacencyExtensionPackageRemainsOptInAndBounded(t *testing.T) {
+	extensionRoot := filepath.Join("..", "..", "extensions", "dawgs_p5_native_adjacency_v1")
+	packageFiles := map[string][]string{
+		"Makefile": {
+			"PG_CONFIG ?= pg_config",
+			"PG_CFLAGS += -Wall -Werror",
+			"dawgs_p5_native_adjacency_v1--1.0.sql",
+		},
+		"dawgs_p5_native_adjacency_v1.control": {
+			"default_version = '1.0'",
+			"schema = 'p5_native_feasibility'",
+		},
+		"sql/dawgs_p5_native_adjacency_v1--1.0.sql": {
+			"p5_native_adjacency_scan_v1",
+			"stable",
+			"strict",
+			"security invoker",
+			"parallel restricted",
+			"revoke all",
+		},
+		"dawgs_p5_native_adjacency_v1.c": {
+			"PG_MODULE_MAGIC",
+			"GetActiveSnapshot",
+			"VM_ALL_VISIBLE",
+			"get_partition_parent",
+			"index_get_partition",
+			"P5_NATIVE_ROW_CAP 4096",
+			"index_beginscan",
+			"CHECK_FOR_INTERRUPTS",
+		},
+		"scripts/stage_matched_major.sh": {
+			"PostgreSQL 17.",
+			"PostgreSQL 18.",
+			"P5_NATIVE_IMAGE_ID",
+			"DESTDIR",
+			"strip --strip-unneeded",
+			"1048576",
+		},
+	}
+
+	for relativePath, requiredFragments := range packageFiles {
+		content, err := os.ReadFile(filepath.Join(extensionRoot, relativePath))
+		require.NoError(t, err, relativePath)
+
+		for _, fragment := range requiredFragments {
+			require.Truef(t, strings.Contains(string(content), fragment), "%s must contain %q", relativePath, fragment)
+		}
+	}
+
+	rootMakefile, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
+	require.NoError(t, err)
+	require.Contains(t, string(rootMakefile), "p5_native_extension_stage")
+	require.Contains(t, string(rootMakefile), "P5_NATIVE_EXTENSION_STAGE")
 }

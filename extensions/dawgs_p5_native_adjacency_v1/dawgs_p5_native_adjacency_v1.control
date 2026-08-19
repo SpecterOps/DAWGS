@@ -1,0 +1,5 @@
+comment = 'P5 native adjacency feasibility probe over existing DAWGS edge indexes'
+default_version = '1.0'
+module_pathname = '$libdir/dawgs_p5_native_adjacency_v1'
+relocatable = false
+schema = 'p5_native_feasibility'

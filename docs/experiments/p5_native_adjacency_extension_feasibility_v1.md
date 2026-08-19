@@ -2,9 +2,13 @@
 
 Date: 2026-08-19
 
-Status: prospectively frozen, non-candidate plan. No extension implementation,
-Cypher executor, selector, normal-schema dependency, protected timing, or
-production support claim is authorized by this record.
+Status: frozen, non-candidate protocol. An opt-in PGXS package and a
+matched-major staging harness now exist as the first implementation slice; a
+local PostgreSQL 18 smoke probe has exercised the diagnostic function only.
+Gate 0 remains incomplete because the PostgreSQL 17 matched-major build/load
+lane and both major lifecycle runs have not passed. No Cypher executor,
+selector, normal-schema dependency, protected timing, or production support
+claim is authorized by this record.
 
 ## Decision
 
@@ -176,7 +180,17 @@ from these open traces. It still does not authorize Cypher translation,
 automatic selection, a required database extension, normal schema changes,
 protected access, production packaging, or a support claim.
 
-The next executable slice is therefore the matched-major delivery harness and
-the single diagnostic function, followed by lifecycle/exactness tests. Raw
+The first executable slice added the package at
+[`extensions/dawgs_p5_native_adjacency_v1`](../../extensions/dawgs_p5_native_adjacency_v1),
+its one diagnostic function, and a staging-only build harness. The local
+PostgreSQL 18.4 lane compiled with warnings as errors, produced a 25,456-byte
+unstripped and 22,568-byte stripped library, and passed a disposable-cluster
+smoke probe for outbound, inbound, visibility-map index-only, and misbound
+partition rejection behavior. These are development observations, not Gate 0
+evidence: they did not use `CREATE EXTENSION`, lifecycle drop/reinstall, the
+open fixture, or the required PG17 lane.
+
+The next executable slice is the matched-major lifecycle and exactness test
+harness, beginning with the missing PostgreSQL 17 build/load environment. Raw
 timing starts only after both PostgreSQL 17 and 18 lanes pass those untimed
 gates.
