@@ -48,8 +48,8 @@ It is a platform observation rather than portable performance evidence.
 
 ## Disposition
 
-Do not add a topology synopsis, duplicate adjacency table, application-side
-traversal service, or native extension under the current P5 scope:
+Do not add a topology synopsis, duplicate adjacency table, or application-side
+traversal service under the current P5 scope:
 
 - The versioned topology synopsis remains deferred under
   [`traversal_topology_synopsis_adr_v1.md`](traversal_topology_synopsis_adr_v1.md).
@@ -58,27 +58,12 @@ traversal service, or native extension under the current P5 scope:
 - A duplicate adjacency relation has no predeclared exact target or measured
   read advantage over the existing direction-specific covering indexes. Adding
   it first would expose write and storage costs without an admission case.
-- A native extension requires a separately owned PostgreSQL 17/18 build,
-  installation, upgrade, rollback, and CI matrix before it can be evaluated.
-  No such deployment contract is currently present.
 - An application-side service cannot be considered until it can preserve the
   driver's Repeatable Read snapshot and exact fallback contract.
 
-This is a defer, not a terminal claim about all future native work. A future
-P5 successor must choose exactly one architecture and first freeze a
-non-candidate feasibility protocol that specifies the server-version delivery
-matrix, mutation fixture and write/WAL/storage budget, graph-generation and
-cache behavior, rollback/removal path, and a read-only exact baseline. Only
-after that prerequisite passes may it create a candidate roster. P4 artifacts
-and the current platform inventory cannot tune or promote such a successor.
-
-## Selected successor
-
-On 2026-08-19, the distinct
-[`P5-NATIVE-ADJACENCY-SCAN-V1`](p5_native_adjacency_extension_feasibility_v1.md)
-architecture was selected for prospective feasibility planning. It is a
-backend-local, read-only PostgreSQL extension over the existing edge indexes;
-it is not a continuation of the rejected duplicate relation. Its frozen first
-gate is matched PostgreSQL 17/18 delivery followed by an exact raw-adjacency
-probe. No native traversal candidate exists unless that non-candidate protocol
-passes.
+There is no selected P5 successor. Any future, non-native architecture must
+first freeze a feasibility protocol that specifies its mutation fixture and
+write/WAL/storage budget, graph-generation and cache behavior,
+rollback/removal path, and a read-only exact baseline. Only after that
+prerequisite passes may it create a candidate roster. P4 artifacts and the
+current platform inventory cannot tune or promote such a successor.

@@ -9,12 +9,9 @@ schema migration, protected-corpus timing, or a promotion claim.
 
 ## Chosen architecture
 
-The feasibility audit ruled out starting with a native extension: this
-repository has no extension package and the local PostgreSQL 18 PGXS build
-interface cannot produce a module testable against the live PostgreSQL 17
-server. The topology synopsis remains separately deferred because it lacks a
-graph mutation epoch and cache contract. The remaining locally testable option
-is a shadow, graph-scoped directed adjacency materialization.
+The feasibility audit deferred alternative architectures because the topology
+synopsis lacks a graph mutation epoch and cache contract. The remaining locally
+testable option is a shadow, graph-scoped directed adjacency materialization.
 
 `public.p5_adjacency_v1` will contain exactly two rows for every base edge:
 one outbound `(start_id, end_id)` row and one inbound `(end_id, start_id)` row,

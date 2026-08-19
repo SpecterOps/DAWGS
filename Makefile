@@ -10,9 +10,6 @@ BENCH_TIME ?= 1s
 BENCH_BASE ?= main
 BENCH_TARGET ?= HEAD
 BENCH_KIND ?= all
-P5_NATIVE_EXTENSION_DIR ?= extensions/dawgs_p5_native_adjacency_v1
-P5_NATIVE_PG_CONFIG ?= pg_config
-P5_NATIVE_EXTENSION_STAGE ?=
 
 # Main packages to test/build
 MAIN_PACKAGES := $(shell $(GO_CMD) list ./...)
@@ -91,7 +88,7 @@ QUALITY_INPUTS += -mutation-report $(MUTATION_REPORT)
 endif
 QUALITY_INPUTS += -benchmark-regression $(BENCHMARK_REGRESSION)
 
-.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus perf_gate perf_aa perf_confirm perf_bundle_verify perf_expand_into perf_tournament complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean p5_native_extension_build p5_native_extension_stage p5_native_extension_clean help
+.PHONY: default all build deps tidy lint format test test_all test_integration test_neo4j test_pg test_update plan_corpus perf_gate perf_aa perf_confirm perf_bundle_verify perf_expand_into perf_tournament complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
 
 # Default target
 default: help
@@ -101,22 +98,6 @@ all: generate format tidy test
 build:
 	@echo "Building all packages..."
 	@$(GO_CMD) build ./...
-
-# P5 native adjacency feasibility extension. This is intentionally opt-in and
-# only stages artifacts; it never installs into a live PostgreSQL instance.
-p5_native_extension_build:
-	@$(MAKE) -C $(P5_NATIVE_EXTENSION_DIR) PG_CONFIG="$(P5_NATIVE_PG_CONFIG)" all
-
-p5_native_extension_stage:
-	@if [ -z "$(P5_NATIVE_EXTENSION_STAGE)" ]; then \
-		echo "P5_NATIVE_EXTENSION_STAGE is required."; \
-		exit 1; \
-	fi
-	@$(P5_NATIVE_EXTENSION_DIR)/scripts/stage_matched_major.sh \
-		"$(P5_NATIVE_PG_CONFIG)" "$(P5_NATIVE_EXTENSION_STAGE)"
-
-p5_native_extension_clean:
-	@$(MAKE) -C $(P5_NATIVE_EXTENSION_DIR) PG_CONFIG="$(P5_NATIVE_PG_CONFIG)" clean
 
 # Dependency management
 deps:

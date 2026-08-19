@@ -149,7 +149,7 @@ ASP I1 improved over A1 by a median `57.2%` on the focused all-shortest
 tournament, but regressed shallow diamond and parallel-kind cases by about
 `8-10%`. A1 therefore remains the automatic default.
 
-## P5 architectural follow-on
+## P5 disposition
 
 The shadow adjacency-materialization feasibility run passed its physical
 oracles but was terminally not advanced. At 2,000 targets it consumed about
@@ -158,12 +158,10 @@ WAL, and caused destructive-write median regressions ranging from roughly
 `524x` to `1,324x`. Its faster raw lookup was not a Cypher result and did not
 justify those costs.
 
-The prospectively frozen successor is `P5-NATIVE-ADJACENCY-SCAN-V1`: one
-read-only PostgreSQL extension primitive over the existing edge indexes. Its
-first gate is matched-major build/install/drop/reinstall on PostgreSQL 17 and
-18, followed by exact snapshot and raw-adjacency feasibility. It maintains no
-graph copy and authorizes no native traversal candidate until the complete
-non-candidate protocol passes.
+No P5 successor is selected. Native-extension feasibility work has been
+withdrawn, and the rejected duplicate-adjacency result may not be retuned or
+used to justify another P5 architecture. Any future work requires a distinct,
+non-native architecture with a newly frozen feasibility protocol.
 
 ## Bottom line
 
@@ -191,8 +189,8 @@ non-candidate protocol passes.
   distance, all-shortest enumeration, and sparse fixed-suffix traversal.
 - The remaining gaps are architectural and topology-specific rather than
   general driver or decoding overhead.
-- P5's duplicate adjacency architecture is terminally stopped; its native
-  read-only successor is planned but not implemented or performance-qualified.
+- P5's duplicate adjacency architecture is terminally stopped, and no
+  successor is currently authorized.
 
 ## Evidence boundaries
 
@@ -226,7 +224,6 @@ independent bootstrap replay, and the operational gate validates an assembled
 Primary local sources:
 
 - [`docs/experiments/remaining_outlier_delivery_v1.md`](docs/experiments/remaining_outlier_delivery_v1.md)
-- [`docs/experiments/p5_native_adjacency_extension_feasibility_v1.md`](docs/experiments/p5_native_adjacency_extension_feasibility_v1.md)
 - [`cmd/graphbench/README.md`](cmd/graphbench/README.md)
 - [`benchmark/testdata/scale/protocols/sp_i2_distance_v2.json`](benchmark/testdata/scale/protocols/sp_i2_distance_v2.json)
 - [`benchmark/testdata/scale/protocols/sp_i2_distance_v2_rejection.json`](benchmark/testdata/scale/protocols/sp_i2_distance_v2_rejection.json)

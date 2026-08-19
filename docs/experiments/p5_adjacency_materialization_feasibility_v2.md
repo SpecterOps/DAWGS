@@ -76,7 +76,6 @@ decision is created and no candidate experiment is authorized. The complete
 non-promotional record is
 [`p5_adjacency_materialization_feasibility_v2_disposition.json`](../../benchmark/testdata/scale/protocols/p5_adjacency_materialization_feasibility_v2_disposition.json).
 
-The later
-[`P5-NATIVE-ADJACENCY-SCAN-V1`](p5_native_adjacency_extension_feasibility_v1.md)
-plan is a distinct read-only architecture over the existing edge indexes. It
-does not revive, retune, or reuse this materialization as a candidate.
+No P5 successor is currently selected. The native-extension feasibility path
+was withdrawn; it does not revive, retune, or reuse this materialization as a
+candidate.

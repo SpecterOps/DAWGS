@@ -30,21 +30,6 @@ Run unit tests:
 make test
 ```
 
-The non-candidate P5 native-adjacency feasibility package is separate from
-normal DAWGS builds and never installs into a live PostgreSQL instance. It can
-only be built or staged with a matching PostgreSQL 17/18 `pg_config`; staging
-also requires a recorded image identity:
-
-```bash
-P5_NATIVE_IMAGE_ID='postgres:18.4-linux-amd64' \
-  make p5_native_extension_stage \
-  P5_NATIVE_PG_CONFIG=/path/to/pg_config \
-  P5_NATIVE_EXTENSION_STAGE="$PWD/.coverage/p5-native-pg18"
-```
-
-See [the extension package](extensions/dawgs_p5_native_adjacency_v1/README.md)
-and [its frozen protocol](docs/experiments/p5_native_adjacency_extension_feasibility_v1.md).
-
 Run integration tests when a backend is available:
 
 ```bash
@@ -369,7 +354,6 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [CySQL traversal performance priorities](docs/cysql_traversal_priorities.md): source-grounded roadmap for orientation, SP/ASP, probes, statistics, telemetry, and qualification.
 - [Traversal priority implementation status](docs/experiments/traversal_priority_implementation_status_v1.md): implemented candidate identities, fail-closed gates, and current no-promotion disposition.
 - [Remaining traversal outlier delivery](docs/experiments/remaining_outlier_delivery_v1.md): SP-I2, fixed-suffix, qualification, promotion-closure, and rollback handoff.
-- [P5 native adjacency extension feasibility](docs/experiments/p5_native_adjacency_extension_feasibility_v1.md): frozen PostgreSQL 17/18 delivery, snapshot, zero-state, and raw-read gates for the next non-candidate architecture.
 - [PostgreSQL versus Neo4j performance summary](report_summary.md): current outlier measurements and evidence boundaries.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.

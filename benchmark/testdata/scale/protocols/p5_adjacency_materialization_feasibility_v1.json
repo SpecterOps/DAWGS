@@ -7,7 +7,7 @@
     "source_commit": "6a0a252bad44f1a73b3fdace9de8d84d7fed11f5",
     "inventory": ".coverage/p5-feasibility-4db030c/inventory.json",
     "inventory_sha256": "6913d46209601b5bd8bd955b28738f1040dc6c14a514d95aeae081d2977ffb92",
-    "selection_basis": "The base edge layout already has outgoing/incoming covering indexes. A native extension is not locally testable across the PostgreSQL 18 build interface and PostgreSQL 17 live server, while a topology synopsis lacks a mutation-epoch/cache contract."
+    "selection_basis": "The base edge layout already has outgoing/incoming covering indexes, while a topology synopsis lacks a mutation-epoch/cache contract. The locally testable shadow materialization was selected only for its feasibility inventory."
   },
   "architecture": {
     "name": "P5-ADJACENCY-MATERIALIZATION-V1",

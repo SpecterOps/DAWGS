@@ -55,9 +55,9 @@ the default optimization strategy.
 Generated SQL and stored-function work still have room where an execution
 kernel can avoid workspace setup, repeated scans, hydration, or unnecessary
 output. Beyond that, the remaining levers are architectural: transaction-local
-retry, generation-keyed decisions, maintained topology data, adjacency layout,
-and possibly compiled server-side execution. This plan escalates through those
-layers only after a cheaper layer reaches a measured stop condition.
+retry, generation-keyed decisions, maintained topology data, and adjacency
+layout. This plan escalates through those layers only after a cheaper layer
+reaches a measured stop condition.
 
 ## Priority order
 
@@ -68,7 +68,7 @@ layers only after a cheaper layer reaches a measured stop condition.
 | P2 | New hidden-fan-in distance successor | Addresses the largest raw gap using a proven component | Medium | Only after prospective power passes under a new identity |
 | P3 | Compact unbounded shortest-path kernel | Addresses stable `6-8x` losses | Medium | After P1 reaches a terminal decision |
 | P4 | Bucketed all-shortest predecessor-DAG execution | Addresses `5x` losses without broad shallow regressions | Medium-low | After P3 search telemetry is reusable |
-| P5 | Native adjacency or extension feasibility | Raises the architectural ceiling if SQL/workspace kernels plateau | Low until measured | Only if P1/P3 cannot meet their gates |
+| P5 | No successor selected | The duplicate-adjacency architecture is terminal and native-extension work is withdrawn | N/A | A distinct non-native architecture needs a new protocol |
 
 P1 and P2 may share diagnostic infrastructure, but formal evidence must remain
 serial. Do not run multiple protected studies concurrently on one host or use
@@ -425,7 +425,6 @@ Evaluate independently:
   staleness;
 - transactionally maintained typed degree/heavy-hitter summaries;
 - a denormalized adjacency representation optimized for ordered traversal;
-- a native PostgreSQL extension or compiled server-side traversal kernel;
 - an application-side traversal service only if transaction snapshot and
   consistency semantics can be preserved.
 
@@ -440,9 +439,7 @@ or remove exact fallback.
 The initial read-only feasibility inventory is deferred before implementation:
 the existing partitioned edge layout already has covering indexes in both
 physical directions, but it has no mutation epoch or cache-generation contract
-for a maintained copy. The repository also has no native-extension delivery
-package, and the local PostgreSQL 18 build interface does not match the live
-PostgreSQL 17 target. See
+for a maintained copy. No P5 successor is selected. See
 [`docs/experiments/p5_architecture_feasibility_v1.md`](docs/experiments/p5_architecture_feasibility_v1.md).
 The separately frozen
 [`docs/experiments/p5_adjacency_materialization_feasibility_v1.md`](docs/experiments/p5_adjacency_materialization_feasibility_v1.md)
