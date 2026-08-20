@@ -406,6 +406,7 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [CySQL traversal performance priorities](docs/cysql_traversal_priorities.md): source-grounded roadmap for orientation, SP/ASP, probes, statistics, telemetry, and qualification.
 - [Traversal priority implementation status](docs/experiments/traversal_priority_implementation_status_v1.md): implemented candidate identities, fail-closed gates, and current no-promotion disposition.
 - [Remaining traversal outlier delivery](docs/experiments/remaining_outlier_delivery_v1.md): SP-I2, fixed-suffix, qualification, promotion-closure, and rollback handoff.
+- [Production-wide SQL selection](docs/experiments/production_wide_sql_selection_v1.md): staged structural and topology-aware PostgreSQL routing contract.
 - [PostgreSQL versus Neo4j performance summary](report_summary.md): current outlier measurements and evidence boundaries.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
