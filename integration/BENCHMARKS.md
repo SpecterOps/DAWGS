@@ -68,6 +68,13 @@ and executes the route successfully.
 No forced-mode latency is relabeled as a production-policy result here: a
 comparable publication requires a clean-source, GraphBench-verified manifest
 whose SQL anchor and exact query digest match the current benchmark schema.
+The V2 policy route was nevertheless executed live against PostgreSQL on
+2026-08-20: `TestPostgresV2BenchmarkPolicyPath` rendered and anchor-validated
+the candidate statement, installed it through `SetTraversalPolicy`, and
+returned the expected path. The full PostgreSQL `make test_all` suite also
+passed. These are execution-validation results, not promotion-performance
+evidence.
+
 When that evidence is available, run:
 
 ```bash
