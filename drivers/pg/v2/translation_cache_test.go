@@ -64,6 +64,35 @@ func TestStrategySelectionStatsRemainQueryTextFree(t *testing.T) {
 	require.Equal(t, uint64(1), stats.ShapeUnavailable)
 }
 
+func TestTraversalShapeCacheRetainsOnlyBoundedClassifications(t *testing.T) {
+	provider, _, _ := newTestCache(t, 1)
+	builds := 0
+	classify := func() (pg.TraversalShape, error) {
+		builds++
+		return pg.TraversalShape{Version: pg.TraversalShapeVersion, Family: "SP", Fingerprint: "shape"}, nil
+	}
+
+	first, err := provider.TraversalShapeFor(" MATCH p = shortestPath((a)-[*]->(b)) RETURN p ", classify)
+	require.NoError(t, err)
+	second, err := provider.TraversalShapeFor("MATCH p = shortestPath((a)-[*]->(b)) RETURN p", classify)
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+	require.Equal(t, 1, builds)
+
+	_, err = provider.TraversalShapeFor("MATCH p = shortestPath((b)-[*]->(c)) RETURN p", classify)
+	require.NoError(t, err)
+	require.Equal(t, 2, builds)
+	stats := provider.stats().TraversalShapeCache
+	require.Equal(t, uint64(1), stats.Hits)
+	require.Equal(t, uint64(2), stats.Misses)
+	require.Equal(t, 1, stats.Entries)
+	require.Equal(t, 1, stats.Capacity)
+
+	provider.advanceSchemaGeneration()
+	stats = provider.stats().TraversalShapeCache
+	require.Zero(t, stats.Entries)
+}
+
 // TestConnectionTranslationCachePartitionsInputs verifies all inputs that can
 // change SQL occupy independent entries.
 func TestConnectionTranslationCachePartitionsInputs(t *testing.T) {

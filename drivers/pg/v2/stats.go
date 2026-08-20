@@ -65,6 +65,15 @@ type StrategySelectionStats struct {
 	ShapeUnavailable     uint64 `json:"shape_unavailable"`
 }
 
+// TraversalShapeCacheStats describes V2's bounded, query-text-free structural
+// classification cache. Entries retain only a digest and immutable shape.
+type TraversalShapeCacheStats struct {
+	Hits     uint64 `json:"hits"`
+	Misses   uint64 `json:"misses"`
+	Entries  int    `json:"entries"`
+	Capacity int    `json:"capacity"`
+}
+
 func (s *PreparedStatementStats) add(other PreparedStatementStats) {
 	s.Attempts += other.Attempts
 	s.Prepared += other.Prepared
@@ -86,19 +95,20 @@ type ConnectionCacheStats struct {
 // retired connection counters; its Capacity is the current theoretical bound
 // across live connections, not a global retained-entry limit.
 type Stats struct {
-	SchemaGeneration            uint64                  `json:"schema_generation"`
-	CapacityPerConnection       int                     `json:"capacity_per_connection"`
-	MinConnections              int32                   `json:"min_connections"`
-	MaxConnections              int32                   `json:"max_connections"`
-	LiveConnections             int                     `json:"live_connections"`
-	RetiredConnections          uint64                  `json:"retired_connections"`
-	Aggregate                   TranslationCacheStats   `json:"aggregate"`
-	TraversalWorkspace          TraversalWorkspaceStats `json:"traversal_workspace"`
-	PreparedStatements          PreparedStatementStats  `json:"prepared_statements"`
-	Connections                 []ConnectionCacheStats  `json:"connections"`
-	SQLGeneration               SQLGenerationStats      `json:"sql_generation"`
-	StrategySelection           StrategySelectionStats  `json:"strategy_selection"`
-	SharedShortestPathTemplates SharedTemplateStats     `json:"shared_shortest_path_templates"`
+	SchemaGeneration            uint64                   `json:"schema_generation"`
+	CapacityPerConnection       int                      `json:"capacity_per_connection"`
+	MinConnections              int32                    `json:"min_connections"`
+	MaxConnections              int32                    `json:"max_connections"`
+	LiveConnections             int                      `json:"live_connections"`
+	RetiredConnections          uint64                   `json:"retired_connections"`
+	Aggregate                   TranslationCacheStats    `json:"aggregate"`
+	TraversalWorkspace          TraversalWorkspaceStats  `json:"traversal_workspace"`
+	PreparedStatements          PreparedStatementStats   `json:"prepared_statements"`
+	Connections                 []ConnectionCacheStats   `json:"connections"`
+	SQLGeneration               SQLGenerationStats       `json:"sql_generation"`
+	StrategySelection           StrategySelectionStats   `json:"strategy_selection"`
+	TraversalShapeCache         TraversalShapeCacheStats `json:"traversal_shape_cache"`
+	SharedShortestPathTemplates SharedTemplateStats      `json:"shared_shortest_path_templates"`
 }
 
 // SharedTemplateStats reports the bounded V2-wide immutable shortest-path

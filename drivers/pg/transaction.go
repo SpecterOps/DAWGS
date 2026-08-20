@@ -358,14 +358,13 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		return graph.NewErrorResult(err)
 	}
 	policyStarted := time.Now()
-	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicy(query, s.isolation)
 	shape := TraversalShape{}
-	if !policy.enabled() && s.schemaManager.hasStructuralTraversalPolicy() {
-		shape, _ = traversalShapeForQuery(parsedQuery)
-		policy, policyIdentity = s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
+	if s.schemaManager.shouldClassifyTraversal() {
+		shape, _ = s.schemaManager.classifyTraversalShape(query, parsedQuery)
 	}
+	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
 	profile.Policy = time.Since(policyStarted)
-	s.schemaManager.observeTraversalStrategySelection(query, parsedQuery, policy)
+	s.schemaManager.observeTraversalStrategySelection(query, shape, policy)
 	buildTranslation := func() (translate.Result, string, error) {
 		var translated translate.Result
 		var translateErr error

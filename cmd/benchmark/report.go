@@ -133,6 +133,10 @@ func writeMarkdown(w io.Writer, r Report) error {
 		if selection.Incumbent+selection.ExactQueryCanary+selection.StructuralAuthorized > 0 {
 			fmt.Fprintf(w, "V2 strategy selection: %d incumbent, %d exact-query canary, %d structurally authorized, %d structural-shadow, %d shape-unavailable observations.\n\n", selection.Incumbent, selection.ExactQueryCanary, selection.StructuralAuthorized, selection.StructuralShadow, selection.ShapeUnavailable)
 		}
+		shapeCache := r.TranslationCache.TraversalShapeCache
+		if shapeCache.Hits+shapeCache.Misses > 0 {
+			fmt.Fprintf(w, "V2 traversal shape cache: %d hits, %d misses, %d entries/%d capacity.\n\n", shapeCache.Hits, shapeCache.Misses, shapeCache.Entries, shapeCache.Capacity)
+		}
 	}
 	return nil
 }

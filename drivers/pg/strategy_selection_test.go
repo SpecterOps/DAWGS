@@ -61,6 +61,24 @@ func TestTraversalShapeRejectsMultipleTraversalTargets(t *testing.T) {
 	require.False(t, shape.Available())
 }
 
+func TestTraversalShapeClassifiesQualifiedFixedSuffixExpansion(t *testing.T) {
+	query, err := frontend.ParseCypher(frontend.NewContext(), `
+MATCH (root:ExpansionRoot)
+WHERE root.root_key = $root_key
+MATCH route = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+RETURN route`)
+	require.NoError(t, err)
+
+	shape, err := traversalShapeForQuery(query)
+	require.NoError(t, err)
+	require.True(t, shape.Available())
+	require.Equal(t, TraversalFixedSuffixShapeVersion, shape.Version)
+	require.Equal(t, "fixed_suffix_expansion", shape.Family)
+	require.Equal(t, 3, shape.SuffixLength)
+	require.Equal(t, "EXPANSION-SUFFIX-SEEDED-REVERSE", shape.CandidateStrategy)
+	require.NotEmpty(t, shape.Fingerprint)
+}
+
 func TestTraversalPolicyAuthorizesVerifiedStructuralBucket(t *testing.T) {
 	query := "MATCH p = allShortestPaths((s)-[:Edge*1..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
 	otherQuery := "MATCH route = allShortestPaths((left)-[:Edge*1..4]->(right)) WHERE id(left) = $a AND id(right) = $b RETURN route"

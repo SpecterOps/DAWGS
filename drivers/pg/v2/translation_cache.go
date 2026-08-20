@@ -256,6 +256,10 @@ type connectionCacheProvider struct {
 	retiredPrepared    PreparedStatementStats
 	sqlGeneration      SQLGenerationStats
 	strategySelection  StrategySelectionStats
+	shapeCapacity      int
+	shapeCache         map[[sha256.Size]byte]pg.TraversalShape
+	shapeOrder         [][sha256.Size]byte
+	shapeStats         TraversalShapeCacheStats
 	sharedTemplates    *sharedTemplateCache
 }
 
@@ -264,6 +268,51 @@ var _ pg.StableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(n
 var _ pg.LazyStableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
 var _ pg.SQLGenerationProfileCollector = (*connectionCacheProvider)(nil)
 var _ pg.TraversalStrategySelectionCollector = (*connectionCacheProvider)(nil)
+var _ pg.TraversalShapeCacheProvider = (*connectionCacheProvider)(nil)
+
+// TraversalShapeFor caches a bounded classifier result by a query digest. It
+// never retains source text, values, parsed ASTs, or database state.
+func (s *connectionCacheProvider) TraversalShapeFor(query string, classify func() (pg.TraversalShape, error)) (pg.TraversalShape, error) {
+	if classify == nil {
+		return pg.TraversalShape{}, fmt.Errorf("traversal shape classifier is required")
+	}
+	if s == nil || len(query) > pg.MaxCachedCypherQueryBytes {
+		return classify()
+	}
+	identity := sha256.Sum256([]byte(strings.TrimSpace(query)))
+	s.lock.Lock()
+	if shape, found := s.shapeCache[identity]; found {
+		s.shapeStats.Hits++
+		s.lock.Unlock()
+		return shape, nil
+	}
+	s.shapeStats.Misses++
+	s.lock.Unlock()
+
+	shape, err := classify()
+	if err != nil {
+		return pg.TraversalShape{}, err
+	}
+	if s.shapeCapacity == 0 {
+		return shape, nil
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.closed {
+		return shape, nil
+	}
+	if cached, found := s.shapeCache[identity]; found {
+		return cached, nil
+	}
+	if len(s.shapeOrder) == s.shapeCapacity {
+		delete(s.shapeCache, s.shapeOrder[0])
+		s.shapeOrder = s.shapeOrder[1:]
+	}
+	s.shapeCache[identity] = shape
+	s.shapeOrder = append(s.shapeOrder, identity)
+	s.shapeStats.Entries = len(s.shapeCache)
+	return shape, nil
+}
 
 // RecordTraversalStrategySelection records an observation-only routing
 // outcome. No per-query, SQL, graph, parameter, or decision data is retained.
@@ -316,6 +365,9 @@ func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error)
 	poolConfig := config.resolvedPoolConfig()
 	return &connectionCacheProvider{
 		capacity:        config.TranslationCacheEntries,
+		shapeCapacity:   config.TranslationCacheEntries,
+		shapeCache:      map[[sha256.Size]byte]pg.TraversalShape{},
+		shapeStats:      TraversalShapeCacheStats{Capacity: config.TranslationCacheEntries},
 		sharedTemplates: newSharedTemplateCache(config.SharedShortestPathTemplateEntries),
 		minConnections:  poolConfig.MinConnections,
 		maxConnections:  poolConfig.MaxConnections,
@@ -525,6 +577,9 @@ func (s *connectionCacheProvider) advanceSchemaGeneration() uint64 {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.generation++
+	s.shapeCache = map[[sha256.Size]byte]pg.TraversalShape{}
+	s.shapeOrder = nil
+	s.shapeStats.Entries = 0
 	for _, state := range s.states {
 		state.workspace.Ready = false
 	}
@@ -541,6 +596,9 @@ func (s *connectionCacheProvider) close() {
 		return
 	}
 	s.closed = true
+	s.shapeCache = nil
+	s.shapeOrder = nil
+	s.shapeStats.Entries = 0
 	states := make([]*connectionState, 0, len(s.states))
 	for _, state := range s.states {
 		states = append(states, state)
@@ -577,6 +635,7 @@ func (s *connectionCacheProvider) stats() Stats {
 		PreparedStatements:          s.retiredPrepared,
 		SQLGeneration:               s.sqlGeneration,
 		StrategySelection:           s.strategySelection,
+		TraversalShapeCache:         s.shapeStats,
 		SharedShortestPathTemplates: s.sharedTemplates.snapshot(),
 		Connections:                 make([]ConnectionCacheStats, 0, len(s.states)),
 	}
