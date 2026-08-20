@@ -296,7 +296,9 @@ GraphBench-verified manifest; its usage and guardrails are documented in
 Activation requires the exact promotion manifest, including its measured
 execution boundary, independently frozen operational candidate SQL SHA-256,
 and evidence digests. The SQL anchor is derived in a non-promotional preflight,
-then added to the provisional manifest before formal evidence is recaptured.
+then added to the provisional manifest before formal evidence is recaptured;
+the benchmark preflight renders but does not execute a candidate or authorize
+it for production policy selection.
 Manifest schema v2 also requires every evidence report to repeat the exact
 candidate, selector, source, binary,
 corpus, cap, bucket, and query-cohort identity; a digest-shaped string alone is

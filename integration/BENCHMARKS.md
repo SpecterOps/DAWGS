@@ -75,6 +75,23 @@ returned the expected path. The full PostgreSQL `make test_all` suite also
 passed. These are execution-validation results, not promotion-performance
 evidence.
 
+For a new qualified manifest, first derive its SQL anchor from the actual
+benchmark graph and parameterized scenario. This preflight record is not
+evidence and cannot activate a V2 policy:
+
+```bash
+go run ./cmd/benchmark \
+  -driver pg-v2 \
+  -connection "postgresql://user:password@localhost/database" \
+  -dataset traversal_shapes \
+  -pg-v2-traversal-policy-preflight-manifest .coverage/provisional.json \
+  -pg-v2-traversal-policy-preflight-output .coverage/policy-preflight.json
+```
+
+Copy the emitted `operational_candidate_sql_sha256` into the provisional
+manifest, generate and verify the complete GraphBench evidence closure, and
+only then run the production-policy command below.
+
 When that evidence is available, run:
 
 ```bash

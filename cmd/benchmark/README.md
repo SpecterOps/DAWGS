@@ -36,6 +36,9 @@ go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes
 # Exercise one verified manifest-authorized query through the real V2 policy path
 go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes -pg-v2-traversal-policy-manifest .coverage/promotion.json -pg-v2-traversal-policy-generation 7 -pg-plan-cache-mode auto -iterations 20
 
+# Derive a non-promotional exact SQL anchor for one provisional traversal-policy bucket
+go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes -pg-v2-traversal-policy-preflight-manifest .coverage/provisional.json -pg-v2-traversal-policy-preflight-output .coverage/policy-preflight.json
+
 # Save to file
 go run ./cmd/benchmark -connection "..." -output report.md
 
@@ -60,6 +63,8 @@ go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 | `-pg-v2-shortest-path-executor` | | Benchmark-only qualified executor identity; production routing remains manifest-controlled |
 | `-pg-v2-traversal-policy-manifest` | | A GraphBench-verified promotion manifest to install through `pg-v2`'s real `SetTraversalPolicy` path |
 | `-pg-v2-traversal-policy-generation` | `1` | Nonzero traversal-policy generation used for cache identity in manifest policy mode |
+| `-pg-v2-traversal-policy-preflight-manifest` | | Provisional one-query manifest used only to render the V2 candidate SQL anchor |
+| `-pg-v2-traversal-policy-preflight-output` | | JSON destination for the non-promotional preflight record; required with the preflight manifest |
 | `-pg-plan-cache-mode` | `auto` | Plan mode for forced or manifest-policy PostgreSQL shortest-path runs (`auto`, `force_custom_plan`, `force_generic_plan`) |
 | `-pg-jit` | `true` | Enable PostgreSQL JIT transaction-locally during forced or manifest-policy shortest-path runs |
 | `-pg-v2-min-conns` | `5` | V2 minimum physical PostgreSQL connections |
@@ -100,6 +105,16 @@ requires `-dataset` and runs exactly one matching parameterized Cypher
 scenario. `-explain` is intentionally unavailable in this mode because the
 standalone explainer would otherwise bypass the live policy gate and report a
 different statement.
+
+When a formal manifest needs its candidate SQL anchor, use
+`-pg-v2-traversal-policy-preflight-manifest` with the same selected benchmark
+dataset. Its provisional manifest supplies the candidate, selector, caps, and
+single query bucket; the command loads the graph and renders that exact V2
+translation, then writes only the query and SQL SHA-256 values plus translation
+metadata. It does not install a traversal policy, execute the candidate SQL,
+or create verification evidence. Copy the SQL hash into the provisional
+manifest and recapture the complete GraphBench evidence closure before using
+the resulting document with policy mode.
 
 The committed default datasets are `base`, `fixed_suffix_expansion_fanout`, and
 `traversal_shapes`. `traversal_shapes` covers chain, fanout, bounded cycle,
