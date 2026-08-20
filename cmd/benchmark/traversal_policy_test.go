@@ -84,6 +84,22 @@ func TestBenchmarkTraversalPromotionManifestProductionOptions(t *testing.T) {
 	require.ErrorContains(t, err, "absent from provisional traversal policy manifest")
 }
 
+func TestWriteTraversalPolicyPreflightCreatesOneNewRecord(t *testing.T) {
+	directory := t.TempDir()
+	manifestPath := filepath.Join(directory, "provisional.json")
+	require.NoError(t, os.WriteFile(manifestPath, []byte(`{"candidate":"ASP-I1-U-DAG+MAT-M0"}`), 0o600))
+	outputPath := filepath.Join(directory, "preflight.json")
+	preflight := TraversalPolicyPreflight{Candidate: "ASP-I1-U-DAG+MAT-M0", SQLSHA256: "sql-digest"}
+
+	require.NoError(t, writeTraversalPolicyPreflight(manifestPath, outputPath, preflight))
+	encoded, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"candidate":"ASP-I1-U-DAG+MAT-M0","selector_version":"","query_sha256":"","operational_candidate_sql_sha256":"sql-digest","graph_id":0,"optimization":{}}`, string(encoded))
+
+	require.ErrorContains(t, writeTraversalPolicyPreflight(manifestPath, outputPath, preflight), "already exists")
+	require.ErrorContains(t, writeTraversalPolicyPreflight(manifestPath, manifestPath, preflight), "must not overwrite")
+}
+
 func TestSelectTraversalPolicyScenariosRequiresOneExactMatch(t *testing.T) {
 	query := "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
 	policy := pg.TraversalPolicy{QuerySHA256Allowlist: []string{pg.TraversalPolicyQuerySHA256(query)}}

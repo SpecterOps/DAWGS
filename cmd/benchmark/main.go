@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -304,11 +303,7 @@ func main() {
 			if err != nil {
 				fatal("render traversal policy preflight: %v", err)
 			}
-			encoded, err := json.MarshalIndent(preflight, "", "  ")
-			if err != nil {
-				fatal("encode traversal policy preflight: %v", err)
-			}
-			if err := os.WriteFile(*v2PolicyPreflightOutput, append(encoded, '\n'), 0o600); err != nil {
+			if err := writeTraversalPolicyPreflight(*v2PolicyPreflight, *v2PolicyPreflightOutput, preflight); err != nil {
 				fatal("write traversal policy preflight: %v", err)
 			}
 			fmt.Fprintf(os.Stderr, "  wrote non-promotional traversal policy preflight %s (query=%s sql=%s)\n", *v2PolicyPreflightOutput, preflight.QuerySHA256, preflight.SQLSHA256)

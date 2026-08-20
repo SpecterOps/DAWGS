@@ -159,6 +159,44 @@ type TraversalPolicyPreflight struct {
 	Optimization    translate.OptimizationSummary `json:"optimization"`
 }
 
+// writeTraversalPolicyPreflight creates a new provenance record without ever
+// replacing a provisional manifest or an earlier capture. A repeated preflight
+// must use a new path so the record's filesystem lifetime remains one-to-one
+// with the invocation that produced it.
+func writeTraversalPolicyPreflight(manifestPath, outputPath string, preflight TraversalPolicyPreflight) error {
+	manifestInfo, err := os.Stat(manifestPath)
+	if err != nil {
+		return fmt.Errorf("stat provisional traversal policy manifest: %w", err)
+	}
+	if outputInfo, err := os.Stat(outputPath); err == nil {
+		if os.SameFile(manifestInfo, outputInfo) {
+			return fmt.Errorf("preflight output must not overwrite the provisional traversal policy manifest")
+		}
+		return fmt.Errorf("preflight output already exists: %s", outputPath)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat preflight output: %w", err)
+	}
+
+	encoded, err := json.MarshalIndent(preflight, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode traversal policy preflight: %w", err)
+	}
+	output, err := os.OpenFile(outputPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create preflight output: %w", err)
+	}
+	if _, err := output.Write(append(encoded, '\n')); err != nil {
+		_ = output.Close()
+		_ = os.Remove(outputPath)
+		return fmt.Errorf("write preflight output: %w", err)
+	}
+	if err := output.Close(); err != nil {
+		_ = os.Remove(outputPath)
+		return fmt.Errorf("close preflight output: %w", err)
+	}
+	return nil
+}
+
 func renderTraversalPolicyPreflight(ctx context.Context, mapper pg.KindMapper, target model.Graph, scenario Scenario, manifest benchmarkTraversalPromotionManifest) (TraversalPolicyPreflight, error) {
 	options, err := manifest.productionOptions(scenario.Cypher)
 	if err != nil {
