@@ -38,12 +38,31 @@ func (s *TraversalWorkspaceStats) add(other TraversalWorkspaceStats) {
 	s.Failures += other.Failures
 }
 
+// PreparedStatementStats describes opt-in statement warm-up activity. Entries
+// counts only SHA-256 statement identities, never SQL text or parameter data.
+type PreparedStatementStats struct {
+	Attempts uint64 `json:"attempts"`
+	Prepared uint64 `json:"prepared"`
+	Reuses   uint64 `json:"reuses"`
+	Failures uint64 `json:"failures"`
+	Entries  int    `json:"entries"`
+}
+
+func (s *PreparedStatementStats) add(other PreparedStatementStats) {
+	s.Attempts += other.Attempts
+	s.Prepared += other.Prepared
+	s.Reuses += other.Reuses
+	s.Failures += other.Failures
+	s.Entries += other.Entries
+}
+
 // ConnectionCacheStats describes one currently live connection cache. ID is
 // an opaque diagnostic identifier; it is not a backend PID or pointer value.
 type ConnectionCacheStats struct {
 	ID                 uint64                  `json:"id"`
 	Translation        TranslationCacheStats   `json:"translation"`
 	TraversalWorkspace TraversalWorkspaceStats `json:"traversal_workspace"`
+	PreparedStatements PreparedStatementStats  `json:"prepared_statements"`
 }
 
 // Stats is a query-text-free provider snapshot. Aggregate combines live and
@@ -58,5 +77,6 @@ type Stats struct {
 	RetiredConnections    uint64                  `json:"retired_connections"`
 	Aggregate             TranslationCacheStats   `json:"aggregate"`
 	TraversalWorkspace    TraversalWorkspaceStats `json:"traversal_workspace"`
+	PreparedStatements    PreparedStatementStats  `json:"prepared_statements"`
 	Connections           []ConnectionCacheStats  `json:"connections"`
 }

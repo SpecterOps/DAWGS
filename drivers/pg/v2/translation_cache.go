@@ -2,6 +2,9 @@ package v2
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -199,6 +202,8 @@ type connectionState struct {
 	cache                    *connectionTranslationCache
 	workspaceReadyGeneration uint64
 	workspace                TraversalWorkspaceStats
+	preparedStatements       map[[sha256.Size]byte]struct{}
+	prepared                 PreparedStatementStats
 }
 
 // connectionCacheProvider maps physical connection identities to their cache
@@ -217,6 +222,7 @@ type connectionCacheProvider struct {
 
 	retiredConnections uint64
 	retiredStats       TranslationCacheStats
+	retiredPrepared    PreparedStatementStats
 }
 
 var _ pg.CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
@@ -322,7 +328,88 @@ func (s *connectionCacheProvider) registerConnection(conn *pgx.Conn) {
 			defer s.lock.RUnlock()
 			return s.generation
 		}),
+		preparedStatements: map[[sha256.Size]byte]struct{}{},
 	}
+}
+
+type preparedStatementWarmup struct {
+	identity [sha256.Size]byte
+	sql      string
+}
+
+func normalizePreparedStatementWarmups(statements []string) ([]preparedStatementWarmup, error) {
+	warmups := make([]preparedStatementWarmup, 0, len(statements))
+	seen := map[[sha256.Size]byte]struct{}{}
+	for _, statement := range statements {
+		statement = strings.TrimSpace(statement)
+		if statement == "" {
+			return nil, fmt.Errorf("prepared statement SQL must not be empty")
+		}
+		if len(statement) > pg.MaxCachedCypherQueryBytes {
+			return nil, fmt.Errorf("prepared statement SQL exceeds %d bytes", pg.MaxCachedCypherQueryBytes)
+		}
+		identity := sha256.Sum256([]byte(statement))
+		if _, exists := seen[identity]; exists {
+			continue
+		}
+		seen[identity] = struct{}{}
+		warmups = append(warmups, preparedStatementWarmup{identity: identity, sql: strings.Clone(statement)})
+	}
+	return warmups, nil
+}
+
+func pgxStatementCacheName(identity [sha256.Size]byte) string {
+	return "stmtcache_" + hex.EncodeToString(identity[:24])
+}
+
+// warmStatementsForConnection prepares SQL using pgx's CacheStatement naming
+// convention. pgx then adopts the already-prepared server statement on its
+// first regular CacheStatement execution instead of preparing it twice.
+func (s *connectionCacheProvider) warmStatementsForConnection(conn *pgx.Conn, statements []preparedStatementWarmup, prepare func(string, string) error) error {
+	if len(statements) == 0 {
+		return nil
+	}
+	if prepare == nil {
+		return fmt.Errorf("prepared statement initializer is required")
+	}
+	if s == nil || conn == nil {
+		return fmt.Errorf("registered PostgreSQL connection is required for statement warm-up")
+	}
+
+	var errs []error
+	for _, statement := range statements {
+		s.lock.Lock()
+		state := s.states[conn]
+		if state == nil || s.closed {
+			s.lock.Unlock()
+			return fmt.Errorf("PostgreSQL connection is not registered for statement warm-up")
+		}
+		if _, prepared := state.preparedStatements[statement.identity]; prepared {
+			state.prepared.Reuses++
+			s.lock.Unlock()
+			continue
+		}
+		state.prepared.Attempts++
+		s.lock.Unlock()
+
+		if err := prepare(pgxStatementCacheName(statement.identity), statement.sql); err != nil {
+			s.lock.Lock()
+			if s.states[conn] == state {
+				state.prepared.Failures++
+			}
+			s.lock.Unlock()
+			errs = append(errs, err)
+			continue
+		}
+
+		s.lock.Lock()
+		if s.states[conn] == state && !s.closed {
+			state.preparedStatements[statement.identity] = struct{}{}
+			state.prepared.Prepared++
+		}
+		s.lock.Unlock()
+	}
+	return errors.Join(errs...)
 }
 
 // removeConnection unregisters and closes state. It is idempotent so pool
@@ -347,6 +434,8 @@ func (s *connectionCacheProvider) removeConnection(conn *pgx.Conn) {
 	stats.Entries = 0
 	stats.Capacity = 0
 	s.retiredStats.add(stats)
+	state.prepared.Entries = 0
+	s.retiredPrepared.add(state.prepared)
 	s.lock.Unlock()
 }
 
@@ -384,6 +473,8 @@ func (s *connectionCacheProvider) close() {
 		stats.Entries = 0
 		stats.Capacity = 0
 		s.retiredStats.add(stats)
+		state.prepared.Entries = 0
+		s.retiredPrepared.add(state.prepared)
 		s.lock.Unlock()
 	}
 }
@@ -401,14 +492,20 @@ func (s *connectionCacheProvider) stats() Stats {
 		LiveConnections:       len(s.states),
 		RetiredConnections:    s.retiredConnections,
 		Aggregate:             s.retiredStats,
+		PreparedStatements:    s.retiredPrepared,
 		Connections:           make([]ConnectionCacheStats, 0, len(s.states)),
 	}
 	states := make([]*connectionState, 0, len(s.states))
 	workspaceStats := make([]TraversalWorkspaceStats, 0, len(s.states))
+	preparedStats := make([]PreparedStatementStats, 0, len(s.states))
 	for _, state := range s.states {
 		states = append(states, state)
 		workspaceStats = append(workspaceStats, state.workspace)
+		prepared := state.prepared
+		prepared.Entries = len(state.preparedStatements)
+		preparedStats = append(preparedStats, prepared)
 		stats.TraversalWorkspace.add(state.workspace)
+		stats.PreparedStatements.add(prepared)
 	}
 	s.lock.RUnlock()
 
@@ -418,6 +515,7 @@ func (s *connectionCacheProvider) stats() Stats {
 			ID:                 state.id,
 			Translation:        connectionStats,
 			TraversalWorkspace: workspaceStats[index],
+			PreparedStatements: preparedStats[index],
 		})
 		stats.Aggregate.add(connectionStats)
 	}

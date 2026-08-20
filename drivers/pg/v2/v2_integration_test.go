@@ -4,6 +4,7 @@ package v2
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"os"
 	"reflect"
@@ -235,6 +236,37 @@ func TestV2StableSnapshotTraversalWorkspaceReadiness(t *testing.T) {
 	require.NoError(t, stableSnapshot())
 	stats = driver.TranslationCacheStats()
 	require.Equal(t, uint64(2), stats.TraversalWorkspace.Initializations)
+}
+
+// TestV2StatementWarmupUsesPooledPGXCacheNames verifies that an opt-in warmup
+// creates one server statement per physical connection and leaves only a
+// query-text-free identity in V2 lifecycle state.
+func TestV2StatementWarmupUsesPooledPGXCacheNames(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 4, nil)
+	setUpV2IntegrationGraph(t, driver)
+	ctx := context.Background()
+	require.NoError(t, driver.WarmStatements(ctx, "select 1", "select 1"))
+
+	connection, err := driver.pool.pool.Acquire(ctx)
+	require.NoError(t, err)
+	identity := sha256.Sum256([]byte("select 1"))
+	var prepared int
+	require.NoError(t, connection.QueryRow(ctx, "select count(*) from pg_prepared_statements where name = $1", pgxStatementCacheName(identity)).Scan(&prepared))
+	require.Equal(t, 1, prepared)
+	var value int
+	require.NoError(t, connection.QueryRow(ctx, "select 1", pgx.QueryExecModeCacheStatement).Scan(&value))
+	require.Equal(t, 1, value)
+
+	stats := driver.TranslationCacheStats()
+	require.Equal(t, uint64(1), stats.PreparedStatements.Prepared)
+	require.Equal(t, 1, stats.PreparedStatements.Entries)
+
+	connection.Release()
+	driver.pool.Reset()
+	requireEventually(t, func() bool {
+		stats := driver.TranslationCacheStats()
+		return stats.LiveConnections == 0 && stats.PreparedStatements.Entries == 0
+	}, "prepared statement retirement")
 }
 
 func TestV2PhysicalConnectionsHaveIndependentCaches(t *testing.T) {

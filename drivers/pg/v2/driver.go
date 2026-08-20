@@ -134,6 +134,16 @@ func (s *Driver) TranslationCacheStats() Stats {
 	return s.pool.provider.stats()
 }
 
+// WarmStatements prepares explicitly selected hot PostgreSQL statements on
+// currently idle physical connections without executing them. It is opt-in and
+// should be called after schema assertion.
+func (s *Driver) WarmStatements(ctx context.Context, statements ...string) error {
+	if s == nil || s.pool == nil {
+		return nil
+	}
+	return s.pool.WarmStatements(ctx, statements...)
+}
+
 // ParseCacheStats forwards v1's still-driver-wide parse-cache statistics.
 func (s *Driver) ParseCacheStats() pg.ParseCacheStats {
 	if s == nil || s.delegate == nil {

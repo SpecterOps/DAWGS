@@ -273,3 +273,51 @@ func TestConnectionWorkspaceReadinessDoesNotMarkFailuresReady(t *testing.T) {
 	require.Equal(t, uint64(1), stats.TraversalWorkspace.Initializations)
 	require.True(t, stats.Connections[0].TraversalWorkspace.Ready)
 }
+
+// TestPreparedStatementWarmupTracksOnlyStatementIdentities verifies that
+// warm-up deduplicates SQL, reuses prepared statements, and drops state when
+// its physical connection retires.
+func TestPreparedStatementWarmupTracksOnlyStatementIdentities(t *testing.T) {
+	provider, _, conn := newTestCache(t, 2)
+	warmups, err := normalizePreparedStatementWarmups([]string{" select 1 ", "select 1"})
+	require.NoError(t, err)
+	require.Len(t, warmups, 1)
+
+	var names []string
+	require.NoError(t, provider.warmStatementsForConnection(conn, warmups, func(name, sql string) error {
+		names = append(names, name)
+		require.Equal(t, "select 1", sql)
+		return nil
+	}))
+	require.Equal(t, []string{pgxStatementCacheName(warmups[0].identity)}, names)
+	require.NoError(t, provider.warmStatementsForConnection(conn, warmups, func(string, string) error {
+		t.Fatal("already prepared statement must not be prepared again")
+		return nil
+	}))
+
+	stats := provider.stats()
+	require.Equal(t, uint64(1), stats.PreparedStatements.Attempts)
+	require.Equal(t, uint64(1), stats.PreparedStatements.Prepared)
+	require.Equal(t, uint64(1), stats.PreparedStatements.Reuses)
+	require.Equal(t, 1, stats.PreparedStatements.Entries)
+
+	provider.removeConnection(conn)
+	stats = provider.stats()
+	require.Equal(t, uint64(1), stats.PreparedStatements.Prepared)
+	require.Zero(t, stats.PreparedStatements.Entries)
+}
+
+func TestPreparedStatementWarmupDoesNotRetainFailures(t *testing.T) {
+	provider, _, conn := newTestCache(t, 2)
+	warmups, err := normalizePreparedStatementWarmups([]string{"select 1"})
+	require.NoError(t, err)
+	expected := errors.New("prepare failed")
+	require.ErrorIs(t, provider.warmStatementsForConnection(conn, warmups, func(string, string) error { return expected }), expected)
+	stats := provider.stats()
+	require.Equal(t, uint64(1), stats.PreparedStatements.Attempts)
+	require.Equal(t, uint64(1), stats.PreparedStatements.Failures)
+	require.Zero(t, stats.PreparedStatements.Entries)
+
+	_, err = normalizePreparedStatementWarmups([]string{""})
+	require.ErrorContains(t, err, "must not be empty")
+}

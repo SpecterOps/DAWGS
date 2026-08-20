@@ -2,6 +2,7 @@ package v2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -145,6 +146,48 @@ func (s *Pool) Reset() {
 	if s != nil && s.pool != nil {
 		s.pool.Reset()
 	}
+}
+
+// WarmStatements prepares the supplied PostgreSQL SQL on every currently
+// idle physical connection. It never executes the SQL. Call it after schema
+// assertion, ideally while the pool is otherwise quiescent; newly created
+// connections warm lazily through pgx's normal CacheStatement behavior.
+func (s *Pool) WarmStatements(ctx context.Context, statements ...string) error {
+	if s == nil || s.pool == nil || s.provider == nil {
+		return fmt.Errorf("PostgreSQL v2 pool is not initialized")
+	}
+	warmups, err := normalizePreparedStatementWarmups(statements)
+	if err != nil {
+		return err
+	}
+	if len(warmups) == 0 {
+		return nil
+	}
+
+	connections := s.pool.AcquireAllIdle(ctx)
+	if len(connections) == 0 {
+		connection, err := s.pool.Acquire(ctx)
+		if err != nil {
+			return err
+		}
+		connections = []*pgxpool.Conn{connection}
+	}
+	defer func() {
+		for _, connection := range connections {
+			connection.Release()
+		}
+	}()
+
+	var errs []error
+	for _, connection := range connections {
+		if err := s.provider.warmStatementsForConnection(connection.Conn(), warmups, func(name, sql string) error {
+			_, err := connection.Conn().Prepare(ctx, name, sql)
+			return err
+		}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *Pool) closeProvider() {
