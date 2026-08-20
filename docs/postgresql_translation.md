@@ -324,6 +324,23 @@ Raw PostgreSQL graph-composite values are driver implementation details. Use the
 immutable for the result lifetime. `Result.Values()` remains row-scoped raw driver data. Public graph values produced
 through the mapper are owned independently of later row advancement and pooled connection reuse.
 
+## Structural traversal policy
+
+Policy manifest v2 remains an exact-query canary: one query digest is bound to
+the rendered SQL digest. Manifest v3 is the opt-in production-wide form. Each
+bucket binds `traversal-shape-v1`, its query-text-free structural SHA-256, and
+a candidate SQL-template SHA-256. The PostgreSQL driver independently
+recomputes both digests when a policy is installed. A malformed, ambiguous, or
+unmatched structural bucket leaves the query on the incumbent. The V2 driver
+reports exact-query, structural-shadow, and structurally-authorized counts
+without retaining query text or caller values.
+
+`RefreshTraversalTopologySynopsis` atomically publishes graph node/edge counts
+against the current graph mutation epoch. It is an explicit management action,
+not a query-latency operation; a missing or stale synopsis remains
+incumbent-only. Fixed-suffix route selection is still tool-only until its
+separate snapshot-bound evidence and policy generation are qualified.
+
 ## Indexing Notes
 
 Exact string property equality is emitted with a JSON string type guard and `properties ->>` extraction. This allows
