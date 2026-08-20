@@ -92,7 +92,7 @@ test: $(METRICS_DIR)
 	@$(GO_CMD) tool cover -func=$(COVERAGE_PROFILE) > $(COVERAGE_FUNC_REPORT)
 	@echo "Coverage report written to $(COVERAGE_FUNC_REPORT)"
 
-test_all: test test_integration test_bdd
+test_all: test test_integration test_bdd_integration
 
 test_integration:
 	@echo "Running all integration tests..."

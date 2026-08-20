@@ -25,7 +25,7 @@ make test
 
 Run integration tests when a backend is available:
 
-export the CONNECTION_STRING environment variable for the Postgres or Neo4j driver 
+Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j driver.
 
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
