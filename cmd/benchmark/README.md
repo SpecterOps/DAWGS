@@ -30,6 +30,9 @@ go run ./cmd/benchmark -driver pg-v2 -connection "..." -iterations 10
 go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes -pg-v2-min-conns 0 -pg-v2-max-conns 4 -workers 4 -warmup 0 -iterations 20
 go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes -pg-v2-min-conns 0 -pg-v2-max-conns 4 -workers 4 -warmup 2 -iterations 20
 
+# Benchmark the guarded inline predecessor-DAG executor without enabling it in production
+go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes -pg-v2-shortest-path-executor 'ASP-I1-U-DAG+MAT-M0' -pg-plan-cache-mode auto -iterations 20
+
 # Save to file
 go run ./cmd/benchmark -connection "..." -output report.md
 
@@ -51,6 +54,9 @@ go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 | `-workers` | `1` | Concurrent workers per scenario; each contributes `-iterations` samples |
 | `-pg-v2-cache-entries` | `64` | V2 translations retained per physical PostgreSQL connection |
 | `-pg-v2-shared-shortest-path-template-entries` | `128` | Immutable shortest-path SQL templates shared across V2 physical connections; zero disables the L2 tier |
+| `-pg-v2-shortest-path-executor` | | Benchmark-only qualified executor identity; production routing remains manifest-controlled |
+| `-pg-plan-cache-mode` | `auto` | Plan mode for forced PostgreSQL shortest-path runs (`auto`, `force_custom_plan`, `force_generic_plan`) |
+| `-pg-jit` | `true` | Enable PostgreSQL JIT transaction-locally during forced shortest-path runs |
 | `-pg-v2-min-conns` | `5` | V2 minimum physical PostgreSQL connections |
 | `-pg-v2-max-conns` | `50` | V2 maximum physical PostgreSQL connections |
 | `-explain` | `false` | Capture PostgreSQL JSON `EXPLAIN (ANALYZE, BUFFERS, SETTINGS)` and translated SQL for Cypher scenarios |
