@@ -33,6 +33,38 @@
 
 ## Shortest Paths
 
+### PostgreSQL V2 inline predecessor-DAG qualification
+
+The default-off `ASP-I1-U-DAG+MAT-M0` executor resolves singleton endpoints
+before recursive work, discovers distance and predecessors using identifier-only
+state, and hydrates emitted paths through an inline M0 lateral operator. The
+incumbent PostgreSQL SQL remains unchanged; production use still requires an
+exact traversal-policy manifest and stable-snapshot transaction.
+
+Matched live `traversal_shapes` runs use 20 timed iterations, two warm-up
+iterations, one worker, PostgreSQL `plan_cache_mode=auto`, and JIT enabled:
+
+| Scenario | PG V2 incumbent p50/p95 | PG V2 candidate p50/p95 | Neo4j p50/p95 |
+|---|---:|---:|---:|
+| Diamond, three shortest paths | 31.6ms / 216ms | 1.8ms / 4.5ms | 1.9ms / 2.7ms |
+| Disconnected endpoints | 2.5ms / 42.3ms | 1.5ms / 2.2ms | 1.5ms / 2.8ms |
+
+The stored-workspace `ASP-B2-DAG-MIN-LEVEL` candidate did not qualify on this
+fixture because workspace execution dominated the small search. Forced custom
+planning also regressed both shortest-path shapes; `auto` remains the selected
+plan policy. The B2 executor remains available only for diagnostic/tool runs.
+
+```bash
+go run ./cmd/benchmark \
+  -driver pg-v2 \
+  -connection "postgresql://user:password@localhost/database" \
+  -dataset traversal_shapes \
+  -iterations 20 -warmup 2 -workers 1 \
+  -pg-v2-min-conns 0 -pg-v2-max-conns 1 \
+  -pg-v2-shortest-path-executor 'ASP-I1-U-DAG+MAT-M0' \
+  -pg-plan-cache-mode auto
+```
+
 | Dataset         | Start | End | Paths | Median |    P95 |    Max |
 | --------------- | ----- | --- | ----: | -----: | -----: | -----: |
 | diamond         | a     | d   |     2 | 0.42ms | 0.68ms | 0.91ms |
