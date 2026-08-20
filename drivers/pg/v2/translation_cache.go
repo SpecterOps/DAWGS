@@ -24,6 +24,12 @@ type translationEntry struct {
 }
 
 func (s translationEntry) bind(parameters map[string]any) (map[string]any, error) {
+	// pgx.NamedArgs accepts nil for statements with no placeholders. Returning
+	// nil avoids allocating an empty map for the common parameter-free cached
+	// shortest-path shape while preserving its execution semantics.
+	if len(s.parameterSources) == 0 {
+		return nil, nil
+	}
 	bound := make(map[string]any, len(s.parameterSources))
 	for identifier, source := range s.parameterSources {
 		value, found := parameters[source]

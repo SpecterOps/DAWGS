@@ -382,3 +382,39 @@ func TestSharedShortestPathTemplateCacheReusesCompilationAcrossConnections(t *te
 	require.Equal(t, uint64(1), stats.Insertions)
 	require.Equal(t, 1, stats.Entries)
 }
+
+func TestConnectionTranslationCacheBindingAvoidsEmptyMap(t *testing.T) {
+	_, cache, _ := newTestCache(t, 1)
+	_, parameters, err := cache.TranslateWithPolicy("MATCH p = shortestPath((s)-[*]->(e)) RETURN p", 1, nil, "incumbent", func() (translate.Result, string, error) {
+		return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
+	})
+	require.NoError(t, err)
+	require.Empty(t, parameters)
+	_, parameters, err = cache.TranslateWithPolicy("MATCH p = shortestPath((s)-[*]->(e)) RETURN p", 1, nil, "incumbent", func() (translate.Result, string, error) {
+		t.Fatal("cached translation must not rebuild")
+		return translate.Result{}, "", nil
+	})
+	require.NoError(t, err)
+	require.Nil(t, parameters)
+}
+
+func BenchmarkConnectionTranslationCacheParameterlessHit(b *testing.B) {
+	cache := newConnectionTranslationCache(1, nil, nil)
+	_, _, err := cache.TranslateWithPolicy("MATCH p = shortestPath((s)-[*]->(e)) RETURN p", 1, nil, "incumbent", func() (translate.Result, string, error) {
+		return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_, _, err := cache.TranslateWithPolicy("MATCH p = shortestPath((s)-[*]->(e)) RETURN p", 1, nil, "incumbent", func() (translate.Result, string, error) {
+			b.Fatal("cached translation must not rebuild")
+			return translate.Result{}, "", nil
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
