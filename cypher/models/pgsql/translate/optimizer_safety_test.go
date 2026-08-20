@@ -726,6 +726,8 @@ func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *test
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Contains(t, formatted, "all_shortest_paths_dag")
+	require.Contains(t, formatted, "m0_hydrated")
+	require.NotContains(t, formatted, "ordered_edge_ids_to_path")
 	require.NotContains(t, formatted, "bidirectional_asp_harness")
 	require.NotContains(t, formatted, "traversal_pair_filter")
 	require.Contains(t, formatted, "array []::int2[]")

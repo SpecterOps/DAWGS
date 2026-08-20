@@ -829,7 +829,11 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 			},
 		}},
 	}
-	if mode.oneWitness {
+	// Both one-witness and all-path results carry ordered edge IDs at this
+	// boundary. Hydrate them inline once per emitted row; routing all-path rows
+	// through ordered_edge_ids_to_path invokes a separately planned SQL
+	// function per row and dominates small shortest-path workloads.
+	{
 		const (
 			hydrated      pgsql.Identifier = "m0_hydrated"
 			hydratedNodes pgsql.Identifier = "nodes"
@@ -858,7 +862,7 @@ func (s *ExpansionBuilder) buildInlinePredecessorDAGRoot(mode inlinePredecessorD
 				},
 			},
 		}
-		projection.Projection = shortestPathM0Projection(projection.Projection, stateID, path)
+		projection.Projection = shortestPathM0Projection(projection.Projection, stateID, expansionModel.PathBinding.Identifier, path)
 		projection.From[0].Joins = append(projection.From[0].Joins, pgsql.Join{
 			Table: hydration,
 			JoinOperator: pgsql.JoinOperator{

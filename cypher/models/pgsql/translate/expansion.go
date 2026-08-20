@@ -2363,20 +2363,26 @@ func shortestPathM0Hydration(stateID pgsql.Identifier, direction graph.Direction
 }
 
 // shortestPathM0Projection replaces the raw path state with its hydrated graph-path value.
-func shortestPathM0Projection(projection pgsql.Projection, stateID pgsql.Identifier, path pgsql.Expression) pgsql.Projection {
+func shortestPathM0Projection(projection pgsql.Projection, stateID, pathBinding pgsql.Identifier, path pgsql.Expression) pgsql.Projection {
 	result := append(pgsql.Projection(nil), projection...)
 	for idx, item := range result {
-		aliased, ok := item.(*pgsql.AliasedExpression)
-		if !ok {
+		var aliased pgsql.AliasedExpression
+		switch typed := item.(type) {
+		case *pgsql.AliasedExpression:
+			aliased = *typed
+		case pgsql.AliasedExpression:
+			aliased = typed
+		default:
 			continue
 		}
-		identifier, ok := aliased.Expression.(pgsql.CompoundIdentifier)
-		if !ok || len(identifier) != 2 || identifier[0] != stateID || identifier[1] != expansionPath {
+		identifier, expressionMatches := aliased.Expression.(pgsql.CompoundIdentifier)
+		expressionMatches = expressionMatches && len(identifier) == 2 && identifier[0] == stateID && identifier[1] == expansionPath
+		aliasMatches := aliased.Alias.Set && aliased.Alias.Value == pathBinding
+		if !expressionMatches && !aliasMatches {
 			continue
 		}
-		copy := *aliased
-		copy.Expression = path
-		result[idx] = &copy
+		aliased.Expression = path
+		result[idx] = &aliased
 	}
 	return result
 }
@@ -2485,7 +2491,7 @@ func (s *ExpansionBuilder) BuildShortestPathEdgeM0Root() (pgsql.Query, error) {
 	}
 
 	projection := pgsql.Select{
-		Projection: shortestPathM0Projection(expansionModel.Projection, stateID, path),
+		Projection: shortestPathM0Projection(expansionModel.Projection, stateID, expansionModel.PathBinding.Identifier, path),
 		From: []pgsql.FromClause{{
 			Source: pgsql.TableReference{Name: stateID.AsCompoundIdentifier()},
 			Joins: []pgsql.Join{
@@ -2694,12 +2700,12 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 		}},
 	}
 
-	// S4 witness search returns only ordered edge identifiers. Hydrate those
+	// Compact witness and all-path search returns only ordered edge identifiers. Hydrate those
 	// identifiers at the inline statement boundary, exactly as S3 M0 does,
 	// instead of invoking the generic ordered_edge_ids_to_path helper. Keeping
 	// search and hydration as separate SQL operators avoids a second stored
 	// helper boundary and makes S3/S4 materialization evidence comparable.
-	if functionName == pgsql.FunctionShortestPathCompact && expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS4CanonicalWitness {
+	if compactExecutorNeedsPathHydration(expansionModel.ShortestPathExecutor) {
 		pathIDs := pgsql.CompoundIdentifier{stateID, expansionPath}
 		hydration := shortestPathM0Hydration(stateID, s.traversalStep.Direction)
 		rootArray := pgsql.ArrayLiteral{
@@ -2727,7 +2733,7 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 				edges,
 			},
 		}
-		projection.Projection = shortestPathM0Projection(projection.Projection, stateID, path)
+		projection.Projection = shortestPathM0Projection(projection.Projection, stateID, expansionModel.PathBinding.Identifier, path)
 		projection.From[0].Joins = append(projection.From[0].Joins, pgsql.Join{
 			Table: hydration,
 			JoinOperator: pgsql.JoinOperator{
@@ -2751,6 +2757,20 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 	query.AddCTE(endpointCTE)
 	query.AddCTE(search)
 	return query, nil
+}
+
+func compactExecutorNeedsPathHydration(executor optimize.ShortestPathExecutor) bool {
+	switch executor {
+	case optimize.ShortestPathExecutorS4CanonicalWitness,
+		optimize.ShortestPathExecutorASPA1DAG,
+		optimize.ShortestPathExecutorB1AlternatingNodeWitness,
+		optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness,
+		optimize.ShortestPathExecutorASPB1AlternatingNodeDAG,
+		optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG:
+		return true
+	default:
+		return false
+	}
 }
 
 // BuildAllShortestPathsDAGRoot builds the bound-endpoint query that enumerates all shortest paths from a predecessor DAG.
@@ -4586,7 +4606,7 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 
 		traversalStep.Projection = boundProjections.Items
 	}
-	if expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS3EdgeM0 || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorS4CanonicalWitness || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalWitness || expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
+	if shortestExecutorEmitsHydratedPath(expansionModel.ShortestPathExecutor) {
 		expansionModel.PathBinding.DataType = pgsql.PathComposite
 		if part.PatternBinding != nil {
 			part.PatternBinding.DataType = pgsql.PathComposite
@@ -4600,6 +4620,14 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	}
 
 	return nil
+}
+
+func shortestExecutorEmitsHydratedPath(executor optimize.ShortestPathExecutor) bool {
+	return executor == optimize.ShortestPathExecutorS3EdgeM0 ||
+		executor == optimize.ShortestPathExecutorI1CanonicalWitness ||
+		executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness ||
+		executor == optimize.ShortestPathExecutorASPI1DAG ||
+		compactExecutorNeedsPathHydration(executor)
 }
 
 // translateExpansionConstraints consumes applicable constraints and partitions them among expansion bindings and outer frames.
