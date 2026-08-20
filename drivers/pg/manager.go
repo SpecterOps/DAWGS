@@ -29,6 +29,13 @@ type KindMapper interface {
 	AssertKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error)
 }
 
+// StableSnapshotTraversalWorkspaceProvider optionally owns the readiness of
+// session-local traversal workspaces. Providers must treat a closed or
+// replaced physical connection as unready.
+type StableSnapshotTraversalWorkspaceProvider interface {
+	EnsureStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error
+}
+
 // KindMapperFromGraphDatabase coordinates PostgreSQL driver behavior for kind mapper from graph database.
 func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
 	if kindMapperProvider, supported := graphDB.(interface{ KindMapper() KindMapper }); supported {
@@ -252,7 +259,13 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 	} else {
 		defer conn.Release()
 		if stableSnapshotIsolation(cfg.Options.IsoLevel) && !cfg.skipStableSnapshotTraversalWorkspaces {
-			if err := initializeStableSnapshotTraversalWorkspaces(ctx, conn); err != nil {
+			workspaceProvider, hasWorkspaceProvider := s.translationCacheProvider.(StableSnapshotTraversalWorkspaceProvider)
+			if hasWorkspaceProvider {
+				err = workspaceProvider.EnsureStableSnapshotTraversalWorkspaces(ctx, conn)
+			} else {
+				err = EnsureStableSnapshotTraversalWorkspaces(ctx, conn)
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -282,8 +295,11 @@ func stableSnapshotIsolation(isolation pgx.TxIsoLevel) bool {
 	return isolation == pgx.RepeatableRead || isolation == pgx.Serializable
 }
 
-// initializeStableSnapshotTraversalWorkspaces coordinates PostgreSQL driver behavior for initialize stable snapshot traversal workspaces.
-func initializeStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error {
+// EnsureStableSnapshotTraversalWorkspaces initializes the reusable
+// session-local workspace required before stable-snapshot traversal queries.
+// Drivers with connection-local lifecycle state may call this only when their
+// tracked physical connection is not already ready.
+func EnsureStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error {
 	const initializeSQL = `select
 		public.ensure_shortest_dag_workspace(),
 		public.ensure_bidirectional_shortest_path_workspace(),

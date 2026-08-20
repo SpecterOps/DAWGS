@@ -23,23 +23,40 @@ func (s *TranslationCacheStats) add(other TranslationCacheStats) {
 	s.Entries += other.Entries
 }
 
+// TraversalWorkspaceStats describes setup activity for session-local
+// stable-snapshot traversal workspaces without exposing backend identity.
+type TraversalWorkspaceStats struct {
+	Initializations uint64 `json:"initializations"`
+	Reuses          uint64 `json:"reuses"`
+	Failures        uint64 `json:"failures"`
+	Ready           bool   `json:"ready"`
+}
+
+func (s *TraversalWorkspaceStats) add(other TraversalWorkspaceStats) {
+	s.Initializations += other.Initializations
+	s.Reuses += other.Reuses
+	s.Failures += other.Failures
+}
+
 // ConnectionCacheStats describes one currently live connection cache. ID is
 // an opaque diagnostic identifier; it is not a backend PID or pointer value.
 type ConnectionCacheStats struct {
-	ID          uint64                `json:"id"`
-	Translation TranslationCacheStats `json:"translation"`
+	ID                 uint64                  `json:"id"`
+	Translation        TranslationCacheStats   `json:"translation"`
+	TraversalWorkspace TraversalWorkspaceStats `json:"traversal_workspace"`
 }
 
 // Stats is a query-text-free provider snapshot. Aggregate combines live and
 // retired connection counters; its Capacity is the current theoretical bound
 // across live connections, not a global retained-entry limit.
 type Stats struct {
-	SchemaGeneration      uint64                 `json:"schema_generation"`
-	CapacityPerConnection int                    `json:"capacity_per_connection"`
-	MinConnections        int32                  `json:"min_connections"`
-	MaxConnections        int32                  `json:"max_connections"`
-	LiveConnections       int                    `json:"live_connections"`
-	RetiredConnections    uint64                 `json:"retired_connections"`
-	Aggregate             TranslationCacheStats  `json:"aggregate"`
-	Connections           []ConnectionCacheStats `json:"connections"`
+	SchemaGeneration      uint64                  `json:"schema_generation"`
+	CapacityPerConnection int                     `json:"capacity_per_connection"`
+	MinConnections        int32                   `json:"min_connections"`
+	MaxConnections        int32                   `json:"max_connections"`
+	LiveConnections       int                     `json:"live_connections"`
+	RetiredConnections    uint64                  `json:"retired_connections"`
+	Aggregate             TranslationCacheStats   `json:"aggregate"`
+	TraversalWorkspace    TraversalWorkspaceStats `json:"traversal_workspace"`
+	Connections           []ConnectionCacheStats  `json:"connections"`
 }

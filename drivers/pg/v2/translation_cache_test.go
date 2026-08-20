@@ -228,3 +228,48 @@ func TestConnectionCacheProviderStatsAndCleanupAreRaceSafe(t *testing.T) {
 
 	require.Nil(t, provider.CacheForConnection(conn))
 }
+
+// TestConnectionWorkspaceReadinessTracksGenerationAndFailures verifies that a
+// physical connection skips only successfully initialized workspaces and
+// becomes unready after a schema-generation change or retirement.
+func TestConnectionWorkspaceReadinessTracksGenerationAndFailures(t *testing.T) {
+	provider, _, conn := newTestCache(t, 2)
+	var calls int
+	initialize := func() error {
+		calls++
+		return nil
+	}
+
+	require.NoError(t, provider.ensureWorkspaceForConnection(conn, initialize))
+	require.NoError(t, provider.ensureWorkspaceForConnection(conn, initialize))
+	stats := provider.stats()
+	require.Equal(t, 1, calls)
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Initializations)
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Reuses)
+	require.True(t, stats.Connections[0].TraversalWorkspace.Ready)
+
+	provider.advanceSchemaGeneration()
+	stats = provider.stats()
+	require.False(t, stats.Connections[0].TraversalWorkspace.Ready)
+	require.NoError(t, provider.ensureWorkspaceForConnection(conn, initialize))
+	require.Equal(t, 2, calls)
+
+	provider.removeConnection(conn)
+	require.Nil(t, provider.CacheForConnection(conn))
+	require.NoError(t, provider.ensureWorkspaceForConnection(conn, initialize))
+	require.Equal(t, 3, calls)
+}
+
+func TestConnectionWorkspaceReadinessDoesNotMarkFailuresReady(t *testing.T) {
+	provider, _, conn := newTestCache(t, 2)
+	expected := errors.New("workspace setup failed")
+	require.ErrorIs(t, provider.ensureWorkspaceForConnection(conn, func() error { return expected }), expected)
+	stats := provider.stats()
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Failures)
+	require.False(t, stats.Connections[0].TraversalWorkspace.Ready)
+
+	require.NoError(t, provider.ensureWorkspaceForConnection(conn, func() error { return nil }))
+	stats = provider.stats()
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Initializations)
+	require.True(t, stats.Connections[0].TraversalWorkspace.Ready)
+}

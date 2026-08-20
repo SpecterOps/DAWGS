@@ -1,11 +1,13 @@
 package v2
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	dawgscache "github.com/specterops/dawgs/cache"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
@@ -193,8 +195,10 @@ func (s *connectionTranslationCache) close() TranslationCacheStats {
 // connectionState is registered only while its physical connection is live.
 // It intentionally does not retain the physical connection identity.
 type connectionState struct {
-	id    uint64
-	cache *connectionTranslationCache
+	id                       uint64
+	cache                    *connectionTranslationCache
+	workspaceReadyGeneration uint64
+	workspace                TraversalWorkspaceStats
 }
 
 // connectionCacheProvider maps physical connection identities to their cache
@@ -216,6 +220,7 @@ type connectionCacheProvider struct {
 }
 
 var _ pg.CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
+var _ pg.StableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
 
 func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error) {
 	if err := config.validate(); err != nil {
@@ -245,6 +250,54 @@ func (s *connectionCacheProvider) CacheForConnection(conn *pgx.Conn) pg.CypherTr
 		return nil
 	}
 	return state.cache
+}
+
+// EnsureStableSnapshotTraversalWorkspaces initializes a leased connection's
+// reusable traversal workspace at most once per schema generation. The setup
+// is never marked ready until PostgreSQL accepts it successfully.
+func (s *connectionCacheProvider) EnsureStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error {
+	if conn == nil {
+		return fmt.Errorf("PostgreSQL connection is required for traversal workspace setup")
+	}
+	return s.ensureWorkspaceForConnection(conn.Conn(), func() error {
+		return pg.EnsureStableSnapshotTraversalWorkspaces(ctx, conn)
+	})
+}
+
+func (s *connectionCacheProvider) ensureWorkspaceForConnection(conn *pgx.Conn, initialize func() error) error {
+	if initialize == nil {
+		return fmt.Errorf("traversal workspace initializer is required")
+	}
+	if s == nil || conn == nil {
+		return initialize()
+	}
+
+	s.lock.Lock()
+	state := s.states[conn]
+	generation := s.generation
+	if state != nil && !s.closed && state.workspaceReadyGeneration == generation {
+		state.workspace.Reuses++
+		s.lock.Unlock()
+		return nil
+	}
+	s.lock.Unlock()
+
+	err := initialize()
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if state != nil && s.states[conn] == state {
+		if err != nil {
+			state.workspace.Failures++
+			return err
+		}
+		state.workspace.Initializations++
+		if !s.closed && s.generation == generation {
+			state.workspaceReadyGeneration = generation
+			state.workspace.Ready = true
+		}
+	}
+	return err
 }
 
 // registerConnection allocates state only after the pool's earlier
@@ -301,6 +354,9 @@ func (s *connectionCacheProvider) advanceSchemaGeneration() uint64 {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.generation++
+	for _, state := range s.states {
+		state.workspace.Ready = false
+	}
 	return s.generation
 }
 
@@ -337,27 +393,31 @@ func (s *connectionCacheProvider) stats() Stats {
 		return Stats{}
 	}
 	s.lock.RLock()
-	states := make([]*connectionState, 0, len(s.states))
-	for _, state := range s.states {
-		states = append(states, state)
-	}
 	stats := Stats{
 		SchemaGeneration:      s.generation,
 		CapacityPerConnection: s.capacity,
 		MinConnections:        s.minConnections,
 		MaxConnections:        s.maxConnections,
-		LiveConnections:       len(states),
+		LiveConnections:       len(s.states),
 		RetiredConnections:    s.retiredConnections,
 		Aggregate:             s.retiredStats,
-		Connections:           make([]ConnectionCacheStats, 0, len(states)),
+		Connections:           make([]ConnectionCacheStats, 0, len(s.states)),
+	}
+	states := make([]*connectionState, 0, len(s.states))
+	workspaceStats := make([]TraversalWorkspaceStats, 0, len(s.states))
+	for _, state := range s.states {
+		states = append(states, state)
+		workspaceStats = append(workspaceStats, state.workspace)
+		stats.TraversalWorkspace.add(state.workspace)
 	}
 	s.lock.RUnlock()
 
-	for _, state := range states {
+	for index, state := range states {
 		connectionStats := state.cache.statsSnapshot()
 		stats.Connections = append(stats.Connections, ConnectionCacheStats{
-			ID:          state.id,
-			Translation: connectionStats,
+			ID:                 state.id,
+			Translation:        connectionStats,
+			TraversalWorkspace: workspaceStats[index],
 		})
 		stats.Aggregate.add(connectionStats)
 	}

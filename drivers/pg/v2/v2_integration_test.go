@@ -211,6 +211,32 @@ func TestV2TranslationCacheSurvivesLeaseReleaseAndReacquisition(t *testing.T) {
 	require.Equal(t, uint64(1), second.Aggregate.Hits)
 }
 
+// TestV2StableSnapshotTraversalWorkspaceReadiness verifies that the v2
+// provider avoids redundant setup only for the same live connection and
+// schema generation.
+func TestV2StableSnapshotTraversalWorkspaceReadiness(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 4, nil)
+	setUpV2IntegrationGraph(t, driver)
+	ctx := context.Background()
+	stableSnapshot := func() error {
+		return driver.ReadTransaction(ctx, func(graph.Transaction) error { return nil }, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+	}
+
+	require.NoError(t, stableSnapshot())
+	require.NoError(t, stableSnapshot())
+	stats := driver.TranslationCacheStats()
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Initializations)
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Reuses)
+	require.True(t, stats.Connections[0].TraversalWorkspace.Ready)
+
+	require.NoError(t, driver.RefreshKinds(ctx))
+	stats = driver.TranslationCacheStats()
+	require.False(t, stats.Connections[0].TraversalWorkspace.Ready)
+	require.NoError(t, stableSnapshot())
+	stats = driver.TranslationCacheStats()
+	require.Equal(t, uint64(2), stats.TraversalWorkspace.Initializations)
+}
+
 func TestV2PhysicalConnectionsHaveIndependentCaches(t *testing.T) {
 	driver := newV2IntegrationDriver(t, 2, 2, nil)
 	ctx := context.Background()
