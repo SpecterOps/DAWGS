@@ -61,6 +61,39 @@ create table if not exists graph
   unique (name)
 );
 
+-- graph_traversal_epoch is a graph-scoped, transactionally visible generation
+-- for topology-aware SQL selection. It is deliberately independent of driver
+-- cache generations: a stale or missing epoch is an incumbent-only condition.
+create table if not exists graph_traversal_epoch
+(
+  graph_id bigint primary key references graph (id) on delete cascade,
+  epoch    bigint not null default 1,
+  check (epoch > 0)
+);
+
+insert into graph_traversal_epoch (graph_id)
+select id
+from graph
+on conflict (graph_id) do nothing;
+
+create or replace function public.create_graph_traversal_epoch() returns trigger as
+$$
+begin
+  insert into graph_traversal_epoch (graph_id)
+  values (new.id)
+  on conflict (graph_id) do nothing;
+  return new;
+end
+$$
+  language plpgsql
+  volatile;
+
+drop trigger if exists create_graph_traversal_epoch on graph;
+create trigger create_graph_traversal_epoch
+  after insert on graph
+  for each row
+execute procedure public.create_graph_traversal_epoch();
+
 -- The kind table contains name to ID mappings for graph kinds. Storage of these types is necessary to maintain search
 -- capability of a database without the origin application that generated it.
 -- To support FK in asset_group_tags table, the kind table is now maintained by the stepwise migration files.
@@ -172,6 +205,75 @@ create trigger delete_node_edges
   referencing old table as deleted_nodes
   for each statement
 execute procedure delete_node_edges();
+
+-- Each mutating statement advances the affected graph's topology epoch in the
+-- same transaction. Multiple statements may advance it more than once; that
+-- is conservative and makes every previously read synopsis stale.
+create or replace function public.bump_graph_traversal_epoch_new() returns trigger as
+$$
+begin
+  update graph_traversal_epoch
+  set epoch = epoch + 1
+  where graph_id in (select distinct graph_id from new_rows);
+  return null;
+end
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public.bump_graph_traversal_epoch_old() returns trigger as
+$$
+begin
+  update graph_traversal_epoch
+  set epoch = epoch + 1
+  where graph_id in (select distinct graph_id from old_rows);
+  return null;
+end
+$$
+  language plpgsql
+  volatile;
+
+create or replace function public.bump_all_graph_traversal_epochs() returns trigger as
+$$
+begin
+  update graph_traversal_epoch
+  set epoch = epoch + 1;
+  return null;
+end
+$$
+  language plpgsql
+  volatile;
+
+drop trigger if exists bump_node_traversal_epoch_insert on node;
+create trigger bump_node_traversal_epoch_insert after insert on node
+  referencing new table as new_rows for each statement
+execute procedure public.bump_graph_traversal_epoch_new();
+drop trigger if exists bump_node_traversal_epoch_update on node;
+create trigger bump_node_traversal_epoch_update after update on node
+  referencing new table as new_rows for each statement
+execute procedure public.bump_graph_traversal_epoch_new();
+drop trigger if exists bump_node_traversal_epoch_delete on node;
+create trigger bump_node_traversal_epoch_delete after delete on node
+  referencing old table as old_rows for each statement
+execute procedure public.bump_graph_traversal_epoch_old();
+drop trigger if exists bump_edge_traversal_epoch_insert on edge;
+create trigger bump_edge_traversal_epoch_insert after insert on edge
+  referencing new table as new_rows for each statement
+execute procedure public.bump_graph_traversal_epoch_new();
+drop trigger if exists bump_edge_traversal_epoch_update on edge;
+create trigger bump_edge_traversal_epoch_update after update on edge
+  referencing new table as new_rows for each statement
+execute procedure public.bump_graph_traversal_epoch_new();
+drop trigger if exists bump_edge_traversal_epoch_delete on edge;
+create trigger bump_edge_traversal_epoch_delete after delete on edge
+  referencing old table as old_rows for each statement
+execute procedure public.bump_graph_traversal_epoch_old();
+drop trigger if exists bump_node_traversal_epoch_truncate on node;
+create trigger bump_node_traversal_epoch_truncate after truncate on node
+  for each statement execute procedure public.bump_all_graph_traversal_epochs();
+drop trigger if exists bump_edge_traversal_epoch_truncate on edge;
+create trigger bump_edge_traversal_epoch_truncate after truncate on edge
+  for each statement execute procedure public.bump_all_graph_traversal_epochs();
 
 
 -- The storage strategy chosen for the properties JSONB column informs the database of the user's preference to resort

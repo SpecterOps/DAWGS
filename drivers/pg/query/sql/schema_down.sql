@@ -1,6 +1,19 @@
 -- Drop triggers
+drop trigger if exists create_graph_traversal_epoch on graph;
+drop trigger if exists bump_node_traversal_epoch_insert on node;
+drop trigger if exists bump_node_traversal_epoch_update on node;
+drop trigger if exists bump_node_traversal_epoch_delete on node;
+drop trigger if exists bump_edge_traversal_epoch_insert on edge;
+drop trigger if exists bump_edge_traversal_epoch_update on edge;
+drop trigger if exists bump_edge_traversal_epoch_delete on edge;
+drop trigger if exists bump_node_traversal_epoch_truncate on node;
+drop trigger if exists bump_edge_traversal_epoch_truncate on edge;
 drop trigger if exists delete_node_edges on node;
 drop function if exists delete_node_edges;
+drop function if exists public.create_graph_traversal_epoch;
+drop function if exists public.bump_graph_traversal_epoch_new;
+drop function if exists public.bump_graph_traversal_epoch_old;
+drop function if exists public.bump_all_graph_traversal_epochs;
 
 -- Drop functions
 drop aggregate if exists cypher_min(jsonb);
@@ -141,6 +154,7 @@ drop function if exists traverse_paths;
 drop table if exists node;
 drop table if exists edge;
 drop table if exists kind;
+drop table if exists graph_traversal_epoch;
 drop table if exists graph;
 
 -- Remove custom types
