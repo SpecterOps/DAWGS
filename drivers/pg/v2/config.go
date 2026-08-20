@@ -5,9 +5,10 @@ package v2
 import "fmt"
 
 const (
-	defaultTranslationCacheEntries = 64
-	defaultMinConnections          = 5
-	defaultMaxConnections          = 50
+	defaultTranslationCacheEntries           = 64
+	defaultSharedShortestPathTemplateEntries = 128
+	defaultMinConnections                    = 5
+	defaultMaxConnections                    = 50
 )
 
 // PoolConfig controls the pgx pool size owned by a v2 driver. It is optional
@@ -24,6 +25,10 @@ type Config struct {
 	// physical PostgreSQL connection. Zero disables retention.
 	TranslationCacheEntries int
 
+	// SharedShortestPathTemplateEntries bounds immutable shortest-path SQL
+	// templates shared by V2 physical connections. Zero disables this L2 tier.
+	SharedShortestPathTemplateEntries int
+
 	// Pool optionally overrides the v1-compatible connection limits. Nil uses
 	// DefaultConfig's limits; a non-nil value must have MaxConnections >= 1
 	// and MinConnections <= MaxConnections.
@@ -35,7 +40,8 @@ type Config struct {
 // PostgreSQL connections.
 func DefaultConfig() Config {
 	return Config{
-		TranslationCacheEntries: defaultTranslationCacheEntries,
+		TranslationCacheEntries:           defaultTranslationCacheEntries,
+		SharedShortestPathTemplateEntries: defaultSharedShortestPathTemplateEntries,
 		Pool: &PoolConfig{
 			MinConnections: defaultMinConnections,
 			MaxConnections: defaultMaxConnections,
@@ -46,6 +52,9 @@ func DefaultConfig() Config {
 func (s Config) validate() error {
 	if s.TranslationCacheEntries < 0 {
 		return fmt.Errorf("translation cache entries must not be negative: %d", s.TranslationCacheEntries)
+	}
+	if s.SharedShortestPathTemplateEntries < 0 {
+		return fmt.Errorf("shared shortest-path template entries must not be negative: %d", s.SharedShortestPathTemplateEntries)
 	}
 	if s.Pool != nil {
 		if s.Pool.MinConnections < 0 {

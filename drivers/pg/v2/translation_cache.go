@@ -46,6 +46,7 @@ type connectionTranslationCache struct {
 	lock sync.Mutex
 
 	capacity   int
+	shared     *sharedTemplateCache
 	generation func() uint64
 	sieve      dawgscache.Cache[translationKey, translationEntry]
 	closed     bool
@@ -54,10 +55,11 @@ type connectionTranslationCache struct {
 
 var _ pg.CypherTranslationCache = (*connectionTranslationCache)(nil)
 
-func newConnectionTranslationCache(capacity int, generation func() uint64) *connectionTranslationCache {
+func newConnectionTranslationCache(capacity int, generation func() uint64, shared *sharedTemplateCache) *connectionTranslationCache {
 	cache := &connectionTranslationCache{
 		capacity:   capacity,
 		generation: generation,
+		shared:     shared,
 		stats: TranslationCacheStats{
 			Capacity: capacity,
 		},
@@ -98,6 +100,19 @@ func (s *connectionTranslationCache) TranslateWithPolicy(query string, graphID i
 	}
 	s.stats.Misses++
 	s.lock.Unlock()
+	if isShortestPathQuery(query) {
+		if entry, found := s.shared.get(key); found {
+			bound, bindErr := entry.bind(parameters)
+			if bindErr != nil {
+				s.lock.Lock()
+				s.stats.BindingFailures++
+				s.lock.Unlock()
+				return "", nil, bindErr
+			}
+			s.putL1(key, entry)
+			return entry.sql, bound, nil
+		}
+	}
 
 	result, sql, err := build()
 	if err != nil {
@@ -116,11 +131,20 @@ func (s *connectionTranslationCache) TranslateWithPolicy(query string, graphID i
 	}
 	key.query = strings.Clone(key.query)
 
+	if isShortestPathQuery(query) {
+		s.shared.put(key, entry)
+	}
+	s.putL1(key, entry)
+
+	return sql, result.Parameters, nil
+}
+
+func (s *connectionTranslationCache) putL1(key translationKey, entry translationEntry) {
 	s.lock.Lock()
+	defer s.lock.Unlock()
 	if s.closed {
 		s.stats.Bypasses++
-		s.lock.Unlock()
-		return sql, result.Parameters, nil
+		return
 	}
 	if _, exists := s.sieve.Get(key); !exists {
 		if s.sieve.Stats().Size() >= int64(s.capacity) {
@@ -129,9 +153,10 @@ func (s *connectionTranslationCache) TranslateWithPolicy(query string, graphID i
 		s.sieve.Put(key, entry)
 		s.stats.Insertions++
 	}
-	s.lock.Unlock()
+}
 
-	return sql, result.Parameters, nil
+func isShortestPathQuery(query string) bool {
+	return strings.Contains(strings.ToLower(query), "shortestpath")
 }
 
 func buildUncached(build func() (translate.Result, string, error)) (string, map[string]any, error) {
@@ -224,6 +249,7 @@ type connectionCacheProvider struct {
 	retiredStats       TranslationCacheStats
 	retiredPrepared    PreparedStatementStats
 	sqlGeneration      SQLGenerationStats
+	sharedTemplates    *sharedTemplateCache
 }
 
 var _ pg.CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
@@ -252,11 +278,12 @@ func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error)
 	}
 	poolConfig := config.resolvedPoolConfig()
 	return &connectionCacheProvider{
-		capacity:       config.TranslationCacheEntries,
-		minConnections: poolConfig.MinConnections,
-		maxConnections: poolConfig.MaxConnections,
-		generation:     1,
-		states:         map[*pgx.Conn]*connectionState{},
+		capacity:        config.TranslationCacheEntries,
+		sharedTemplates: newSharedTemplateCache(config.SharedShortestPathTemplateEntries),
+		minConnections:  poolConfig.MinConnections,
+		maxConnections:  poolConfig.MaxConnections,
+		generation:      1,
+		states:          map[*pgx.Conn]*connectionState{},
 	}, nil
 }
 
@@ -345,7 +372,7 @@ func (s *connectionCacheProvider) registerConnection(conn *pgx.Conn) {
 			s.lock.RLock()
 			defer s.lock.RUnlock()
 			return s.generation
-		}),
+		}, s.sharedTemplates),
 		preparedStatements: map[[sha256.Size]byte]struct{}{},
 	}
 }
@@ -503,16 +530,17 @@ func (s *connectionCacheProvider) stats() Stats {
 	}
 	s.lock.RLock()
 	stats := Stats{
-		SchemaGeneration:      s.generation,
-		CapacityPerConnection: s.capacity,
-		MinConnections:        s.minConnections,
-		MaxConnections:        s.maxConnections,
-		LiveConnections:       len(s.states),
-		RetiredConnections:    s.retiredConnections,
-		Aggregate:             s.retiredStats,
-		PreparedStatements:    s.retiredPrepared,
-		SQLGeneration:         s.sqlGeneration,
-		Connections:           make([]ConnectionCacheStats, 0, len(s.states)),
+		SchemaGeneration:            s.generation,
+		CapacityPerConnection:       s.capacity,
+		MinConnections:              s.minConnections,
+		MaxConnections:              s.maxConnections,
+		LiveConnections:             len(s.states),
+		RetiredConnections:          s.retiredConnections,
+		Aggregate:                   s.retiredStats,
+		PreparedStatements:          s.retiredPrepared,
+		SQLGeneration:               s.sqlGeneration,
+		SharedShortestPathTemplates: s.sharedTemplates.snapshot(),
+		Connections:                 make([]ConnectionCacheStats, 0, len(s.states)),
 	}
 	states := make([]*connectionState, 0, len(s.states))
 	workspaceStats := make([]TraversalWorkspaceStats, 0, len(s.states))

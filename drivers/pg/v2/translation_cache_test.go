@@ -349,3 +349,36 @@ func TestConnectionCacheProviderRecordsSQLGenerationProfiles(t *testing.T) {
 	require.Equal(t, uint64(1), stats.Other.Count)
 	require.Equal(t, time.Millisecond, stats.Other.Parse)
 }
+
+// TestSharedShortestPathTemplateCacheReusesCompilationAcrossConnections
+// verifies the V2 L2 retains only immutable templates and still negotiates
+// fresh caller values for a different physical connection.
+func TestSharedShortestPathTemplateCacheReusesCompilationAcrossConnections(t *testing.T) {
+	provider, err := newConnectionCacheProvider(Config{TranslationCacheEntries: 2, SharedShortestPathTemplateEntries: 2})
+	require.NoError(t, err)
+	firstConn, secondConn := &pgx.Conn{}, &pgx.Conn{}
+	provider.registerConnection(firstConn)
+	provider.registerConnection(secondConn)
+	first := provider.CacheForConnection(firstConn).(*connectionTranslationCache)
+	second := provider.CacheForConnection(secondConn).(*connectionTranslationCache)
+
+	builds := 0
+	build := func(sql string) func() (translate.Result, string, error) {
+		return func() (translate.Result, string, error) {
+			builds++
+			return translate.Result{Parameters: map[string]any{"i0": int64(1)}, ParameterSources: map[string]string{"i0": "id"}}, sql, nil
+		}
+	}
+	query := "MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = $id RETURN p"
+	_, _, err = first.TranslateWithPolicy(query, 1, map[string]any{"id": int64(1)}, "incumbent", build("select @i0"))
+	require.NoError(t, err)
+	sql, params, err := second.TranslateWithPolicy(query, 1, map[string]any{"id": int64(2)}, "incumbent", build("wrong"))
+	require.NoError(t, err)
+	require.Equal(t, 1, builds)
+	require.Equal(t, "select @i0", sql)
+	require.Equal(t, int64(2), params["i0"])
+	stats := provider.stats().SharedShortestPathTemplates
+	require.Equal(t, uint64(1), stats.Hits)
+	require.Equal(t, uint64(1), stats.Insertions)
+	require.Equal(t, 1, stats.Entries)
+}

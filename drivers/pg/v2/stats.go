@@ -75,17 +75,29 @@ type ConnectionCacheStats struct {
 // retired connection counters; its Capacity is the current theoretical bound
 // across live connections, not a global retained-entry limit.
 type Stats struct {
-	SchemaGeneration      uint64                  `json:"schema_generation"`
-	CapacityPerConnection int                     `json:"capacity_per_connection"`
-	MinConnections        int32                   `json:"min_connections"`
-	MaxConnections        int32                   `json:"max_connections"`
-	LiveConnections       int                     `json:"live_connections"`
-	RetiredConnections    uint64                  `json:"retired_connections"`
-	Aggregate             TranslationCacheStats   `json:"aggregate"`
-	TraversalWorkspace    TraversalWorkspaceStats `json:"traversal_workspace"`
-	PreparedStatements    PreparedStatementStats  `json:"prepared_statements"`
-	Connections           []ConnectionCacheStats  `json:"connections"`
-	SQLGeneration         SQLGenerationStats      `json:"sql_generation"`
+	SchemaGeneration            uint64                  `json:"schema_generation"`
+	CapacityPerConnection       int                     `json:"capacity_per_connection"`
+	MinConnections              int32                   `json:"min_connections"`
+	MaxConnections              int32                   `json:"max_connections"`
+	LiveConnections             int                     `json:"live_connections"`
+	RetiredConnections          uint64                  `json:"retired_connections"`
+	Aggregate                   TranslationCacheStats   `json:"aggregate"`
+	TraversalWorkspace          TraversalWorkspaceStats `json:"traversal_workspace"`
+	PreparedStatements          PreparedStatementStats  `json:"prepared_statements"`
+	Connections                 []ConnectionCacheStats  `json:"connections"`
+	SQLGeneration               SQLGenerationStats      `json:"sql_generation"`
+	SharedShortestPathTemplates SharedTemplateStats     `json:"shared_shortest_path_templates"`
+}
+
+// SharedTemplateStats reports the bounded V2-wide immutable shortest-path
+// template tier. It excludes query text and caller values.
+type SharedTemplateStats struct {
+	Hits       uint64 `json:"hits"`
+	Misses     uint64 `json:"misses"`
+	Insertions uint64 `json:"insertions"`
+	Evictions  uint64 `json:"evictions"`
+	Entries    int    `json:"entries"`
+	Capacity   int    `json:"capacity"`
 }
 
 // SQLGenerationTiming contains aggregate V2 SQL-generation durations. Count
