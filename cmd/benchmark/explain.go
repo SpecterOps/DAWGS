@@ -22,10 +22,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/graph"
 )
@@ -55,13 +57,22 @@ type postgresExplainDocument struct {
 }
 
 func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFunc {
+	return newPostgresExplainerWithExecutor(kindMapper, graphID, "")
+}
+
+func newPostgresExplainerWithExecutor(kindMapper pgsql.KindMapper, graphID int32, executor optimize.ShortestPathExecutor) ExplainFunc {
 	return func(ctx context.Context, tx graph.Transaction, cypherQuery string) (*ExplainResult, error) {
 		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 		if err != nil {
 			return nil, err
 		}
 
-		translation, err := translate.Translate(ctx, regularQuery, kindMapper, nil, graphID)
+		var translation translate.Result
+		if executor != "" && strings.Contains(strings.ToLower(cypherQuery), "shortestpath") {
+			translation, err = translate.TranslateForTool(ctx, regularQuery, kindMapper, nil, graphID, translate.ToolOptions{ForceShortestPathExecutor: executor})
+		} else {
+			translation, err = translate.Translate(ctx, regularQuery, kindMapper, nil, graphID)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -110,6 +121,9 @@ func explainValueString(value any) string {
 	case string:
 		return typed
 	default:
+		if encoded, err := json.Marshal(value); err == nil {
+			return string(encoded)
+		}
 		return fmt.Sprint(value)
 	}
 }

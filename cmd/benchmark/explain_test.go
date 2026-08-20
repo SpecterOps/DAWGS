@@ -23,4 +23,5 @@ func TestParsePostgreSQLExplainMetricsRejectsNonJSON(t *testing.T) {
 
 func TestExplainValueStringPreservesJSONBytes(t *testing.T) {
 	require.Equal(t, `[{"Plan": {}}]`, explainValueString([]byte(`[{"Plan": {}}]`)))
+	require.JSONEq(t, `[{"Plan":{"Node Type":"Result"}}]`, explainValueString([]any{map[string]any{"Plan": map[string]any{"Node Type": "Result"}}}))
 }
