@@ -103,7 +103,9 @@ func writeMarkdown(w io.Writer, r Report) error {
 	fmt.Fprintln(w)
 	if r.TranslationCache != nil {
 		cache := r.TranslationCache.Aggregate
-		fmt.Fprintf(w, "V2 translation cache: %d hits, %d misses, %d bypasses, %d evictions across %d live connections.\n\n", cache.Hits, cache.Misses, cache.Bypasses, cache.Evictions, r.TranslationCache.LiveConnections)
+		workspaces := r.TranslationCache.TraversalWorkspace
+		statements := r.TranslationCache.PreparedStatements
+		fmt.Fprintf(w, "V2 connection state: cache %d hits, %d misses, %d bypasses, %d evictions; workspaces %d initialized/%d reused; statements %d prepared/%d reused across %d live connections.\n\n", cache.Hits, cache.Misses, cache.Bypasses, cache.Evictions, workspaces.Initializations, workspaces.Reuses, statements.Prepared, statements.Reuses, r.TranslationCache.LiveConnections)
 	}
 	return nil
 }

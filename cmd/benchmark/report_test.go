@@ -51,7 +51,12 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 			Iterations:       3,
 			WarmupIterations: 1,
 			Workers:          2,
-			TranslationCache: &pgv2.Stats{LiveConnections: 2, Aggregate: pgv2.TranslationCacheStats{Hits: 4, Misses: 2}},
+			TranslationCache: &pgv2.Stats{
+				LiveConnections:    2,
+				Aggregate:          pgv2.TranslationCacheStats{Hits: 4, Misses: 2},
+				TraversalWorkspace: pgv2.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
+				PreparedStatements: pgv2.PreparedStatementStats{Prepared: 2, Reuses: 4},
+			},
 			Results: []Result{{
 				Section:           "Traversal",
 				Dataset:           "base",
@@ -126,7 +131,12 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 			Iterations:       3,
 			WarmupIterations: 1,
 			Workers:          2,
-			TranslationCache: &pgv2.Stats{LiveConnections: 2, Aggregate: pgv2.TranslationCacheStats{Hits: 4, Misses: 2}},
+			TranslationCache: &pgv2.Stats{
+				LiveConnections:    2,
+				Aggregate:          pgv2.TranslationCacheStats{Hits: 4, Misses: 2},
+				TraversalWorkspace: pgv2.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
+				PreparedStatements: pgv2.PreparedStatementStats{Prepared: 2, Reuses: 4},
+			},
 			Results: []Result{{
 				Section:           "Fixed Suffix Expansion Fanout",
 				Dataset:           "fixed_suffix_expansion_fanout",
@@ -152,7 +162,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		"Distinct Rows",
 		"Duplicate Rows",
 		"| Fixed Suffix Expansion Fanout / combined | fixed_suffix_expansion_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
-		"V2 translation cache: 4 hits, 2 misses, 0 bypasses, 0 evictions across 2 live connections.",
+		"V2 connection state: cache 4 hits, 2 misses, 0 bypasses, 0 evictions; workspaces 1 initialized/3 reused; statements 2 prepared/4 reused across 2 live connections.",
 	} {
 		require.Contains(t, text, expected)
 	}

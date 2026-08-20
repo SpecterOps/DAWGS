@@ -65,9 +65,10 @@ Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each ti
 `pg-v2` is benchmark-only opt-in selection for `drivers/pg/v2`; it does not register a connection-string driver scheme.
 It constructs a matching v2 pool and driver directly, uses the default 64-entry cache per physical PostgreSQL connection,
 and supports the same PostgreSQL EXPLAIN capture as `pg`.
-Its JSON and Markdown reports also include query-text-free connection-local cache counters and configured pool limits. Use a
-cold (`-warmup 0`) and warm (`-warmup 2`) run with the same worker count and V2 pool configuration to measure cache
-effectiveness; do not compare their latency distributions without accounting for the intentionally different warm-up state.
+Its JSON and Markdown reports also include query-text-free translation-cache, traversal-workspace, and prepared-statement
+counters plus configured pool limits. Use a cold (`-warmup 0`) and warm (`-warmup 2`) run with the same worker count and
+V2 pool configuration to measure cache effectiveness; do not compare their latency distributions without accounting for the
+intentionally different warm-up state.
 
 The committed default datasets are `base`, `fixed_suffix_expansion_fanout`, and
 `traversal_shapes`. `traversal_shapes` covers chain, fanout, bounded cycle,

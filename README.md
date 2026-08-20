@@ -9,7 +9,8 @@ plugins. It exposes a backend abstraction for graph queries, with current backen
 The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
 support Cypher natively.
 
-The PostgreSQL driver bounds repeated work with immutable 256-entry Cypher AST and SQL translation caches. Translation
+The PostgreSQL driver bounds repeated work with immutable 256-entry Cypher AST and SQL translation caches. The shared AST
+cache is sharded to avoid serializing unrelated query shapes while preserving same-query AST reuse. Translation
 entries are keyed by normalized query text, graph ID, a collision-safe parameter-name/type shape, and the effective
 versioned traversal-policy identity; they retain SQL
 and parameter-source mappings, never request values or defaults, and fail closed when a required source value is absent.
@@ -36,17 +37,31 @@ database := pgv2.NewDriver(0, pool)
 defer database.Close(ctx)
 ```
 
-`pgv2.DefaultConfig()` uses 64 retained translation entries per live physical PostgreSQL connection. Pass
-`pgv2.Config{TranslationCacheEntries: 0}` to `pgv2.NewPool` to disable retention, or a positive value for that exact
-per-connection SIEVE capacity; negative values are rejected. The theoretical aggregate entry bound is live physical
-connections multiplied by this capacity, not a global bound.
+`pgv2.DefaultConfig()` uses 64 retained translation entries per live physical PostgreSQL connection and a 5-50 connection
+pool. Pass `pgv2.Config{TranslationCacheEntries: 0}` to `pgv2.NewPool` to disable retention, or configure an exact bounded
+pool with `pgv2.Config{TranslationCacheEntries: 64, Pool: &pgv2.PoolConfig{MinConnections: 0, MaxConnections: 4}}`. Negative cache capacity, negative minimums,
+zero maximums, and inverted limits are rejected. The theoretical aggregate entry bound is live physical connections
+multiplied by this capacity, not a global bound.
 
 A cache remains with its physical `*pgx.Conn` across pool lease release and reacquisition, and is removed when that
 connection closes or the driver closes. `TranslationCacheStats` reports opaque diagnostic connection IDs and aggregate,
 query-text-free counters only. Cached entries retain immutable SQL and parameter-source metadata; every hit binds the
 current caller values. V2 keeps the parse cache driver-wide, caches neither results nor routing decisions, and advances
-its generation after successful schema assertion and kind refresh. For out-of-band schema changes that affect types or
-generated SQL, reset or recreate the pool before continuing.
+its generation after successful schema assertion and kind refresh. Stable-snapshot traversal workspaces are marked ready
+only for the current physical connection and schema generation, then reinitialized after reset, closure, or generation
+change. For out-of-band schema changes that affect types or generated SQL, reset or recreate the pool before continuing.
+
+After schema assertion, applications may opt in to pre-prepare selected hot PostgreSQL statements without executing them:
+
+```go
+if err := database.WarmStatements(ctx, "select 1"); err != nil {
+	return err
+}
+```
+
+Warm-up touches each currently idle physical connection and uses pgx's normal `CacheStatement` identity, so the first
+regular execution adopts the prepared server statement rather than creating a second one. V2 records only SHA-256
+statement identities in its lifecycle state; `TranslationCacheStats` includes aggregate workspace and warm-up counters.
 
 ## Quick Start
 

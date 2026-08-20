@@ -191,11 +191,15 @@ func main() {
 	if statsProvider, ok := db.(interface{ TranslationCacheStats() pgv2.Stats }); ok {
 		stats := statsProvider.TranslationCacheStats()
 		report.TranslationCache = &stats
-		fmt.Fprintf(os.Stderr, "v2 translation cache: hits=%d misses=%d bypasses=%d evictions=%d live_connections=%d pool=%d-%d\n",
+		fmt.Fprintf(os.Stderr, "v2 connection state: cache hits=%d misses=%d bypasses=%d evictions=%d; workspaces initialized=%d reused=%d; statements prepared=%d reused=%d; live_connections=%d pool=%d-%d\n",
 			stats.Aggregate.Hits,
 			stats.Aggregate.Misses,
 			stats.Aggregate.Bypasses,
 			stats.Aggregate.Evictions,
+			stats.TraversalWorkspace.Initializations,
+			stats.TraversalWorkspace.Reuses,
+			stats.PreparedStatements.Prepared,
+			stats.PreparedStatements.Reuses,
 			stats.LiveConnections,
 			stats.MinConnections,
 			stats.MaxConnections,
