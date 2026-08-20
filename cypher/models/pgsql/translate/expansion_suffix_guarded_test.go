@@ -143,6 +143,31 @@ func TestSuffixReverseRetryEmitsOnlyBoundedCandidate(t *testing.T) {
 	require.NotContains(t, formatted, "_suffix_guard_fallback_rows")
 }
 
+func TestProductionTopologyFixedSuffixEmitsOneGuardedCandidate(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), guardedSuffixOrientationQuery)
+	require.NoError(t, err)
+	translation, err := TranslateWithProductionOptions(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"root_key": "suffix-guard-root",
+	}, DefaultGraphID, ProductionOptions{
+		EnableTopologyFixedSuffix: true,
+		TopologyFixedSuffixCaps: &ProductionFixedSuffixCaps{
+			SuffixRowLimit: 7, StateLimit: 11, OutputRowLimit: 13, OutputBytesLimit: 17,
+		},
+		SelectorVersion: string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1),
+	})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	decision := translation.Optimization.LoweringPlan.ExpansionSearchStrategy[0]
+	require.Equal(t, optimize.ExpansionSearchPolicyTopologyFixedSuffixV1, decision.PlannedPolicy)
+	require.Equal(t, optimize.ExpansionSearchPolicyTopologyFixedSuffixV1, decision.EmittedPolicy)
+	require.Equal(t, "production_canary", decision.SelectionMode)
+	require.Equal(t, optimize.ExpansionSearchExecutionBoundaryTransactionRetry, decision.ExecutionBoundary)
+	require.Equal(t, []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}, decision.EmittedCandidates)
+	require.Contains(t, formatted, "set_config('dawgs.suffix_reverse_retry_status'")
+	require.NotContains(t, formatted, "_suffix_guard_fallback_body")
+}
+
 // TestSuffixRouteComponentEmitsOneExactReverseStatement verifies the new
 // default-off preflight arm has no probe, fallback, retry, or production-policy
 // identity while retaining one runtime receipt for diagnostic attestation.

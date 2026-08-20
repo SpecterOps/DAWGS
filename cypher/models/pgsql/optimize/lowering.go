@@ -682,6 +682,11 @@ const (
 	// as a second statement in the same stable-snapshot transaction.
 	ExpansionSearchPolicySuffixReverseRetryV1 ExpansionSearchPolicy = "suffix-reverse-retry-v1"
 
+	// ExpansionSearchPolicyTopologyFixedSuffixV1 identifies the production
+	// topology-selected fixed-suffix candidate. It is distinct from every
+	// tool-only suffix guard, retry, and component identity.
+	ExpansionSearchPolicyTopologyFixedSuffixV1 ExpansionSearchPolicy = "topology-fixed-suffix-v1"
+
 	// ExpansionSearchSelectorFixedSuffixPathV1 identifies the tool-only static
 	// selector for full-path fixed-suffix observations.
 	ExpansionSearchSelectorFixedSuffixPathV1 = "fixed-suffix-path-static-v1"

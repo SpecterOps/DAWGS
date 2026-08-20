@@ -1414,6 +1414,12 @@ type ProductionOptions struct {
 	AuthorizedBucket *ProductionTraversalBucket
 	// EnableExpansionOrientation indicates whether enable expansion orientation applies.
 	EnableExpansionOrientation bool
+	// EnableTopologyFixedSuffix enables the separately versioned production
+	// reverse-only fixed-suffix candidate. Callers must supply immutable caps;
+	// route selection and exact fallback remain driver responsibilities.
+	EnableTopologyFixedSuffix bool
+	// TopologyFixedSuffixCaps are the immutable candidate and output limits.
+	TopologyFixedSuffixCaps *ProductionFixedSuffixCaps
 	// ExpansionOrientationPolicy identifies the manifest-authorized immutable
 	// runtime formula. Production callers must set it explicitly when enabling
 	// orientation so v2 evidence cannot silently execute the v1 selector.
@@ -1428,6 +1434,15 @@ type ProductionOptions struct {
 	DisableInlineSPDistance bool
 	// SelectorVersion identifies the schema version for selector version.
 	SelectorVersion string
+}
+
+// ProductionFixedSuffixCaps bind the fixed-suffix candidate's SQL and driver
+// buffering limits to one verified policy generation.
+type ProductionFixedSuffixCaps struct {
+	SuffixRowLimit   int64 `json:"suffix_row_limit"`
+	StateLimit       int64 `json:"state_limit"`
+	OutputRowLimit   int64 `json:"output_row_limit"`
+	OutputBytesLimit int64 `json:"output_bytes_limit"`
 }
 
 // ProductionShortestPathCaps are immutable manifest-authorized limits. They
@@ -1485,17 +1500,36 @@ func TranslateWithProductionOptions(ctx context.Context, cypherQuery *cypher.Reg
 	if options.ShortestPathExecutor != "" && !productionShortestPathExecutor(options.ShortestPathExecutor) {
 		return Result{}, fmt.Errorf("shortest-path executor %q is not production-canary eligible", options.ShortestPathExecutor)
 	}
+	if options.EnableTopologyFixedSuffix {
+		caps := options.TopologyFixedSuffixCaps
+		if caps == nil || caps.SuffixRowLimit <= 0 || caps.StateLimit <= 0 || caps.OutputRowLimit <= 0 || caps.OutputBytesLimit <= 0 {
+			return Result{}, fmt.Errorf("production topology fixed-suffix policy requires positive immutable caps")
+		}
+		if options.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) {
+			return Result{}, fmt.Errorf("production topology fixed-suffix selector requires %q", optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
+		}
+	}
 	toolOptions := ToolOptions{
 		ForceShortestPathExecutor:            options.ShortestPathExecutor,
 		EnableExpansionOrientationTournament: options.EnableExpansionOrientation,
 		ExpansionOrientationPolicy:           options.ExpansionOrientationPolicy,
 		DisableEndpointSeededReverse:         options.DisableEndpointSeededReverse,
 	}
+	if options.EnableTopologyFixedSuffix {
+		toolOptions.EnableExpansionSuffixReverseRetry = true
+		toolOptions.SuffixReverseGuardSuffixRowLimit = options.TopologyFixedSuffixCaps.SuffixRowLimit
+		toolOptions.SuffixReverseGuardStateLimit = options.TopologyFixedSuffixCaps.StateLimit
+		toolOptions.SuffixReverseRetryOutputRowLimit = options.TopologyFixedSuffixCaps.OutputRowLimit
+		toolOptions.SuffixReverseRetryOutputBytesLimit = options.TopologyFixedSuffixCaps.OutputBytesLimit
+	}
 	optimizedPlan, err := optimize.Optimize(cypherQuery)
 	if err != nil {
 		return Result{}, err
 	}
 	if err := applyToolOptions(&optimizedPlan, toolOptions); err != nil {
+		return Result{}, err
+	}
+	if err := applyProductionTopologyFixedSuffixAuthorization(&optimizedPlan, options); err != nil {
 		return Result{}, err
 	}
 	applyProductionShortestPathRollback(&optimizedPlan, options)
@@ -1605,6 +1639,31 @@ func productionShortestPathExecutor(executor optimize.ShortestPathExecutor) bool
 	default:
 		return false
 	}
+}
+
+// applyProductionTopologyFixedSuffixAuthorization promotes the already
+// structurally checked reverse-only tool lowering to its distinct production
+// identity. It intentionally does not add a second arm to emitted SQL.
+func applyProductionTopologyFixedSuffixAuthorization(plan *optimize.Plan, options ProductionOptions) error {
+	if !options.EnableTopologyFixedSuffix {
+		return nil
+	}
+	matching := 0
+	for index := range plan.LoweringPlan.ExpansionSearchStrategy {
+		decision := &plan.LoweringPlan.ExpansionSearchStrategy[index]
+		if decision.Family != "fixed_suffix_expansion" || decision.SelectedStrategy != optimize.ExpansionSearchSuffixSeededReverse || decision.EmittedPolicy != optimize.ExpansionSearchPolicySuffixReverseRetryV1 {
+			continue
+		}
+		matching++
+		decision.PlannedPolicy = optimize.ExpansionSearchPolicyTopologyFixedSuffixV1
+		decision.EmittedPolicy = optimize.ExpansionSearchPolicyTopologyFixedSuffixV1
+		decision.SelectionMode = "production_canary"
+		decision.SelectorVersion = options.SelectorVersion
+	}
+	if matching != 1 {
+		return fmt.Errorf("production topology fixed-suffix policy matched %d candidates; expected exactly one", matching)
+	}
+	return nil
 }
 
 // applyProductionShortestPathAuthorization applies production shortest path authorization.
