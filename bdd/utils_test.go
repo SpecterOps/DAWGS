@@ -69,7 +69,11 @@ func TestFormatString(t *testing.T) {
 			expectedOutput: `(:B{prefix:'c',name:'b'})`,
 		},
 		{
-			input:          `(:B {prefix:"c",name:"b"})`,
+			input:          `(:B{prefix:"c",name:"b"})`,
+			expectedOutput: `(:B{prefix:'c',name:'b'})`,
+		},
+		{
+			input:          `(:B{prefix:'c',name:'b'})`,
 			expectedOutput: `(:B{prefix:'c',name:'b'})`,
 		},
 	}

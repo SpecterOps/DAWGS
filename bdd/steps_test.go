@@ -50,7 +50,6 @@ func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 
 func TestFeatures(t *testing.T) {
 	backgroundCtx := context.Background()
-
 	// establish database connection
 	session := integration.Open(t, integration.Options{
 		Schema: &graph.Schema{
@@ -64,7 +63,7 @@ func TestFeatures(t *testing.T) {
 		db: session.DB,
 	}
 	suite := godog.TestSuite{
-		Name: "DAWGS-BDD",
+		Name: "OpenCypher-TCK",
 		TestSuiteInitializer: func(ctx *godog.TestSuiteContext) {
 			InitializeTestSuite(ctx, backgroundCtx, dbCtx)
 		},
@@ -72,13 +71,14 @@ func TestFeatures(t *testing.T) {
 			InitializeScenario(ctx, dbCtx)
 		},
 		Options: &godog.Options{
-			Format:   "pretty",
+			Format: "pretty",
+			// TODO create env variable pointing to the TCK features via CI
 			Paths:    []string{"features"},
 			TestingT: t,
 		},
 	}
 
 	if num := suite.Run(); num != 0 {
-		log.Fatalf("TestSuite execution failed")
+		t.Fatalf("TestSuite execution failed with status %d", num)
 	}
 }

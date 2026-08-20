@@ -33,7 +33,7 @@ type dbContext struct {
 	nodes      []graph.Node
 }
 
-// anEmptyGraph deletes graph data
+// anEmptyGraph removes all nodes to give each scenario a clean graph.
 func (c *dbContext) anEmptyGraph(ctx context.Context) error {
 	err := c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		if err := tx.Nodes().Delete(); err != nil {
@@ -47,8 +47,10 @@ func (c *dbContext) anEmptyGraph(ctx context.Context) error {
 	return nil
 }
 
-// executingQuery read cypher queries statement
+// executingQuery runs a read query and records its rows for later comparison.
 func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) error {
+	c.actualRows = nil
+
 	err := c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var (
 			node     graph.Node
@@ -71,7 +73,7 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 			// format graph nodes and their properties into a cypher query
 			formatted, err := formatGraphResults(nodes)
 			if err != nil {
-				return fmt.Errorf("Failed to format graph results: %w", err)
+				return fmt.Errorf("failed to format graph result: %w", err)
 			}
 			c.actualRows = append(c.actualRows, formatted...)
 		}
@@ -90,7 +92,7 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	return nil
 }
 
-// havingExecuted seeds data
+// havingExecuted runs a write query to seed the graph for a scenario.
 func (c *dbContext) havingExecuted(ctx context.Context, input *godog.DocString) error {
 	err := c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Query(input.Content, nil)
@@ -108,6 +110,7 @@ func (c *dbContext) havingExecuted(ctx context.Context, input *godog.DocString) 
 	return nil
 }
 
+// theResultShouldBe compares the recorded query rows with the expected table.
 func (c *dbContext) theResultShouldBe(expectedTable *godog.Table) error {
 	var expectedRows []string
 	for _, value := range expectedTable.Rows {
