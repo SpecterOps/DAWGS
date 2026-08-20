@@ -3,6 +3,7 @@ package pg
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/stretchr/testify/require"
@@ -58,4 +59,35 @@ func TestTraversalShapeRejectsMultipleTraversalTargets(t *testing.T) {
 	shape, err := traversalShapeForQuery(query)
 	require.NoError(t, err)
 	require.False(t, shape.Available())
+}
+
+func TestTraversalPolicyAuthorizesVerifiedStructuralBucket(t *testing.T) {
+	query := "MATCH p = allShortestPaths((s)-[:Edge*1..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
+	otherQuery := "MATCH route = allShortestPaths((left)-[:Edge*1..4]->(right)) WHERE id(left) = $a AND id(right) = $b RETURN route"
+	parsed, err := frontend.ParseCypher(frontend.NewContext(), otherQuery)
+	require.NoError(t, err)
+	shape, err := traversalShapeForQuery(parsed)
+	require.NoError(t, err)
+
+	policy := testTraversalPolicy(query, optimize.ShortestPathExecutorASPI1DAG, false)
+	manifest, err := decodeTraversalPromotionManifest(policy.PromotionManifestJSON)
+	require.NoError(t, err)
+	manifest.Version = 3
+	manifest.Buckets[0].StructuralShapeVersion = shape.Version
+	manifest.Buckets[0].StructuralFamily = shape.Family
+	manifest.Buckets[0].StructuralShapeSHA256 = shape.Fingerprint
+	manifest.Buckets[0].SQLTemplateSHA256 = structuralSQLTemplateSHA256(manifest, manifest.Buckets[0])
+	policy = rewriteTestTraversalPolicyManifest(t, policy, func(current *traversalPromotionManifest) {
+		*current = manifest
+	})
+
+	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	require.NoError(t, driver.SetTraversalPolicy(policy))
+	effective, identity := driver.SchemaManager.effectiveTraversalPolicyForShape(otherQuery, shape, pgx.RepeatableRead)
+	require.True(t, effective.enabled())
+	require.NotEqual(t, "production-incumbent-v1", identity)
+	options, err := effective.productionOptionsForShape(otherQuery, shape)
+	require.NoError(t, err)
+	require.NotNil(t, options.AuthorizedBucket)
+	require.Equal(t, "outbound", options.AuthorizedBucket.Direction)
 }

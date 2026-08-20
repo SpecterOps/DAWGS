@@ -5,6 +5,8 @@ package v2
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"reflect"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/pg"
@@ -165,6 +168,71 @@ func TestV2RefreshTraversalTopologySynopsisTracksGraphMutation(t *testing.T) {
 	require.Greater(t, refreshed.Epoch, initial.Epoch)
 	require.Greater(t, refreshed.SourceMutationEpoch, initial.SourceMutationEpoch)
 	require.GreaterOrEqual(t, refreshed.NodeCount, initial.NodeCount+1)
+}
+
+func structuralASPV3Policy(t *testing.T, evidenceQuery string) pg.TraversalPolicy {
+	t.Helper()
+	shape := pg.TraversalShape{
+		Version:               pg.TraversalShapeVersion,
+		Family:                "ASP",
+		Direction:             "outbound",
+		ObservationMode:       "all_paths",
+		MinimumDepth:          1,
+		MaximumDepth:          4,
+		RelationshipKindCount: 1,
+	}
+	shape.Fingerprint = pg.TraversalShapeFingerprint(shape)
+	candidate := string(optimize.ShortestPathExecutorASPI1DAG)
+	selector := "v2-structural-asp-v1"
+	template := pg.TraversalSQLTemplateSHA256(candidate, selector, "guarded_dual_arm", shape)
+	digest := pg.TraversalPolicyQuerySHA256(evidenceQuery)
+	evidence := map[string]map[string]string{}
+	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
+		evidence[role] = map[string]string{"path": role + ".json", "sha256": strings.Repeat("0", sha256.Size*2)}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"version": 3, "candidate": candidate, "selector_version": selector,
+		"source_commit": "v2-integration", "source_sha256": strings.Repeat("0", sha256.Size*2),
+		"binary_sha256": strings.Repeat("1", sha256.Size*2), "corpus_sha256": strings.Repeat("2", sha256.Size*2),
+		"operational_candidate_sql_sha256": strings.Repeat("3", sha256.Size*2),
+		"execution_boundary":               "guarded_dual_arm", "fallback_executor": string(optimize.ShortestPathExecutorASPA1DAG),
+		"caps": map[string]int64{"state_limit": 1000, "predecessor_limit": 1000, "enumeration_limit": 1000, "output_bytes_limit": 1 << 20},
+		"buckets": []map[string]any{{
+			"name": "v2-structural-asp", "query_sha256": []string{digest}, "qualification_split": []string{"training", "holdout"},
+			"direction": shape.Direction, "observation_mode": shape.ObservationMode, "minimum_depth": shape.MinimumDepth, "maximum_depth": shape.MaximumDepth,
+			"relationship_kind_count": shape.RelationshipKindCount, "untyped_relationship": shape.UntypedRelationship,
+			"structural_shape_version": shape.Version, "structural_family": shape.Family, "structural_shape_sha256": shape.Fingerprint, "sql_template_sha256": template,
+		}},
+		"evidence": evidence,
+	})
+	require.NoError(t, err)
+	sum := sha256.Sum256(raw)
+	return pg.TraversalPolicy{
+		Generation:              1,
+		PromotionManifestSHA256: hex.EncodeToString(sum[:]),
+		PromotionManifestJSON:   raw,
+		QuerySHA256Allowlist:    []string{digest},
+		ShortestPathExecutor:    optimize.ShortestPathExecutorASPI1DAG,
+	}
+}
+
+func TestV2StructuralTraversalPolicyExecutesVerifiedEquivalentShape(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 4, nil)
+	fixture := setUpV2IntegrationGraph(t, driver)
+	evidenceQuery := "MATCH p = allShortestPaths((s)-[:PGV2IntegrationEdge*1..4]->(e)) WHERE id(s) = $start AND id(e) = $end RETURN p"
+	require.NoError(t, driver.SetTraversalPolicy(structuralASPV3Policy(t, evidenceQuery)))
+	structurallyEquivalent := "MATCH route = allShortestPaths((left)-[:PGV2IntegrationEdge*1..4]->(right)) WHERE id(left) = $source AND id(right) = $target RETURN route"
+
+	ctx := context.Background()
+	require.NoError(t, driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		result := tx.Query(structurallyEquivalent, map[string]any{"source": fixture.start, "target": fixture.end})
+		defer result.Close()
+		for result.Next() {
+		}
+		return result.Error()
+	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	stats := driver.TranslationCacheStats()
+	require.Equal(t, uint64(1), stats.StrategySelection.StructuralAuthorized)
 }
 
 func snapshotQuery(ctx context.Context, database graph.Database, query string, parameters map[string]any) ([][]any, error) {

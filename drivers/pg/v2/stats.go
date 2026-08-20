@@ -58,10 +58,11 @@ type PreparedStatementStats struct {
 // observations. These counters describe selection only; they do not claim an
 // emitted candidate executed.
 type StrategySelectionStats struct {
-	Incumbent        uint64 `json:"incumbent"`
-	ExactQueryCanary uint64 `json:"exact_query_canary"`
-	StructuralShadow uint64 `json:"structural_shadow"`
-	ShapeUnavailable uint64 `json:"shape_unavailable"`
+	Incumbent            uint64 `json:"incumbent"`
+	ExactQueryCanary     uint64 `json:"exact_query_canary"`
+	StructuralShadow     uint64 `json:"structural_shadow"`
+	StructuralAuthorized uint64 `json:"structural_authorized"`
+	ShapeUnavailable     uint64 `json:"shape_unavailable"`
 }
 
 func (s *PreparedStatementStats) add(other PreparedStatementStats) {

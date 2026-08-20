@@ -25,6 +25,10 @@ import (
 // promotionManifestVersion reserves the stable protocol value used to recognize promotion manifest version across artifacts and executions.
 const promotionManifestVersion = 2
 
+// structuralPromotionManifestVersion adds reusable structural bucket bindings
+// while retaining v2's exact-query SQL-anchor protocol.
+const structuralPromotionManifestVersion = 3
+
 // requiredPromotionEvidenceRoles contains the frozen required promotion evidence roles declaration consulted by package validation.
 var requiredPromotionEvidenceRoles = []string{
 	"aa", "confirmation", "performance", "resource", "reference_closure", "operational",
@@ -92,6 +96,15 @@ type PromotionBucket struct {
 	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
 	// UntypedRelationship indicates whether untyped relationship applies.
 	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
+	// StructuralShapeVersion identifies the shared structural classifier for a
+	// v3 production-wide bucket.
+	StructuralShapeVersion string `json:"structural_shape_version,omitempty"`
+	// StructuralFamily binds the SP or ASP classifier family.
+	StructuralFamily string `json:"structural_family,omitempty"`
+	// StructuralShapeSHA256 binds the query-text-free structural identity.
+	StructuralShapeSHA256 string `json:"structural_shape_sha256,omitempty"`
+	// SQLTemplateSHA256 binds the reusable candidate SQL template contract.
+	SQLTemplateSHA256 string `json:"sql_template_sha256,omitempty"`
 	// QualificationSplit assigns the workload to training, holdout, or diagnostic evidence.
 	QualificationSplit []string `json:"qualification_split"`
 }
@@ -203,7 +216,7 @@ func clonePromotionBuckets(input []PromotionBucket) []PromotionBucket {
 // both final verification and provisional capture. A single SQL anchor is
 // meaningful only for one unique query identity, and qualification evidence
 // must close the exact training/holdout split rather than a superset.
-func validatePromotionBucketSets(buckets []PromotionBucket) []string {
+func validatePromotionBucketSets(version int, buckets []PromotionBucket) []string {
 	var reasons []string
 	seenBuckets := map[string]struct{}{}
 	seenQueries := map[string]string{}
@@ -238,9 +251,15 @@ func validatePromotionBucketSets(buckets []PromotionBucket) []string {
 		if !reflect.DeepEqual(bucket.QualificationSplit, []string{"training", "holdout"}) {
 			reasons = append(reasons, "bucket "+bucket.Name+" must bind exactly one training and one holdout qualification split in canonical order")
 		}
+		if version == structuralPromotionManifestVersion && (bucket.StructuralShapeVersion == "" || bucket.StructuralFamily == "" || !isLowerHexSHA256(bucket.StructuralShapeSHA256) || !isLowerHexSHA256(bucket.SQLTemplateSHA256)) {
+			reasons = append(reasons, "structural bucket "+bucket.Name+" requires classifier version, family, shape digest, and SQL template digest")
+		}
 	}
-	if len(seenQueries) != 1 {
+	if version == promotionManifestVersion && len(seenQueries) != 1 {
 		reasons = append(reasons, "operational SQL anchor requires exactly one authorized query digest")
+	}
+	if version == structuralPromotionManifestVersion && len(seenQueries) == 0 {
+		reasons = append(reasons, "structural promotion requires at least one evidence query digest")
 	}
 	return reasons
 }
@@ -303,8 +322,8 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 		verification.Passed = false
 		verification.Reasons = append(verification.Reasons, reason)
 	}
-	if manifest.Version != promotionManifestVersion {
-		addReason("manifest version must be 2")
+	if manifest.Version != promotionManifestVersion && manifest.Version != structuralPromotionManifestVersion {
+		addReason("manifest version must be 2 or 3")
 	}
 	if strings.TrimSpace(manifest.Candidate) == "" || strings.TrimSpace(manifest.SelectorVersion) == "" {
 		addReason("candidate and selector_version are required")
@@ -418,7 +437,7 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 	if len(manifest.Buckets) == 0 {
 		addReason("at least one authorized bucket is required")
 	}
-	for _, reason := range validatePromotionBucketSets(manifest.Buckets) {
+	for _, reason := range validatePromotionBucketSets(manifest.Version, manifest.Buckets) {
 		addReason(reason)
 	}
 	for _, bucket := range manifest.Buckets {
@@ -914,7 +933,7 @@ func bindPromotionEvidenceReport(manifestPath, role, inputPath, outputPath strin
 	if err := decodePromotionEvidence(manifestRaw, &manifest); err != nil {
 		return fmt.Errorf("decode promotion manifest: %w", err)
 	}
-	if reasons := validatePromotionBucketSets(manifest.Buckets); len(reasons) != 0 {
+	if reasons := validatePromotionBucketSets(manifest.Version, manifest.Buckets); len(reasons) != 0 {
 		return fmt.Errorf("promotion manifest has an invalid query/split set: %s", strings.Join(reasons, "; "))
 	}
 	if manifest.OperationalCandidateSQLSHA256 != "" && !isLowerHexSHA256(manifest.OperationalCandidateSQLSHA256) {

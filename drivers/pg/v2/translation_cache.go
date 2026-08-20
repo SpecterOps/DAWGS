@@ -278,6 +278,8 @@ func (s *connectionCacheProvider) RecordTraversalStrategySelection(selection pg.
 	}
 	if selection.Mode == "exact_query_canary" {
 		s.strategySelection.ExactQueryCanary++
+	} else if selection.Mode == "structural_authorized" {
+		s.strategySelection.StructuralAuthorized++
 	} else if selection.Mode == "structural_shadow" {
 		s.strategySelection.StructuralShadow++
 	} else {

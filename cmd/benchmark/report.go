@@ -130,8 +130,8 @@ func writeMarkdown(w io.Writer, r Report) error {
 			fmt.Fprintf(w, "V2 shortest-path generation (%d samples): parse %s, cache/bind %s, translate %s, format %s, dispatch %s total. Shared L2: %d hits, %d misses, %d entries/%d capacity.\n\n", shortest.Count, fmtDuration(shortest.Parse), fmtDuration(shortest.Cache), fmtDuration(shortest.Translate), fmtDuration(shortest.Format), fmtDuration(shortest.Dispatch), r.TranslationCache.SharedShortestPathTemplates.Hits, r.TranslationCache.SharedShortestPathTemplates.Misses, r.TranslationCache.SharedShortestPathTemplates.Entries, r.TranslationCache.SharedShortestPathTemplates.Capacity)
 		}
 		selection := r.TranslationCache.StrategySelection
-		if selection.Incumbent+selection.ExactQueryCanary > 0 {
-			fmt.Fprintf(w, "V2 strategy selection: %d incumbent, %d exact-query canary, %d structural-shadow, %d shape-unavailable observations.\n\n", selection.Incumbent, selection.ExactQueryCanary, selection.StructuralShadow, selection.ShapeUnavailable)
+		if selection.Incumbent+selection.ExactQueryCanary+selection.StructuralAuthorized > 0 {
+			fmt.Fprintf(w, "V2 strategy selection: %d incumbent, %d exact-query canary, %d structurally authorized, %d structural-shadow, %d shape-unavailable observations.\n\n", selection.Incumbent, selection.ExactQueryCanary, selection.StructuralAuthorized, selection.StructuralShadow, selection.ShapeUnavailable)
 		}
 	}
 	return nil

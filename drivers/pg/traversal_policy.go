@@ -122,6 +122,10 @@ func (s TraversalPolicy) withoutManifestCandidate() TraversalPolicy {
 
 // productionOptions derives validated translation options from the active traversal policy.
 func (s TraversalPolicy) productionOptions(query string) (translate.ProductionOptions, error) {
+	return s.productionOptionsForShape(query, TraversalShape{})
+}
+
+func (s TraversalPolicy) productionOptionsForShape(query string, shape TraversalShape) (translate.ProductionOptions, error) {
 	manifest := s.compiledManifest
 	if manifest.SelectorVersion == "" && len(s.PromotionManifestJSON) > 0 {
 		var err error
@@ -162,6 +166,15 @@ func (s TraversalPolicy) productionOptions(query string) (translate.ProductionOp
 		}
 		queryDigest := TraversalPolicyQuerySHA256(query)
 		if bucket, found := s.compiledBuckets[queryDigest]; found {
+			options.AuthorizedBucket = &translate.ProductionTraversalBucket{
+				Direction:             bucket.Direction,
+				ObservationMode:       bucket.ObservationMode,
+				MinimumDepth:          bucket.MinimumDepth,
+				MaximumDepth:          bucket.MaximumDepth,
+				RelationshipKindCount: bucket.RelationshipKindCount,
+				UntypedRelationship:   bucket.UntypedRelationship,
+			}
+		} else if bucket, found := s.authorizedStructuralBucketForShape(shape); found {
 			options.AuthorizedBucket = &translate.ProductionTraversalBucket{
 				Direction:             bucket.Direction,
 				ObservationMode:       bucket.ObservationMode,
@@ -216,6 +229,59 @@ func (s TraversalPolicy) structuralBucketForShape(shape TraversalShape) (travers
 	return *matched, true
 }
 
+// authorizedStructuralBucketForShape reports a v3 manifest-backed structural
+// authorization. Version 2 buckets intentionally remain observation-only:
+// their SQL anchor binds one exact query, not a reusable SQL template.
+func (s TraversalPolicy) authorizedStructuralBucketForShape(shape TraversalShape) (traversalPromotionBucket, bool) {
+	if !shape.Available() || s.compiledManifest.Version != 3 {
+		return traversalPromotionBucket{}, false
+	}
+	var matched *traversalPromotionBucket
+	for index := range s.compiledManifest.Buckets {
+		bucket := &s.compiledManifest.Buckets[index]
+		if bucket.StructuralShapeVersion != shape.Version || bucket.StructuralShapeSHA256 != shape.Fingerprint {
+			continue
+		}
+		if matched != nil {
+			return traversalPromotionBucket{}, false
+		}
+		matched = bucket
+	}
+	if matched == nil {
+		return traversalPromotionBucket{}, false
+	}
+	return *matched, true
+}
+
+func structuralSQLTemplateSHA256(manifest traversalPromotionManifest, bucket traversalPromotionBucket) string {
+	return TraversalSQLTemplateSHA256(manifest.Candidate, manifest.SelectorVersion, manifest.ExecutionBoundary, TraversalShape{
+		Version:               bucket.StructuralShapeVersion,
+		Family:                bucket.StructuralFamily,
+		Direction:             bucket.Direction,
+		ObservationMode:       bucket.ObservationMode,
+		MinimumDepth:          bucket.MinimumDepth,
+		MaximumDepth:          bucket.MaximumDepth,
+		RelationshipKindCount: bucket.RelationshipKindCount,
+		UntypedRelationship:   bucket.UntypedRelationship,
+		Fingerprint:           bucket.StructuralShapeSHA256,
+	})
+}
+
+// TraversalSQLTemplateSHA256 returns the public template-contract digest for
+// a v3 structural bucket. It binds the candidate and every SQL-shaping static
+// fact, but intentionally excludes Cypher identifiers and caller values.
+func TraversalSQLTemplateSHA256(candidate, selectorVersion, executionBoundary string, shape TraversalShape) string {
+	canonical := fmt.Sprintf(
+		"structural-sql-template-v1|%s|%s|%s|%s|%s|%s|%s|%s|%d|%d|%d|%t",
+		candidate, selectorVersion, executionBoundary,
+		shape.Version, shape.Family, shape.Fingerprint,
+		shape.Direction, shape.ObservationMode, shape.MinimumDepth,
+		shape.MaximumDepth, shape.RelationshipKindCount, shape.UntypedRelationship,
+	)
+	digest := sha256.Sum256([]byte(canonical))
+	return hex.EncodeToString(digest[:])
+}
+
 // traversalPromotionBucket groups state that must remain consistent while processing traversal promotion bucket.
 type traversalPromotionBucket struct {
 	// Name identifies the qualified workload bucket.
@@ -236,6 +302,19 @@ type traversalPromotionBucket struct {
 	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
 	// UntypedRelationship indicates whether untyped relationship applies.
 	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
+	// StructuralShapeVersion identifies the canonical structural classifier
+	// used when this bucket authorizes production-wide selection.
+	StructuralShapeVersion string `json:"structural_shape_version,omitempty"`
+	// StructuralFamily identifies the shortest-path family bound by the
+	// structural classifier.
+	StructuralFamily string `json:"structural_family,omitempty"`
+	// StructuralShapeSHA256 binds the classifier output without retaining the
+	// source query text.
+	StructuralShapeSHA256 string `json:"structural_shape_sha256,omitempty"`
+	// SQLTemplateSHA256 binds the candidate SQL template contract for a
+	// structural bucket. Unlike the v2 SQL anchor, it is independent of Cypher
+	// identifiers and parameters.
+	SQLTemplateSHA256 string `json:"sql_template_sha256,omitempty"`
 }
 
 // traversalPromotionEvidence records independently verifiable observations for traversal promotion.
@@ -404,8 +483,8 @@ func (s TraversalPolicy) validate() error {
 	if hex.EncodeToString(digest[:]) != s.PromotionManifestSHA256 {
 		return fmt.Errorf("promotion manifest content does not match its SHA-256 digest")
 	}
-	if manifest.Version != 2 || strings.TrimSpace(manifest.SelectorVersion) == "" {
-		return fmt.Errorf("promotion manifest requires version 2 and a selector version")
+	if (manifest.Version != 2 && manifest.Version != 3) || strings.TrimSpace(manifest.SelectorVersion) == "" {
+		return fmt.Errorf("promotion manifest requires version 2 or 3 and a selector version")
 	}
 	if strings.TrimSpace(manifest.SourceCommit) == "" || !lowerHexSHA256(manifest.SourceSHA256) || !lowerHexSHA256(manifest.BinarySHA256) || !lowerHexSHA256(manifest.CorpusSHA256) {
 		return fmt.Errorf("promotion manifest requires source commit and lowercase source, binary, and corpus SHA-256 digests")
@@ -543,6 +622,24 @@ func (s TraversalPolicy) validate() error {
 		if !slices.Equal(bucket.QualificationSplit, []string{"training", "holdout"}) {
 			return fmt.Errorf("each promotion bucket requires exactly one training and one holdout qualification split in canonical order")
 		}
+		if manifest.Version == 3 {
+			shape := TraversalShape{
+				Version:               bucket.StructuralShapeVersion,
+				Family:                bucket.StructuralFamily,
+				Direction:             bucket.Direction,
+				ObservationMode:       bucket.ObservationMode,
+				MinimumDepth:          bucket.MinimumDepth,
+				MaximumDepth:          bucket.MaximumDepth,
+				RelationshipKindCount: bucket.RelationshipKindCount,
+				UntypedRelationship:   bucket.UntypedRelationship,
+			}
+			if shape.Version != TraversalShapeVersion || !lowerHexSHA256(bucket.StructuralShapeSHA256) || bucket.StructuralShapeSHA256 != TraversalShapeFingerprint(shape) {
+				return fmt.Errorf("promotion bucket %q has an invalid structural shape binding", bucket.Name)
+			}
+			if !lowerHexSHA256(bucket.SQLTemplateSHA256) || bucket.SQLTemplateSHA256 != structuralSQLTemplateSHA256(manifest, bucket) {
+				return fmt.Errorf("promotion bucket %q has an invalid structural SQL template binding", bucket.Name)
+			}
+		}
 		if len(bucket.QuerySHA256) == 0 {
 			return fmt.Errorf("promotion bucket %q requires a nonempty query allowlist", bucket.Name)
 		}
@@ -564,7 +661,7 @@ func (s TraversalPolicy) validate() error {
 	}
 	sort.Strings(manifestQueries)
 	manifestQueries = slices.Compact(manifestQueries)
-	if len(manifestQueries) != 1 {
+	if manifest.Version == 2 && len(manifestQueries) != 1 {
 		return fmt.Errorf("promotion manifest operational SQL anchor requires exactly one authorized query digest")
 	}
 	policyQueries := append([]string(nil), s.QuerySHA256Allowlist...)
@@ -716,6 +813,13 @@ func (s *Driver) TraversalPolicy() TraversalPolicy {
 
 // effectiveTraversalPolicy coordinates PostgreSQL driver behavior for effective traversal policy.
 func (s *SchemaManager) effectiveTraversalPolicy(query string, isolation pgx.TxIsoLevel) (TraversalPolicy, string) {
+	return s.effectiveTraversalPolicyForShape(query, TraversalShape{}, isolation)
+}
+
+// effectiveTraversalPolicyForShape returns the active policy for an exact
+// canary query or a v3 structurally authorized query. A zero shape preserves
+// the historic exact-query behavior.
+func (s *SchemaManager) effectiveTraversalPolicyForShape(query string, shape TraversalShape, isolation pgx.TxIsoLevel) (TraversalPolicy, string) {
 	s.traversalPolicyLock.RLock()
 	policy := s.traversalPolicy
 	s.traversalPolicyLock.RUnlock()
@@ -729,7 +833,8 @@ func (s *SchemaManager) effectiveTraversalPolicy(query string, isolation pgx.TxI
 	}
 
 	_, queryAuthorized := policy.compiledBuckets[TraversalPolicyQuerySHA256(query)]
-	effective := policy.enabled() && (candidateRollback || standaloneRollback || queryAuthorized)
+	_, structuralAuthorized := policy.authorizedStructuralBucketForShape(shape)
+	effective := policy.enabled() && (candidateRollback || standaloneRollback || queryAuthorized || structuralAuthorized)
 	if shortestPathExecutorRequiresStableSnapshot(policy.ShortestPathExecutor) && isolation != pgx.RepeatableRead && isolation != pgx.Serializable {
 		effective = false
 	}
@@ -737,6 +842,12 @@ func (s *SchemaManager) effectiveTraversalPolicy(query string, isolation pgx.TxI
 		return TraversalPolicy{}, "production-incumbent-v1"
 	}
 	return policy, policy.compiledIdentity
+}
+
+func (s *SchemaManager) hasStructuralTraversalPolicy() bool {
+	s.traversalPolicyLock.RLock()
+	defer s.traversalPolicyLock.RUnlock()
+	return s.traversalPolicy.manifestCandidateEnabled() && s.traversalPolicy.compiledManifest.Version == 3 && !s.traversalPolicy.rollbackActive()
 }
 
 // shortestPathExecutorRequiresStableSnapshot coordinates PostgreSQL driver behavior for shortest path executor requires stable snapshot.

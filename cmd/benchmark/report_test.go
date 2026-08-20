@@ -165,7 +165,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		"Duplicate Rows",
 		"| Fixed Suffix Expansion Fanout / combined | fixed_suffix_expansion_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
 		"V2 connection state: cache 4 hits, 2 misses, 0 bypasses, 0 evictions; workspaces 1 initialized/3 reused; statements 2 prepared/4 reused across 2 live connections.",
-		"V2 strategy selection: 3 incumbent, 1 exact-query canary, 2 structural-shadow, 2 shape-unavailable observations.",
+		"V2 strategy selection: 3 incumbent, 1 exact-query canary, 0 structurally authorized, 2 structural-shadow, 2 shape-unavailable observations.",
 	} {
 		require.Contains(t, text, expected)
 	}

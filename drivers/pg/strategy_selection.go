@@ -75,10 +75,16 @@ func traversalShapeForQuery(query *cypher.RegularQuery) (TraversalShape, error) 
 		RelationshipKindCount: decision.RelationshipKindCount,
 		UntypedRelationship:   decision.UntypedRelationship,
 	}
+	shape.Fingerprint = TraversalShapeFingerprint(shape)
+	return shape, nil
+}
+
+// TraversalShapeFingerprint returns the immutable digest that a structural
+// promotion bucket must bind. It never includes query text or runtime values.
+func TraversalShapeFingerprint(shape TraversalShape) string {
 	canonical := fmt.Sprintf("%s|%s|%s|%s|%d|%d|%d|%t", shape.Version, shape.Family, shape.Direction, shape.ObservationMode, shape.MinimumDepth, shape.MaximumDepth, shape.RelationshipKindCount, shape.UntypedRelationship)
 	digest := sha256.Sum256([]byte(canonical))
-	shape.Fingerprint = hex.EncodeToString(digest[:])
-	return shape, nil
+	return hex.EncodeToString(digest[:])
 }
 
 func (s *SchemaManager) observeTraversalStrategySelection(query string, parsed *cypher.RegularQuery, policy TraversalPolicy) {
@@ -97,6 +103,9 @@ func (s *SchemaManager) observeTraversalStrategySelection(query string, parsed *
 		if _, authorized := policy.compiledBuckets[TraversalPolicyQuerySHA256(strings.TrimSpace(query))]; authorized {
 			selection.Mode = "exact_query_canary"
 			selection.Reason = "exact_query_authorized"
+		} else if bucket, authorized := policy.authorizedStructuralBucketForShape(shape); authorized {
+			selection.Mode = "structural_authorized"
+			selection.Reason = "structural_bucket_" + bucket.Name
 		} else if bucket, matched := policy.structuralBucketForShape(shape); matched {
 			selection.Mode = "structural_shadow"
 			selection.Reason = "structural_bucket_" + bucket.Name

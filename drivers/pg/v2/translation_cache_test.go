@@ -54,11 +54,13 @@ func TestStrategySelectionStatsRemainQueryTextFree(t *testing.T) {
 	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "incumbent", Reason: "shape_unavailable"})
 	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "exact_query_canary", Reason: "exact_query_authorized"})
 	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "structural_shadow", Reason: "structural_bucket-qualified"})
+	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "structural_authorized", Reason: "structural_bucket-qualified"})
 
 	stats := provider.stats().StrategySelection
 	require.Equal(t, uint64(1), stats.Incumbent)
 	require.Equal(t, uint64(1), stats.ExactQueryCanary)
 	require.Equal(t, uint64(1), stats.StructuralShadow)
+	require.Equal(t, uint64(1), stats.StructuralAuthorized)
 	require.Equal(t, uint64(1), stats.ShapeUnavailable)
 }
 

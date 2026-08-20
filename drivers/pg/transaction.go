@@ -359,6 +359,11 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	}
 	policyStarted := time.Now()
 	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicy(query, s.isolation)
+	shape := TraversalShape{}
+	if !policy.enabled() && s.schemaManager.hasStructuralTraversalPolicy() {
+		shape, _ = traversalShapeForQuery(parsedQuery)
+		policy, policyIdentity = s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
+	}
 	profile.Policy = time.Since(policyStarted)
 	s.schemaManager.observeTraversalStrategySelection(query, parsedQuery, policy)
 	buildTranslation := func() (translate.Result, string, error) {
@@ -366,7 +371,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		var translateErr error
 		translateStarted := time.Now()
 		if policy.enabled() {
-			if options, optionsErr := policy.productionOptions(query); optionsErr != nil {
+			if options, optionsErr := policy.productionOptionsForShape(query, shape); optionsErr != nil {
 				return translate.Result{}, "", optionsErr
 			} else {
 				translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, options)
@@ -381,7 +386,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		formatStarted := time.Now()
 		formatted, formatErr := translate.Translated(translated)
 		profile.Format += time.Since(formatStarted)
-		if formatErr == nil && policy.enabled() {
+		if formatErr == nil && policy.enabled() && policy.compiledManifest.Version == 2 {
 			if anchorErr := validateTraversalPromotionSQLAnchor(policy.compiledManifest, formatted); anchorErr != nil {
 				return translate.Result{}, "", anchorErr
 			}
