@@ -30,7 +30,6 @@ type dbContext struct {
 	db         graph.Database
 	rowCount   int
 	actualRows []string
-	nodes      []graph.Node
 }
 
 // anEmptyGraph removes all nodes to give each scenario a clean graph.
@@ -52,22 +51,22 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	c.actualRows = nil
 
 	err := c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		var (
-			node     graph.Node
-			nodes    []graph.Node
-			rowCount int64
-		)
+		var rowCount int64
 		result := tx.Query(input.Content, nil)
 
 		defer result.Close()
 
 		for result.Next() {
+			var nodes []graph.Node
+
 			rowCount++
 
 			for _, value := range result.Values() {
+				var node graph.Node
+
 				mapper := result.Mapper()
 				mapper.Map(value, &node)
-				nodes = append(c.nodes, node)
+				nodes = append(nodes, node)
 			}
 
 			// format graph nodes and their properties into a cypher query
@@ -122,7 +121,7 @@ func (c *dbContext) theResultShouldBe(expectedTable *godog.Table) error {
 	}
 
 	if c.rowCount != len(expectedRows) {
-		return fmt.Errorf("Invalid row count expected %d actual %d", c.rowCount, len(expectedTable.Rows))
+		return fmt.Errorf("Invalid row count expected %d actual %d", len(expectedRows), c.rowCount)
 	}
 
 	for i := 0; i < len(expectedRows); i++ {
