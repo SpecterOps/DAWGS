@@ -556,6 +556,9 @@ func TestTopologyFixedSuffixBucketUsesDriverStructuralContract(t *testing.T) {
 		Candidate:         string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1),
 		SelectorVersion:   string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1),
 		ExecutionBoundary: "transaction_retry",
+		TopologyThresholds: map[string]int64{
+			"maximum_edge_to_node_ratio_per_mille": 1000,
+		},
 	}
 	bucket := PromotionBucket{
 		Name:                   "fixed-suffix",

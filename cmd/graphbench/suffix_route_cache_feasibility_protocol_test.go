@@ -113,6 +113,11 @@ func TestTopologySelectedRoutingV1FreezesDefaultOffSnapshotContract(t *testing.T
 			ReadOnly  bool     `json:"read_only"`
 			SameSnap  bool     `json:"same_snapshot_synopsis_read"`
 		} `json:"transaction"`
+		Selector struct {
+			EstimatorVersion string `json:"estimator_version"`
+			MaximumDensity   int64  `json:"maximum_edge_to_node_ratio_per_mille"`
+			Comparison       string `json:"comparison"`
+		} `json:"selector"`
 		RouteCache struct {
 			Scope       string   `json:"scope"`
 			Entries     int64    `json:"maximum_entries"`
@@ -133,6 +138,9 @@ func TestTopologySelectedRoutingV1FreezesDefaultOffSnapshotContract(t *testing.T
 	require.ElementsMatch(t, []string{"repeatable_read", "serializable"}, protocol.Transaction.Isolation)
 	require.True(t, protocol.Transaction.ReadOnly)
 	require.True(t, protocol.Transaction.SameSnap)
+	require.Equal(t, "topology-fixed-suffix-counts-v1", protocol.Selector.EstimatorVersion)
+	require.Equal(t, int64(1000), protocol.Selector.MaximumDensity)
+	require.Contains(t, protocol.Selector.Comparison, "edge_count * 1000")
 	require.Equal(t, "one_active_transaction", protocol.RouteCache.Scope)
 	require.Equal(t, int64(64), protocol.RouteCache.Entries)
 	require.Equal(t, int64(65536), protocol.RouteCache.TotalBytes)

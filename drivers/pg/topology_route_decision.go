@@ -85,7 +85,7 @@ func (s *transaction) recordTopologyRouteDecision(decision TraversalRouteDecisio
 // after an incumbent miss has populated this transaction-owned cache. Any
 // failure, a first observation, or an unavailable synopsis remains incumbent.
 // The returned instruction is valid only for the current transaction.
-func (s *transaction) topologyRouteDecision(graphID int32, shape TraversalShape, parameters map[string]any, policyIdentity string, candidateAuthorized bool) bool {
+func (s *transaction) topologyRouteDecision(graphID int32, shape TraversalShape, parameters map[string]any, policyIdentity, estimatorVersion string, maximumEdgeToNodeRatioPerMille int64, candidateAuthorized bool) bool {
 	if shape.Version != TraversalFixedSuffixShapeVersion {
 		return false
 	}
@@ -102,6 +102,13 @@ func (s *transaction) topologyRouteDecision(graphID int32, shape TraversalShape,
 	synopsis, err := s.traversalTopologySynopsis(graphID)
 	if err != nil || !synopsis.Available() || synopsis.SchemaVersion != "topology-synopsis-schema-v2" || synopsis.NodeCount == 0 || synopsis.EdgeCount == 0 {
 		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_synopsis_unavailable"})
+		return false
+	}
+	// v1 freezes a 1000-per-mille limit, so this overflow-safe comparison is
+	// exactly edge_count <= node_count. Validation rejects any other threshold
+	// until a separately versioned estimator defines its arithmetic.
+	if candidateAuthorized && (synopsis.EstimatorVersion != estimatorVersion || maximumEdgeToNodeRatioPerMille != 1000 || synopsis.EdgeCount > synopsis.NodeCount) {
+		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_estimate_rejected"})
 		return false
 	}
 	keyMaterial := fmt.Sprintf("%d|%d|%d|%s|%s|%s|%d|%d", cache.owner, graphID, cache.generation, shape.Fingerprint, parametersFingerprint, policyIdentity, synopsis.Epoch, synopsis.CurrentMutationEpoch)

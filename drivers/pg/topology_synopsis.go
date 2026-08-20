@@ -107,7 +107,7 @@ from degree group by direction, kind_id, case when degree = 1 then 'one' when de
 	const publish = `
 insert into graph_traversal_synopsis_generation
   (graph_id, epoch, source_mutation_epoch, estimator_version, schema_version, status, node_count, edge_count, refresh_started_at, refresh_completed_at, refresh_mode)
-select $1, $2, $3, 'topology-synopsis-v2', 'topology-synopsis-schema-v2', 'ready', $4, $5, clock_timestamp(), clock_timestamp(), 'full'
+select $1, $2, $3, 'topology-fixed-suffix-counts-v1', 'topology-synopsis-schema-v2', 'ready', $4, $5, clock_timestamp(), clock_timestamp(), 'full'
 where (select epoch from graph_traversal_epoch where graph_id = $1) = $3
 on conflict (graph_id) do update
 set epoch = excluded.epoch, source_mutation_epoch = excluded.source_mutation_epoch,

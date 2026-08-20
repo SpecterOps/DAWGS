@@ -180,6 +180,8 @@ type PromotionManifest struct {
 	SynopsisSchemaVersion string `json:"synopsis_schema_version,omitempty"`
 	// RouteCacheProtocol binds the transaction-owned route-decision contract.
 	RouteCacheProtocol string `json:"route_cache_protocol,omitempty"`
+	// TopologyThresholds bind the immutable estimator thresholds for manifest v4.
+	TopologyThresholds map[string]int64 `json:"topology_thresholds,omitempty"`
 	// Caps binds each guarded resource dimension to its enforced limit.
 	Caps map[string]int64 `json:"caps"`
 	// Buckets supplies the buckets input to the PromotionManifest contract.
@@ -212,10 +214,11 @@ type PromotionEvidenceIdentity struct {
 	CorpusSHA256 string `json:"corpus_sha256"`
 	// OperationalCandidateSQLSHA256 binds the exact rendered SQL emitted for
 	// the candidate at the operational timing boundary.
-	OperationalCandidateSQLSHA256 string `json:"operational_candidate_sql_sha256"`
-	TopologyEstimatorVersion      string `json:"topology_estimator_version,omitempty"`
-	SynopsisSchemaVersion         string `json:"synopsis_schema_version,omitempty"`
-	RouteCacheProtocol            string `json:"route_cache_protocol,omitempty"`
+	OperationalCandidateSQLSHA256 string           `json:"operational_candidate_sql_sha256"`
+	TopologyEstimatorVersion      string           `json:"topology_estimator_version,omitempty"`
+	SynopsisSchemaVersion         string           `json:"synopsis_schema_version,omitempty"`
+	RouteCacheProtocol            string           `json:"route_cache_protocol,omitempty"`
+	TopologyThresholds            map[string]int64 `json:"topology_thresholds,omitempty"`
 	// Caps binds each guarded resource dimension to its enforced limit.
 	Caps map[string]int64 `json:"caps"`
 	// Buckets supplies the buckets input to the PromotionEvidenceIdentity contract.
@@ -238,6 +241,7 @@ func promotionEvidenceIdentity(manifest PromotionManifest) PromotionEvidenceIden
 		TopologyEstimatorVersion:      manifest.TopologyEstimatorVersion,
 		SynopsisSchemaVersion:         manifest.SynopsisSchemaVersion,
 		RouteCacheProtocol:            manifest.RouteCacheProtocol,
+		TopologyThresholds:            clonePromotionCaps(manifest.TopologyThresholds),
 		Caps:                          clonePromotionCaps(manifest.Caps),
 		Buckets:                       clonePromotionBuckets(manifest.Buckets),
 	}
@@ -245,6 +249,9 @@ func promotionEvidenceIdentity(manifest PromotionManifest) PromotionEvidenceIden
 
 // clonePromotionCaps returns an independent copy of promotion caps.
 func clonePromotionCaps(input map[string]int64) map[string]int64 {
+	if input == nil {
+		return nil
+	}
 	result := make(map[string]int64, len(input))
 	for name, value := range input {
 		result[name] = value
@@ -497,7 +504,7 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 		if !reflect.DeepEqual(manifest.Caps, expectedCaps) {
 			addReason("topology fixed-suffix requires the exact frozen suffix, state, output-row, and output-byte caps")
 		}
-		if manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.TopologyEstimatorVersion != "topology-fixed-suffix-counts-v1" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
+		if manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.TopologyEstimatorVersion != "topology-fixed-suffix-counts-v1" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" || !reflect.DeepEqual(manifest.TopologyThresholds, map[string]int64{"maximum_edge_to_node_ratio_per_mille": 1000}) {
 			addReason("topology fixed-suffix requires its selector, estimator, synopsis schema, and route-cache protocol identities")
 		}
 	}

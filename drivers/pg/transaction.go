@@ -377,7 +377,13 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	}
 	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
 	topologyPolicy, topologyPolicyIdentity := s.schemaManager.topologyFixedSuffixPolicyForShape(shape, s.isolation)
-	topologyCandidate := s.topologyRouteDecision(graphTarget.ID, shape, parameters, topologyPolicyIdentity, topologyPolicy.enabled())
+	topologyEstimatorVersion := ""
+	maximumEdgeToNodeRatioPerMille := int64(0)
+	if topologyPolicy.enabled() {
+		topologyEstimatorVersion = topologyPolicy.compiledManifest.TopologyEstimatorVersion
+		maximumEdgeToNodeRatioPerMille = topologyPolicy.compiledManifest.TopologyThresholds["maximum_edge_to_node_ratio_per_mille"]
+	}
+	topologyCandidate := s.topologyRouteDecision(graphTarget.ID, shape, parameters, topologyPolicyIdentity, topologyEstimatorVersion, maximumEdgeToNodeRatioPerMille, topologyPolicy.enabled())
 	profile.Policy = time.Since(policyStarted)
 	if topologyCandidate {
 		policy = topologyPolicy

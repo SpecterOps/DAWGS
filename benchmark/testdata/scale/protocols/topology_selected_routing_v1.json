@@ -12,6 +12,11 @@
     "read_only": true,
     "same_snapshot_synopsis_read": true
   },
+  "selector": {
+    "estimator_version": "topology-fixed-suffix-counts-v1",
+    "maximum_edge_to_node_ratio_per_mille": 1000,
+    "comparison": "edge_count * 1000 <= node_count * maximum_edge_to_node_ratio_per_mille"
+  },
   "route_cache": {
     "scope": "one_active_transaction",
     "maximum_entries": 64,

@@ -119,10 +119,16 @@ func setUpV2IntegrationGraph(t *testing.T, driver *Driver) v2IntegrationFixture 
 	require.NoError(t, driver.AssertSchema(ctx, v2IntegrationSchema))
 	t.Cleanup(func() {
 		_ = driver.WriteTransaction(context.Background(), func(tx graph.Transaction) error {
+			if err := deleteV2IntegrationRelationships(tx); err != nil {
+				return err
+			}
 			return tx.Nodes().Delete()
 		})
 	})
 	require.NoError(t, driver.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		if err := deleteV2IntegrationRelationships(tx); err != nil {
+			return err
+		}
 		return tx.Nodes().Delete()
 	}))
 
@@ -146,6 +152,14 @@ func setUpV2IntegrationGraph(t *testing.T, driver *Driver) v2IntegrationFixture 
 	return fixture
 }
 
+func deleteV2IntegrationRelationships(tx graph.Transaction) error {
+	result := tx.Raw("delete from edge where graph_id = (select id from graph where name = 'pg_v2_integration')", nil)
+	defer result.Close()
+	for result.Next() {
+	}
+	return result.Error()
+}
+
 func TestV2RefreshTraversalTopologySynopsisTracksGraphMutation(t *testing.T) {
 	driver := newV2IntegrationDriver(t, 1, 4, nil)
 	setUpV2IntegrationGraph(t, driver)
@@ -154,6 +168,7 @@ func TestV2RefreshTraversalTopologySynopsisTracksGraphMutation(t *testing.T) {
 	initial, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
 	require.NoError(t, err)
 	require.True(t, initial.Available())
+	require.Equal(t, "topology-fixed-suffix-counts-v1", initial.EstimatorVersion)
 	require.GreaterOrEqual(t, initial.NodeCount, int64(2))
 	require.GreaterOrEqual(t, initial.EdgeCount, int64(1))
 
@@ -284,6 +299,7 @@ func v2TopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape pg.Tr
 		"source_commit": "v2-integration", "source_sha256": strings.Repeat("1", sha256.Size*2), "binary_sha256": strings.Repeat("2", sha256.Size*2), "corpus_sha256": strings.Repeat("3", sha256.Size*2),
 		"operational_candidate_sql_sha256": strings.Repeat("4", sha256.Size*2),
 		"topology_estimator_version":       "topology-fixed-suffix-counts-v1", "synopsis_schema_version": "topology-synopsis-schema-v2", "route_cache_protocol": "topology-selected-routing-v1",
+		"topology_thresholds": map[string]int64{"maximum_edge_to_node_ratio_per_mille": 1000},
 		"caps": map[string]int64{
 			"suffix_row_limit": optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit, "state_limit": optimize.ExpansionSearchSuffixReverseGuardStateLimit,
 			"output_row_limit": optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit, "output_bytes_limit": optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit,

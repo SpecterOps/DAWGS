@@ -396,6 +396,9 @@ type traversalPromotionManifest struct {
 	SynopsisSchemaVersion string `json:"synopsis_schema_version,omitempty"`
 	// RouteCacheProtocol binds the transaction-local v4 route-cache contract.
 	RouteCacheProtocol string `json:"route_cache_protocol,omitempty"`
+	// TopologyThresholds bind the immutable topology estimator thresholds for
+	// a manifest-v4 candidate.
+	TopologyThresholds map[string]int64 `json:"topology_thresholds,omitempty"`
 	// Caps binds each guarded resource dimension to its enforced limit.
 	Caps map[string]int64 `json:"caps"`
 	// Buckets supplies the buckets input to the traversalPromotionManifest contract.
@@ -611,6 +614,11 @@ func (s TraversalPolicy) validate() error {
 		if manifest.Version != 4 || manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) || manifest.TopologyEstimatorVersion != "topology-fixed-suffix-counts-v1" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
 			return fmt.Errorf("topology fixed-suffix promotion manifest requires v4 selector, fallback, estimator, synopsis schema, and route-cache protocol bindings")
 		}
+		if !slices.EqualFunc(sortedTopologyThresholds(manifest.TopologyThresholds), []topologyThreshold{{Name: "maximum_edge_to_node_ratio_per_mille", Value: 1000}}, func(left, right topologyThreshold) bool {
+			return left == right
+		}) {
+			return fmt.Errorf("topology fixed-suffix promotion manifest requires maximum_edge_to_node_ratio_per_mille=1000")
+		}
 	}
 	if s.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG {
 		expectedCaps := map[string]struct{}{
@@ -787,6 +795,22 @@ func (s TraversalPolicy) validate() error {
 		}
 	}
 	return nil
+}
+
+type topologyThreshold struct {
+	Name  string
+	Value int64
+}
+
+func sortedTopologyThresholds(input map[string]int64) []topologyThreshold {
+	thresholds := make([]topologyThreshold, 0, len(input))
+	for name, value := range input {
+		thresholds = append(thresholds, topologyThreshold{Name: name, Value: value})
+	}
+	slices.SortFunc(thresholds, func(left, right topologyThreshold) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+	return thresholds
 }
 
 // lowerHexSHA256 coordinates PostgreSQL driver behavior for lower hex sha256.

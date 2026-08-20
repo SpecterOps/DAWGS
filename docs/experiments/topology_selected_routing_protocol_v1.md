@@ -29,6 +29,12 @@ The selector reads no graph values from a synopsis and cannot establish query
 correctness. It estimates only candidate cost. Candidate admission caps and an
 exact incumbent fallback remain authoritative.
 
+`topology-fixed-suffix-counts-v1` admits the reverse candidate only when the
+synopsis reports `edge_count * 1000 <= node_count *
+maximum_edge_to_node_ratio_per_mille`. Version v1 freezes that threshold at
+`1000`; it is manifest-bound and therefore part of the route-cache policy
+identity. A new estimator or threshold requires a new selector version.
+
 ## Route-decision cache
 
 A route decision is transaction-owned application memory, never a translation

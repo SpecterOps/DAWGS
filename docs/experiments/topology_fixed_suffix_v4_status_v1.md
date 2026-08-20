@@ -11,7 +11,8 @@ candidate.
 
 - The driver validates the v4 candidate identity, exact immutable caps,
   estimator, synopsis schema, route-cache protocol, fixed-suffix structural
-  fingerprint, and SQL-template fingerprint.
+  fingerprint, SQL-template fingerprint, and the frozen 1000-per-mille
+  edge-to-node-density threshold.
 - A current v2 synopsis and a read-only Repeatable Read or Serializable
   transaction are mandatory.
 - Decisions are transaction-owned and parameter-sensitive. A cache miss runs

@@ -146,6 +146,7 @@ func testTopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape Tra
 		TopologyEstimatorVersion:      "topology-fixed-suffix-counts-v1",
 		SynopsisSchemaVersion:         "topology-synopsis-schema-v2",
 		RouteCacheProtocol:            "topology-selected-routing-v1",
+		TopologyThresholds:            map[string]int64{"maximum_edge_to_node_ratio_per_mille": 1000},
 		Caps: map[string]int64{
 			"suffix_row_limit":   optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit,
 			"state_limit":        optimize.ExpansionSearchSuffixReverseGuardStateLimit,
@@ -213,6 +214,10 @@ func TestTraversalPolicyV4RequiresRouteOwnedFixedSuffixSelection(t *testing.T) {
 		manifest.RouteCacheProtocol = "unknown"
 	})
 	require.ErrorContains(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(invalid), "route-cache protocol")
+	invalid = rewriteTestTraversalPolicyManifest(t, policy, func(manifest *traversalPromotionManifest) {
+		manifest.TopologyThresholds["maximum_edge_to_node_ratio_per_mille"] = 999
+	})
+	require.ErrorContains(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(invalid), "maximum_edge_to_node_ratio_per_mille=1000")
 }
 
 // TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExactCaps verifies traversal policy authorizes guarded inline asp only with stable snapshot and exact caps behavior.
