@@ -29,5 +29,12 @@ func TestSchemaDefinesVersionedTraversalTopologySynopsis(t *testing.T) {
 	require.Contains(t, sqlSchemaUp, "source_mutation_epoch")
 	require.Contains(t, sqlSchemaUp, "estimator_version")
 	require.Contains(t, sqlSchemaUp, "status in ('ready', 'building', 'failed')")
+	require.Contains(t, sqlSchemaUp, "graph_traversal_synopsis_node_count")
+	require.Contains(t, sqlSchemaUp, "graph_traversal_synopsis_edge_count")
+	require.Contains(t, sqlSchemaUp, "graph_traversal_synopsis_degree")
+	require.Contains(t, sqlSchemaUp, "schema_version")
+	require.Contains(t, sqlSchemaDown, "drop table if exists graph_traversal_synopsis_node_count")
+	require.Contains(t, sqlSchemaDown, "drop table if exists graph_traversal_synopsis_edge_count")
+	require.Contains(t, sqlSchemaDown, "drop table if exists graph_traversal_synopsis_degree")
 	require.Contains(t, sqlSchemaDown, "drop table if exists graph_traversal_synopsis_generation")
 }

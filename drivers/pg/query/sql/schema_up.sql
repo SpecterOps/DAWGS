@@ -89,6 +89,57 @@ create table if not exists graph_traversal_synopsis_generation
   check (status in ('ready', 'building', 'failed'))
 );
 
+alter table graph_traversal_synopsis_generation
+  add column if not exists schema_version text not null default 'topology-synopsis-v2',
+  add column if not exists refresh_started_at timestamptz,
+  add column if not exists refresh_completed_at timestamptz,
+  add column if not exists refresh_mode text not null default 'full';
+
+-- Detail relations are scoped to the atomically published generation. They
+-- remain advisory estimates: missing rows are an incumbent-only condition.
+create table if not exists graph_traversal_synopsis_node_count
+(
+  graph_id bigint not null references graph (id) on delete cascade,
+  epoch bigint not null,
+  kind_id smallint not null,
+  node_count bigint not null,
+  primary key (graph_id, epoch, kind_id),
+  check (epoch > 0),
+  check (node_count >= 0)
+);
+
+create table if not exists graph_traversal_synopsis_edge_count
+(
+  graph_id bigint not null references graph (id) on delete cascade,
+  epoch bigint not null,
+  direction text not null,
+  kind_id smallint not null,
+  edge_count bigint not null,
+  distinct_start_count bigint not null,
+  distinct_end_count bigint not null,
+  primary key (graph_id, epoch, direction, kind_id),
+  check (epoch > 0),
+  check (direction in ('outbound', 'inbound')),
+  check (edge_count >= 0),
+  check (distinct_start_count >= 0),
+  check (distinct_end_count >= 0)
+);
+
+create table if not exists graph_traversal_synopsis_degree
+(
+  graph_id bigint not null references graph (id) on delete cascade,
+  epoch bigint not null,
+  direction text not null,
+  kind_id smallint not null,
+  bucket text not null,
+  node_count bigint not null,
+  primary key (graph_id, epoch, direction, kind_id, bucket),
+  check (epoch > 0),
+  check (direction in ('outbound', 'inbound')),
+  check (bucket in ('one', 'two_to_four', 'five_to_sixteen', 'seventeen_plus')),
+  check (node_count >= 0)
+);
+
 insert into graph_traversal_epoch (graph_id)
 select id
 from graph
