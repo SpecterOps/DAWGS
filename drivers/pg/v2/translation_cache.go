@@ -331,6 +331,8 @@ func (s *connectionCacheProvider) RecordTraversalStrategySelection(selection pg.
 		s.strategySelection.ExactQueryCanary++
 	} else if selection.Mode == "structural_authorized" {
 		s.strategySelection.StructuralAuthorized++
+	} else if selection.Mode == "topology_selected" {
+		s.strategySelection.TopologySelected++
 	} else if selection.Mode == "structural_shadow" {
 		s.strategySelection.StructuralShadow++
 	} else {
@@ -353,6 +355,8 @@ func (s *connectionCacheProvider) RecordTraversalRouteDecision(decision pg.Trave
 		s.routeDecisions.ShadowMiss++
 	case "topology_route_shadow_hit":
 		s.routeDecisions.ShadowHit++
+	case "topology_route_candidate_hit":
+		s.routeDecisions.CandidateHit++
 	case "topology_route_capacity":
 		s.routeDecisions.Capacity++
 	case "topology_route_parameters_unverifiable":

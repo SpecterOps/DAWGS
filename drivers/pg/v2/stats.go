@@ -62,6 +62,7 @@ type StrategySelectionStats struct {
 	ExactQueryCanary     uint64 `json:"exact_query_canary"`
 	StructuralShadow     uint64 `json:"structural_shadow"`
 	StructuralAuthorized uint64 `json:"structural_authorized"`
+	TopologySelected     uint64 `json:"topology_selected"`
 	ShapeUnavailable     uint64 `json:"shape_unavailable"`
 }
 
@@ -81,6 +82,7 @@ type TraversalRouteDecisionStats struct {
 	SynopsisUnavailable uint64 `json:"synopsis_unavailable"`
 	ShadowMiss          uint64 `json:"shadow_miss"`
 	ShadowHit           uint64 `json:"shadow_hit"`
+	CandidateHit        uint64 `json:"candidate_hit"`
 	Capacity            uint64 `json:"capacity"`
 	ParametersInvalid   uint64 `json:"parameters_invalid"`
 }

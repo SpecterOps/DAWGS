@@ -81,41 +81,47 @@ func (s *transaction) recordTopologyRouteDecision(decision TraversalRouteDecisio
 	}
 }
 
-// shadowTopologyRouteDecision observes a snapshot-bound fixed-suffix decision
-// cache. A miss, hit, unavailable synopsis, or any failure remains incumbent
-// only. This function deliberately returns no routing instruction.
-func (s *transaction) shadowTopologyRouteDecision(graphID int32, shape TraversalShape, parameters map[string]any, policyIdentity string) {
+// topologyRouteDecision selects a snapshot-bound fixed-suffix candidate only
+// after an incumbent miss has populated this transaction-owned cache. Any
+// failure, a first observation, or an unavailable synopsis remains incumbent.
+// The returned instruction is valid only for the current transaction.
+func (s *transaction) topologyRouteDecision(graphID int32, shape TraversalShape, parameters map[string]any, policyIdentity string, candidateAuthorized bool) bool {
 	if shape.Version != TraversalFixedSuffixShapeVersion {
-		return
+		return false
 	}
 	cache := s.topologyRouteDecisions
 	if cache == nil || cache.disabled || s.tx == nil || !stableSnapshotIsolation(s.isolation) {
 		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_route_disabled"})
-		return
+		return false
 	}
 	parametersFingerprint, valid := topologyRouteParameterFingerprint(parameters)
 	if !valid {
 		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_route_parameters_unverifiable"})
-		return
+		return false
 	}
 	synopsis, err := s.traversalTopologySynopsis(graphID)
-	if err != nil || !synopsis.Available() || synopsis.SchemaVersion != "topology-synopsis-schema-v2" {
+	if err != nil || !synopsis.Available() || synopsis.SchemaVersion != "topology-synopsis-schema-v2" || synopsis.NodeCount == 0 || synopsis.EdgeCount == 0 {
 		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_synopsis_unavailable"})
-		return
+		return false
 	}
 	keyMaterial := fmt.Sprintf("%d|%d|%d|%s|%s|%s|%d|%d", cache.owner, graphID, cache.generation, shape.Fingerprint, parametersFingerprint, policyIdentity, synopsis.Epoch, synopsis.CurrentMutationEpoch)
 	digest := sha256.Sum256([]byte(keyMaterial))
 	key := hex.EncodeToString(digest[:])
 	if _, found := cache.entries[key]; found {
+		if candidateAuthorized {
+			s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "candidate", Reason: "topology_route_candidate_hit"})
+			return true
+		}
 		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_route_shadow_hit"})
-		return
+		return false
 	}
 	entryBytes := len(key) + len(shape.Fingerprint) + len(policyIdentity) + 64
 	if entryBytes > topologyRouteDecisionMaximumEntry || len(cache.entries) == topologyRouteDecisionMaximumEntries || cache.bytes+entryBytes > topologyRouteDecisionMaximumBytes {
 		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_route_capacity"})
-		return
+		return false
 	}
 	cache.entries[key] = struct{}{}
 	cache.bytes += entryBytes
 	s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_route_shadow_miss"})
+	return false
 }

@@ -35,9 +35,16 @@ type TraversalPolicy struct {
 	ShortestPathExecutor optimize.ShortestPathExecutor `json:"shortest_path_executor,omitempty"`
 	// EnableExpansionOrientation indicates whether enable expansion orientation applies.
 	EnableExpansionOrientation bool `json:"enable_expansion_orientation,omitempty"`
+	// EnableTopologyFixedSuffix permits the manifest-v4, snapshot-owned
+	// fixed-suffix candidate. It never changes ordinary routing: the
+	// transaction route-decision cache must independently select the arm.
+	EnableTopologyFixedSuffix bool `json:"enable_topology_fixed_suffix,omitempty"`
 	// DisableExpansionOrientation is an evidence-free emergency rollback switch
 	// for any manifest-authorized orientation selector.
 	DisableExpansionOrientation bool `json:"disable_expansion_orientation,omitempty"`
+	// DisableTopologyFixedSuffix is the evidence-free emergency rollback
+	// switch for the manifest-v4 fixed-suffix candidate.
+	DisableTopologyFixedSuffix bool `json:"disable_topology_fixed_suffix,omitempty"`
 	// DisableEndpointSeededReverse indicates whether disable endpoint seeded reverse applies.
 	DisableEndpointSeededReverse bool `json:"disable_endpoint_seeded_reverse,omitempty"`
 	// DisableInlineASPDAG indicates whether disable inline aspdag applies.
@@ -56,20 +63,20 @@ type TraversalPolicy struct {
 
 // enabled reports whether the policy changes any production translation behavior.
 func (s TraversalPolicy) enabled() bool {
-	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.DisableExpansionOrientation || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
+	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.EnableTopologyFixedSuffix || s.DisableExpansionOrientation || s.DisableTopologyFixedSuffix || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
 }
 
 // rollbackActive reports whether an emergency rollback can change the SQL
 // authorized by a promotion manifest. Rollback generations retain their own
 // cache identity, but must not compare incumbent SQL with the candidate anchor.
 func (s TraversalPolicy) rollbackActive() bool {
-	return s.DisableExpansionOrientation || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
+	return s.DisableExpansionOrientation || s.DisableTopologyFixedSuffix || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
 }
 
 // manifestCandidateEnabled reports whether this policy carries a candidate
 // whose authorization depends on a promotion manifest.
 func (s TraversalPolicy) manifestCandidateEnabled() bool {
-	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation
+	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.EnableTopologyFixedSuffix
 }
 
 // rollbackSwitchCount returns the number of emergency controls enabled in the
@@ -79,6 +86,7 @@ func (s TraversalPolicy) rollbackSwitchCount() int {
 	count := 0
 	for _, enabled := range []bool{
 		s.DisableExpansionOrientation,
+		s.DisableTopologyFixedSuffix,
 		s.DisableEndpointSeededReverse,
 		s.DisableInlineASPDAG,
 		s.DisableInlineSPWitness,
@@ -100,6 +108,9 @@ func (s TraversalPolicy) matchingCandidateRollbackActive() bool {
 	if s.EnableExpansionOrientation {
 		return s.DisableExpansionOrientation
 	}
+	if s.EnableTopologyFixedSuffix {
+		return s.DisableTopologyFixedSuffix
+	}
 	switch s.ShortestPathExecutor {
 	case optimize.ShortestPathExecutorASPI1DAG:
 		return s.DisableInlineASPDAG
@@ -117,6 +128,7 @@ func (s TraversalPolicy) matchingCandidateRollbackActive() bool {
 func (s TraversalPolicy) withoutManifestCandidate() TraversalPolicy {
 	s.ShortestPathExecutor = ""
 	s.EnableExpansionOrientation = false
+	s.EnableTopologyFixedSuffix = false
 	return s
 }
 
@@ -152,6 +164,15 @@ func (s TraversalPolicy) productionOptionsForShape(query string, shape Traversal
 		DisableInlineSPWitness:       s.DisableInlineSPWitness,
 		DisableInlineSPDistance:      s.DisableInlineSPDistance,
 		SelectorVersion:              selectorVersion,
+	}
+	if s.EnableTopologyFixedSuffix && !s.DisableTopologyFixedSuffix {
+		options.EnableTopologyFixedSuffix = true
+		options.TopologyFixedSuffixCaps = &translate.ProductionFixedSuffixCaps{
+			SuffixRowLimit:   manifest.Caps["suffix_row_limit"],
+			StateLimit:       manifest.Caps["state_limit"],
+			OutputRowLimit:   manifest.Caps["output_row_limit"],
+			OutputBytesLimit: manifest.Caps["output_bytes_limit"],
+		}
 	}
 	if options.EnableExpansionOrientation {
 		options.ExpansionOrientationPolicy = optimize.ExpansionSearchPolicy(manifest.SelectorVersion)
@@ -215,7 +236,8 @@ func (s TraversalPolicy) structuralBucketForShape(shape TraversalShape) (travers
 		bucket := &s.compiledManifest.Buckets[index]
 		if bucket.Direction != shape.Direction || bucket.ObservationMode != shape.ObservationMode ||
 			bucket.MinimumDepth != shape.MinimumDepth || bucket.MaximumDepth != shape.MaximumDepth ||
-			bucket.RelationshipKindCount != shape.RelationshipKindCount || bucket.UntypedRelationship != shape.UntypedRelationship {
+			bucket.RelationshipKindCount != shape.RelationshipKindCount || bucket.UntypedRelationship != shape.UntypedRelationship ||
+			bucket.SuffixLength != shape.SuffixLength || bucket.CandidateStrategy != shape.CandidateStrategy {
 			continue
 		}
 		if matched != nil {
@@ -229,11 +251,13 @@ func (s TraversalPolicy) structuralBucketForShape(shape TraversalShape) (travers
 	return *matched, true
 }
 
-// authorizedStructuralBucketForShape reports a v3 manifest-backed structural
-// authorization. Version 2 buckets intentionally remain observation-only:
-// their SQL anchor binds one exact query, not a reusable SQL template.
+// authorizedStructuralBucketForShape reports a v3 or v4 manifest-backed
+// structural authorization. Version 2 buckets intentionally remain
+// observation-only: their SQL anchor binds one exact query, not a reusable SQL
+// template. A v4 match authorizes only the route-decision candidate path; it
+// does not make ordinary translation select that candidate.
 func (s TraversalPolicy) authorizedStructuralBucketForShape(shape TraversalShape) (traversalPromotionBucket, bool) {
-	if !shape.Available() || s.compiledManifest.Version != 3 {
+	if !shape.Available() || (s.compiledManifest.Version != 3 && s.compiledManifest.Version != 4) {
 		return traversalPromotionBucket{}, false
 	}
 	var matched *traversalPromotionBucket
@@ -263,14 +287,28 @@ func structuralSQLTemplateSHA256(manifest traversalPromotionManifest, bucket tra
 		MaximumDepth:          bucket.MaximumDepth,
 		RelationshipKindCount: bucket.RelationshipKindCount,
 		UntypedRelationship:   bucket.UntypedRelationship,
+		SuffixLength:          bucket.SuffixLength,
+		CandidateStrategy:     bucket.CandidateStrategy,
 		Fingerprint:           bucket.StructuralShapeSHA256,
 	})
 }
 
 // TraversalSQLTemplateSHA256 returns the public template-contract digest for
-// a v3 structural bucket. It binds the candidate and every SQL-shaping static
-// fact, but intentionally excludes Cypher identifiers and caller values.
+// a v3 or v4 structural bucket. It binds the candidate and every SQL-shaping
+// static fact, but intentionally excludes Cypher identifiers and caller
+// values.
 func TraversalSQLTemplateSHA256(candidate, selectorVersion, executionBoundary string, shape TraversalShape) string {
+	if shape.Version == TraversalFixedSuffixShapeVersion {
+		canonical := fmt.Sprintf(
+			"topology-sql-template-v1|%s|%s|%s|%s|%s|%s|%s|%s|%d|%d|%d|%s",
+			candidate, selectorVersion, executionBoundary,
+			shape.Version, shape.Family, shape.Fingerprint,
+			shape.Direction, shape.ObservationMode, shape.MinimumDepth, shape.MaximumDepth,
+			shape.SuffixLength, shape.CandidateStrategy,
+		)
+		digest := sha256.Sum256([]byte(canonical))
+		return hex.EncodeToString(digest[:])
+	}
 	canonical := fmt.Sprintf(
 		"structural-sql-template-v1|%s|%s|%s|%s|%s|%s|%s|%s|%d|%d|%d|%t",
 		candidate, selectorVersion, executionBoundary,
@@ -302,6 +340,10 @@ type traversalPromotionBucket struct {
 	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
 	// UntypedRelationship indicates whether untyped relationship applies.
 	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
+	// SuffixLength binds the fixed terminal suffix width for a v4 bucket.
+	SuffixLength int `json:"suffix_length,omitempty"`
+	// CandidateStrategy binds the optimizer-provided fixed-suffix candidate.
+	CandidateStrategy string `json:"candidate_strategy,omitempty"`
 	// StructuralShapeVersion identifies the canonical structural classifier
 	// used when this bucket authorizes production-wide selection.
 	StructuralShapeVersion string `json:"structural_shape_version,omitempty"`
@@ -348,6 +390,12 @@ type traversalPromotionManifest struct {
 	// OperationalCandidateSQLSHA256 independently freezes the exact SQL used
 	// by the operational candidate matrix.
 	OperationalCandidateSQLSHA256 string `json:"operational_candidate_sql_sha256"`
+	// TopologyEstimatorVersion binds the frozen synopsis estimator for v4.
+	TopologyEstimatorVersion string `json:"topology_estimator_version,omitempty"`
+	// SynopsisSchemaVersion binds the published synopsis schema required by v4.
+	SynopsisSchemaVersion string `json:"synopsis_schema_version,omitempty"`
+	// RouteCacheProtocol binds the transaction-local v4 route-cache contract.
+	RouteCacheProtocol string `json:"route_cache_protocol,omitempty"`
 	// Caps binds each guarded resource dimension to its enforced limit.
 	Caps map[string]int64 `json:"caps"`
 	// Buckets supplies the buckets input to the traversalPromotionManifest contract.
@@ -460,7 +508,13 @@ func (s TraversalPolicy) validate() error {
 	if s.Generation == 0 {
 		return fmt.Errorf("enabled traversal policy requires a nonzero generation")
 	}
-	if s.ShortestPathExecutor != "" && s.EnableExpansionOrientation {
+	candidateFamilies := 0
+	for _, enabled := range []bool{s.ShortestPathExecutor != "", s.EnableExpansionOrientation, s.EnableTopologyFixedSuffix} {
+		if enabled {
+			candidateFamilies++
+		}
+	}
+	if candidateFamilies > 1 {
 		return fmt.Errorf("one traversal policy generation may enable only one candidate family")
 	}
 	if s.manifestCandidateEnabled() && s.rollbackActive() && !s.matchingCandidateRollbackActive() {
@@ -483,8 +537,8 @@ func (s TraversalPolicy) validate() error {
 	if hex.EncodeToString(digest[:]) != s.PromotionManifestSHA256 {
 		return fmt.Errorf("promotion manifest content does not match its SHA-256 digest")
 	}
-	if (manifest.Version != 2 && manifest.Version != 3) || strings.TrimSpace(manifest.SelectorVersion) == "" {
-		return fmt.Errorf("promotion manifest requires version 2 or 3 and a selector version")
+	if (manifest.Version != 2 && manifest.Version != 3 && manifest.Version != 4) || strings.TrimSpace(manifest.SelectorVersion) == "" {
+		return fmt.Errorf("promotion manifest requires version 2, 3, or 4 and a selector version")
 	}
 	if strings.TrimSpace(manifest.SourceCommit) == "" || !lowerHexSHA256(manifest.SourceSHA256) || !lowerHexSHA256(manifest.BinarySHA256) || !lowerHexSHA256(manifest.CorpusSHA256) {
 		return fmt.Errorf("promotion manifest requires source commit and lowercase source, binary, and corpus SHA-256 digests")
@@ -500,12 +554,17 @@ func (s TraversalPolicy) validate() error {
 		}
 		expectedCandidate = string(policy)
 	}
+	if s.EnableTopologyFixedSuffix {
+		expectedCandidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
+	}
 	if manifest.Candidate != expectedCandidate {
 		return fmt.Errorf("promotion manifest candidate %q does not authorize %q", manifest.Candidate, expectedCandidate)
 	}
 	expectedBoundary := "inline_statement"
 	if s.EnableExpansionOrientation {
 		expectedBoundary = "guarded_dual_arm"
+	} else if s.EnableTopologyFixedSuffix {
+		expectedBoundary = "transaction_retry"
 	} else if s.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG || s.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || s.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
 		expectedBoundary = "guarded_dual_arm"
 	}
@@ -532,6 +591,25 @@ func (s TraversalPolicy) validate() error {
 		}
 		if manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) {
 			return fmt.Errorf("%s promotion manifest requires fallback %q", manifest.SelectorVersion, optimize.ExpansionSearchStepwiseForward)
+		}
+	}
+	if s.EnableTopologyFixedSuffix {
+		expectedCaps := map[string]int64{
+			"suffix_row_limit":   optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit,
+			"state_limit":        optimize.ExpansionSearchSuffixReverseGuardStateLimit,
+			"output_row_limit":   optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit,
+			"output_bytes_limit": optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit,
+		}
+		if len(manifest.Caps) != len(expectedCaps) {
+			return fmt.Errorf("topology fixed-suffix promotion manifest requires exactly suffix, state, output-row, and output-byte caps")
+		}
+		for name, expected := range expectedCaps {
+			if actual, found := manifest.Caps[name]; !found || actual != expected {
+				return fmt.Errorf("topology fixed-suffix promotion manifest requires %s=%d", name, expected)
+			}
+		}
+		if manifest.Version != 4 || manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) || strings.TrimSpace(manifest.TopologyEstimatorVersion) == "" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
+			return fmt.Errorf("topology fixed-suffix promotion manifest requires v4 selector, fallback, estimator, synopsis schema, and route-cache protocol bindings")
 		}
 	}
 	if s.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG {
@@ -622,7 +700,7 @@ func (s TraversalPolicy) validate() error {
 		if !slices.Equal(bucket.QualificationSplit, []string{"training", "holdout"}) {
 			return fmt.Errorf("each promotion bucket requires exactly one training and one holdout qualification split in canonical order")
 		}
-		if manifest.Version == 3 {
+		if manifest.Version == 3 || manifest.Version == 4 {
 			shape := TraversalShape{
 				Version:               bucket.StructuralShapeVersion,
 				Family:                bucket.StructuralFamily,
@@ -632,12 +710,21 @@ func (s TraversalPolicy) validate() error {
 				MaximumDepth:          bucket.MaximumDepth,
 				RelationshipKindCount: bucket.RelationshipKindCount,
 				UntypedRelationship:   bucket.UntypedRelationship,
+				SuffixLength:          bucket.SuffixLength,
+				CandidateStrategy:     bucket.CandidateStrategy,
 			}
-			if shape.Version != TraversalShapeVersion || !lowerHexSHA256(bucket.StructuralShapeSHA256) || bucket.StructuralShapeSHA256 != TraversalShapeFingerprint(shape) {
+			expectedShapeVersion := TraversalShapeVersion
+			if manifest.Version == 4 {
+				expectedShapeVersion = TraversalFixedSuffixShapeVersion
+			}
+			if shape.Version != expectedShapeVersion || !lowerHexSHA256(bucket.StructuralShapeSHA256) || bucket.StructuralShapeSHA256 != TraversalShapeFingerprint(shape) {
 				return fmt.Errorf("promotion bucket %q has an invalid structural shape binding", bucket.Name)
 			}
 			if !lowerHexSHA256(bucket.SQLTemplateSHA256) || bucket.SQLTemplateSHA256 != structuralSQLTemplateSHA256(manifest, bucket) {
 				return fmt.Errorf("promotion bucket %q has an invalid structural SQL template binding", bucket.Name)
+			}
+			if manifest.Version == 4 && (bucket.Direction != "outbound" || bucket.ObservationMode != string(optimize.ExpansionSearchObservationFullPath) || bucket.MinimumDepth != 0 || bucket.MaximumDepth != 16 || bucket.SuffixLength != 3 || bucket.CandidateStrategy != string(optimize.ExpansionSearchSuffixSeededReverse)) {
+				return fmt.Errorf("topology fixed-suffix promotion bucket %q does not match the qualified outbound full-path fixed-suffix envelope", bucket.Name)
 			}
 		}
 		if len(bucket.QuerySHA256) == 0 {
@@ -831,6 +918,15 @@ func (s *SchemaManager) effectiveTraversalPolicyForShape(query string, shape Tra
 	if candidateRollback || standaloneRollback {
 		policy.compiledManifest.OperationalCandidateSQLSHA256 = ""
 	}
+	// Manifest v4 has a separate, snapshot-owned selection path. An exact
+	// evidence query must not make it eligible through the ordinary translation
+	// cache path, otherwise a route-cache miss could silently execute it.
+	if policy.EnableTopologyFixedSuffix || (candidateRollback && policy.compiledManifest.Version == 4) {
+		if candidateRollback {
+			return policy, policy.compiledIdentity
+		}
+		return TraversalPolicy{}, "production-incumbent-v1"
+	}
 
 	_, queryAuthorized := policy.compiledBuckets[TraversalPolicyQuerySHA256(query)]
 	_, structuralAuthorized := policy.authorizedStructuralBucketForShape(shape)
@@ -847,7 +943,27 @@ func (s *SchemaManager) effectiveTraversalPolicyForShape(query string, shape Tra
 func (s *SchemaManager) hasStructuralTraversalPolicy() bool {
 	s.traversalPolicyLock.RLock()
 	defer s.traversalPolicyLock.RUnlock()
-	return s.traversalPolicy.manifestCandidateEnabled() && s.traversalPolicy.compiledManifest.Version == 3 && !s.traversalPolicy.rollbackActive()
+	return s.traversalPolicy.manifestCandidateEnabled() && (s.traversalPolicy.compiledManifest.Version == 3 || s.traversalPolicy.compiledManifest.Version == 4) && !s.traversalPolicy.rollbackActive()
+}
+
+// topologyFixedSuffixPolicyForShape returns a validated v4 policy only for
+// the narrow structural bucket it authorizes. The caller must still own a
+// stable transaction snapshot and receive a route-cache hit before it can
+// execute the returned candidate.
+func (s *SchemaManager) topologyFixedSuffixPolicyForShape(shape TraversalShape, isolation pgx.TxIsoLevel) (TraversalPolicy, string) {
+	if shape.Version != TraversalFixedSuffixShapeVersion || !stableSnapshotIsolation(isolation) {
+		return TraversalPolicy{}, ""
+	}
+	s.traversalPolicyLock.RLock()
+	policy := s.traversalPolicy
+	s.traversalPolicyLock.RUnlock()
+	if !policy.EnableTopologyFixedSuffix || policy.rollbackActive() || policy.compiledManifest.Version != 4 {
+		return TraversalPolicy{}, ""
+	}
+	if _, authorized := policy.authorizedStructuralBucketForShape(shape); !authorized {
+		return TraversalPolicy{}, ""
+	}
+	return policy, policy.compiledIdentity + "-topology-fixed-suffix-candidate"
 }
 
 // shortestPathExecutorRequiresStableSnapshot coordinates PostgreSQL driver behavior for shortest path executor requires stable snapshot.

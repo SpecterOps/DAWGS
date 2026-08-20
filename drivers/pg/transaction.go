@@ -376,42 +376,84 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		shape, _ = s.schemaManager.classifyTraversalShape(query, parsedQuery)
 	}
 	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
+	topologyPolicy, topologyPolicyIdentity := s.schemaManager.topologyFixedSuffixPolicyForShape(shape, s.isolation)
+	topologyCandidate := s.topologyRouteDecision(graphTarget.ID, shape, parameters, topologyPolicyIdentity, topologyPolicy.enabled())
 	profile.Policy = time.Since(policyStarted)
-	s.schemaManager.observeTraversalStrategySelection(query, shape, policy)
-	s.shadowTopologyRouteDecision(graphTarget.ID, shape, parameters, policyIdentity)
-	buildTranslation := func() (translate.Result, string, error) {
-		var translated translate.Result
-		var translateErr error
-		translateStarted := time.Now()
-		if policy.enabled() {
-			if options, optionsErr := policy.productionOptionsForShape(query, shape); optionsErr != nil {
-				return translate.Result{}, "", optionsErr
-			} else {
-				translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, options)
-			}
-		} else {
-			translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
-		}
-		profile.Translate += time.Since(translateStarted)
-		if translateErr != nil {
-			return translate.Result{}, "", translateErr
-		}
-		formatStarted := time.Now()
-		formatted, formatErr := translate.Translated(translated)
-		profile.Format += time.Since(formatStarted)
-		if formatErr == nil && policy.enabled() && policy.compiledManifest.Version == 2 {
-			if anchorErr := validateTraversalPromotionSQLAnchor(policy.compiledManifest, formatted); anchorErr != nil {
-				return translate.Result{}, "", anchorErr
-			}
-		}
-		return translated, formatted, formatErr
+	if topologyCandidate {
+		policy = topologyPolicy
+		policyIdentity = topologyPolicyIdentity
 	}
+	s.schemaManager.observeTraversalStrategySelection(query, shape, policy)
+	buildTranslation := func(activePolicy TraversalPolicy) func() (translate.Result, string, error) {
+		return func() (translate.Result, string, error) {
+			var translated translate.Result
+			var translateErr error
+			translateStarted := time.Now()
+			if activePolicy.enabled() {
+				if options, optionsErr := activePolicy.productionOptionsForShape(query, shape); optionsErr != nil {
+					return translate.Result{}, "", optionsErr
+				} else {
+					translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, options)
+				}
+			} else {
+				translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
+			}
+			profile.Translate += time.Since(translateStarted)
+			if translateErr != nil {
+				return translate.Result{}, "", translateErr
+			}
+			formatStarted := time.Now()
+			formatted, formatErr := translate.Translated(translated)
+			profile.Format += time.Since(formatStarted)
+			if formatErr == nil && activePolicy.enabled() && activePolicy.compiledManifest.Version == 2 {
+				if anchorErr := validateTraversalPromotionSQLAnchor(activePolicy.compiledManifest, formatted); anchorErr != nil {
+					return translate.Result{}, "", anchorErr
+				}
+			}
+			return translated, formatted, formatErr
+		}
+	}
+	translateCached := func(activePolicy TraversalPolicy, identity string) (string, map[string]any, error) {
+		builder := buildTranslation(activePolicy)
+		if s.translationCache == nil {
+			translated, formatted, err := builder()
+			if err != nil {
+				return "", nil, err
+			}
+			return formatted, translated.Parameters, nil
+		}
+		return s.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, identity, builder)
+	}
+	if topologyCandidate {
+		cacheStarted := time.Now()
+		candidateSQL, candidateParameters, candidateErr := translateCached(policy, policyIdentity)
+		if candidateErr != nil {
+			profile.Cache = time.Since(cacheStarted)
+			s.recordSQLGenerationProfile(profile)
+			return graph.NewErrorResult(candidateErr)
+		}
+		fallbackSQL, fallbackParameters, fallbackErr := translateCached(TraversalPolicy{}, policyIdentity+"-fallback")
+		profile.Cache = time.Since(cacheStarted)
+		if fallbackErr != nil {
+			s.recordSQLGenerationProfile(profile)
+			return graph.NewErrorResult(fallbackErr)
+		}
+		dispatchStarted := time.Now()
+		result := s.RawSuffixReverseRetry(candidateSQL, fallbackSQL, candidateParameters, fallbackParameters, SuffixReverseRetryLimits{
+			OutputRows:  policy.compiledManifest.Caps["output_row_limit"],
+			OutputBytes: policy.compiledManifest.Caps["output_bytes_limit"],
+		})
+		profile.Dispatch = time.Since(dispatchStarted)
+		s.recordSQLGenerationProfile(profile)
+		return result
+	}
+	buildCurrentTranslation := buildTranslation(policy)
 
 	var sqlQuery string
 	var translatedParameters map[string]any
 	cacheStarted := time.Now()
 	if s.translationCache == nil {
-		translated, translatedSQL, translateErr := buildTranslation()
+		translated, translatedSQL, translateErr := buildCurrentTranslation()
 		if translateErr != nil {
 			profile.Cache = time.Since(cacheStarted)
 			s.recordSQLGenerationProfile(profile)
@@ -420,7 +462,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		sqlQuery, translatedParameters = translatedSQL, translated.Parameters
 	} else {
 		var translateErr error
-		sqlQuery, translatedParameters, translateErr = s.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, policyIdentity, buildTranslation)
+		sqlQuery, translatedParameters, translateErr = s.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, policyIdentity, buildCurrentTranslation)
 		if translateErr != nil {
 			profile.Cache = time.Since(cacheStarted)
 			s.recordSQLGenerationProfile(profile)

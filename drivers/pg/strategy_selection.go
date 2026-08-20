@@ -162,6 +162,16 @@ func (s *SchemaManager) observeTraversalStrategySelection(query string, shape Tr
 		selection.SelectorVersion = policy.compiledManifest.SelectorVersion
 		selection.Candidate = string(policy.ShortestPathExecutor)
 		selection.Fallback = policy.compiledManifest.FallbackExecutor
+		if policy.EnableTopologyFixedSuffix {
+			selection.Candidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
+			if bucket, authorized := policy.authorizedStructuralBucketForShape(shape); authorized {
+				selection.SelectedArm = "candidate"
+				selection.Bucket = bucket.Name
+				selection.TemplateSHA256 = bucket.SQLTemplateSHA256
+				selection.Mode = "topology_selected"
+				selection.Reason = "topology_route_candidate_hit"
+			}
+		}
 		selectCandidate := func(bucket traversalPromotionBucket, mode, reason string) {
 			selection.SelectedArm = "candidate"
 			selection.Bucket = bucket.Name
@@ -169,7 +179,10 @@ func (s *SchemaManager) observeTraversalStrategySelection(query string, shape Tr
 			selection.Mode = mode
 			selection.Reason = reason
 		}
-		if _, authorized := policy.compiledBuckets[TraversalPolicyQuerySHA256(strings.TrimSpace(query))]; authorized {
+		if policy.EnableTopologyFixedSuffix {
+			// The topology branch above is selected only by a transaction-local
+			// route-cache hit, never by an evidence-query allowlist.
+		} else if _, authorized := policy.compiledBuckets[TraversalPolicyQuerySHA256(strings.TrimSpace(query))]; authorized {
 			selectCandidate(policy.compiledBuckets[TraversalPolicyQuerySHA256(strings.TrimSpace(query))], "exact_query_canary", "exact_query_authorized")
 		} else if bucket, authorized := policy.authorizedStructuralBucketForShape(shape); authorized {
 			selectCandidate(bucket, "structural_authorized", "structural_bucket_"+bucket.Name)

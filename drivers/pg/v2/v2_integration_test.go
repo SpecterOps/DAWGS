@@ -264,6 +264,86 @@ RETURN path`
 	require.Equal(t, uint64(1), stats.ShadowHit)
 }
 
+func v2TopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape pg.TraversalShape) pg.TraversalPolicy {
+	t.Helper()
+	digest := pg.TraversalPolicyQuerySHA256(evidenceQuery)
+	candidate := string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
+	evidence := map[string]map[string]string{}
+	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
+		evidence[role] = map[string]string{"path": role + ".json", "sha256": strings.Repeat("0", sha256.Size*2)}
+	}
+	bucket := map[string]any{
+		"name": "v2-topology-fixed-suffix", "query_sha256": []string{digest}, "qualification_split": []string{"training", "holdout"},
+		"direction": shape.Direction, "observation_mode": shape.ObservationMode, "minimum_depth": shape.MinimumDepth, "maximum_depth": shape.MaximumDepth,
+		"suffix_length": shape.SuffixLength, "candidate_strategy": shape.CandidateStrategy,
+		"structural_shape_version": shape.Version, "structural_family": shape.Family, "structural_shape_sha256": shape.Fingerprint,
+		"sql_template_sha256": pg.TraversalSQLTemplateSHA256(candidate, candidate, "transaction_retry", shape),
+	}
+	raw, err := json.Marshal(map[string]any{
+		"version": 4, "candidate": candidate, "selector_version": candidate, "execution_boundary": "transaction_retry", "fallback_executor": string(optimize.ExpansionSearchStepwiseForward),
+		"source_commit": "v2-integration", "source_sha256": strings.Repeat("1", sha256.Size*2), "binary_sha256": strings.Repeat("2", sha256.Size*2), "corpus_sha256": strings.Repeat("3", sha256.Size*2),
+		"operational_candidate_sql_sha256": strings.Repeat("4", sha256.Size*2),
+		"topology_estimator_version":       "topology-fixed-suffix-counts-v1", "synopsis_schema_version": "topology-synopsis-schema-v2", "route_cache_protocol": "topology-selected-routing-v1",
+		"caps": map[string]int64{
+			"suffix_row_limit": optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit, "state_limit": optimize.ExpansionSearchSuffixReverseGuardStateLimit,
+			"output_row_limit": optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit, "output_bytes_limit": optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit,
+		},
+		"buckets": []map[string]any{bucket}, "evidence": evidence,
+	})
+	require.NoError(t, err)
+	sum := sha256.Sum256(raw)
+	return pg.TraversalPolicy{
+		Generation:                1,
+		PromotionManifestSHA256:   hex.EncodeToString(sum[:]),
+		PromotionManifestJSON:     raw,
+		QuerySHA256Allowlist:      []string{digest},
+		EnableTopologyFixedSuffix: true,
+	}
+}
+
+func TestV2TopologyFixedSuffixExecutesOnlyAfterSnapshotRouteCacheHit(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 8, nil)
+	setUpV2IntegrationGraph(t, driver)
+	ctx := context.Background()
+	_, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
+	require.NoError(t, err)
+	query := `
+MATCH (root:PGV2IntegrationNode)
+WHERE root.name = 'start'
+MATCH path = (root)-[:PGV2IntegrationEdge*0..16]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)
+RETURN path`
+	shape := pg.TraversalShape{
+		Version:           pg.TraversalFixedSuffixShapeVersion,
+		Family:            "fixed_suffix_expansion",
+		Direction:         "outbound",
+		ObservationMode:   "full_path",
+		MinimumDepth:      0,
+		MaximumDepth:      16,
+		SuffixLength:      3,
+		CandidateStrategy: string(optimize.ExpansionSearchSuffixSeededReverse),
+	}
+	shape.Fingerprint = pg.TraversalShapeFingerprint(shape)
+	require.Equal(t, pg.TraversalFixedSuffixShapeVersion, shape.Version)
+	require.NoError(t, driver.SetTraversalPolicy(v2TopologyFixedSuffixPolicy(t, query, shape)))
+
+	require.NoError(t, driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		for range 2 {
+			result := tx.Query(query, nil)
+			for result.Next() {
+			}
+			result.Close()
+			if err := result.Error(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	stats := driver.TranslationCacheStats()
+	require.Equal(t, uint64(1), stats.TraversalRouteDecision.ShadowMiss)
+	require.Equal(t, uint64(1), stats.TraversalRouteDecision.CandidateHit)
+	require.Equal(t, uint64(1), stats.StrategySelection.TopologySelected)
+}
+
 func snapshotQuery(ctx context.Context, database graph.Database, query string, parameters map[string]any) ([][]any, error) {
 	var rows [][]any
 	err := database.ReadTransaction(ctx, func(tx graph.Transaction) error {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/graph"
@@ -127,6 +128,91 @@ func rewriteTestTraversalPolicyManifest(t *testing.T, policy TraversalPolicy, mu
 	policy.PromotionManifestJSON = raw
 	policy.PromotionManifestSHA256 = hex.EncodeToString(digest[:])
 	return policy
+}
+
+func testTopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape TraversalShape) TraversalPolicy {
+	t.Helper()
+	manifest := traversalPromotionManifest{
+		Version:                       4,
+		Candidate:                     string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1),
+		SelectorVersion:               string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1),
+		ExecutionBoundary:             "transaction_retry",
+		FallbackExecutor:              string(optimize.ExpansionSearchStepwiseForward),
+		SourceCommit:                  "test-topology-fixed-suffix",
+		SourceSHA256:                  strings.Repeat("0", sha256.Size*2),
+		BinarySHA256:                  strings.Repeat("1", sha256.Size*2),
+		CorpusSHA256:                  strings.Repeat("2", sha256.Size*2),
+		OperationalCandidateSQLSHA256: strings.Repeat("3", sha256.Size*2),
+		TopologyEstimatorVersion:      "topology-fixed-suffix-counts-v1",
+		SynopsisSchemaVersion:         "topology-synopsis-schema-v2",
+		RouteCacheProtocol:            "topology-selected-routing-v1",
+		Caps: map[string]int64{
+			"suffix_row_limit":   optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit,
+			"state_limit":        optimize.ExpansionSearchSuffixReverseGuardStateLimit,
+			"output_row_limit":   optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit,
+			"output_bytes_limit": optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit,
+		},
+	}
+	bucket := traversalPromotionBucket{
+		Name:                   "topology-fixed-suffix",
+		QuerySHA256:            []string{TraversalPolicyQuerySHA256(evidenceQuery)},
+		QualificationSplit:     []string{"training", "holdout"},
+		Direction:              shape.Direction,
+		ObservationMode:        shape.ObservationMode,
+		MinimumDepth:           shape.MinimumDepth,
+		MaximumDepth:           shape.MaximumDepth,
+		SuffixLength:           shape.SuffixLength,
+		CandidateStrategy:      shape.CandidateStrategy,
+		StructuralShapeVersion: shape.Version,
+		StructuralFamily:       shape.Family,
+		StructuralShapeSHA256:  shape.Fingerprint,
+	}
+	manifest.Buckets = []traversalPromotionBucket{bucket}
+	manifest.Buckets[0].SQLTemplateSHA256 = structuralSQLTemplateSHA256(manifest, manifest.Buckets[0])
+	manifest.Evidence = map[string]traversalPromotionEvidence{}
+	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
+		manifest.Evidence[role] = traversalPromotionEvidence{Path: role + ".json", SHA256: strings.Repeat("4", sha256.Size*2)}
+	}
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	digest := sha256.Sum256(raw)
+	return TraversalPolicy{
+		Generation:                1,
+		PromotionManifestSHA256:   hex.EncodeToString(digest[:]),
+		PromotionManifestJSON:     raw,
+		QuerySHA256Allowlist:      []string{bucket.QuerySHA256[0]},
+		EnableTopologyFixedSuffix: true,
+	}
+}
+
+func TestTraversalPolicyV4RequiresRouteOwnedFixedSuffixSelection(t *testing.T) {
+	query := `MATCH (root:Root) WHERE root.key = $key MATCH route = (root)-[:Expand*0..16]->()-[:Enter]->(:Middle)-[:Continue]->(:NearTerminal)-[:Complete]->(:Terminal) RETURN route`
+	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+	require.NoError(t, err)
+	shape, err := traversalShapeForQuery(parsed)
+	require.NoError(t, err)
+	require.Equal(t, TraversalFixedSuffixShapeVersion, shape.Version)
+
+	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	policy := testTopologyFixedSuffixPolicy(t, query, shape)
+	require.NoError(t, driver.SetTraversalPolicy(policy))
+
+	ordinary, identity := driver.SchemaManager.effectiveTraversalPolicyForShape(query, shape, pgx.RepeatableRead)
+	require.False(t, ordinary.enabled())
+	require.Equal(t, "production-incumbent-v1", identity)
+
+	topology, topologyIdentity := driver.SchemaManager.topologyFixedSuffixPolicyForShape(shape, pgx.RepeatableRead)
+	require.True(t, topology.enabled())
+	require.Contains(t, topologyIdentity, "topology-fixed-suffix-candidate")
+	options, err := topology.productionOptionsForShape(query, shape)
+	require.NoError(t, err)
+	require.True(t, options.EnableTopologyFixedSuffix)
+	require.Equal(t, optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit, options.TopologyFixedSuffixCaps.OutputRowLimit)
+
+	invalid := rewriteTestTraversalPolicyManifest(t, policy, func(manifest *traversalPromotionManifest) {
+		manifest.RouteCacheProtocol = "unknown"
+	})
+	require.ErrorContains(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(invalid), "route-cache protocol")
 }
 
 // TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExactCaps verifies traversal policy authorizes guarded inline asp only with stable snapshot and exact caps behavior.
