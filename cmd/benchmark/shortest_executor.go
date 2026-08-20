@@ -19,16 +19,25 @@ import (
 // by the signed traversal-policy manifest.
 type shortestExecutorBenchmarkDatabase struct {
 	graph.Database
-	mapper   pg.KindMapper
-	graph    model.Graph
-	executor optimize.ShortestPathExecutor
+	mapper        pg.KindMapper
+	graph         model.Graph
+	executor      optimize.ShortestPathExecutor
+	planCacheMode string
+	jitEnabled    bool
 }
 
-func newShortestExecutorBenchmarkDatabase(database graph.Database, mapper pg.KindMapper, target model.Graph, executor optimize.ShortestPathExecutor) (graph.Database, error) {
+func newShortestExecutorBenchmarkDatabase(database graph.Database, mapper pg.KindMapper, target model.Graph, executor optimize.ShortestPathExecutor, planCacheMode string, jitEnabled bool) (graph.Database, error) {
 	if !benchmarkShortestPathExecutor(executor) {
 		return nil, fmt.Errorf("unsupported benchmark shortest-path executor %q", executor)
 	}
-	return &shortestExecutorBenchmarkDatabase{Database: database, mapper: mapper, graph: target, executor: executor}, nil
+	if !benchmarkPlanCacheMode(planCacheMode) {
+		return nil, fmt.Errorf("unsupported PostgreSQL plan cache mode %q", planCacheMode)
+	}
+	return &shortestExecutorBenchmarkDatabase{Database: database, mapper: mapper, graph: target, executor: executor, planCacheMode: planCacheMode, jitEnabled: jitEnabled}, nil
+}
+
+func benchmarkPlanCacheMode(mode string) bool {
+	return mode == "auto" || mode == "force_custom_plan" || mode == "force_generic_plan"
 }
 
 func benchmarkShortestPathExecutor(executor optimize.ShortestPathExecutor) bool {
@@ -48,14 +57,18 @@ func benchmarkShortestPathExecutor(executor optimize.ShortestPathExecutor) bool 
 func (s *shortestExecutorBenchmarkDatabase) ReadTransaction(ctx context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 	options = append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	return s.Database.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		// The compact helper and late materializer have intentionally conservative
-		// cost estimates. PostgreSQL can otherwise spend tens of milliseconds JIT
-		// compiling a two-edge path. Qualification measures the execution strategy,
-		// so disable JIT transaction-locally without changing the database setting.
-		setting := tx.Raw("set local jit = off", nil)
-		setting.Close()
-		if err := setting.Error(); err != nil {
-			return fmt.Errorf("disable PostgreSQL JIT for shortest-path benchmark: %w", err)
+		settings := []string{"set local plan_cache_mode = " + s.planCacheMode}
+		if s.jitEnabled {
+			settings = append(settings, "set local jit = on")
+		} else {
+			settings = append(settings, "set local jit = off")
+		}
+		for _, sql := range settings {
+			setting := tx.Raw(sql, nil)
+			setting.Close()
+			if err := setting.Error(); err != nil {
+				return fmt.Errorf("apply PostgreSQL shortest-path benchmark setting: %w", err)
+			}
 		}
 		return delegate(&shortestExecutorBenchmarkTransaction{Transaction: tx, ctx: ctx, mapper: s.mapper, graphID: s.graph.ID, executor: s.executor})
 	}, options...)

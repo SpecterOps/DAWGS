@@ -53,4 +53,8 @@ func TestBenchmarkShortestPathExecutorAllowlist(t *testing.T) {
 	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorASPI1DAG))
 	require.False(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorIncumbentWorkspace))
 	require.False(t, benchmarkShortestPathExecutor("unknown"))
+	require.True(t, benchmarkPlanCacheMode("auto"))
+	require.True(t, benchmarkPlanCacheMode("force_custom_plan"))
+	require.True(t, benchmarkPlanCacheMode("force_generic_plan"))
+	require.False(t, benchmarkPlanCacheMode("invalid"))
 }

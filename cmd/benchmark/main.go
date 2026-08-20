@@ -56,6 +56,8 @@ func main() {
 		v2Cache      = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
 		v2SharedSP   = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
 		v2SPExecutor = flag.String("pg-v2-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
+		pgPlanMode   = flag.String("pg-plan-cache-mode", "auto", "PostgreSQL plan cache mode for forced shortest-path benchmarks (auto, force_custom_plan, force_generic_plan)")
+		pgJIT        = flag.Bool("pg-jit", false, "enable PostgreSQL JIT for forced shortest-path benchmarks")
 		v2MinConns   = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
 		v2MaxConns   = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
 		output       = flag.String("output", "", "output file (default: stdout)")
@@ -149,7 +151,7 @@ func main() {
 		if !found {
 			fatal("failed to resolve default graph for shortest-path executor benchmark")
 		}
-		wrapped, err := newShortestExecutorBenchmarkDatabase(db, pgDB.KindMapper(), defaultGraph, optimize.ShortestPathExecutor(*v2SPExecutor))
+		wrapped, err := newShortestExecutorBenchmarkDatabase(db, pgDB.KindMapper(), defaultGraph, optimize.ShortestPathExecutor(*v2SPExecutor), *pgPlanMode, *pgJIT)
 		if err != nil {
 			fatal("configure shortest-path executor benchmark: %v", err)
 		}
