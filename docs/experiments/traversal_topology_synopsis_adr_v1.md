@@ -1,6 +1,6 @@
 # Traversal topology synopsis ADR v1
 
-Status: **deferred; no synopsis is read by production translation or execution**.
+Status: **superseded by [topology-selected routing protocol v1](topology_selected_routing_protocol_v1.md)**. The v1 ADR remains the historical pre-schema decision record; the minimal graph epoch and synopsis publication schema now exist, but production translation and execution still do not read a synopsis.
 
 Decision ID: `traversal-topology-synopsis-v1`. This record defines the design
 and qualification boundary requested by M7 of

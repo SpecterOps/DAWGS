@@ -99,3 +99,46 @@ func TestSuffixRouteCacheFeasibilityV1FreezesTransactionOnlySafety(t *testing.T)
 	}
 	require.False(t, slices.Contains(protocol.CacheKey.Required, "backend_pid"))
 }
+
+func TestTopologySelectedRoutingV1FreezesDefaultOffSnapshotContract(t *testing.T) {
+	contents, err := os.ReadFile("../../benchmark/testdata/scale/protocols/topology_selected_routing_v1.json")
+	require.NoError(t, err)
+
+	var protocol struct {
+		Schema            string `json:"schema"`
+		Status            string `json:"status"`
+		ProductionDefault string `json:"production_default"`
+		Transaction       struct {
+			Isolation []string `json:"required_isolation"`
+			ReadOnly  bool     `json:"read_only"`
+			SameSnap  bool     `json:"same_snapshot_synopsis_read"`
+		} `json:"transaction"`
+		RouteCache struct {
+			Scope       string   `json:"scope"`
+			Entries     int64    `json:"maximum_entries"`
+			TotalBytes  int64    `json:"maximum_total_bytes"`
+			EntryBytes  int64    `json:"maximum_entry_bytes"`
+			Miss        string   `json:"miss"`
+			Invalidates []string `json:"invalidation"`
+		} `json:"route_cache"`
+		Execution struct {
+			SingleArm bool   `json:"single_arm"`
+			Fallback  string `json:"fallback"`
+		} `json:"execution"`
+	}
+	require.NoError(t, json.Unmarshal(contents, &protocol))
+	require.Equal(t, "topology-selected-routing-v1", protocol.Schema)
+	require.Equal(t, "frozen_implementation_protocol", protocol.Status)
+	require.Equal(t, "off", protocol.ProductionDefault)
+	require.ElementsMatch(t, []string{"repeatable_read", "serializable"}, protocol.Transaction.Isolation)
+	require.True(t, protocol.Transaction.ReadOnly)
+	require.True(t, protocol.Transaction.SameSnap)
+	require.Equal(t, "one_active_transaction", protocol.RouteCache.Scope)
+	require.Equal(t, int64(64), protocol.RouteCache.Entries)
+	require.Equal(t, int64(65536), protocol.RouteCache.TotalBytes)
+	require.Equal(t, int64(4096), protocol.RouteCache.EntryBytes)
+	require.Equal(t, "incumbent_only", protocol.RouteCache.Miss)
+	require.Contains(t, protocol.RouteCache.Invalidates, "cancellation")
+	require.True(t, protocol.Execution.SingleArm)
+	require.Equal(t, "exact_forward_same_snapshot", protocol.Execution.Fallback)
+}
