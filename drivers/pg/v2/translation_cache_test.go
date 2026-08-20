@@ -4,9 +4,11 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/stretchr/testify/require"
 )
 
@@ -320,4 +322,30 @@ func TestPreparedStatementWarmupDoesNotRetainFailures(t *testing.T) {
 
 	_, err = normalizePreparedStatementWarmups([]string{""})
 	require.ErrorContains(t, err, "must not be empty")
+}
+
+// TestConnectionCacheProviderRecordsSQLGenerationProfiles verifies V2
+// aggregates query-text-free timing samples by shortest-path classification.
+func TestConnectionCacheProviderRecordsSQLGenerationProfiles(t *testing.T) {
+	provider, err := newConnectionCacheProvider(DefaultConfig())
+	require.NoError(t, err)
+
+	provider.RecordSQLGenerationProfile(pg.SQLGenerationProfile{
+		QueryClass: "shortest_path",
+		Parse:      time.Millisecond,
+		Graph:      2 * time.Millisecond,
+		Policy:     3 * time.Millisecond,
+		Cache:      4 * time.Millisecond,
+		Translate:  5 * time.Millisecond,
+		Format:     6 * time.Millisecond,
+		Dispatch:   7 * time.Millisecond,
+	})
+	provider.RecordSQLGenerationProfile(pg.SQLGenerationProfile{QueryClass: "other", Parse: time.Millisecond})
+
+	stats := provider.stats().SQLGeneration
+	require.Equal(t, uint64(1), stats.ShortestPath.Count)
+	require.Equal(t, 5*time.Millisecond, stats.ShortestPath.Translate)
+	require.Equal(t, 7*time.Millisecond, stats.ShortestPath.Dispatch)
+	require.Equal(t, uint64(1), stats.Other.Count)
+	require.Equal(t, time.Millisecond, stats.Other.Parse)
 }

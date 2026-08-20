@@ -1,5 +1,11 @@
 package v2
 
+import (
+	"time"
+
+	"github.com/specterops/dawgs/drivers/pg"
+)
+
 // TranslationCacheStats is a query-text-free snapshot of one connection's
 // translation cache activity and occupancy.
 type TranslationCacheStats struct {
@@ -79,4 +85,35 @@ type Stats struct {
 	TraversalWorkspace    TraversalWorkspaceStats `json:"traversal_workspace"`
 	PreparedStatements    PreparedStatementStats  `json:"prepared_statements"`
 	Connections           []ConnectionCacheStats  `json:"connections"`
+	SQLGeneration         SQLGenerationStats      `json:"sql_generation"`
+}
+
+// SQLGenerationTiming contains aggregate V2 SQL-generation durations. Count
+// is separate so a zero-cost stage remains observable.
+type SQLGenerationTiming struct {
+	Count     uint64        `json:"count"`
+	Parse     time.Duration `json:"parse"`
+	Graph     time.Duration `json:"graph"`
+	Policy    time.Duration `json:"policy"`
+	Cache     time.Duration `json:"cache"`
+	Translate time.Duration `json:"translate"`
+	Format    time.Duration `json:"format"`
+	Dispatch  time.Duration `json:"dispatch"`
+}
+
+func (s *SQLGenerationTiming) add(profile pg.SQLGenerationProfile) {
+	s.Count++
+	s.Parse += profile.Parse
+	s.Graph += profile.Graph
+	s.Policy += profile.Policy
+	s.Cache += profile.Cache
+	s.Translate += profile.Translate
+	s.Format += profile.Format
+	s.Dispatch += profile.Dispatch
+}
+
+// SQLGenerationStats separates shortest-path timing from other graph work.
+type SQLGenerationStats struct {
+	ShortestPath SQLGenerationTiming `json:"shortest_path"`
+	Other        SQLGenerationTiming `json:"other"`
 }

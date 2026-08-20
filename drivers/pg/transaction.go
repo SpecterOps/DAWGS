@@ -3,6 +3,8 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
@@ -332,18 +334,28 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 
 // Query parses and translates Cypher through the schema caches, returning translation failures as graph results.
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
+	profile := SQLGenerationProfile{QueryClass: sqlGenerationQueryClass(query)}
+	parseStarted := time.Now()
 	parsedQuery, _, err := s.schemaManager.parseCache.Parse(query)
+	profile.Parse = time.Since(parseStarted)
 	if err != nil {
+		s.recordSQLGenerationProfile(profile)
 		return graph.NewErrorResult(err)
 	}
+	graphStarted := time.Now()
 	graphTarget, err := s.getTargetGraph()
+	profile.Graph = time.Since(graphStarted)
 	if err != nil {
+		s.recordSQLGenerationProfile(profile)
 		return graph.NewErrorResult(err)
 	}
+	policyStarted := time.Now()
 	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicy(query, s.isolation)
+	profile.Policy = time.Since(policyStarted)
 	buildTranslation := func() (translate.Result, string, error) {
 		var translated translate.Result
 		var translateErr error
+		translateStarted := time.Now()
 		if policy.enabled() {
 			if options, optionsErr := policy.productionOptions(query); optionsErr != nil {
 				return translate.Result{}, "", optionsErr
@@ -353,10 +365,13 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		} else {
 			translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
 		}
+		profile.Translate += time.Since(translateStarted)
 		if translateErr != nil {
 			return translate.Result{}, "", translateErr
 		}
+		formatStarted := time.Now()
 		formatted, formatErr := translate.Translated(translated)
+		profile.Format += time.Since(formatStarted)
 		if formatErr == nil && policy.enabled() {
 			if anchorErr := validateTraversalPromotionSQLAnchor(policy.compiledManifest, formatted); anchorErr != nil {
 				return translate.Result{}, "", anchorErr
@@ -367,9 +382,12 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 
 	var sqlQuery string
 	var translatedParameters map[string]any
+	cacheStarted := time.Now()
 	if s.translationCache == nil {
 		translated, translatedSQL, translateErr := buildTranslation()
 		if translateErr != nil {
+			profile.Cache = time.Since(cacheStarted)
+			s.recordSQLGenerationProfile(profile)
 			return graph.NewErrorResult(translateErr)
 		}
 		sqlQuery, translatedParameters = translatedSQL, translated.Parameters
@@ -377,10 +395,30 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		var translateErr error
 		sqlQuery, translatedParameters, translateErr = s.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, policyIdentity, buildTranslation)
 		if translateErr != nil {
+			profile.Cache = time.Since(cacheStarted)
+			s.recordSQLGenerationProfile(profile)
 			return graph.NewErrorResult(translateErr)
 		}
 	}
-	return s.Raw(sqlQuery, translatedParameters)
+	profile.Cache = time.Since(cacheStarted)
+	dispatchStarted := time.Now()
+	result := s.Raw(sqlQuery, translatedParameters)
+	profile.Dispatch = time.Since(dispatchStarted)
+	s.recordSQLGenerationProfile(profile)
+	return result
+}
+
+func (s *transaction) recordSQLGenerationProfile(profile SQLGenerationProfile) {
+	if collector, ok := s.schemaManager.translationCacheProvider.(SQLGenerationProfileCollector); ok {
+		collector.RecordSQLGenerationProfile(profile)
+	}
+}
+
+func sqlGenerationQueryClass(query string) string {
+	if strings.Contains(strings.ToLower(query), "shortestpath") {
+		return "shortest_path"
+	}
+	return "other"
 }
 
 // Raw coordinates PostgreSQL driver behavior for raw.

@@ -223,10 +223,28 @@ type connectionCacheProvider struct {
 	retiredConnections uint64
 	retiredStats       TranslationCacheStats
 	retiredPrepared    PreparedStatementStats
+	sqlGeneration      SQLGenerationStats
 }
 
 var _ pg.CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
 var _ pg.StableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
+var _ pg.SQLGenerationProfileCollector = (*connectionCacheProvider)(nil)
+
+// RecordSQLGenerationProfile retains query-text-free timing totals for the
+// v2 architecture. A profile is recorded after pgx has returned a row stream,
+// not after its rows are consumed.
+func (s *connectionCacheProvider) RecordSQLGenerationProfile(profile pg.SQLGenerationProfile) {
+	if s == nil {
+		return
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if profile.QueryClass == "shortest_path" {
+		s.sqlGeneration.ShortestPath.add(profile)
+	} else {
+		s.sqlGeneration.Other.add(profile)
+	}
+}
 
 func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error) {
 	if err := config.validate(); err != nil {
@@ -493,6 +511,7 @@ func (s *connectionCacheProvider) stats() Stats {
 		RetiredConnections:    s.retiredConnections,
 		Aggregate:             s.retiredStats,
 		PreparedStatements:    s.retiredPrepared,
+		SQLGeneration:         s.sqlGeneration,
 		Connections:           make([]ConnectionCacheStats, 0, len(s.states)),
 	}
 	states := make([]*connectionState, 0, len(s.states))
