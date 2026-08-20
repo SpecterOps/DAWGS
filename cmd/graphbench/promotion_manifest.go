@@ -29,6 +29,8 @@ const promotionManifestVersion = 2
 // while retaining v2's exact-query SQL-anchor protocol.
 const structuralPromotionManifestVersion = 3
 
+const topologyPromotionManifestVersion = 4
+
 // requiredPromotionEvidenceRoles contains the frozen required promotion evidence roles declaration consulted by package validation.
 var requiredPromotionEvidenceRoles = []string{
 	"aa", "confirmation", "performance", "resource", "reference_closure", "operational",
@@ -136,6 +138,13 @@ type PromotionManifest struct {
 	// OperationalCandidateSQLSHA256 binds the exact rendered SQL emitted for
 	// the candidate at the operational timing boundary.
 	OperationalCandidateSQLSHA256 string `json:"operational_candidate_sql_sha256"`
+	// TopologyEstimatorVersion binds the frozen estimator used by topology
+	// selected manifest v4 buckets.
+	TopologyEstimatorVersion string `json:"topology_estimator_version,omitempty"`
+	// SynopsisSchemaVersion binds the compatible published synopsis schema.
+	SynopsisSchemaVersion string `json:"synopsis_schema_version,omitempty"`
+	// RouteCacheProtocol binds the transaction-owned route-decision contract.
+	RouteCacheProtocol string `json:"route_cache_protocol,omitempty"`
 	// Caps binds each guarded resource dimension to its enforced limit.
 	Caps map[string]int64 `json:"caps"`
 	// Buckets supplies the buckets input to the PromotionManifest contract.
@@ -169,6 +178,9 @@ type PromotionEvidenceIdentity struct {
 	// OperationalCandidateSQLSHA256 binds the exact rendered SQL emitted for
 	// the candidate at the operational timing boundary.
 	OperationalCandidateSQLSHA256 string `json:"operational_candidate_sql_sha256"`
+	TopologyEstimatorVersion      string `json:"topology_estimator_version,omitempty"`
+	SynopsisSchemaVersion         string `json:"synopsis_schema_version,omitempty"`
+	RouteCacheProtocol            string `json:"route_cache_protocol,omitempty"`
 	// Caps binds each guarded resource dimension to its enforced limit.
 	Caps map[string]int64 `json:"caps"`
 	// Buckets supplies the buckets input to the PromotionEvidenceIdentity contract.
@@ -188,6 +200,9 @@ func promotionEvidenceIdentity(manifest PromotionManifest) PromotionEvidenceIden
 		BinarySHA256:                  manifest.BinarySHA256,
 		CorpusSHA256:                  manifest.CorpusSHA256,
 		OperationalCandidateSQLSHA256: manifest.OperationalCandidateSQLSHA256,
+		TopologyEstimatorVersion:      manifest.TopologyEstimatorVersion,
+		SynopsisSchemaVersion:         manifest.SynopsisSchemaVersion,
+		RouteCacheProtocol:            manifest.RouteCacheProtocol,
 		Caps:                          clonePromotionCaps(manifest.Caps),
 		Buckets:                       clonePromotionBuckets(manifest.Buckets),
 	}
@@ -251,14 +266,14 @@ func validatePromotionBucketSets(version int, buckets []PromotionBucket) []strin
 		if !reflect.DeepEqual(bucket.QualificationSplit, []string{"training", "holdout"}) {
 			reasons = append(reasons, "bucket "+bucket.Name+" must bind exactly one training and one holdout qualification split in canonical order")
 		}
-		if version == structuralPromotionManifestVersion && (bucket.StructuralShapeVersion == "" || bucket.StructuralFamily == "" || !isLowerHexSHA256(bucket.StructuralShapeSHA256) || !isLowerHexSHA256(bucket.SQLTemplateSHA256)) {
+		if (version == structuralPromotionManifestVersion || version == topologyPromotionManifestVersion) && (bucket.StructuralShapeVersion == "" || bucket.StructuralFamily == "" || !isLowerHexSHA256(bucket.StructuralShapeSHA256) || !isLowerHexSHA256(bucket.SQLTemplateSHA256)) {
 			reasons = append(reasons, "structural bucket "+bucket.Name+" requires classifier version, family, shape digest, and SQL template digest")
 		}
 	}
 	if version == promotionManifestVersion && len(seenQueries) != 1 {
 		reasons = append(reasons, "operational SQL anchor requires exactly one authorized query digest")
 	}
-	if version == structuralPromotionManifestVersion && len(seenQueries) == 0 {
+	if (version == structuralPromotionManifestVersion || version == topologyPromotionManifestVersion) && len(seenQueries) == 0 {
 		reasons = append(reasons, "structural promotion requires at least one evidence query digest")
 	}
 	return reasons
@@ -322,13 +337,13 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 		verification.Passed = false
 		verification.Reasons = append(verification.Reasons, reason)
 	}
-	if manifest.Version != promotionManifestVersion && manifest.Version != structuralPromotionManifestVersion {
-		addReason("manifest version must be 2 or 3")
+	if manifest.Version != promotionManifestVersion && manifest.Version != structuralPromotionManifestVersion && manifest.Version != topologyPromotionManifestVersion {
+		addReason("manifest version must be 2, 3, or 4")
 	}
 	if strings.TrimSpace(manifest.Candidate) == "" || strings.TrimSpace(manifest.SelectorVersion) == "" {
 		addReason("candidate and selector_version are required")
 	}
-	if manifest.ExecutionBoundary != "inline_statement" && manifest.ExecutionBoundary != "stored_helper" && manifest.ExecutionBoundary != "guarded_dual_arm" {
+	if manifest.ExecutionBoundary != "inline_statement" && manifest.ExecutionBoundary != "stored_helper" && manifest.ExecutionBoundary != "guarded_dual_arm" && manifest.ExecutionBoundary != "transaction_retry" {
 		addReason("execution_boundary must identify the measured production boundary")
 	}
 	for name, value := range map[string]string{"source_sha256": manifest.SourceSHA256, "binary_sha256": manifest.BinarySHA256, "corpus_sha256": manifest.CorpusSHA256} {
@@ -433,6 +448,23 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 	}
 	if manifest.Candidate == string(optimize.ExpansionSearchPolicyOrientationProbeV2) {
 		addReason("orientation-probe-v2 is terminally rejected because its immutable training overhead gate failed; authorization requires a new policy generation")
+	}
+	if manifest.Candidate == string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) {
+		expectedCaps := map[string]int64{
+			"suffix_row_limit":   optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit,
+			"state_limit":        optimize.ExpansionSearchSuffixReverseGuardStateLimit,
+			"output_row_limit":   optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit,
+			"output_bytes_limit": optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit,
+		}
+		if manifest.Version != topologyPromotionManifestVersion || manifest.ExecutionBoundary != "transaction_retry" || manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) {
+			addReason("topology fixed-suffix requires manifest v4, transaction_retry, and EXPANSION-STEPWISE-FORWARD fallback")
+		}
+		if !reflect.DeepEqual(manifest.Caps, expectedCaps) {
+			addReason("topology fixed-suffix requires the exact frozen suffix, state, output-row, and output-byte caps")
+		}
+		if manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.TopologyEstimatorVersion == "" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
+			addReason("topology fixed-suffix requires its selector, estimator, synopsis schema, and route-cache protocol identities")
+		}
 	}
 	if len(manifest.Buckets) == 0 {
 		addReason("at least one authorized bucket is required")
