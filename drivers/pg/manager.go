@@ -36,6 +36,14 @@ type StableSnapshotTraversalWorkspaceProvider interface {
 	EnsureStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error
 }
 
+// LazyStableSnapshotTraversalWorkspaceProvider elects to initialize traversal
+// workspaces only when a shortest-path query is actually issued. This is safe
+// for V2 because readiness remains tied to the leased physical connection and
+// schema generation.
+type LazyStableSnapshotTraversalWorkspaceProvider interface {
+	DeferStableSnapshotTraversalWorkspaces() bool
+}
+
 // KindMapperFromGraphDatabase coordinates PostgreSQL driver behavior for kind mapper from graph database.
 func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
 	if kindMapperProvider, supported := graphDB.(interface{ KindMapper() KindMapper }); supported {
@@ -260,7 +268,11 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 		defer conn.Release()
 		if stableSnapshotIsolation(cfg.Options.IsoLevel) && !cfg.skipStableSnapshotTraversalWorkspaces {
 			workspaceProvider, hasWorkspaceProvider := s.translationCacheProvider.(StableSnapshotTraversalWorkspaceProvider)
-			if hasWorkspaceProvider {
+			lazyProvider, deferWorkspace := s.translationCacheProvider.(LazyStableSnapshotTraversalWorkspaceProvider)
+			if deferWorkspace && lazyProvider.DeferStableSnapshotTraversalWorkspaces() {
+				// V2 initializes only when transaction.Query observes a shortest-path
+				// operation. Ordinary repeatable-read work needs no temporary tables.
+			} else if hasWorkspaceProvider {
 				err = workspaceProvider.EnsureStableSnapshotTraversalWorkspaces(ctx, conn)
 			} else {
 				err = EnsureStableSnapshotTraversalWorkspaces(ctx, conn)

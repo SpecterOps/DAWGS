@@ -260,6 +260,7 @@ type connectionCacheProvider struct {
 
 var _ pg.CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
 var _ pg.StableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
+var _ pg.LazyStableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
 var _ pg.SQLGenerationProfileCollector = (*connectionCacheProvider)(nil)
 
 // RecordSQLGenerationProfile retains query-text-free timing totals for the
@@ -276,6 +277,12 @@ func (s *connectionCacheProvider) RecordSQLGenerationProfile(profile pg.SQLGener
 	} else {
 		s.sqlGeneration.Other.add(profile)
 	}
+}
+
+// DeferStableSnapshotTraversalWorkspaces keeps V2 ordinary repeatable-read
+// transactions free of temporary shortest-path workspace initialization.
+func (s *connectionCacheProvider) DeferStableSnapshotTraversalWorkspaces() bool {
+	return true
 }
 
 func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error) {

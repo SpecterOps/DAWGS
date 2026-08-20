@@ -220,7 +220,11 @@ func TestV2StableSnapshotTraversalWorkspaceReadiness(t *testing.T) {
 	setUpV2IntegrationGraph(t, driver)
 	ctx := context.Background()
 	stableSnapshot := func() error {
-		return driver.ReadTransaction(ctx, func(graph.Transaction) error { return nil }, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+		return driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query("MATCH p = shortestPath((s)-[*1..]->(e)) RETURN p", nil)
+			defer result.Close()
+			return result.Error()
+		}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	}
 
 	require.NoError(t, stableSnapshot())

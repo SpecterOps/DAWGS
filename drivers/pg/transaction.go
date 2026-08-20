@@ -335,6 +335,14 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 // Query parses and translates Cypher through the schema caches, returning translation failures as graph results.
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
 	profile := SQLGenerationProfile{QueryClass: sqlGenerationQueryClass(query)}
+	if profile.QueryClass == "shortest_path" && stableSnapshotIsolation(s.isolation) {
+		if provider, ok := s.schemaManager.translationCacheProvider.(StableSnapshotTraversalWorkspaceProvider); ok {
+			if err := provider.EnsureStableSnapshotTraversalWorkspaces(s.ctx, s.conn); err != nil {
+				s.recordSQLGenerationProfile(profile)
+				return graph.NewErrorResult(err)
+			}
+		}
+	}
 	parseStarted := time.Now()
 	parsedQuery, _, err := s.schemaManager.parseCache.Parse(query)
 	profile.Parse = time.Since(parseStarted)
