@@ -157,7 +157,7 @@ func (s *transaction) RawSuffixReverseRetry(candidateSQL, fallbackSQL string, ca
 		return s.suffixReverseRetryAbort(err)
 	}
 
-	candidate, bufferBranch, err := bufferGraphResult(s.Raw(candidateSQL, candidateParameters), limits)
+	candidate, bufferBranch, err := bufferGraphResult(s.raw(candidateSQL, candidateParameters), limits)
 	if err != nil {
 		return s.suffixReverseRetryAbort(err)
 	}
@@ -194,7 +194,7 @@ func (s *transaction) RawSuffixReverseRetry(candidateSQL, fallbackSQL string, ca
 		return graph.NewErrorResult(err)
 	}
 	return &suffixReverseRetryFallbackResult{
-		Result: s.Raw(fallbackSQL, fallbackParameters),
+		Result: s.raw(fallbackSQL, fallbackParameters),
 		complete: func() error {
 			return s.suffixReverseRetryExec(
 				"select public.record_requested_traversal_runtime_attestation_v1($1, true, $2)",

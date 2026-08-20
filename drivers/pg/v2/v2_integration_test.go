@@ -235,6 +235,35 @@ func TestV2StructuralTraversalPolicyExecutesVerifiedEquivalentShape(t *testing.T
 	require.Equal(t, uint64(1), stats.StrategySelection.StructuralAuthorized)
 }
 
+func TestV2TopologyRouteDecisionShadowsOnlyWithinStableSnapshot(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 4, nil)
+	setUpV2IntegrationGraph(t, driver)
+	ctx := context.Background()
+	_, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
+	require.NoError(t, err)
+	query := `
+MATCH (root:PGV2IntegrationNode)
+WHERE root.name = 'start'
+MATCH path = (root)-[:PGV2IntegrationEdge*0..16]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)
+RETURN path`
+
+	require.NoError(t, driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		for range 2 {
+			result := tx.Query(query, nil)
+			for result.Next() {
+			}
+			result.Close()
+			if err := result.Error(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	stats := driver.TranslationCacheStats().TraversalRouteDecision
+	require.Equal(t, uint64(1), stats.ShadowMiss)
+	require.Equal(t, uint64(1), stats.ShadowHit)
+}
+
 func snapshotQuery(ctx context.Context, database graph.Database, query string, parameters map[string]any) ([][]any, error) {
 	var rows [][]any
 	err := database.ReadTransaction(ctx, func(tx graph.Transaction) error {

@@ -137,6 +137,10 @@ func writeMarkdown(w io.Writer, r Report) error {
 		if shapeCache.Hits+shapeCache.Misses > 0 {
 			fmt.Fprintf(w, "V2 traversal shape cache: %d hits, %d misses, %d entries/%d capacity.\n\n", shapeCache.Hits, shapeCache.Misses, shapeCache.Entries, shapeCache.Capacity)
 		}
+		route := r.TranslationCache.TraversalRouteDecision
+		if route.Disabled+route.SynopsisUnavailable+route.ShadowMiss+route.ShadowHit+route.Capacity+route.ParametersInvalid > 0 {
+			fmt.Fprintf(w, "V2 topology routing shadow: %d misses, %d hits, %d synopsis-unavailable, %d disabled, %d capacity, %d parameter-invalid.\n\n", route.ShadowMiss, route.ShadowHit, route.SynopsisUnavailable, route.Disabled, route.Capacity, route.ParametersInvalid)
+		}
 	}
 	return nil
 }

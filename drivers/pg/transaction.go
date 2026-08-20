@@ -86,6 +86,10 @@ type transaction struct {
 
 	// targetSchemaSet distinguishes an explicit target from the zero-value graph schema.
 	targetSchemaSet bool
+
+	// topologyRouteDecisions is transaction-owned shadow routing state. It is
+	// allocated only after an explicit stable-snapshot transaction begins.
+	topologyRouteDecisions *topologyRouteDecisionCache
 }
 
 // newTransactionWrapper configures a graph transaction and optionally begins an explicit PostgreSQL transaction.
@@ -112,6 +116,9 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 		} else {
 			wrapper.tx = pgxTx
 		}
+	}
+	if wrapper.tx != nil && stableSnapshotIsolation(wrapper.isolation) {
+		wrapper.topologyRouteDecisions = newTopologyRouteDecisionCache()
 	}
 
 	return wrapper, nil
@@ -145,6 +152,7 @@ func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
 
 // Close coordinates PostgreSQL driver behavior for close.
 func (s *transaction) Close() {
+	s.invalidateTopologyRouteDecisions()
 	if s.tx != nil {
 		s.tx.Rollback(s.ctx)
 		s.tx = nil
@@ -205,6 +213,7 @@ func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Ki
 
 // UpdateNode coordinates PostgreSQL driver behavior for update node.
 func (s *transaction) UpdateNode(node *graph.Node) error {
+	s.invalidateTopologyRouteDecisions()
 	var (
 		properties       = node.Properties
 		updateStatements []graph.Criteria
@@ -271,6 +280,7 @@ func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, k
 
 // UpdateRelationship coordinates PostgreSQL driver behavior for update relationship.
 func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error {
+	s.invalidateTopologyRouteDecisions()
 	var (
 		modifiedProperties    = relationship.Properties.ModifiedProperties()
 		deletedProperties     = relationship.Properties.DeletedProperties()
@@ -334,6 +344,9 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 
 // Query parses and translates Cypher through the schema caches, returning translation failures as graph results.
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
+	if cypherMayMutate(query) {
+		s.invalidateTopologyRouteDecisions()
+	}
 	profile := SQLGenerationProfile{QueryClass: sqlGenerationQueryClass(query)}
 	if profile.QueryClass == "shortest_path" && stableSnapshotIsolation(s.isolation) {
 		if provider, ok := s.schemaManager.translationCacheProvider.(StableSnapshotTraversalWorkspaceProvider); ok {
@@ -365,6 +378,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
 	profile.Policy = time.Since(policyStarted)
 	s.schemaManager.observeTraversalStrategySelection(query, shape, policy)
+	s.shadowTopologyRouteDecision(graphTarget.ID, shape, parameters, policyIdentity)
 	buildTranslation := func() (translate.Result, string, error) {
 		var translated translate.Result
 		var translateErr error
@@ -415,7 +429,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	}
 	profile.Cache = time.Since(cacheStarted)
 	dispatchStarted := time.Now()
-	result := s.Raw(sqlQuery, translatedParameters)
+	result := s.raw(sqlQuery, translatedParameters)
 	profile.Dispatch = time.Since(dispatchStarted)
 	s.recordSQLGenerationProfile(profile)
 	return result
@@ -434,8 +448,23 @@ func sqlGenerationQueryClass(query string) string {
 	return "other"
 }
 
+func cypherMayMutate(value string) bool {
+	lower := strings.ToLower(value)
+	for _, keyword := range []string{" create ", " merge ", " delete ", " detach delete ", " set ", " remove "} {
+		if strings.Contains(" "+lower+" ", keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 // Raw coordinates PostgreSQL driver behavior for raw.
 func (s *transaction) Raw(query string, parameters map[string]any) graph.Result {
+	s.invalidateTopologyRouteDecisions()
+	return s.raw(query, parameters)
+}
+
+func (s *transaction) raw(query string, parameters map[string]any) graph.Result {
 	if rows, err := s.query(query, parameters); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
@@ -449,6 +478,7 @@ func (s *transaction) Raw(query string, parameters map[string]any) graph.Result 
 
 // Commit coordinates PostgreSQL driver behavior for commit.
 func (s *transaction) Commit() error {
+	s.invalidateTopologyRouteDecisions()
 	if s.tx != nil {
 		return s.tx.Commit(s.ctx)
 	}

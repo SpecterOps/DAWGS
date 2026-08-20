@@ -256,6 +256,7 @@ type connectionCacheProvider struct {
 	retiredPrepared    PreparedStatementStats
 	sqlGeneration      SQLGenerationStats
 	strategySelection  StrategySelectionStats
+	routeDecisions     TraversalRouteDecisionStats
 	shapeCapacity      int
 	shapeCache         map[[sha256.Size]byte]pg.TraversalShape
 	shapeOrder         [][sha256.Size]byte
@@ -269,6 +270,7 @@ var _ pg.LazyStableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvide
 var _ pg.SQLGenerationProfileCollector = (*connectionCacheProvider)(nil)
 var _ pg.TraversalStrategySelectionCollector = (*connectionCacheProvider)(nil)
 var _ pg.TraversalShapeCacheProvider = (*connectionCacheProvider)(nil)
+var _ pg.TraversalRouteDecisionCollector = (*connectionCacheProvider)(nil)
 
 // TraversalShapeFor caches a bounded classifier result by a query digest. It
 // never retains source text, values, parsed ASTs, or database state.
@@ -333,6 +335,28 @@ func (s *connectionCacheProvider) RecordTraversalStrategySelection(selection pg.
 		s.strategySelection.StructuralShadow++
 	} else {
 		s.strategySelection.Incumbent++
+	}
+}
+
+func (s *connectionCacheProvider) RecordTraversalRouteDecision(decision pg.TraversalRouteDecision) {
+	if s == nil {
+		return
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	switch decision.Reason {
+	case "topology_route_disabled":
+		s.routeDecisions.Disabled++
+	case "topology_synopsis_unavailable":
+		s.routeDecisions.SynopsisUnavailable++
+	case "topology_route_shadow_miss":
+		s.routeDecisions.ShadowMiss++
+	case "topology_route_shadow_hit":
+		s.routeDecisions.ShadowHit++
+	case "topology_route_capacity":
+		s.routeDecisions.Capacity++
+	case "topology_route_parameters_unverifiable":
+		s.routeDecisions.ParametersInvalid++
 	}
 }
 
@@ -636,6 +660,7 @@ func (s *connectionCacheProvider) stats() Stats {
 		SQLGeneration:               s.sqlGeneration,
 		StrategySelection:           s.strategySelection,
 		TraversalShapeCache:         s.shapeStats,
+		TraversalRouteDecision:      s.routeDecisions,
 		SharedShortestPathTemplates: s.sharedTemplates.snapshot(),
 		Connections:                 make([]ConnectionCacheStats, 0, len(s.states)),
 	}
