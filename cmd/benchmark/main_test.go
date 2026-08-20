@@ -33,13 +33,14 @@ func TestPostgresBenchmarkDriverModes(t *testing.T) {
 }
 
 func TestBenchmarkV2ConfigValidatesAndConvertsPoolLimits(t *testing.T) {
-	config, err := benchmarkV2Config(32, 0, 4)
+	config, err := benchmarkV2Config(32, 16, 0, 4)
 	require.NoError(t, err)
 	require.Equal(t, 32, config.TranslationCacheEntries)
+	require.Equal(t, 16, config.SharedShortestPathTemplateEntries)
 	require.Equal(t, &pgv2.PoolConfig{MinConnections: 0, MaxConnections: 4}, config.Pool)
 
-	for _, arguments := range [][3]int{{-1, 0, 1}, {1, -1, 1}, {1, 1, 0}, {1, 2, 1}} {
-		_, err := benchmarkV2Config(arguments[0], arguments[1], arguments[2])
+	for _, arguments := range [][4]int{{-1, 0, 0, 1}, {1, -1, 0, 1}, {1, 0, -1, 1}, {1, 0, 1, 0}, {1, 0, 2, 1}} {
+		_, err := benchmarkV2Config(arguments[0], arguments[1], arguments[2], arguments[3])
 		require.Error(t, err)
 	}
 }

@@ -106,6 +106,10 @@ func writeMarkdown(w io.Writer, r Report) error {
 		workspaces := r.TranslationCache.TraversalWorkspace
 		statements := r.TranslationCache.PreparedStatements
 		fmt.Fprintf(w, "V2 connection state: cache %d hits, %d misses, %d bypasses, %d evictions; workspaces %d initialized/%d reused; statements %d prepared/%d reused across %d live connections.\n\n", cache.Hits, cache.Misses, cache.Bypasses, cache.Evictions, workspaces.Initializations, workspaces.Reuses, statements.Prepared, statements.Reuses, r.TranslationCache.LiveConnections)
+		shortest := r.TranslationCache.SQLGeneration.ShortestPath
+		if shortest.Count > 0 {
+			fmt.Fprintf(w, "V2 shortest-path generation (%d samples): parse %s, cache/bind %s, translate %s, format %s, dispatch %s total. Shared L2: %d hits, %d misses, %d entries/%d capacity.\n\n", shortest.Count, fmtDuration(shortest.Parse), fmtDuration(shortest.Cache), fmtDuration(shortest.Translate), fmtDuration(shortest.Format), fmtDuration(shortest.Dispatch), r.TranslationCache.SharedShortestPathTemplates.Hits, r.TranslationCache.SharedShortestPathTemplates.Misses, r.TranslationCache.SharedShortestPathTemplates.Entries, r.TranslationCache.SharedShortestPathTemplates.Capacity)
+		}
 	}
 	return nil
 }

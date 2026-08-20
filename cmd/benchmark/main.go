@@ -53,6 +53,7 @@ func main() {
 		warmup       = flag.Int("warmup", 1, "untimed iterations per worker (zero measures cold queries)")
 		workers      = flag.Int("workers", 1, "concurrent workers per scenario")
 		v2Cache      = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
+		v2SharedSP   = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
 		v2MinConns   = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
 		v2MaxConns   = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
 		output       = flag.String("output", "", "output file (default: stdout)")
@@ -75,7 +76,7 @@ func main() {
 	if !isReportFormat(*format) {
 		fatal("unsupported output format %q", *format)
 	}
-	v2Config, err := benchmarkV2Config(*v2Cache, *v2MinConns, *v2MaxConns)
+	v2Config, err := benchmarkV2Config(*v2Cache, *v2SharedSP, *v2MinConns, *v2MaxConns)
 	if err != nil {
 		fatal("invalid pg-v2 configuration: %v", err)
 	}
@@ -280,10 +281,13 @@ func openBenchmarkDatabaseWithV2Config(ctx context.Context, driverName, connecti
 	}
 }
 
-func benchmarkV2Config(cacheEntries, minConnections, maxConnections int) (pgv2.Config, error) {
+func benchmarkV2Config(cacheEntries, sharedShortestPathTemplateEntries, minConnections, maxConnections int) (pgv2.Config, error) {
 	const maxInt32 = int(^uint32(0) >> 1)
 	if cacheEntries < 0 {
 		return pgv2.Config{}, fmt.Errorf("translation cache entries must not be negative: %d", cacheEntries)
+	}
+	if sharedShortestPathTemplateEntries < 0 {
+		return pgv2.Config{}, fmt.Errorf("shared shortest-path template entries must not be negative: %d", sharedShortestPathTemplateEntries)
 	}
 	if minConnections < 0 || minConnections > maxInt32 {
 		return pgv2.Config{}, fmt.Errorf("minimum connections must be between 0 and %d: %d", maxInt32, minConnections)
@@ -295,7 +299,8 @@ func benchmarkV2Config(cacheEntries, minConnections, maxConnections int) (pgv2.C
 		return pgv2.Config{}, fmt.Errorf("minimum connections %d exceeds maximum connections %d", minConnections, maxConnections)
 	}
 	return pgv2.Config{
-		TranslationCacheEntries: cacheEntries,
+		TranslationCacheEntries:           cacheEntries,
+		SharedShortestPathTemplateEntries: sharedShortestPathTemplateEntries,
 		Pool: &pgv2.PoolConfig{
 			MinConnections: int32(minConnections),
 			MaxConnections: int32(maxConnections),
