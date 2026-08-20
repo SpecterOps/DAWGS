@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
+	pgdriver "github.com/specterops/dawgs/drivers/pg"
 )
 
 // promotionManifestVersion reserves the stable protocol value used to recognize promotion manifest version across artifacts and executions.
@@ -72,6 +73,35 @@ func validateStaticV8HiddenFanInBucket(bucket PromotionBucket) error {
 	return nil
 }
 
+// validateTopologyFixedSuffixBucket binds every v4 bucket to the classifier
+// and SQL-template protocol the PostgreSQL driver will later enforce. This
+// prevents a qualification artifact from authorizing a different shape than
+// the live route selector.
+func validateTopologyFixedSuffixBucket(manifest PromotionManifest, bucket PromotionBucket) error {
+	shape := pgdriver.TraversalShape{
+		Version:           bucket.StructuralShapeVersion,
+		Family:            bucket.StructuralFamily,
+		Direction:         bucket.Direction,
+		ObservationMode:   bucket.ObservationMode,
+		MinimumDepth:      int64(bucket.MinimumDepth),
+		MaximumDepth:      int64(bucket.MaximumDepth),
+		SuffixLength:      bucket.SuffixLength,
+		CandidateStrategy: bucket.CandidateStrategy,
+		Fingerprint:       bucket.StructuralShapeSHA256,
+	}
+	if shape.Version != pgdriver.TraversalFixedSuffixShapeVersion || shape.Family != "fixed_suffix_expansion" ||
+		shape.Direction != "outbound" || shape.ObservationMode != string(optimize.ExpansionSearchObservationFullPath) ||
+		shape.MinimumDepth != 0 || shape.MaximumDepth != 16 || shape.SuffixLength != 3 ||
+		shape.CandidateStrategy != string(optimize.ExpansionSearchSuffixSeededReverse) ||
+		!isLowerHexSHA256(shape.Fingerprint) || shape.Fingerprint != pgdriver.TraversalShapeFingerprint(shape) {
+		return fmt.Errorf("topology fixed-suffix bucket %s must match the qualified outbound full-path fixed-suffix classifier envelope", bucket.Name)
+	}
+	if !isLowerHexSHA256(bucket.SQLTemplateSHA256) || bucket.SQLTemplateSHA256 != pgdriver.TraversalSQLTemplateSHA256(manifest.Candidate, manifest.SelectorVersion, manifest.ExecutionBoundary, shape) {
+		return fmt.Errorf("topology fixed-suffix bucket %s must bind the driver's v4 SQL template digest", bucket.Name)
+	}
+	return nil
+}
+
 // PromotionEvidenceReference groups state that must remain consistent while processing promotion evidence reference.
 type PromotionEvidenceReference struct {
 	// Path identifies the filesystem path.
@@ -98,6 +128,11 @@ type PromotionBucket struct {
 	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
 	// UntypedRelationship indicates whether untyped relationship applies.
 	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
+	// SuffixLength binds the terminal fixed suffix width for a v4 bucket.
+	SuffixLength int `json:"suffix_length,omitempty"`
+	// CandidateStrategy binds the fixed-suffix optimizer candidate used to
+	// derive this v4 bucket.
+	CandidateStrategy string `json:"candidate_strategy,omitempty"`
 	// StructuralShapeVersion identifies the shared structural classifier for a
 	// v3 production-wide bucket.
 	StructuralShapeVersion string `json:"structural_shape_version,omitempty"`
@@ -462,7 +497,7 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 		if !reflect.DeepEqual(manifest.Caps, expectedCaps) {
 			addReason("topology fixed-suffix requires the exact frozen suffix, state, output-row, and output-byte caps")
 		}
-		if manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.TopologyEstimatorVersion == "" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
+		if manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.TopologyEstimatorVersion != "topology-fixed-suffix-counts-v1" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
 			addReason("topology fixed-suffix requires its selector, estimator, synopsis schema, and route-cache protocol identities")
 		}
 	}
@@ -488,6 +523,11 @@ func verifyPromotionManifest(path string) (PromotionManifestVerification, error)
 		}
 		if manifest.Candidate == string(optimize.ShortestPathExecutorI2GuardedDistance) {
 			if err := validateStaticV8HiddenFanInBucket(bucket); err != nil {
+				addReason(err.Error())
+			}
+		}
+		if manifest.Candidate == string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) {
+			if err := validateTopologyFixedSuffixBucket(manifest, bucket); err != nil {
 				addReason(err.Error())
 			}
 		}

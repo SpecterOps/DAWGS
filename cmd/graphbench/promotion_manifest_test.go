@@ -539,6 +539,48 @@ func promotionTestDeclarationSHA256(candidate string) string {
 	}
 }
 
+func TestTopologyFixedSuffixBucketUsesDriverStructuralContract(t *testing.T) {
+	shape := pgdriver.TraversalShape{
+		Version:           pgdriver.TraversalFixedSuffixShapeVersion,
+		Family:            "fixed_suffix_expansion",
+		Direction:         "outbound",
+		ObservationMode:   string(optimize.ExpansionSearchObservationFullPath),
+		MinimumDepth:      0,
+		MaximumDepth:      16,
+		SuffixLength:      3,
+		CandidateStrategy: string(optimize.ExpansionSearchSuffixSeededReverse),
+	}
+	shape.Fingerprint = pgdriver.TraversalShapeFingerprint(shape)
+	manifest := PromotionManifest{
+		Version:           topologyPromotionManifestVersion,
+		Candidate:         string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1),
+		SelectorVersion:   string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1),
+		ExecutionBoundary: "transaction_retry",
+	}
+	bucket := PromotionBucket{
+		Name:                   "fixed-suffix",
+		QuerySHA256:            []string{strings.Repeat("a", 64)},
+		QualificationSplit:     []string{"training", "holdout"},
+		Direction:              shape.Direction,
+		ObservationMode:        shape.ObservationMode,
+		MinimumDepth:           int(shape.MinimumDepth),
+		MaximumDepth:           int(shape.MaximumDepth),
+		SuffixLength:           shape.SuffixLength,
+		CandidateStrategy:      shape.CandidateStrategy,
+		StructuralShapeVersion: shape.Version,
+		StructuralFamily:       shape.Family,
+		StructuralShapeSHA256:  shape.Fingerprint,
+	}
+	bucket.SQLTemplateSHA256 = pgdriver.TraversalSQLTemplateSHA256(manifest.Candidate, manifest.SelectorVersion, manifest.ExecutionBoundary, shape)
+	require.NoError(t, validateTopologyFixedSuffixBucket(manifest, bucket))
+
+	bucket.SuffixLength = 2
+	require.ErrorContains(t, validateTopologyFixedSuffixBucket(manifest, bucket), "classifier envelope")
+	bucket.SuffixLength = 3
+	bucket.SQLTemplateSHA256 = strings.Repeat("b", 64)
+	require.ErrorContains(t, validateTopologyFixedSuffixBucket(manifest, bucket), "SQL template digest")
+}
+
 // TestVerifyPromotionManifestRequiresExactOrientationProbeContract verifies verify promotion manifest requires exact orientation probe contract behavior.
 func TestVerifyPromotionManifestRequiresExactOrientationProbeContract(t *testing.T) {
 	digest := strings.Repeat("a", 64)

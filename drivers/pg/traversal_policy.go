@@ -608,7 +608,7 @@ func (s TraversalPolicy) validate() error {
 				return fmt.Errorf("topology fixed-suffix promotion manifest requires %s=%d", name, expected)
 			}
 		}
-		if manifest.Version != 4 || manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) || strings.TrimSpace(manifest.TopologyEstimatorVersion) == "" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
+		if manifest.Version != 4 || manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) || manifest.TopologyEstimatorVersion != "topology-fixed-suffix-counts-v1" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
 			return fmt.Errorf("topology fixed-suffix promotion manifest requires v4 selector, fallback, estimator, synopsis schema, and route-cache protocol bindings")
 		}
 	}
