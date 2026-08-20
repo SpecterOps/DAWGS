@@ -40,6 +40,7 @@ func OptionSetQueryExecMode(queryExecMode pgx.QueryExecMode) graph.TransactionOp
 type Driver struct {
 	pool *pgxpool.Pool
 	*SchemaManager
+	ingestHooks *ingestLifecycleHooks
 }
 
 func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {

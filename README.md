@@ -111,6 +111,7 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 ## Documentation
 
 - [Development workflow](docs/development.md): build, test, integration, metrics, quality, and corpus-capture commands.
+- [PostgreSQL hash-filtered ingest](docs/postgresql_ingest.md): PostgreSQL-only ingest API, identity and merge contracts, operational guidance, and manual benchmarks.
 - [Cypher library](cypher/README.md): parser generation and Cypher package overview.
 - [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.

@@ -3,6 +3,12 @@ drop trigger if exists delete_node_edges on node;
 drop function if exists delete_node_edges;
 
 -- Drop functions
+drop function if exists dawgs_ingest_edge_content_hash(jsonb);
+drop function if exists dawgs_ingest_node_content_hash(smallint[], jsonb);
+drop function if exists dawgs_ingest_canonical_jsonb(jsonb);
+drop function if exists dawgs_ingest_canonical_number(text);
+drop function if exists dawgs_ingest_zigzag_varint(bigint);
+drop function if exists dawgs_ingest_u64be(bigint);
 drop aggregate if exists cypher_min(jsonb);
 drop aggregate if exists cypher_max(jsonb);
 drop function if exists query_perf;

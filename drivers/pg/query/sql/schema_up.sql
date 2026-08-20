@@ -92,10 +92,12 @@ $$;
 -- contain a disjunction of kinds for creating node subsets without requiring edges.
 create table if not exists node
 (
-  id         bigserial  not null,
-  graph_id   integer    not null,
-  kind_ids   smallint[] not null,
-  properties jsonb      not null,
+  id           bigserial  not null,
+  graph_id     integer    not null,
+  kind_ids     smallint[] not null,
+  properties   jsonb      not null,
+  id_hash      integer,
+  content_hash bytea check (content_hash is null or octet_length(content_hash) = 16),
 
   primary key (id, graph_id),
   foreign key (graph_id) references graph (id) on delete cascade
@@ -112,6 +114,9 @@ drop index if exists node_graph_id_index;
 
 -- Index node kind IDs so that lookups by kind is accelerated.
 create index if not exists node_kind_ids_index on node using gin (kind_ids);
+
+-- Index ingest identity hashes on the partitioned parent so PostgreSQL creates matching indexes for every child.
+create index if not exists node_id_hash_index on node using btree (id_hash);
 
 -- Edge composite type
 do
@@ -133,12 +138,16 @@ $$;
 -- The edge table is a partitioned table view that partitions over the graph ID that each edge belongs to.
 create table if not exists edge
 (
-  id         bigserial not null,
-  graph_id   integer   not null,
-  start_id   bigint    not null,
-  end_id     bigint    not null,
-  kind_id    smallint  not null,
-  properties jsonb     not null,
+  id              bigserial not null,
+  graph_id        integer   not null,
+  start_id        bigint    not null,
+  end_id          bigint    not null,
+  kind_id         smallint  not null,
+  properties      jsonb     not null,
+  id_hash         integer,
+  content_hash    bytea check (content_hash is null or octet_length(content_hash) = 16),
+  start_object_id text,
+  end_object_id   text,
 
   primary key (id, graph_id),
   foreign key (graph_id) references graph (id) on delete cascade,
@@ -196,6 +205,7 @@ drop index if exists edge_end_kind_index;
 create index if not exists edge_start_id_kind_id_id_end_id_index on edge using btree (start_id, kind_id) include (id, end_id);
 create index if not exists edge_end_id_kind_id_id_start_id_index on edge using btree (end_id, kind_id) include (id, start_id);
 create index if not exists edge_kind_id_id_start_id_end_id_index on edge using btree (kind_id) include (id, start_id, end_id);
+create index if not exists edge_id_hash_index on edge using btree (id_hash);
 
 -- Path composite type
 do
@@ -210,6 +220,284 @@ $$
     when duplicate_object then null;
   end
 $$;
+
+-- Canonical ingest helpers. These functions independently implement the byte contract used by the PostgreSQL ingest
+-- path; changing any framing or domain requires a new hash version and a fresh database rebuild.
+create or replace function public.dawgs_ingest_u64be(_value bigint) returns bytea as
+$$
+begin
+  if _value < 0 then
+    raise exception using
+      errcode = '22003',
+      message = 'canonical ingest unsigned length must not be negative';
+  end if;
+
+  return int8send(_value);
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.dawgs_ingest_zigzag_varint(_value bigint) returns bytea as
+$$
+declare
+  encoded numeric;
+  next_byte integer;
+  result bytea := ''::bytea;
+begin
+  if _value >= 0 then
+    encoded := _value::numeric * 2;
+  else
+    encoded := -(_value::numeric * 2) - 1;
+  end if;
+
+  loop
+    next_byte := mod(encoded, 128)::integer;
+    encoded := trunc(encoded / 128);
+    if encoded > 0 then
+      next_byte := next_byte | 128;
+    end if;
+
+    result := result || decode(lpad(to_hex(next_byte), 2, '0'), 'hex');
+    exit when encoded = 0;
+  end loop;
+
+  return result;
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.dawgs_ingest_canonical_number(_number text) returns bytea as
+$$
+declare
+  parts text[];
+  negative boolean;
+  integer_digits text;
+  fractional_digits text;
+  exponent_digits text;
+  exponent_negative boolean;
+  lexical_exponent bigint := 0;
+  trimmed_exponent_digits text;
+  digits text;
+  coefficient text;
+  trailing_zero_count bigint;
+  normalized_exponent bigint;
+  digits_before_decimal bigint;
+begin
+  parts := regexp_match(_number, '^(-?)(0|[1-9][0-9]*)(\.([0-9]+))?([eE]([+-]?)([0-9]+))?$');
+  if parts is null then
+    raise exception using
+      errcode = '22023',
+      message = format('canonical ingest number %L is not valid JSON numeric syntax', _number);
+  end if;
+
+  negative := parts[1] = '-';
+  integer_digits := parts[2];
+  fractional_digits := coalesce(parts[4], '');
+  exponent_negative := parts[6] = '-';
+  exponent_digits := coalesce(parts[7], '');
+
+  if exponent_digits <> '' then
+    trimmed_exponent_digits := ltrim(exponent_digits, '0');
+    if trimmed_exponent_digits = '' then
+      trimmed_exponent_digits := '0';
+    end if;
+    if length(trimmed_exponent_digits) > 10
+       or (length(trimmed_exponent_digits) = 10 and trimmed_exponent_digits::bigint > 1073741823) then
+      raise exception using
+        errcode = '22003',
+        message = format('canonical ingest number %L exceeds PostgreSQL numeric lexical exponent range', _number);
+    end if;
+
+    lexical_exponent := trimmed_exponent_digits::bigint;
+    if exponent_negative then
+      lexical_exponent := -lexical_exponent;
+    end if;
+  end if;
+
+  if length(fractional_digits)::bigint - lexical_exponent > 16383 then
+    raise exception using
+      errcode = '22003',
+      message = format('canonical ingest number %L exceeds PostgreSQL numeric fractional limit 16383', _number);
+  end if;
+
+  digits := ltrim(integer_digits || fractional_digits, '0');
+  if digits = '' then
+    return decode('0400', 'hex')
+           || public.dawgs_ingest_u64be(1)
+           || convert_to('0', 'UTF8')
+           || public.dawgs_ingest_zigzag_varint(0);
+  end if;
+
+  coefficient := rtrim(digits, '0');
+  trailing_zero_count := length(digits)::bigint - length(coefficient)::bigint;
+  normalized_exponent := lexical_exponent - length(fractional_digits)::bigint + trailing_zero_count;
+  digits_before_decimal := length(coefficient)::bigint + normalized_exponent;
+
+  if digits_before_decimal > 131072 then
+    raise exception using
+      errcode = '22003',
+      message = format('canonical ingest number %L exceeds PostgreSQL numeric integer limit 131072', _number);
+  end if;
+  if normalized_exponent < -16383 then
+    raise exception using
+      errcode = '22003',
+      message = format('canonical ingest number %L exceeds PostgreSQL numeric fractional limit 16383', _number);
+  end if;
+
+  return decode(case when negative then '0401' else '0400' end, 'hex')
+         || public.dawgs_ingest_u64be(octet_length(convert_to(coefficient, 'UTF8')))
+         || convert_to(coefficient, 'UTF8')
+         || public.dawgs_ingest_zigzag_varint(normalized_exponent);
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.dawgs_ingest_canonical_jsonb(_value jsonb) returns bytea as
+$$
+declare
+  value_type text := jsonb_typeof(_value);
+  text_value text;
+  text_bytes bytea;
+  content bytea;
+  item_count bigint;
+  item record;
+begin
+  case value_type
+    when 'null' then
+      return decode('00', 'hex');
+    when 'boolean' then
+      if _value = 'true'::jsonb then
+        return decode('02', 'hex');
+      end if;
+      return decode('01', 'hex');
+    when 'string' then
+      text_value := _value #>> '{}';
+      text_bytes := convert_to(text_value, 'UTF8');
+      return decode('03', 'hex')
+             || public.dawgs_ingest_u64be(octet_length(text_bytes))
+             || text_bytes;
+    when 'number' then
+      return public.dawgs_ingest_canonical_number(_value #>> '{}');
+    when 'array' then
+      content := decode('05', 'hex')
+                 || public.dawgs_ingest_u64be(jsonb_array_length(_value));
+      for item in
+        select value, ordinality
+        from jsonb_array_elements(_value) with ordinality
+        order by ordinality
+      loop
+        content := content || public.dawgs_ingest_canonical_jsonb(item.value);
+      end loop;
+      return content;
+    when 'object' then
+      select count(*)
+      into item_count
+      from jsonb_object_keys(_value);
+
+      content := decode('06', 'hex')
+                 || public.dawgs_ingest_u64be(item_count);
+      for item in
+        select key, value
+        from jsonb_each(_value)
+        order by convert_to(key, 'UTF8')
+      loop
+        text_bytes := convert_to(item.key, 'UTF8');
+        content := content
+                   || public.dawgs_ingest_u64be(octet_length(text_bytes))
+                   || text_bytes
+                   || public.dawgs_ingest_canonical_jsonb(item.value);
+      end loop;
+      return content;
+    else
+      raise exception using
+        errcode = '22023',
+        message = format('unsupported canonical ingest JSONB type %L', value_type);
+  end case;
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe
+  strict;
+
+create or replace function public.dawgs_ingest_node_content_hash(_kind_ids smallint[], _properties jsonb) returns bytea as
+$$
+declare
+  expected_kind_count integer := cardinality(_kind_ids);
+  mapped_kind_count integer;
+  kind_name text;
+  kind_bytes bytea;
+  content bytea;
+begin
+  if jsonb_typeof(_properties) <> 'object' then
+    raise exception using
+      errcode = '22023',
+      message = 'canonical ingest node properties must be a JSON object';
+  end if;
+
+  select count(*)::integer
+  into mapped_kind_count
+  from unnest(_kind_ids) as requested_kind(id)
+  join kind on kind.id = requested_kind.id;
+
+  if mapped_kind_count <> expected_kind_count then
+    raise exception using
+      errcode = '23503',
+      message = 'canonical ingest node content has an unmapped kind ID';
+  end if;
+
+  content := convert_to('dawgs:pg-ingest:node-content:v1', 'UTF8')
+             || public.dawgs_ingest_u64be(expected_kind_count);
+  for kind_name in
+    select name::text
+    from unnest(_kind_ids) as requested_kind(id)
+    join kind on kind.id = requested_kind.id
+    order by convert_to(name, 'UTF8')
+  loop
+    kind_bytes := convert_to(kind_name, 'UTF8');
+    content := content
+               || public.dawgs_ingest_u64be(octet_length(kind_bytes))
+               || kind_bytes;
+  end loop;
+
+  content := content || public.dawgs_ingest_canonical_jsonb(_properties - 'objectid');
+  return substring(sha256(content) from 1 for 16);
+end
+$$
+  language plpgsql
+  stable
+  parallel safe
+  strict;
+
+create or replace function public.dawgs_ingest_edge_content_hash(_properties jsonb) returns bytea as
+$$
+declare
+  content bytea;
+begin
+  if jsonb_typeof(_properties) <> 'object' then
+    raise exception using
+      errcode = '22023',
+      message = 'canonical ingest edge properties must be a JSON object';
+  end if;
+
+  content := convert_to('dawgs:pg-ingest:edge-content:v1', 'UTF8')
+             || public.dawgs_ingest_canonical_jsonb(_properties);
+  return substring(sha256(content) from 1 for 16);
+end
+$$
+  language plpgsql
+  immutable
+  parallel safe
+  strict;
 
 -- Database helper functions
 create or replace function public.kind_name(_kind_id smallint) returns text as
