@@ -24,6 +24,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,10 +45,13 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 			}},
 		}
 		report = Report{
-			Driver:     "pg",
-			GitRef:     "abc123",
-			Date:       "2026-05-14",
-			Iterations: 3,
+			Driver:           "pg",
+			GitRef:           "abc123",
+			Date:             "2026-05-14",
+			Iterations:       3,
+			WarmupIterations: 1,
+			Workers:          2,
+			TranslationCache: &pgv2.Stats{LiveConnections: 2, Aggregate: pgv2.TranslationCacheStats{Hits: 4, Misses: 2}},
 			Results: []Result{{
 				Section:           "Traversal",
 				Dataset:           "base",
@@ -86,6 +90,10 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 	for _, expected := range []string{
 		`"driver": "pg"`,
 		`"git_ref": "abc123"`,
+		`"warmup_iterations": 1`,
+		`"workers": 2`,
+		`"translation_cache": {`,
+		`"hits": 4`,
 		`"median": 10000000`,
 		`"row_count": 2`,
 		`"distinct_row_count": 2`,
@@ -112,10 +120,13 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		distinctRows  = int64(2)
 		duplicateRows = int64(0)
 		report        = Report{
-			Driver:     "pg",
-			GitRef:     "abc123",
-			Date:       "2026-05-14",
-			Iterations: 3,
+			Driver:           "pg",
+			GitRef:           "abc123",
+			Date:             "2026-05-14",
+			Iterations:       3,
+			WarmupIterations: 1,
+			Workers:          2,
+			TranslationCache: &pgv2.Stats{LiveConnections: 2, Aggregate: pgv2.TranslationCacheStats{Hits: 4, Misses: 2}},
 			Results: []Result{{
 				Section:           "Fixed Suffix Expansion Fanout",
 				Dataset:           "fixed_suffix_expansion_fanout",
@@ -141,6 +152,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		"Distinct Rows",
 		"Duplicate Rows",
 		"| Fixed Suffix Expansion Fanout / combined | fixed_suffix_expansion_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
+		"V2 translation cache: 4 hits, 2 misses, 0 bypasses, 0 evictions across 2 live connections.",
 	} {
 		require.Contains(t, text, expected)
 	}
@@ -150,6 +162,15 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 func TestValidateIterationsRejectsZero(t *testing.T) {
 	require.Error(t, validateIterations(0))
 	require.NoError(t, validateIterations(1))
+}
+
+// TestValidateBenchmarkConcurrencyRejectsInvalidInputs verifies that cold and
+// concurrent measurements reject invalid values before database work starts.
+func TestValidateBenchmarkConcurrencyRejectsInvalidInputs(t *testing.T) {
+	require.Error(t, validateBenchmarkConcurrency(-1, 1))
+	require.Error(t, validateBenchmarkConcurrency(0, 0))
+	require.NoError(t, validateBenchmarkConcurrency(0, 1))
+	require.NoError(t, validateBenchmarkConcurrency(2, 4))
 }
 
 // TestWriteReportRejectsUnknownFormat verifies that report dispatch fails instead of silently choosing a serializer for an unsupported format.

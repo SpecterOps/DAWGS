@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 )
 
 const (
@@ -34,11 +36,14 @@ const (
 
 // Report holds all benchmark results and metadata.
 type Report struct {
-	Driver     string   `json:"driver"`
-	GitRef     string   `json:"git_ref"`
-	Date       string   `json:"date"`
-	Iterations int      `json:"iterations"`
-	Results    []Result `json:"results"`
+	Driver           string      `json:"driver"`
+	GitRef           string      `json:"git_ref"`
+	Date             string      `json:"date"`
+	Iterations       int         `json:"iterations"`
+	WarmupIterations int         `json:"warmup_iterations"`
+	Workers          int         `json:"workers"`
+	TranslationCache *pgv2.Stats `json:"translation_cache,omitempty"`
+	Results          []Result    `json:"results"`
 }
 
 func writeReport(w io.Writer, r Report, format string) error {
@@ -72,7 +77,7 @@ func writeJSON(w io.Writer, r Report) error {
 }
 
 func writeMarkdown(w io.Writer, r Report) error {
-	fmt.Fprintf(w, "# Benchmarks — %s @ %s (%s, %d iterations)\n\n", r.Driver, r.GitRef, r.Date, r.Iterations)
+	fmt.Fprintf(w, "# Benchmarks — %s @ %s (%s, %d iterations × %d workers, %d warm-up iterations)\n\n", r.Driver, r.GitRef, r.Date, r.Iterations, r.Workers, r.WarmupIterations)
 	fmt.Fprintf(w, "| Query | Dataset | Rows | Distinct Rows | Duplicate Rows | Median | P95 | Max | Explain |\n")
 	fmt.Fprintf(w, "|-------|---------|-----:|--------------:|---------------:|-------:|----:|----:|:--------|\n")
 
@@ -96,6 +101,10 @@ func writeMarkdown(w io.Writer, r Report) error {
 	}
 
 	fmt.Fprintln(w)
+	if r.TranslationCache != nil {
+		cache := r.TranslationCache.Aggregate
+		fmt.Fprintf(w, "V2 translation cache: %d hits, %d misses, %d bypasses, %d evictions across %d live connections.\n\n", cache.Hits, cache.Misses, cache.Bypasses, cache.Evictions, r.TranslationCache.LiveConnections)
+	}
 	return nil
 }
 

@@ -26,6 +26,10 @@ go run ./cmd/benchmark -driver neo4j -connection "neo4j://neo4j:password@localho
 # Explicit PostgreSQL v2 connection-local translation cache
 go run ./cmd/benchmark -driver pg-v2 -connection "..." -iterations 10
 
+# Cold and warm concurrent cache measurements (4 workers × 20 samples)
+go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes -workers 4 -warmup 0 -iterations 20
+go run ./cmd/benchmark -driver pg-v2 -connection "..." -dataset traversal_shapes -workers 4 -warmup 2 -iterations 20
+
 # Save to file
 go run ./cmd/benchmark -connection "..." -output report.md
 
@@ -43,6 +47,8 @@ go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 | `-driver` | `pg` | Database driver (`pg`, `pg-v2`, `neo4j`) |
 | `-connection` | | Connection string (or `CONNECTION_STRING` env) |
 | `-iterations` | `10` | Timed iterations per scenario |
+| `-warmup` | `1` | Untimed iterations per worker; use `0` to include cold-query cost |
+| `-workers` | `1` | Concurrent workers per scenario; each contributes `-iterations` samples |
 | `-explain` | `false` | Capture PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` and translated SQL for Cypher scenarios in JSON output |
 | `-dataset` | | Run only this dataset |
 | `-local-dataset` | | Add a local dataset to the default set |
@@ -56,6 +62,9 @@ Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each ti
 `pg-v2` is benchmark-only opt-in selection for `drivers/pg/v2`; it does not register a connection-string driver scheme.
 It constructs a matching v2 pool and driver directly, uses the default 64-entry cache per physical PostgreSQL connection,
 and supports the same PostgreSQL EXPLAIN capture as `pg`.
+Its JSON and Markdown reports also include query-text-free connection-local cache counters. Use a cold (`-warmup 0`) and
+warm (`-warmup 2`) run with the same worker count to measure cache effectiveness; do not compare their latency distributions
+without accounting for the intentionally different warm-up state.
 
 The committed default datasets are `base`, `fixed_suffix_expansion_fanout`, and
 `traversal_shapes`. `traversal_shapes` covers chain, fanout, bounded cycle,

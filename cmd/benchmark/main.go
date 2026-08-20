@@ -50,6 +50,8 @@ func main() {
 		driver       = flag.String("driver", "pg", "database driver (pg, pg-v2, neo4j)")
 		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
+		warmup       = flag.Int("warmup", 1, "untimed iterations per worker (zero measures cold queries)")
+		workers      = flag.Int("workers", 1, "concurrent workers per scenario")
 		output       = flag.String("output", "", "output file (default: stdout)")
 		format       = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
 		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
@@ -62,6 +64,9 @@ func main() {
 	flag.Parse()
 
 	if err := validateIterations(*iterations); err != nil {
+		fatal("%v", err)
+	}
+	if err := validateBenchmarkConcurrency(*warmup, *workers); err != nil {
 		fatal("%v", err)
 	}
 	if !isReportFormat(*format) {
@@ -124,10 +129,12 @@ func main() {
 	}
 
 	report := Report{
-		Driver:     *driver,
-		GitRef:     gitRef(),
-		Date:       time.Now().Format("2006-01-02"),
-		Iterations: *iterations,
+		Driver:           *driver,
+		GitRef:           gitRef(),
+		Date:             time.Now().Format("2006-01-02"),
+		Iterations:       *iterations,
+		WarmupIterations: *warmup,
+		Workers:          *workers,
 	}
 
 	for _, ds := range datasets {
@@ -153,6 +160,8 @@ func main() {
 
 		// Run scenarios
 		for _, s := range scenariosForDataset(ds, idMap) {
+			runOptions.WarmupIterations = *warmup
+			runOptions.Workers = *workers
 			result, err := runScenario(ctx, db, s, *iterations, runOptions)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  %s/%s failed: %v\n", s.Section, s.Label, err)
@@ -171,6 +180,17 @@ func main() {
 				fmtExplainStatus(result.Explain),
 			)
 		}
+	}
+	if statsProvider, ok := db.(interface{ TranslationCacheStats() pgv2.Stats }); ok {
+		stats := statsProvider.TranslationCacheStats()
+		report.TranslationCache = &stats
+		fmt.Fprintf(os.Stderr, "v2 translation cache: hits=%d misses=%d bypasses=%d evictions=%d live_connections=%d\n",
+			stats.Aggregate.Hits,
+			stats.Aggregate.Misses,
+			stats.Aggregate.Bypasses,
+			stats.Aggregate.Evictions,
+			stats.LiveConnections,
+		)
 	}
 
 	// Write report

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/specterops/dawgs/graph"
@@ -28,7 +29,9 @@ import (
 type ExplainFunc func(ctx context.Context, tx graph.Transaction, cypher string) (*ExplainResult, error)
 
 type RunOptions struct {
-	Explain ExplainFunc
+	Explain          ExplainFunc
+	WarmupIterations int
+	Workers          int
 }
 
 // Stats holds computed timing statistics for a scenario.
@@ -56,21 +59,18 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 	if err := validateIterations(iterations); err != nil {
 		return Result{}, err
 	}
-
-	// Warm-up: one untimed run.
-	measurement, err := runScenarioOnce(ctx, db, s)
-	if err != nil {
+	if options.Workers == 0 {
+		options.Workers = 1
+	}
+	if err := validateRunOptions(options); err != nil {
 		return Result{}, err
 	}
 
-	durations := make([]time.Duration, iterations)
-
-	for i := range iterations {
-		start := time.Now()
-		if _, err := runScenarioOnce(ctx, db, s); err != nil {
-			return Result{}, err
-		}
-		durations[i] = time.Since(start)
+	measurement, durations, err := runScenarioSamples(iterations, options.WarmupIterations, options.Workers, func() (Measurement, error) {
+		return runScenarioOnce(ctx, db, s)
+	})
+	if err != nil {
+		return Result{}, err
 	}
 
 	result := Result{
@@ -97,11 +97,91 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 	return result, nil
 }
 
+// runScenarioSamples executes one logical benchmark scenario across workers.
+// Every worker warms its own leased connection before it contributes timed
+// samples, which makes connection-local cache behavior observable without
+// mixing warm-up latency into the reported distribution.
+func runScenarioSamples(iterations, warmupIterations, workers int, run func() (Measurement, error)) (Measurement, []time.Duration, error) {
+	if err := validateIterations(iterations); err != nil {
+		return Measurement{}, nil, err
+	}
+	if err := validateBenchmarkConcurrency(warmupIterations, workers); err != nil {
+		return Measurement{}, nil, err
+	}
+
+	type workerResult struct {
+		measurement Measurement
+		durations   []time.Duration
+		err         error
+	}
+
+	results := make(chan workerResult, workers)
+	var group sync.WaitGroup
+	group.Add(workers)
+	for range workers {
+		go func() {
+			defer group.Done()
+			var measurement Measurement
+			for range warmupIterations {
+				next, err := run()
+				if err != nil {
+					results <- workerResult{err: err}
+					return
+				}
+				measurement = next
+			}
+
+			durations := make([]time.Duration, iterations)
+			for index := range iterations {
+				started := time.Now()
+				next, err := run()
+				if err != nil {
+					results <- workerResult{err: err}
+					return
+				}
+				if warmupIterations == 0 && index == 0 {
+					measurement = next
+				}
+				durations[index] = time.Since(started)
+			}
+			results <- workerResult{measurement: measurement, durations: durations}
+		}()
+	}
+	group.Wait()
+	close(results)
+
+	durations := make([]time.Duration, 0, iterations*workers)
+	var measurement Measurement
+	for result := range results {
+		if result.err != nil {
+			return Measurement{}, nil, result.err
+		}
+		measurement = result.measurement
+		durations = append(durations, result.durations...)
+	}
+
+	return measurement, durations, nil
+}
+
 func validateIterations(iterations int) error {
 	if iterations < 1 {
 		return fmt.Errorf("iterations must be at least 1")
 	}
 
+	return nil
+}
+
+func validateRunOptions(options RunOptions) error {
+	return validateBenchmarkConcurrency(options.WarmupIterations, options.Workers)
+}
+
+func validateBenchmarkConcurrency(warmupIterations, workers int) error {
+	if warmupIterations < 0 {
+		return fmt.Errorf("warm-up iterations must not be negative: %d", warmupIterations)
+	}
+	if workers < 1 {
+		return fmt.Errorf("workers must be at least 1: %d", workers)
+	}
 	return nil
 }
 
