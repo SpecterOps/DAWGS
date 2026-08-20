@@ -114,7 +114,8 @@ translation, then writes only the query and SQL SHA-256 values plus translation
 metadata. It does not install a traversal policy, execute the candidate SQL,
 or create verification evidence. Copy the SQL hash into the provisional
 manifest and recapture the complete GraphBench evidence closure before using
-the resulting document with policy mode.
+the resulting document with policy mode. The output path must be new: preflight
+refuses to overwrite either the provisional manifest or an earlier record.
 
 The committed default datasets are `base`, `fixed_suffix_expansion_fanout`, and
 `traversal_shapes`. `traversal_shapes` covers chain, fanout, bounded cycle,

@@ -90,7 +90,9 @@ go run ./cmd/benchmark \
 
 Copy the emitted `operational_candidate_sql_sha256` into the provisional
 manifest, generate and verify the complete GraphBench evidence closure, and
-only then run the production-policy command below.
+only then run the production-policy command below. Use a new preflight-output
+path for every capture; the benchmark refuses to overwrite a manifest or prior
+record.
 
 When that evidence is available, run:
 
