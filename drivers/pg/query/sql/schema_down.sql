@@ -154,6 +154,7 @@ drop function if exists traverse_paths;
 drop table if exists node;
 drop table if exists edge;
 drop table if exists kind;
+drop table if exists graph_traversal_synopsis_generation;
 drop table if exists graph_traversal_epoch;
 drop table if exists graph;
 

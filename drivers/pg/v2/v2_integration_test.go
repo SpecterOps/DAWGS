@@ -143,6 +143,30 @@ func setUpV2IntegrationGraph(t *testing.T, driver *Driver) v2IntegrationFixture 
 	return fixture
 }
 
+func TestV2RefreshTraversalTopologySynopsisTracksGraphMutation(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 4, nil)
+	setUpV2IntegrationGraph(t, driver)
+	ctx := context.Background()
+
+	initial, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
+	require.NoError(t, err)
+	require.True(t, initial.Available())
+	require.GreaterOrEqual(t, initial.NodeCount, int64(2))
+	require.GreaterOrEqual(t, initial.EdgeCount, int64(1))
+
+	require.NoError(t, driver.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		_, err := tx.CreateNode(graph.NewProperties().Set("name", "after-synopsis"), v2IntegrationNodeKind)
+		return err
+	}))
+
+	refreshed, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
+	require.NoError(t, err)
+	require.True(t, refreshed.Available())
+	require.Greater(t, refreshed.Epoch, initial.Epoch)
+	require.Greater(t, refreshed.SourceMutationEpoch, initial.SourceMutationEpoch)
+	require.GreaterOrEqual(t, refreshed.NodeCount, initial.NodeCount+1)
+}
+
 func snapshotQuery(ctx context.Context, database graph.Database, query string, parameters map[string]any) ([][]any, error) {
 	var rows [][]any
 	err := database.ReadTransaction(ctx, func(tx graph.Transaction) error {

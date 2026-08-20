@@ -71,6 +71,24 @@ create table if not exists graph_traversal_epoch
   check (epoch > 0)
 );
 
+-- The latest atomically published topology synopsis for each graph. The
+-- initial selector uses only its generation validity; estimator payloads are
+-- added in versioned relations as candidate families require them.
+create table if not exists graph_traversal_synopsis_generation
+(
+  graph_id              bigint primary key references graph (id) on delete cascade,
+  epoch                 bigint not null,
+  source_mutation_epoch bigint not null,
+  estimator_version     text not null,
+  status                text not null,
+  node_count            bigint not null default 0,
+  edge_count            bigint not null default 0,
+  built_at              timestamptz not null default clock_timestamp(),
+  check (epoch > 0),
+  check (source_mutation_epoch > 0),
+  check (status in ('ready', 'building', 'failed'))
+);
+
 insert into graph_traversal_epoch (graph_id)
 select id
 from graph

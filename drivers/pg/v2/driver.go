@@ -111,6 +111,12 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	return nil
 }
 
+// RefreshTraversalTopologySynopsis explicitly publishes an advisory graph
+// summary for shadow selection. It does not enable or alter a SQL strategy.
+func (s *Driver) RefreshTraversalTopologySynopsis(ctx context.Context, target graph.Graph) (pg.TraversalTopologySynopsis, error) {
+	return s.delegate.RefreshTraversalTopologySynopsis(ctx, target)
+}
+
 // OptimizeStorage forwards the stable PostgreSQL operation.
 func (s *Driver) OptimizeStorage(ctx context.Context) error {
 	return s.delegate.OptimizeStorage(ctx)
