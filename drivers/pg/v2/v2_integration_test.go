@@ -67,12 +67,14 @@ func newV2IntegrationDriver(t *testing.T, maxConns int32, capacity int, afterRel
 	poolConfig.MaxConns = maxConns
 	poolConfig.AfterRelease = afterRelease
 
-	provider, err := newConnectionCacheProvider(Config{TranslationCacheEntries: capacity})
+	config := Config{
+		TranslationCacheEntries: capacity,
+		Pool:                    &PoolConfig{MinConnections: 0, MaxConnections: maxConns},
+	}
+	provider, err := newConnectionCacheProvider(config)
 	require.NoError(t, err)
-	configuredPool, err := composePoolConfig(poolConfig, provider, productionPoolLifecycleHooks())
+	configuredPool, err := composePoolConfig(poolConfig, config, provider, productionPoolLifecycleHooks())
 	require.NoError(t, err)
-	configuredPool.MinConns = 0
-	configuredPool.MaxConns = maxConns
 	underlying, err := pgxpool.NewWithConfig(ctx, configuredPool)
 	require.NoError(t, err)
 	driver := NewDriver(0, &Pool{pool: underlying, provider: provider})
@@ -170,7 +172,10 @@ func v2ScalarQuery() string {
 func TestV2NewPoolConstructsAnExplicitOptInDriver(t *testing.T) {
 	poolConfig, err := pgxpool.ParseConfig(postgresV2IntegrationConnectionString(t))
 	require.NoError(t, err)
-	pool, err := NewPool(context.Background(), poolConfig, Config{TranslationCacheEntries: 2})
+	pool, err := NewPool(context.Background(), poolConfig, Config{
+		TranslationCacheEntries: 2,
+		Pool:                    &PoolConfig{MinConnections: 0, MaxConnections: 1},
+	})
 	require.NoError(t, err)
 	driver := NewDriver(0, pool)
 	t.Cleanup(func() {
@@ -182,6 +187,8 @@ func TestV2NewPoolConstructsAnExplicitOptInDriver(t *testing.T) {
 	require.NoError(t, err)
 	stats := driver.TranslationCacheStats()
 	require.Equal(t, 2, stats.CapacityPerConnection)
+	require.Equal(t, int32(0), stats.MinConnections)
+	require.Equal(t, int32(1), stats.MaxConnections)
 	require.NotEmpty(t, stats.Connections)
 }
 

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/drivers/pg"
+	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,4 +30,16 @@ func TestPostgresBenchmarkDriverModes(t *testing.T) {
 	require.True(t, isPostgresBenchmarkDriver(pg.DriverName))
 	require.True(t, isPostgresBenchmarkDriver(pgV2BenchmarkDriver))
 	require.False(t, isPostgresBenchmarkDriver("neo4j"))
+}
+
+func TestBenchmarkV2ConfigValidatesAndConvertsPoolLimits(t *testing.T) {
+	config, err := benchmarkV2Config(32, 0, 4)
+	require.NoError(t, err)
+	require.Equal(t, 32, config.TranslationCacheEntries)
+	require.Equal(t, &pgv2.PoolConfig{MinConnections: 0, MaxConnections: 4}, config.Pool)
+
+	for _, arguments := range [][3]int{{-1, 0, 1}, {1, -1, 1}, {1, 1, 0}, {1, 2, 1}} {
+		_, err := benchmarkV2Config(arguments[0], arguments[1], arguments[2])
+		require.Error(t, err)
+	}
 }

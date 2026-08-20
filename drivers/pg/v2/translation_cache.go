@@ -203,11 +203,13 @@ type connectionState struct {
 type connectionCacheProvider struct {
 	lock sync.RWMutex
 
-	capacity   int
-	generation uint64
-	nextID     uint64
-	closed     bool
-	states     map[*pgx.Conn]*connectionState
+	capacity       int
+	minConnections int32
+	maxConnections int32
+	generation     uint64
+	nextID         uint64
+	closed         bool
+	states         map[*pgx.Conn]*connectionState
 
 	retiredConnections uint64
 	retiredStats       TranslationCacheStats
@@ -219,10 +221,13 @@ func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error)
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
+	poolConfig := config.resolvedPoolConfig()
 	return &connectionCacheProvider{
-		capacity:   config.TranslationCacheEntries,
-		generation: 1,
-		states:     map[*pgx.Conn]*connectionState{},
+		capacity:       config.TranslationCacheEntries,
+		minConnections: poolConfig.MinConnections,
+		maxConnections: poolConfig.MaxConnections,
+		generation:     1,
+		states:         map[*pgx.Conn]*connectionState{},
 	}, nil
 }
 
@@ -339,6 +344,8 @@ func (s *connectionCacheProvider) stats() Stats {
 	stats := Stats{
 		SchemaGeneration:      s.generation,
 		CapacityPerConnection: s.capacity,
+		MinConnections:        s.minConnections,
+		MaxConnections:        s.maxConnections,
 		LiveConnections:       len(states),
 		RetiredConnections:    s.retiredConnections,
 		Aggregate:             s.retiredStats,

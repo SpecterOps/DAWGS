@@ -14,6 +14,8 @@ func TestDriverReportsProviderStatisticsWithoutSensitiveState(t *testing.T) {
 
 	stats := driver.TranslationCacheStats()
 	require.Equal(t, DefaultConfig().TranslationCacheEntries, stats.CapacityPerConnection)
+	require.Equal(t, int32(defaultMinConnections), stats.MinConnections)
+	require.Equal(t, int32(defaultMaxConnections), stats.MaxConnections)
 	require.Zero(t, stats.LiveConnections)
 	require.Empty(t, stats.Connections)
 }

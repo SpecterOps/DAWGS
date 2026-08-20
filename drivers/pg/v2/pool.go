@@ -34,24 +34,26 @@ func productionPoolLifecycleHooks() poolLifecycleHooks {
 	}
 }
 
-func composePoolConfig(poolConfig *pgxpool.Config, provider *connectionCacheProvider, hooks poolLifecycleHooks) (*pgxpool.Config, error) {
+func composePoolConfig(poolConfig *pgxpool.Config, v2Config Config, provider *connectionCacheProvider, hooks poolLifecycleHooks) (*pgxpool.Config, error) {
 	if poolConfig == nil || poolConfig.ConnConfig == nil {
 		return nil, fmt.Errorf("PostgreSQL pool config is required")
 	}
 	if provider == nil {
 		return nil, fmt.Errorf("connection cache provider is required")
 	}
+	if err := v2Config.validate(); err != nil {
+		return nil, err
+	}
 
-	config := poolConfig.Copy()
-	callerAfterConnect := config.AfterConnect
-	callerAfterRelease := config.AfterRelease
-	callerBeforeClose := config.BeforeClose
+	configuredPool := poolConfig.Copy()
+	callerAfterConnect := configuredPool.AfterConnect
+	callerAfterRelease := configuredPool.AfterRelease
+	callerBeforeClose := configuredPool.BeforeClose
 
-	// Mirror the current v1 pool sizing. Pool tuning is deliberately outside
-	// the v2 cache-lifetime experiment.
-	config.MinConns = 5
-	config.MaxConns = 50
-	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+	poolLimits := v2Config.resolvedPoolConfig()
+	configuredPool.MinConns = poolLimits.MinConnections
+	configuredPool.MaxConns = poolLimits.MaxConnections
+	configuredPool.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		if hooks.afterConnect != nil {
 			if err := hooks.afterConnect(ctx, conn); err != nil {
 				return err
@@ -65,7 +67,7 @@ func composePoolConfig(poolConfig *pgxpool.Config, provider *connectionCacheProv
 		provider.registerConnection(conn)
 		return nil
 	}
-	config.AfterRelease = func(conn *pgx.Conn) bool {
+	configuredPool.AfterRelease = func(conn *pgx.Conn) bool {
 		if hooks.afterRelease != nil && !hooks.afterRelease(conn) {
 			return false
 		}
@@ -74,13 +76,13 @@ func composePoolConfig(poolConfig *pgxpool.Config, provider *connectionCacheProv
 		}
 		return true
 	}
-	config.BeforeClose = func(conn *pgx.Conn) {
+	configuredPool.BeforeClose = func(conn *pgx.Conn) {
 		provider.removeConnection(conn)
 		if callerBeforeClose != nil {
 			callerBeforeClose(conn)
 		}
 	}
-	return config, nil
+	return configuredPool, nil
 }
 
 // NewPool constructs an opt-in v2 pool. It copies poolConfig before composing
@@ -95,7 +97,7 @@ func NewPool(ctx context.Context, poolConfig *pgxpool.Config, config Config) (*P
 	if err != nil {
 		return nil, err
 	}
-	configuredPool, err := composePoolConfig(poolConfig, provider, productionPoolLifecycleHooks())
+	configuredPool, err := composePoolConfig(poolConfig, config, provider, productionPoolLifecycleHooks())
 	if err != nil {
 		provider.close()
 		return nil, err

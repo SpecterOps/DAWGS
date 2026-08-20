@@ -52,6 +52,9 @@ func main() {
 		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
 		warmup       = flag.Int("warmup", 1, "untimed iterations per worker (zero measures cold queries)")
 		workers      = flag.Int("workers", 1, "concurrent workers per scenario")
+		v2Cache      = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
+		v2MinConns   = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
+		v2MaxConns   = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
 		output       = flag.String("output", "", "output file (default: stdout)")
 		format       = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
 		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
@@ -72,6 +75,10 @@ func main() {
 	if !isReportFormat(*format) {
 		fatal("unsupported output format %q", *format)
 	}
+	v2Config, err := benchmarkV2Config(*v2Cache, *v2MinConns, *v2MaxConns)
+	if err != nil {
+		fatal("invalid pg-v2 configuration: %v", err)
+	}
 
 	conn := *connStr
 	if conn == "" {
@@ -82,7 +89,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	db, err := openBenchmarkDatabase(ctx, *driver, conn, size.Gibibyte)
+	db, err := openBenchmarkDatabaseWithV2Config(ctx, *driver, conn, size.Gibibyte, v2Config)
 	if err != nil {
 		fatal("failed to open database: %v", err)
 	}
@@ -184,12 +191,14 @@ func main() {
 	if statsProvider, ok := db.(interface{ TranslationCacheStats() pgv2.Stats }); ok {
 		stats := statsProvider.TranslationCacheStats()
 		report.TranslationCache = &stats
-		fmt.Fprintf(os.Stderr, "v2 translation cache: hits=%d misses=%d bypasses=%d evictions=%d live_connections=%d\n",
+		fmt.Fprintf(os.Stderr, "v2 translation cache: hits=%d misses=%d bypasses=%d evictions=%d live_connections=%d pool=%d-%d\n",
 			stats.Aggregate.Hits,
 			stats.Aggregate.Misses,
 			stats.Aggregate.Bypasses,
 			stats.Aggregate.Evictions,
 			stats.LiveConnections,
+			stats.MinConnections,
+			stats.MaxConnections,
 		)
 	}
 
@@ -229,6 +238,10 @@ func main() {
 }
 
 func openBenchmarkDatabase(ctx context.Context, driverName, connection string, graphQueryMemoryLimit size.Size) (graph.Database, error) {
+	return openBenchmarkDatabaseWithV2Config(ctx, driverName, connection, graphQueryMemoryLimit, pgv2.DefaultConfig())
+}
+
+func openBenchmarkDatabaseWithV2Config(ctx context.Context, driverName, connection string, graphQueryMemoryLimit size.Size, v2Config pgv2.Config) (graph.Database, error) {
 	cfg := dawgs.Config{
 		GraphQueryMemoryLimit: graphQueryMemoryLimit,
 		ConnectionString:      connection,
@@ -252,7 +265,7 @@ func openBenchmarkDatabase(ctx context.Context, driverName, connection string, g
 		if err != nil {
 			return nil, fmt.Errorf("parse PostgreSQL v2 pool configuration: %w", err)
 		}
-		pool, err := pgv2.NewDefaultPool(ctx, poolConfig)
+		pool, err := pgv2.NewPool(ctx, poolConfig, v2Config)
 		if err != nil {
 			return nil, fmt.Errorf("create PostgreSQL v2 pool: %w", err)
 		}
@@ -261,6 +274,29 @@ func openBenchmarkDatabase(ctx context.Context, driverName, connection string, g
 	default:
 		return dawgs.Open(ctx, driverName, cfg)
 	}
+}
+
+func benchmarkV2Config(cacheEntries, minConnections, maxConnections int) (pgv2.Config, error) {
+	const maxInt32 = int(^uint32(0) >> 1)
+	if cacheEntries < 0 {
+		return pgv2.Config{}, fmt.Errorf("translation cache entries must not be negative: %d", cacheEntries)
+	}
+	if minConnections < 0 || minConnections > maxInt32 {
+		return pgv2.Config{}, fmt.Errorf("minimum connections must be between 0 and %d: %d", maxInt32, minConnections)
+	}
+	if maxConnections < 1 || maxConnections > maxInt32 {
+		return pgv2.Config{}, fmt.Errorf("maximum connections must be between 1 and %d: %d", maxInt32, maxConnections)
+	}
+	if minConnections > maxConnections {
+		return pgv2.Config{}, fmt.Errorf("minimum connections %d exceeds maximum connections %d", minConnections, maxConnections)
+	}
+	return pgv2.Config{
+		TranslationCacheEntries: cacheEntries,
+		Pool: &pgv2.PoolConfig{
+			MinConnections: int32(minConnections),
+			MaxConnections: int32(maxConnections),
+		},
+	}, nil
 }
 
 func isPostgresBenchmarkDriver(driverName string) bool {

@@ -36,6 +36,8 @@ type ConnectionCacheStats struct {
 type Stats struct {
 	SchemaGeneration      uint64                 `json:"schema_generation"`
 	CapacityPerConnection int                    `json:"capacity_per_connection"`
+	MinConnections        int32                  `json:"min_connections"`
+	MaxConnections        int32                  `json:"max_connections"`
 	LiveConnections       int                    `json:"live_connections"`
 	RetiredConnections    uint64                 `json:"retired_connections"`
 	Aggregate             TranslationCacheStats  `json:"aggregate"`

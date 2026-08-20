@@ -47,7 +47,7 @@ func TestComposePoolConfigCopiesAndOrdersHooks(t *testing.T) {
 		},
 	}
 
-	composed, err := composePoolConfig(config, provider, hooks)
+	composed, err := composePoolConfig(config, DefaultConfig(), provider, hooks)
 	require.NoError(t, err)
 	require.NotSame(t, config, composed)
 	require.Equal(t, int32(1), config.MinConns)
@@ -71,7 +71,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 	t.Run("failed required connect does not register state", func(t *testing.T) {
 		config := testPoolConfig(t)
 		expected := errors.New("required setup failed")
-		composed, err := composePoolConfig(config, provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
 			afterConnect: func(context.Context, *pgx.Conn) error { return expected },
 		})
 		require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 		config := testPoolConfig(t)
 		expected := errors.New("caller setup failed")
 		config.AfterConnect = func(context.Context, *pgx.Conn) error { return expected }
-		composed, err := composePoolConfig(config, provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
 			afterConnect: func(context.Context, *pgx.Conn) error { return nil },
 		})
 		require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 			called = true
 			return true
 		}
-		composed, err := composePoolConfig(config, provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
 			afterRelease: func(*pgx.Conn) bool { return false },
 		})
 		require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 	t.Run("caller release rejection is preserved", func(t *testing.T) {
 		config := testPoolConfig(t)
 		config.AfterRelease = func(*pgx.Conn) bool { return false }
-		composed, err := composePoolConfig(config, provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
 			afterRelease: func(*pgx.Conn) bool { return true },
 		})
 		require.NoError(t, err)
@@ -119,4 +119,27 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 
 func TestDefaultConfigUsesConservativePerConnectionCapacity(t *testing.T) {
 	require.Equal(t, defaultTranslationCacheEntries, DefaultConfig().TranslationCacheEntries)
+	require.Equal(t, &PoolConfig{MinConnections: defaultMinConnections, MaxConnections: defaultMaxConnections}, DefaultConfig().Pool)
+}
+
+func TestConfigValidatesAndAppliesExplicitPoolLimits(t *testing.T) {
+	config := Config{
+		TranslationCacheEntries: 3,
+		Pool:                    &PoolConfig{MinConnections: 0, MaxConnections: 2},
+	}
+	provider, err := newConnectionCacheProvider(config)
+	require.NoError(t, err)
+	composed, err := composePoolConfig(testPoolConfig(t), config, provider, poolLifecycleHooks{})
+	require.NoError(t, err)
+	require.Equal(t, int32(0), composed.MinConns)
+	require.Equal(t, int32(2), composed.MaxConns)
+
+	for _, invalid := range []Config{
+		{TranslationCacheEntries: -1},
+		{Pool: &PoolConfig{MinConnections: -1, MaxConnections: 1}},
+		{Pool: &PoolConfig{MinConnections: 0, MaxConnections: 0}},
+		{Pool: &PoolConfig{MinConnections: 2, MaxConnections: 1}},
+	} {
+		require.Error(t, invalid.validate())
+	}
 }
