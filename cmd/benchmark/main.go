@@ -27,6 +27,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
@@ -54,6 +55,7 @@ func main() {
 		workers      = flag.Int("workers", 1, "concurrent workers per scenario")
 		v2Cache      = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
 		v2SharedSP   = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
+		v2SPExecutor = flag.String("pg-v2-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
 		v2MinConns   = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
 		v2MaxConns   = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
 		output       = flag.String("output", "", "output file (default: stdout)")
@@ -132,8 +134,26 @@ func main() {
 		} else if defaultGraph, hasDefaultGraph := pgDB.DefaultGraph(); !hasDefaultGraph {
 			fatal("failed to resolve default graph for explain capture")
 		} else {
-			runOptions.Explain = newPostgresExplainer(pgDB.KindMapper(), defaultGraph.ID)
+			runOptions.Explain = newPostgresExplainerWithExecutor(pgDB.KindMapper(), defaultGraph.ID, optimize.ShortestPathExecutor(*v2SPExecutor))
 		}
+	}
+	if *v2SPExecutor != "" {
+		if *driver != pgV2BenchmarkDriver {
+			fatal("-pg-v2-shortest-path-executor requires -driver pg-v2")
+		}
+		pgDB, ok := db.(postgresBenchmarkDriver)
+		if !ok {
+			fatal("PostgreSQL v2 benchmark driver does not expose translation metadata")
+		}
+		defaultGraph, found := pgDB.DefaultGraph()
+		if !found {
+			fatal("failed to resolve default graph for shortest-path executor benchmark")
+		}
+		wrapped, err := newShortestExecutorBenchmarkDatabase(db, pgDB.KindMapper(), defaultGraph, optimize.ShortestPathExecutor(*v2SPExecutor))
+		if err != nil {
+			fatal("configure shortest-path executor benchmark: %v", err)
+		}
+		db = wrapped
 	}
 
 	report := Report{

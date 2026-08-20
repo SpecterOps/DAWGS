@@ -19,6 +19,7 @@ package main
 import (
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg"
 	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/stretchr/testify/require"
@@ -43,4 +44,13 @@ func TestBenchmarkV2ConfigValidatesAndConvertsPoolLimits(t *testing.T) {
 		_, err := benchmarkV2Config(arguments[0], arguments[1], arguments[2], arguments[3])
 		require.Error(t, err)
 	}
+}
+
+func TestBenchmarkShortestPathExecutorAllowlist(t *testing.T) {
+	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorB2SmallerCurrentLevelDistance))
+	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness))
+	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG))
+	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorASPI1DAG))
+	require.False(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorIncumbentWorkspace))
+	require.False(t, benchmarkShortestPathExecutor("unknown"))
 }
