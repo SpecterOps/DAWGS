@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,6 +28,27 @@ func TestTraversalShapeUsesOptimizerFactsWithoutIdentifiersOrValues(t *testing.T
 	require.Equal(t, 1, firstShape.RelationshipKindCount)
 	require.False(t, firstShape.UntypedRelationship)
 	require.Equal(t, firstShape.Fingerprint, secondShape.Fingerprint)
+}
+
+func TestTraversalPolicyStructuralBucketIsObservationOnlyAndUnambiguous(t *testing.T) {
+	query := "MATCH p = allShortestPaths((s)-[:Edge*1..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
+	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+	require.NoError(t, err)
+	shape, err := traversalShapeForQuery(parsed)
+	require.NoError(t, err)
+
+	policy := testTraversalPolicy(query, optimize.ShortestPathExecutorASPI1DAG, false)
+	manifest, err := decodeTraversalPromotionManifest(policy.PromotionManifestJSON)
+	require.NoError(t, err)
+	policy.compiledManifest = manifest
+	bucket, matched := policy.structuralBucketForShape(shape)
+	require.True(t, matched)
+	require.Equal(t, "qualified-query", bucket.Name)
+
+	policy.compiledManifest.Buckets = append(policy.compiledManifest.Buckets, bucket)
+	policy.compiledManifest.Buckets[1].Name = "ambiguous"
+	_, matched = policy.structuralBucketForShape(shape)
+	require.False(t, matched)
 }
 
 func TestTraversalShapeRejectsMultipleTraversalTargets(t *testing.T) {

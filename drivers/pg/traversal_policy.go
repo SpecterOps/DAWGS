@@ -190,6 +190,32 @@ func (s TraversalPolicy) productionOptions(query string) (translate.ProductionOp
 	return options, nil
 }
 
+// structuralBucketForShape reports an observation-only structural match. It
+// does not authorize a candidate: manifest v2 remains exact-query gated until
+// the structural evidence schema is independently verified.
+func (s TraversalPolicy) structuralBucketForShape(shape TraversalShape) (traversalPromotionBucket, bool) {
+	if !shape.Available() || len(s.compiledManifest.Buckets) == 0 {
+		return traversalPromotionBucket{}, false
+	}
+	var matched *traversalPromotionBucket
+	for index := range s.compiledManifest.Buckets {
+		bucket := &s.compiledManifest.Buckets[index]
+		if bucket.Direction != shape.Direction || bucket.ObservationMode != shape.ObservationMode ||
+			bucket.MinimumDepth != shape.MinimumDepth || bucket.MaximumDepth != shape.MaximumDepth ||
+			bucket.RelationshipKindCount != shape.RelationshipKindCount || bucket.UntypedRelationship != shape.UntypedRelationship {
+			continue
+		}
+		if matched != nil {
+			return traversalPromotionBucket{}, false
+		}
+		matched = bucket
+	}
+	if matched == nil {
+		return traversalPromotionBucket{}, false
+	}
+	return *matched, true
+}
+
 // traversalPromotionBucket groups state that must remain consistent while processing traversal promotion bucket.
 type traversalPromotionBucket struct {
 	// Name identifies the qualified workload bucket.

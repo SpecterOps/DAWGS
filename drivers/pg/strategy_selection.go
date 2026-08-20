@@ -97,6 +97,9 @@ func (s *SchemaManager) observeTraversalStrategySelection(query string, parsed *
 		if _, authorized := policy.compiledBuckets[TraversalPolicyQuerySHA256(strings.TrimSpace(query))]; authorized {
 			selection.Mode = "exact_query_canary"
 			selection.Reason = "exact_query_authorized"
+		} else if bucket, matched := policy.structuralBucketForShape(shape); matched {
+			selection.Mode = "structural_shadow"
+			selection.Reason = "structural_bucket_" + bucket.Name
 		} else {
 			selection.Reason = "exact_query_not_authorized"
 		}

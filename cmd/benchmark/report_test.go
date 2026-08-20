@@ -56,7 +56,7 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 				Aggregate:          pgv2.TranslationCacheStats{Hits: 4, Misses: 2},
 				TraversalWorkspace: pgv2.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
 				PreparedStatements: pgv2.PreparedStatementStats{Prepared: 2, Reuses: 4},
-				StrategySelection:  pgv2.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, ShapeUnavailable: 2},
+				StrategySelection:  pgv2.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
 			},
 			Results: []Result{{
 				Section:           "Traversal",
@@ -137,7 +137,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 				Aggregate:          pgv2.TranslationCacheStats{Hits: 4, Misses: 2},
 				TraversalWorkspace: pgv2.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
 				PreparedStatements: pgv2.PreparedStatementStats{Prepared: 2, Reuses: 4},
-				StrategySelection:  pgv2.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, ShapeUnavailable: 2},
+				StrategySelection:  pgv2.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
 			},
 			Results: []Result{{
 				Section:           "Fixed Suffix Expansion Fanout",
@@ -165,7 +165,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		"Duplicate Rows",
 		"| Fixed Suffix Expansion Fanout / combined | fixed_suffix_expansion_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
 		"V2 connection state: cache 4 hits, 2 misses, 0 bypasses, 0 evictions; workspaces 1 initialized/3 reused; statements 2 prepared/4 reused across 2 live connections.",
-		"V2 strategy selection: 3 incumbent, 1 exact-query canary, 2 shape-unavailable observations.",
+		"V2 strategy selection: 3 incumbent, 1 exact-query canary, 2 structural-shadow, 2 shape-unavailable observations.",
 	} {
 		require.Contains(t, text, expected)
 	}

@@ -131,7 +131,7 @@ func writeMarkdown(w io.Writer, r Report) error {
 		}
 		selection := r.TranslationCache.StrategySelection
 		if selection.Incumbent+selection.ExactQueryCanary > 0 {
-			fmt.Fprintf(w, "V2 strategy selection: %d incumbent, %d exact-query canary, %d shape-unavailable observations.\n\n", selection.Incumbent, selection.ExactQueryCanary, selection.ShapeUnavailable)
+			fmt.Fprintf(w, "V2 strategy selection: %d incumbent, %d exact-query canary, %d structural-shadow, %d shape-unavailable observations.\n\n", selection.Incumbent, selection.ExactQueryCanary, selection.StructuralShadow, selection.ShapeUnavailable)
 		}
 	}
 	return nil
