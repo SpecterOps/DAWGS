@@ -147,6 +147,7 @@ func TestPostgresV2BenchmarkPolicyPath(t *testing.T) {
 
 	const cypher = "MATCH p = allShortestPaths((s)-[:BenchmarkV2PolicyEdge*1..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
 	parameters := map[string]any{"start_id": startID, "end_id": endID}
+	scenario := expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", "policy", "candidate", cypher, parameters), 1)
 	defaultGraph, found := driver.DefaultGraph()
 	require.True(t, found)
 	productionOptions := translate.ProductionOptions{
@@ -168,6 +169,23 @@ func TestPostgresV2BenchmarkPolicyPath(t *testing.T) {
 	sqlDigest := sha256.Sum256([]byte(sqlQuery))
 
 	queryDigest := pg.TraversalPolicyQuerySHA256(cypher)
+	preflightManifest := benchmarkTraversalPromotionManifest{
+		Candidate:       string(optimize.ShortestPathExecutorASPI1DAG),
+		SelectorVersion: "benchmark-policy-path-v1",
+		Caps: map[string]int64{
+			"state_limit": 1000, "predecessor_limit": 1000, "enumeration_limit": 1000, "output_bytes_limit": 1 << 20,
+		},
+		Buckets: []benchmarkPolicyBucket{{
+			QuerySHA256: []string{queryDigest}, Direction: "outbound", ObservationMode: "all_paths",
+			MinimumDepth: 1, MaximumDepth: 4, RelationshipKindCount: 1,
+		}},
+	}
+	preflight, err := renderTraversalPolicyPreflight(ctx, driver.KindMapper(), defaultGraph, scenario, preflightManifest)
+	require.NoError(t, err)
+	require.Equal(t, queryDigest, preflight.QuerySHA256)
+	require.Equal(t, hex.EncodeToString(sqlDigest[:]), preflight.SQLSHA256)
+	require.Equal(t, string(optimize.ShortestPathExecutorASPI1DAG), preflight.Candidate)
+
 	evidence := map[string]map[string]string{}
 	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
 		evidence[role] = map[string]string{"path": role + ".json", "sha256": strings.Repeat("0", sha256.Size*2)}
@@ -195,7 +213,6 @@ func TestPostgresV2BenchmarkPolicyPath(t *testing.T) {
 
 	wrapped, err := newTraversalPolicyBenchmarkDatabase(database, "auto", true)
 	require.NoError(t, err)
-	scenario := expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", "policy", "candidate", cypher, parameters), 1)
 	result, err := runScenario(ctx, wrapped, scenario, 2, RunOptions{WarmupIterations: 1})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.RowCount)
