@@ -49,6 +49,17 @@ func TestConnectionTranslationCacheRebindsCurrentValues(t *testing.T) {
 	require.Equal(t, TranslationCacheStats{Hits: 1, Misses: 1, Insertions: 1, Entries: 1, Capacity: 2}, cache.statsSnapshot())
 }
 
+func TestStrategySelectionStatsRemainQueryTextFree(t *testing.T) {
+	provider, _, _ := newTestCache(t, 2)
+	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "incumbent", Reason: "shape_unavailable"})
+	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "exact_query_canary", Reason: "exact_query_authorized"})
+
+	stats := provider.stats().StrategySelection
+	require.Equal(t, uint64(1), stats.Incumbent)
+	require.Equal(t, uint64(1), stats.ExactQueryCanary)
+	require.Equal(t, uint64(1), stats.ShapeUnavailable)
+}
+
 // TestConnectionTranslationCachePartitionsInputs verifies all inputs that can
 // change SQL occupy independent entries.
 func TestConnectionTranslationCachePartitionsInputs(t *testing.T) {

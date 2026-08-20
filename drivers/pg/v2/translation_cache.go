@@ -255,6 +255,7 @@ type connectionCacheProvider struct {
 	retiredStats       TranslationCacheStats
 	retiredPrepared    PreparedStatementStats
 	sqlGeneration      SQLGenerationStats
+	strategySelection  StrategySelectionStats
 	sharedTemplates    *sharedTemplateCache
 }
 
@@ -262,6 +263,25 @@ var _ pg.CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
 var _ pg.StableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
 var _ pg.LazyStableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
 var _ pg.SQLGenerationProfileCollector = (*connectionCacheProvider)(nil)
+var _ pg.TraversalStrategySelectionCollector = (*connectionCacheProvider)(nil)
+
+// RecordTraversalStrategySelection records an observation-only routing
+// outcome. No per-query, SQL, graph, parameter, or decision data is retained.
+func (s *connectionCacheProvider) RecordTraversalStrategySelection(selection pg.TraversalStrategySelection) {
+	if s == nil {
+		return
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if selection.Reason == "shape_unavailable" {
+		s.strategySelection.ShapeUnavailable++
+	}
+	if selection.Mode == "exact_query_canary" {
+		s.strategySelection.ExactQueryCanary++
+	} else {
+		s.strategySelection.Incumbent++
+	}
+}
 
 // RecordSQLGenerationProfile retains query-text-free timing totals for the
 // v2 architecture. A profile is recorded after pgx has returned a row stream,
@@ -552,6 +572,7 @@ func (s *connectionCacheProvider) stats() Stats {
 		Aggregate:                   s.retiredStats,
 		PreparedStatements:          s.retiredPrepared,
 		SQLGeneration:               s.sqlGeneration,
+		StrategySelection:           s.strategySelection,
 		SharedShortestPathTemplates: s.sharedTemplates.snapshot(),
 		Connections:                 make([]ConnectionCacheStats, 0, len(s.states)),
 	}

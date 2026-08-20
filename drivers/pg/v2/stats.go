@@ -54,6 +54,15 @@ type PreparedStatementStats struct {
 	Entries  int    `json:"entries"`
 }
 
+// StrategySelectionStats records query-text-free production-routing
+// observations. These counters describe selection only; they do not claim an
+// emitted candidate executed.
+type StrategySelectionStats struct {
+	Incumbent        uint64 `json:"incumbent"`
+	ExactQueryCanary uint64 `json:"exact_query_canary"`
+	ShapeUnavailable uint64 `json:"shape_unavailable"`
+}
+
 func (s *PreparedStatementStats) add(other PreparedStatementStats) {
 	s.Attempts += other.Attempts
 	s.Prepared += other.Prepared
@@ -86,6 +95,7 @@ type Stats struct {
 	PreparedStatements          PreparedStatementStats  `json:"prepared_statements"`
 	Connections                 []ConnectionCacheStats  `json:"connections"`
 	SQLGeneration               SQLGenerationStats      `json:"sql_generation"`
+	StrategySelection           StrategySelectionStats  `json:"strategy_selection"`
 	SharedShortestPathTemplates SharedTemplateStats     `json:"shared_shortest_path_templates"`
 }
 

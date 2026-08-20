@@ -360,6 +360,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	policyStarted := time.Now()
 	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicy(query, s.isolation)
 	profile.Policy = time.Since(policyStarted)
+	s.schemaManager.observeTraversalStrategySelection(query, parsedQuery, policy)
 	buildTranslation := func() (translate.Result, string, error) {
 		var translated translate.Result
 		var translateErr error
