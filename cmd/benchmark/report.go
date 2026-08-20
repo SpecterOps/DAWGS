@@ -36,14 +36,17 @@ const (
 
 // Report holds all benchmark results and metadata.
 type Report struct {
-	Driver           string      `json:"driver"`
-	GitRef           string      `json:"git_ref"`
-	Date             string      `json:"date"`
-	Iterations       int         `json:"iterations"`
-	WarmupIterations int         `json:"warmup_iterations"`
-	Workers          int         `json:"workers"`
-	TranslationCache *pgv2.Stats `json:"translation_cache,omitempty"`
-	Results          []Result    `json:"results"`
+	Driver                  string      `json:"driver"`
+	GitRef                  string      `json:"git_ref"`
+	Date                    string      `json:"date"`
+	Iterations              int         `json:"iterations"`
+	WarmupIterations        int         `json:"warmup_iterations"`
+	Workers                 int         `json:"workers"`
+	ShortestPathExecutor    string      `json:"shortest_path_executor,omitempty"`
+	PostgreSQLPlanCacheMode string      `json:"postgresql_plan_cache_mode,omitempty"`
+	PostgreSQLJIT           bool        `json:"postgresql_jit"`
+	TranslationCache        *pgv2.Stats `json:"translation_cache,omitempty"`
+	Results                 []Result    `json:"results"`
 }
 
 func writeReport(w io.Writer, r Report, format string) error {
@@ -78,6 +81,9 @@ func writeJSON(w io.Writer, r Report) error {
 
 func writeMarkdown(w io.Writer, r Report) error {
 	fmt.Fprintf(w, "# Benchmarks — %s @ %s (%s, %d iterations × %d workers, %d warm-up iterations)\n\n", r.Driver, r.GitRef, r.Date, r.Iterations, r.Workers, r.WarmupIterations)
+	if r.ShortestPathExecutor != "" {
+		fmt.Fprintf(w, "Shortest-path executor: `%s`; PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+	}
 	fmt.Fprintf(w, "| Query | Dataset | Rows | Distinct Rows | Duplicate Rows | Median | P95 | Max | Explain |\n")
 	fmt.Fprintf(w, "|-------|---------|-----:|--------------:|---------------:|-------:|----:|----:|:--------|\n")
 

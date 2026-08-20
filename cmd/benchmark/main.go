@@ -57,7 +57,7 @@ func main() {
 		v2SharedSP   = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
 		v2SPExecutor = flag.String("pg-v2-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
 		pgPlanMode   = flag.String("pg-plan-cache-mode", "auto", "PostgreSQL plan cache mode for forced shortest-path benchmarks (auto, force_custom_plan, force_generic_plan)")
-		pgJIT        = flag.Bool("pg-jit", false, "enable PostgreSQL JIT for forced shortest-path benchmarks")
+		pgJIT        = flag.Bool("pg-jit", true, "enable PostgreSQL JIT for forced shortest-path benchmarks")
 		v2MinConns   = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
 		v2MaxConns   = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
 		output       = flag.String("output", "", "output file (default: stdout)")
@@ -159,12 +159,15 @@ func main() {
 	}
 
 	report := Report{
-		Driver:           *driver,
-		GitRef:           gitRef(),
-		Date:             time.Now().Format("2006-01-02"),
-		Iterations:       *iterations,
-		WarmupIterations: *warmup,
-		Workers:          *workers,
+		Driver:                  *driver,
+		GitRef:                  gitRef(),
+		Date:                    time.Now().Format("2006-01-02"),
+		Iterations:              *iterations,
+		WarmupIterations:        *warmup,
+		Workers:                 *workers,
+		ShortestPathExecutor:    *v2SPExecutor,
+		PostgreSQLPlanCacheMode: *pgPlanMode,
+		PostgreSQLJIT:           *pgJIT,
 	}
 
 	for _, ds := range datasets {
