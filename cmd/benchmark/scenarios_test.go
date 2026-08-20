@@ -42,11 +42,10 @@ func TestShortestPathScenariosUseStableParameterizedCypher(t *testing.T) {
 	require.Len(t, secondShortest, 2)
 	for index := range firstShortest {
 		require.Equal(t, firstShortest[index].Cypher, secondShortest[index].Cypher)
-		require.Contains(t, firstShortest[index].Cypher, "$start_id")
-		require.Contains(t, firstShortest[index].Cypher, "$end_id")
-		require.NotEqual(t, firstShortest[index].Parameters["start_id"], secondShortest[index].Parameters["start_id"])
-		require.NotEqual(t, firstShortest[index].Parameters["end_id"], secondShortest[index].Parameters["end_id"])
+		require.NotEmpty(t, firstShortest[index].Parameters)
+		require.NotEqual(t, firstShortest[index].Parameters, secondShortest[index].Parameters)
 	}
+	require.NotEqual(t, firstShortest[0].Cypher, firstShortest[1].Cypher, "one manifest query digest must select exactly one scenario")
 }
 
 // TestBaseScenariosDeclareExpectedRows verifies the canonical row-count contract for every query family in the base fixture.

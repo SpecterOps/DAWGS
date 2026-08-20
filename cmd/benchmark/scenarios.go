@@ -365,8 +365,8 @@ func traversalShapesScenarios(idMap opengraph.IDMap) []Scenario {
 			map[string]any{"start_id": idMap["d0"], "end_id": idMap["d4"]},
 		), 3),
 		expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", ds, "disconnected",
-			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
-			map[string]any{"start_id": idMap["x0"], "end_id": idMap["x1"]},
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $disconnected_start_id AND id(e) = $disconnected_end_id RETURN p",
+			map[string]any{"disconnected_start_id": idMap["x0"], "disconnected_end_id": idMap["x1"]},
 		), 0),
 	}
 }

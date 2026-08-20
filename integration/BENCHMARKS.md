@@ -54,6 +54,34 @@ fixture because workspace execution dominated the small search. Forced custom
 planning also regressed both shortest-path shapes; `auto` remains the selected
 plan policy. The B2 executor remains available only for diagnostic/tool runs.
 
+### V2 production-policy path
+
+The forced-executor measurements above establish a candidate SQL comparison,
+but do not exercise V2's manifest selection or connection-local translation
+cache. `cmd/benchmark` now has a separate `production_policy` mode that loads a
+GraphBench-verified manifest into `Driver.SetTraversalPolicy`, requires
+Repeatable Read, and runs exactly its single allowlisted parameterized Cypher
+scenario. A live PostgreSQL manual integration test renders the candidate SQL,
+binds its SHA-256 into a schema-v2 manifest, installs that policy on `pg-v2`,
+and executes the route successfully.
+
+No forced-mode latency is relabeled as a production-policy result here: a
+comparable publication requires a clean-source, GraphBench-verified manifest
+whose SQL anchor and exact query digest match the current benchmark schema.
+When that evidence is available, run:
+
+```bash
+go run ./cmd/graphbench -promotion-manifest .coverage/promotion.json
+go run ./cmd/benchmark \
+  -driver pg-v2 \
+  -connection "postgresql://user:password@localhost/database" \
+  -dataset traversal_shapes \
+  -pg-v2-traversal-policy-manifest .coverage/promotion.json \
+  -pg-v2-traversal-policy-generation 7 \
+  -pg-plan-cache-mode auto \
+  -iterations 20 -warmup 2 -workers 1
+```
+
 ```bash
 go run ./cmd/benchmark \
   -driver pg-v2 \

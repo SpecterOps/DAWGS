@@ -290,6 +290,9 @@ report `policy_default` depth provenance under `sp-static-v7-contained`.
 The PostgreSQL driver's `SetTraversalPolicy` API can expose one eligible
 candidate to an explicit normalized-query SHA-256 allowlist under a nonzero
 generation.
+The benchmark command can exercise that real V2 policy path only with a
+GraphBench-verified manifest; its usage and guardrails are documented in
+[`cmd/benchmark/README.md`](cmd/benchmark/README.md).
 Activation requires the exact promotion manifest, including its measured
 execution boundary, independently frozen operational candidate SQL SHA-256,
 and evidence digests. The SQL anchor is derived in a non-promotional preflight,
