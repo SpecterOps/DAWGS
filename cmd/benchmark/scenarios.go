@@ -47,6 +47,8 @@ type Scenario struct {
 	ExpectedRows *int64
 	// Cypher contains the Cypher statement under test.
 	Cypher string
+	// Parameters supplies the immutable parameters bound when Cypher is executed.
+	Parameters map[string]any
 	// Query executes the scenario in a transaction and returns its duration and observed row count.
 	Query func(tx graph.Transaction) (Measurement, error)
 }
@@ -90,8 +92,14 @@ func countEdges(tx graph.Transaction) (int64, error) {
 
 // cypherQuery adapts Cypher text into a benchmark callback that drains the result and records returned row count.
 func cypherQuery(cypher string) func(tx graph.Transaction) (Measurement, error) {
+	return cypherQueryWithParameters(cypher, nil)
+}
+
+// cypherQueryWithParameters adapts parameterized Cypher text into a benchmark
+// callback that drains the result and records returned row count.
+func cypherQueryWithParameters(cypher string, parameters map[string]any) func(tx graph.Transaction) (Measurement, error) {
 	return func(tx graph.Transaction) (Measurement, error) {
-		result := tx.Query(cypher, nil)
+		result := tx.Query(cypher, parameters)
 		defer result.Close()
 
 		var rowCount int64
@@ -117,12 +125,20 @@ func countQuery(query func(tx graph.Transaction) (int64, error)) func(tx graph.T
 
 // cypherScenario builds a row-counting Scenario from its corpus identity and Cypher text.
 func cypherScenario(section, dataset, label, cypher string) Scenario {
+	return cypherScenarioWithParameters(section, dataset, label, cypher, nil)
+}
+
+// cypherScenarioWithParameters builds a row-counting Scenario whose Cypher
+// identity remains stable while its endpoint values vary with fixture loading.
+// That stability is required by the exact-query traversal-policy allowlist.
+func cypherScenarioWithParameters(section, dataset, label, cypher string, parameters map[string]any) Scenario {
 	return Scenario{
-		Section: section,
-		Dataset: dataset,
-		Label:   label,
-		Cypher:  cypher,
-		Query:   cypherQuery(cypher),
+		Section:    section,
+		Dataset:    dataset,
+		Label:      label,
+		Cypher:     cypher,
+		Parameters: parameters,
+		Query:      cypherQueryWithParameters(cypher, parameters),
 	}
 }
 
@@ -239,10 +255,10 @@ func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	return []Scenario{
 		{Section: "Match Nodes", Dataset: ds, Label: ds, ExpectedRows: expectRows(3), Query: countQuery(countNodes)},
 		{Section: "Match Edges", Dataset: ds, Label: ds, ExpectedRows: expectRows(2), Query: countQuery(countEdges)},
-		expectScenarioRows(cypherScenario("Shortest Paths", ds, "n1 -> n3", fmt.Sprintf(
-			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-			idMap["n1"], idMap["n3"],
-		)), 1),
+		expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", ds, "n1 -> n3",
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+			map[string]any{"start_id": idMap["n1"], "end_id": idMap["n3"]},
+		), 1),
 		expectScenarioRows(cypherScenario("Traversal", ds, "n1", fmt.Sprintf(
 			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
 			idMap["n1"],
@@ -344,14 +360,14 @@ func traversalShapesScenarios(idMap opengraph.IDMap) []Scenario {
 			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
 			idMap["s0"],
 		)), 6),
-		expectScenarioRows(cypherScenario("Shortest Paths", ds, "diamond many paths", fmt.Sprintf(
-			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-			idMap["d0"], idMap["d4"],
-		)), 3),
-		expectScenarioRows(cypherScenario("Shortest Paths", ds, "disconnected", fmt.Sprintf(
-			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-			idMap["x0"], idMap["x1"],
-		)), 0),
+		expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", ds, "diamond many paths",
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+			map[string]any{"start_id": idMap["d0"], "end_id": idMap["d4"]},
+		), 3),
+		expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", ds, "disconnected",
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+			map[string]any{"start_id": idMap["x0"], "end_id": idMap["x1"]},
+		), 0),
 	}
 }
 

@@ -56,8 +56,10 @@ func main() {
 		v2Cache      = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
 		v2SharedSP   = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
 		v2SPExecutor = flag.String("pg-v2-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
-		pgPlanMode   = flag.String("pg-plan-cache-mode", "auto", "PostgreSQL plan cache mode for forced shortest-path benchmarks (auto, force_custom_plan, force_generic_plan)")
-		pgJIT        = flag.Bool("pg-jit", true, "enable PostgreSQL JIT for forced shortest-path benchmarks")
+		v2Policy     = flag.String("pg-v2-traversal-policy-manifest", "", "verified promotion manifest to install through the real pg-v2 traversal-policy path")
+		v2PolicyGen  = flag.Uint64("pg-v2-traversal-policy-generation", 1, "nonzero generation for -pg-v2-traversal-policy-manifest")
+		pgPlanMode   = flag.String("pg-plan-cache-mode", "auto", "PostgreSQL plan cache mode for shortest-path benchmark modes (auto, force_custom_plan, force_generic_plan)")
+		pgJIT        = flag.Bool("pg-jit", true, "enable PostgreSQL JIT transaction-locally for shortest-path benchmark modes")
 		v2MinConns   = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
 		v2MaxConns   = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
 		output       = flag.String("output", "", "output file (default: stdout)")
@@ -80,6 +82,20 @@ func main() {
 	if !isReportFormat(*format) {
 		fatal("unsupported output format %q", *format)
 	}
+	if *v2Policy != "" {
+		if *driver != pgV2BenchmarkDriver {
+			fatal("-pg-v2-traversal-policy-manifest requires -driver pg-v2")
+		}
+		if *v2SPExecutor != "" {
+			fatal("-pg-v2-traversal-policy-manifest cannot be combined with -pg-v2-shortest-path-executor")
+		}
+		if *onlyDataset == "" {
+			fatal("-pg-v2-traversal-policy-manifest requires -dataset so its exact-query policy path is unambiguous")
+		}
+		if *explain {
+			fatal("-explain cannot be combined with -pg-v2-traversal-policy-manifest because the explainer does not bypass the live policy gate")
+		}
+	}
 	v2Config, err := benchmarkV2Config(*v2Cache, *v2SharedSP, *v2MinConns, *v2MaxConns)
 	if err != nil {
 		fatal("invalid pg-v2 configuration: %v", err)
@@ -100,6 +116,23 @@ func main() {
 	}
 	defer db.Close(ctx)
 
+	var traversalPolicy *pg.TraversalPolicy
+	if *v2Policy != "" {
+		policy, err := loadBenchmarkTraversalPolicy(*v2Policy, *v2PolicyGen)
+		if err != nil {
+			fatal("load pg-v2 traversal policy manifest: %v", err)
+		}
+		policyDriver, ok := db.(traversalPolicyBenchmarkDriver)
+		if !ok {
+			fatal("PostgreSQL v2 benchmark driver does not support traversal-policy installation")
+		}
+		if err := policyDriver.SetTraversalPolicy(policy); err != nil {
+			fatal("install pg-v2 traversal policy: %v", err)
+		}
+		traversalPolicy = &policy
+		fmt.Fprintf(os.Stderr, "installed pg-v2 traversal policy generation=%d candidate=%s manifest=%s\n", policy.Generation, policy.ShortestPathExecutor, policy.PromotionManifestSHA256)
+	}
+
 	// Build dataset list
 	var datasets []string
 	if *onlyDataset != "" {
@@ -108,6 +141,13 @@ func main() {
 		datasets = defaultDatasets
 		if *localDataset != "" {
 			datasets = append(datasets, *localDataset)
+		}
+	}
+	if traversalPolicy != nil {
+		for _, dataset := range datasets {
+			if _, err := selectTraversalPolicyScenarios(scenariosForDataset(dataset, opengraph.IDMap{}), *traversalPolicy); err != nil {
+				fatal("select manifest-authorized traversal benchmark scenario: %v", err)
+			}
 		}
 	}
 
@@ -157,6 +197,13 @@ func main() {
 		}
 		db = wrapped
 	}
+	if traversalPolicy != nil {
+		wrapped, err := newTraversalPolicyBenchmarkDatabase(db, *pgPlanMode, *pgJIT)
+		if err != nil {
+			fatal("configure traversal-policy benchmark: %v", err)
+		}
+		db = wrapped
+	}
 
 	report := Report{
 		Driver:                  *driver,
@@ -168,6 +215,14 @@ func main() {
 		ShortestPathExecutor:    *v2SPExecutor,
 		PostgreSQLPlanCacheMode: *pgPlanMode,
 		PostgreSQLJIT:           *pgJIT,
+	}
+	if traversalPolicy != nil {
+		report.ShortestPathExecutor = string(traversalPolicy.ShortestPathExecutor)
+		report.ShortestPathMode = shortestPathModeProductionPolicy
+		report.TraversalPolicyGeneration = traversalPolicy.Generation
+		report.TraversalPolicyManifestSHA256 = traversalPolicy.PromotionManifestSHA256
+	} else if *v2SPExecutor != "" {
+		report.ShortestPathMode = shortestPathModeForced
 	}
 
 	for _, ds := range datasets {
@@ -192,7 +247,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  loaded %d nodes\n", len(idMap))
 
 		// Run scenarios
-		for _, s := range scenariosForDataset(ds, idMap) {
+		scenarios := scenariosForDataset(ds, idMap)
+		if traversalPolicy != nil {
+			scenarios, err = selectTraversalPolicyScenarios(scenarios, *traversalPolicy)
+			if err != nil {
+				fatal("select manifest-authorized traversal benchmark scenario: %v", err)
+			}
+			fmt.Fprintf(os.Stderr, "  manifest-authorized scenario: %s/%s\n", scenarios[0].Section, scenarios[0].Label)
+		}
+		for _, s := range scenarios {
 			runOptions.WarmupIterations = *warmup
 			runOptions.Workers = *workers
 			result, err := runScenario(ctx, db, s, *iterations, runOptions)

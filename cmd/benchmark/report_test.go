@@ -168,6 +168,26 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 	}
 }
 
+func TestWriteMarkdownIdentifiesProductionPolicyPath(t *testing.T) {
+	report := Report{
+		Driver:                        pgV2BenchmarkDriver,
+		GitRef:                        "abcdef0",
+		Date:                          "2026-08-20",
+		Iterations:                    2,
+		ShortestPathExecutor:          string(optimize.ShortestPathExecutorASPI1DAG),
+		ShortestPathMode:              shortestPathModeProductionPolicy,
+		TraversalPolicyGeneration:     42,
+		TraversalPolicyManifestSHA256: "0123456789abcdef",
+		PostgreSQLPlanCacheMode:       "auto",
+		PostgreSQLJIT:                 true,
+	}
+	var output bytes.Buffer
+
+	require.NoError(t, writeMarkdown(&output, report))
+	require.Contains(t, output.String(), "through production traversal policy generation 42")
+	require.Contains(t, output.String(), "manifest `0123456789abcdef`")
+}
+
 // TestValidateIterationsRejectsZero verifies that benchmark execution requires at least one measured iteration.
 func TestValidateIterationsRejectsZero(t *testing.T) {
 	require.Error(t, validateIterations(0))

@@ -25,6 +25,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestShortestPathScenariosUseStableParameterizedCypher verifies that fixture
+// reloads vary only bindings, not the exact Cypher identity authorized by a
+// traversal policy manifest.
+func TestShortestPathScenariosUseStableParameterizedCypher(t *testing.T) {
+	first := traversalShapesScenarios(opengraph.IDMap{
+		"d0": graph.ID(1), "d4": graph.ID(2), "x0": graph.ID(3), "x1": graph.ID(4),
+	})
+	second := traversalShapesScenarios(opengraph.IDMap{
+		"d0": graph.ID(101), "d4": graph.ID(102), "x0": graph.ID(103), "x1": graph.ID(104),
+	})
+
+	firstShortest := shortestPathScenarios(first)
+	secondShortest := shortestPathScenarios(second)
+	require.Len(t, firstShortest, 2)
+	require.Len(t, secondShortest, 2)
+	for index := range firstShortest {
+		require.Equal(t, firstShortest[index].Cypher, secondShortest[index].Cypher)
+		require.Contains(t, firstShortest[index].Cypher, "$start_id")
+		require.Contains(t, firstShortest[index].Cypher, "$end_id")
+		require.NotEqual(t, firstShortest[index].Parameters["start_id"], secondShortest[index].Parameters["start_id"])
+		require.NotEqual(t, firstShortest[index].Parameters["end_id"], secondShortest[index].Parameters["end_id"])
+	}
+}
+
 // TestBaseScenariosDeclareExpectedRows verifies the canonical row-count contract for every query family in the base fixture.
 func TestBaseScenariosDeclareExpectedRows(t *testing.T) {
 	scenarios := baseScenarios(opengraph.IDMap{
@@ -125,4 +149,14 @@ func requireExpectedRows(t *testing.T, scenarios []Scenario, section, label stri
 	}
 
 	require.Failf(t, "scenario not found", "%s/%s", section, label)
+}
+
+func shortestPathScenarios(scenarios []Scenario) []Scenario {
+	shortest := make([]Scenario, 0)
+	for _, scenario := range scenarios {
+		if scenario.Section == "Shortest Paths" {
+			shortest = append(shortest, scenario)
+		}
+	}
+	return shortest
 }

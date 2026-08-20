@@ -32,21 +32,27 @@ const (
 	reportFormatBenchfmt = "benchfmt"
 	reportFormatJSON     = "json"
 	reportFormatMarkdown = "markdown"
+
+	shortestPathModeForced           = "forced"
+	shortestPathModeProductionPolicy = "production_policy"
 )
 
 // Report holds all benchmark results and metadata.
 type Report struct {
-	Driver                  string      `json:"driver"`
-	GitRef                  string      `json:"git_ref"`
-	Date                    string      `json:"date"`
-	Iterations              int         `json:"iterations"`
-	WarmupIterations        int         `json:"warmup_iterations"`
-	Workers                 int         `json:"workers"`
-	ShortestPathExecutor    string      `json:"shortest_path_executor,omitempty"`
-	PostgreSQLPlanCacheMode string      `json:"postgresql_plan_cache_mode,omitempty"`
-	PostgreSQLJIT           bool        `json:"postgresql_jit"`
-	TranslationCache        *pgv2.Stats `json:"translation_cache,omitempty"`
-	Results                 []Result    `json:"results"`
+	Driver                        string      `json:"driver"`
+	GitRef                        string      `json:"git_ref"`
+	Date                          string      `json:"date"`
+	Iterations                    int         `json:"iterations"`
+	WarmupIterations              int         `json:"warmup_iterations"`
+	Workers                       int         `json:"workers"`
+	ShortestPathExecutor          string      `json:"shortest_path_executor,omitempty"`
+	ShortestPathMode              string      `json:"shortest_path_mode,omitempty"`
+	TraversalPolicyGeneration     uint64      `json:"traversal_policy_generation,omitempty"`
+	TraversalPolicyManifestSHA256 string      `json:"traversal_policy_manifest_sha256,omitempty"`
+	PostgreSQLPlanCacheMode       string      `json:"postgresql_plan_cache_mode,omitempty"`
+	PostgreSQLJIT                 bool        `json:"postgresql_jit"`
+	TranslationCache              *pgv2.Stats `json:"translation_cache,omitempty"`
+	Results                       []Result    `json:"results"`
 }
 
 func writeReport(w io.Writer, r Report, format string) error {
@@ -82,7 +88,14 @@ func writeJSON(w io.Writer, r Report) error {
 func writeMarkdown(w io.Writer, r Report) error {
 	fmt.Fprintf(w, "# Benchmarks — %s @ %s (%s, %d iterations × %d workers, %d warm-up iterations)\n\n", r.Driver, r.GitRef, r.Date, r.Iterations, r.Workers, r.WarmupIterations)
 	if r.ShortestPathExecutor != "" {
-		fmt.Fprintf(w, "Shortest-path executor: `%s`; PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+		switch r.ShortestPathMode {
+		case shortestPathModeProductionPolicy:
+			fmt.Fprintf(w, "Shortest-path executor: `%s` through production traversal policy generation %d (manifest `%s`); PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.TraversalPolicyGeneration, r.TraversalPolicyManifestSHA256, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+		case shortestPathModeForced:
+			fmt.Fprintf(w, "Shortest-path executor: `%s` forced at the benchmark boundary; PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+		default:
+			fmt.Fprintf(w, "Shortest-path executor: `%s`; PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+		}
 	}
 	fmt.Fprintf(w, "| Query | Dataset | Rows | Distinct Rows | Duplicate Rows | Median | P95 | Max | Explain |\n")
 	fmt.Fprintf(w, "|-------|---------|-----:|--------------:|---------------:|-------:|----:|----:|:--------|\n")

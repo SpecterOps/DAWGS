@@ -11,6 +11,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/drivers/pg/model"
+	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -57,18 +58,8 @@ func benchmarkShortestPathExecutor(executor optimize.ShortestPathExecutor) bool 
 func (s *shortestExecutorBenchmarkDatabase) ReadTransaction(ctx context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 	options = append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	return s.Database.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		settings := []string{"set local plan_cache_mode = " + s.planCacheMode}
-		if s.jitEnabled {
-			settings = append(settings, "set local jit = on")
-		} else {
-			settings = append(settings, "set local jit = off")
-		}
-		for _, sql := range settings {
-			setting := tx.Raw(sql, nil)
-			setting.Close()
-			if err := setting.Error(); err != nil {
-				return fmt.Errorf("apply PostgreSQL shortest-path benchmark setting: %w", err)
-			}
+		if err := applyPostgreSQLShortestPathBenchmarkSettings(tx, s.planCacheMode, s.jitEnabled); err != nil {
+			return err
 		}
 		return delegate(&shortestExecutorBenchmarkTransaction{Transaction: tx, ctx: ctx, mapper: s.mapper, graphID: s.graph.ID, executor: s.executor})
 	}, options...)
@@ -107,4 +98,57 @@ func (s *shortestExecutorBenchmarkTransaction) Query(cypherQuery string, paramet
 		return graph.NewErrorResult(err)
 	}
 	return s.Transaction.Raw(sqlQuery, translation.Parameters)
+}
+
+// traversalPolicyBenchmarkDatabase changes only the transaction boundary used
+// by a policy-path benchmark. Query translation remains in the real V2 driver,
+// which therefore performs the manifest selection, SQL-anchor validation, and
+// normal connection-local cache lookup.
+type traversalPolicyBenchmarkDatabase struct {
+	graph.Database
+	planCacheMode string
+	jitEnabled    bool
+}
+
+func newTraversalPolicyBenchmarkDatabase(database graph.Database, planCacheMode string, jitEnabled bool) (graph.Database, error) {
+	if !benchmarkPlanCacheMode(planCacheMode) {
+		return nil, fmt.Errorf("unsupported PostgreSQL plan cache mode %q", planCacheMode)
+	}
+	return &traversalPolicyBenchmarkDatabase{Database: database, planCacheMode: planCacheMode, jitEnabled: jitEnabled}, nil
+}
+
+func (s *traversalPolicyBenchmarkDatabase) ReadTransaction(ctx context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
+	options = append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+	return s.Database.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		if err := applyPostgreSQLShortestPathBenchmarkSettings(tx, s.planCacheMode, s.jitEnabled); err != nil {
+			return err
+		}
+		return delegate(tx)
+	}, options...)
+}
+
+// TranslationCacheStats preserves the V2 telemetry surface through the policy
+// boundary wrapper so policy-path reports include actual cache activity.
+func (s *traversalPolicyBenchmarkDatabase) TranslationCacheStats() pgv2.Stats {
+	if provider, ok := s.Database.(interface{ TranslationCacheStats() pgv2.Stats }); ok {
+		return provider.TranslationCacheStats()
+	}
+	return pgv2.Stats{}
+}
+
+func applyPostgreSQLShortestPathBenchmarkSettings(tx graph.Transaction, planCacheMode string, jitEnabled bool) error {
+	settings := []string{"set local plan_cache_mode = " + planCacheMode}
+	if jitEnabled {
+		settings = append(settings, "set local jit = on")
+	} else {
+		settings = append(settings, "set local jit = off")
+	}
+	for _, sql := range settings {
+		setting := tx.Raw(sql, nil)
+		setting.Close()
+		if err := setting.Error(); err != nil {
+			return fmt.Errorf("apply PostgreSQL shortest-path benchmark setting: %w", err)
+		}
+	}
+	return nil
 }
