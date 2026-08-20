@@ -56,6 +56,34 @@ func TestLoadBenchmarkTraversalPolicyRejectsMissingInputs(t *testing.T) {
 	require.ErrorContains(t, err, "must authorize at least one query")
 }
 
+func TestBenchmarkTraversalPromotionManifestProductionOptions(t *testing.T) {
+	query := "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
+	manifest := benchmarkTraversalPromotionManifest{
+		Candidate:       string(optimize.ShortestPathExecutorASPI1DAG),
+		SelectorVersion: "benchmark-preflight-v1",
+		Caps: map[string]int64{
+			"state_limit": 1000, "frontier_limit": 800, "predecessor_limit": 700,
+			"enumeration_limit": 600, "output_bytes_limit": 1 << 20,
+		},
+		Buckets: []benchmarkPolicyBucket{{
+			QuerySHA256: []string{pg.TraversalPolicyQuerySHA256(query)},
+			Direction:   "outbound", ObservationMode: "all_paths", MinimumDepth: 1, MaximumDepth: 15,
+			UntypedRelationship: true,
+		}},
+	}
+
+	options, err := manifest.productionOptions(query)
+	require.NoError(t, err)
+	require.Equal(t, optimize.ShortestPathExecutorASPI1DAG, options.ShortestPathExecutor)
+	require.Equal(t, int64(800), options.ShortestPathCaps.FrontierLimit)
+	require.Equal(t, int64(700), options.ShortestPathCaps.PredecessorLimit)
+	require.Equal(t, "outbound", options.AuthorizedBucket.Direction)
+	require.True(t, options.AuthorizedBucket.UntypedRelationship)
+
+	_, err = manifest.productionOptions("MATCH (n) RETURN n")
+	require.ErrorContains(t, err, "absent from provisional traversal policy manifest")
+}
+
 func TestSelectTraversalPolicyScenariosRequiresOneExactMatch(t *testing.T) {
 	query := "MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p"
 	policy := pg.TraversalPolicy{QuerySHA256Allowlist: []string{pg.TraversalPolicyQuerySHA256(query)}}

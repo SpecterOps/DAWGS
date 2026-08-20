@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -48,27 +49,29 @@ type postgresBenchmarkDriver interface {
 
 func main() {
 	var (
-		driver       = flag.String("driver", "pg", "database driver (pg, pg-v2, neo4j)")
-		connStr      = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
-		iterations   = flag.Int("iterations", 10, "timed iterations per scenario")
-		warmup       = flag.Int("warmup", 1, "untimed iterations per worker (zero measures cold queries)")
-		workers      = flag.Int("workers", 1, "concurrent workers per scenario")
-		v2Cache      = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
-		v2SharedSP   = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
-		v2SPExecutor = flag.String("pg-v2-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
-		v2Policy     = flag.String("pg-v2-traversal-policy-manifest", "", "verified promotion manifest to install through the real pg-v2 traversal-policy path")
-		v2PolicyGen  = flag.Uint64("pg-v2-traversal-policy-generation", 1, "nonzero generation for -pg-v2-traversal-policy-manifest")
-		pgPlanMode   = flag.String("pg-plan-cache-mode", "auto", "PostgreSQL plan cache mode for shortest-path benchmark modes (auto, force_custom_plan, force_generic_plan)")
-		pgJIT        = flag.Bool("pg-jit", true, "enable PostgreSQL JIT transaction-locally for shortest-path benchmark modes")
-		v2MinConns   = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
-		v2MaxConns   = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
-		output       = flag.String("output", "", "output file (default: stdout)")
-		format       = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
-		jsonOutput   = flag.String("json-output", "", "JSON output file for baseline comparison")
-		explain      = flag.Bool("explain", false, "capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS) for Cypher scenarios")
-		datasetDir   = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
-		localDataset = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
-		onlyDataset  = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
+		driver                  = flag.String("driver", "pg", "database driver (pg, pg-v2, neo4j)")
+		connStr                 = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
+		iterations              = flag.Int("iterations", 10, "timed iterations per scenario")
+		warmup                  = flag.Int("warmup", 1, "untimed iterations per worker (zero measures cold queries)")
+		workers                 = flag.Int("workers", 1, "concurrent workers per scenario")
+		v2Cache                 = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
+		v2SharedSP              = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
+		v2SPExecutor            = flag.String("pg-v2-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
+		v2Policy                = flag.String("pg-v2-traversal-policy-manifest", "", "verified promotion manifest to install through the real pg-v2 traversal-policy path")
+		v2PolicyGen             = flag.Uint64("pg-v2-traversal-policy-generation", 1, "nonzero generation for -pg-v2-traversal-policy-manifest")
+		v2PolicyPreflight       = flag.String("pg-v2-traversal-policy-preflight-manifest", "", "provisional manifest used only to derive the exact V2 candidate SQL anchor")
+		v2PolicyPreflightOutput = flag.String("pg-v2-traversal-policy-preflight-output", "", "JSON destination for the non-promotional traversal-policy preflight")
+		pgPlanMode              = flag.String("pg-plan-cache-mode", "auto", "PostgreSQL plan cache mode for shortest-path benchmark modes (auto, force_custom_plan, force_generic_plan)")
+		pgJIT                   = flag.Bool("pg-jit", true, "enable PostgreSQL JIT transaction-locally for shortest-path benchmark modes")
+		v2MinConns              = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
+		v2MaxConns              = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
+		output                  = flag.String("output", "", "output file (default: stdout)")
+		format                  = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
+		jsonOutput              = flag.String("json-output", "", "JSON output file for baseline comparison")
+		explain                 = flag.Bool("explain", false, "capture PostgreSQL EXPLAIN (ANALYZE, BUFFERS) for Cypher scenarios")
+		datasetDir              = flag.String("dataset-dir", "integration/testdata", "path to testdata directory")
+		localDataset            = flag.String("local-dataset", "", "additional local dataset (e.g. local/phantom)")
+		onlyDataset             = flag.String("dataset", "", "run only this dataset (e.g. diamond, local/phantom)")
 	)
 
 	flag.Parse()
@@ -82,19 +85,25 @@ func main() {
 	if !isReportFormat(*format) {
 		fatal("unsupported output format %q", *format)
 	}
-	if *v2Policy != "" {
+	if *v2Policy != "" || *v2PolicyPreflight != "" {
 		if *driver != pgV2BenchmarkDriver {
-			fatal("-pg-v2-traversal-policy-manifest requires -driver pg-v2")
+			fatal("traversal-policy benchmark modes require -driver pg-v2")
 		}
 		if *v2SPExecutor != "" {
-			fatal("-pg-v2-traversal-policy-manifest cannot be combined with -pg-v2-shortest-path-executor")
+			fatal("traversal-policy benchmark modes cannot be combined with -pg-v2-shortest-path-executor")
 		}
 		if *onlyDataset == "" {
-			fatal("-pg-v2-traversal-policy-manifest requires -dataset so its exact-query policy path is unambiguous")
+			fatal("traversal-policy benchmark modes require -dataset so their exact-query path is unambiguous")
 		}
-		if *explain {
+		if *v2Policy != "" && *explain {
 			fatal("-explain cannot be combined with -pg-v2-traversal-policy-manifest because the explainer does not bypass the live policy gate")
 		}
+	}
+	if *v2Policy != "" && *v2PolicyPreflight != "" {
+		fatal("-pg-v2-traversal-policy-manifest cannot be combined with -pg-v2-traversal-policy-preflight-manifest")
+	}
+	if *v2PolicyPreflight != "" && *v2PolicyPreflightOutput == "" {
+		fatal("-pg-v2-traversal-policy-preflight-manifest requires -pg-v2-traversal-policy-preflight-output")
 	}
 	v2Config, err := benchmarkV2Config(*v2Cache, *v2SharedSP, *v2MinConns, *v2MaxConns)
 	if err != nil {
@@ -117,6 +126,7 @@ func main() {
 	defer db.Close(ctx)
 
 	var traversalPolicy *pg.TraversalPolicy
+	var traversalPolicyPreflight *benchmarkTraversalPromotionManifest
 	if *v2Policy != "" {
 		policy, err := loadBenchmarkTraversalPolicy(*v2Policy, *v2PolicyGen)
 		if err != nil {
@@ -132,6 +142,13 @@ func main() {
 		traversalPolicy = &policy
 		fmt.Fprintf(os.Stderr, "installed pg-v2 traversal policy generation=%d candidate=%s manifest=%s\n", policy.Generation, policy.ShortestPathExecutor, policy.PromotionManifestSHA256)
 	}
+	if *v2PolicyPreflight != "" {
+		_, manifest, err := loadBenchmarkTraversalPromotionManifest(*v2PolicyPreflight)
+		if err != nil {
+			fatal("load pg-v2 traversal policy preflight manifest: %v", err)
+		}
+		traversalPolicyPreflight = &manifest
+	}
 
 	// Build dataset list
 	var datasets []string
@@ -143,9 +160,18 @@ func main() {
 			datasets = append(datasets, *localDataset)
 		}
 	}
-	if traversalPolicy != nil {
+	if traversalPolicy != nil || traversalPolicyPreflight != nil {
+		queryAllowlist := []string(nil)
+		if traversalPolicy != nil {
+			queryAllowlist = traversalPolicy.QuerySHA256Allowlist
+		} else {
+			for _, bucket := range traversalPolicyPreflight.Buckets {
+				queryAllowlist = append(queryAllowlist, bucket.QuerySHA256...)
+			}
+		}
+		selectionPolicy := pg.TraversalPolicy{QuerySHA256Allowlist: queryAllowlist}
 		for _, dataset := range datasets {
-			if _, err := selectTraversalPolicyScenarios(scenariosForDataset(dataset, opengraph.IDMap{}), *traversalPolicy); err != nil {
+			if _, err := selectTraversalPolicyScenarios(scenariosForDataset(dataset, opengraph.IDMap{}), selectionPolicy); err != nil {
 				fatal("select manifest-authorized traversal benchmark scenario: %v", err)
 			}
 		}
@@ -248,12 +274,45 @@ func main() {
 
 		// Run scenarios
 		scenarios := scenariosForDataset(ds, idMap)
-		if traversalPolicy != nil {
-			scenarios, err = selectTraversalPolicyScenarios(scenarios, *traversalPolicy)
+		if traversalPolicy != nil || traversalPolicyPreflight != nil {
+			queryAllowlist := []string(nil)
+			if traversalPolicy != nil {
+				queryAllowlist = traversalPolicy.QuerySHA256Allowlist
+			} else {
+				for _, bucket := range traversalPolicyPreflight.Buckets {
+					queryAllowlist = append(queryAllowlist, bucket.QuerySHA256...)
+				}
+			}
+			scenarios, err = selectTraversalPolicyScenarios(scenarios, pg.TraversalPolicy{QuerySHA256Allowlist: queryAllowlist})
 			if err != nil {
 				fatal("select manifest-authorized traversal benchmark scenario: %v", err)
 			}
-			fmt.Fprintf(os.Stderr, "  manifest-authorized scenario: %s/%s\n", scenarios[0].Section, scenarios[0].Label)
+			if traversalPolicy != nil {
+				fmt.Fprintf(os.Stderr, "  manifest-authorized scenario: %s/%s\n", scenarios[0].Section, scenarios[0].Label)
+			}
+		}
+		if traversalPolicyPreflight != nil {
+			pgDB, ok := db.(postgresBenchmarkDriver)
+			if !ok {
+				fatal("PostgreSQL v2 benchmark driver does not expose translation metadata for policy preflight")
+			}
+			defaultGraph, found := pgDB.DefaultGraph()
+			if !found {
+				fatal("failed to resolve default graph for traversal policy preflight")
+			}
+			preflight, err := renderTraversalPolicyPreflight(ctx, pgDB.KindMapper(), defaultGraph, scenarios[0], *traversalPolicyPreflight)
+			if err != nil {
+				fatal("render traversal policy preflight: %v", err)
+			}
+			encoded, err := json.MarshalIndent(preflight, "", "  ")
+			if err != nil {
+				fatal("encode traversal policy preflight: %v", err)
+			}
+			if err := os.WriteFile(*v2PolicyPreflightOutput, append(encoded, '\n'), 0o600); err != nil {
+				fatal("write traversal policy preflight: %v", err)
+			}
+			fmt.Fprintf(os.Stderr, "  wrote non-promotional traversal policy preflight %s (query=%s sql=%s)\n", *v2PolicyPreflightOutput, preflight.QuerySHA256, preflight.SQLSHA256)
+			return
 		}
 		for _, s := range scenarios {
 			runOptions.WarmupIterations = *warmup
