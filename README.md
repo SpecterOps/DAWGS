@@ -256,14 +256,22 @@ production uses guarded `EXPANSION-ENDPOINT-SEEDED-REVERSE`: 32 endpoint and
 4096 reverse-state caps select either the reverse candidate or an exact
 same-statement forward fallback without exposing partial candidate rows.
 
-The next fixed-suffix generation is available only to GraphBench through
-`-postgres-expansion-suffix-reverse-retry`. It executes a reverse-only bounded
-statement, buffers all candidate rows, and retries the exact forward incumbent
-after a savepoint rollback in the same Repeatable Read transaction. Its
-statement contains no topology probes or inactive forward body. The frozen
+The fixed-suffix development generation remains available only to GraphBench
+through `-postgres-expansion-suffix-reverse-retry`. It executes a reverse-only
+bounded statement, buffers all candidate rows, and retries the exact forward
+incumbent after a savepoint rollback in the same Repeatable Read transaction.
+Its statement contains no topology probes or inactive forward body. The frozen
 development contract and stop gate are documented in
 [Suffix reverse transaction retry v1](docs/experiments/suffix_reverse_retry_v1.md).
-It is not a production selector.
+
+Separately, the PostgreSQL V2 driver implements the default-off manifest-v4
+topology route boundary. An installed v4 policy requires a compatible,
+current topology synopsis and a read-only Repeatable Read or Serializable
+transaction. The first matching query in that transaction records an
+incumbent-only decision; only a later matching query with the same snapshot,
+parameters, policy identity, and synopsis generation may execute the bounded
+reverse candidate with exact forward retry. No v4 promotion manifest ships
+with Dawgs, so this implementation does not change default production SQL.
 
 PostgreSQL recursive shortest-path execution includes contained S3/S4
 singleton selection, a guarded canonical inline witness canary, and an
@@ -407,6 +415,7 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [Traversal priority implementation status](docs/experiments/traversal_priority_implementation_status_v1.md): implemented candidate identities, fail-closed gates, and current no-promotion disposition.
 - [Remaining traversal outlier delivery](docs/experiments/remaining_outlier_delivery_v1.md): SP-I2, fixed-suffix, qualification, promotion-closure, and rollback handoff.
 - [Production-wide SQL selection](docs/experiments/production_wide_sql_selection_v1.md): staged structural and topology-aware PostgreSQL routing contract.
+- [Topology fixed-suffix v4 status](docs/experiments/topology_fixed_suffix_v4_status_v1.md): implemented default-off routing boundary and promotion non-activation record.
 - [PostgreSQL versus Neo4j performance summary](report_summary.md): current outlier measurements and evidence boundaries.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.

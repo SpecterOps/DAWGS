@@ -359,6 +359,14 @@ strategy as applied. It is mutually exclusive with forced shortest execution.
 Automatic suffix-seeded reverse dispatch remains disabled because query shape
 does not bound suffix density or reverse fan-in.
 
+Manifest v4 is the separately versioned topology-selected production contract,
+not a command-line selector. Its verifier recomputes the fixed-suffix shape and
+SQL-template digests through the PostgreSQL driver contract and requires the
+`topology-fixed-suffix-counts-v1` estimator,
+`topology-synopsis-schema-v2`, and `topology-selected-routing-v1` cache
+protocol. GraphBench retry/component captures remain development inputs; they
+cannot by themselves authorize, install, or emulate a v4 route decision.
+
 `-postgres-suffix-route-component-closure` is a measurement-only closure for
 the default-off direct fixed-suffix component preflight. It can accompany the
 ordinary incumbent or `-postgres-expansion-suffix-route-component`, but it

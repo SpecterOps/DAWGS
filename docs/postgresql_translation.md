@@ -338,8 +338,11 @@ without retaining query text or caller values.
 `RefreshTraversalTopologySynopsis` atomically publishes graph node/edge counts
 against the current graph mutation epoch. It is an explicit management action,
 not a query-latency operation; a missing or stale synopsis remains
-incumbent-only. Fixed-suffix route selection is still tool-only until its
-separate snapshot-bound evidence and policy generation are qualified.
+incumbent-only. Manifest v4 can opt in to snapshot-owned fixed-suffix routing:
+the first route-cache observation remains incumbent-only and only a later
+same-snapshot hit can run the bounded candidate with exact forward retry.
+Absent a qualified installed v4 manifest, the production translator remains on
+the incumbent.
 
 ## Indexing Notes
 
