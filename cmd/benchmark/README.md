@@ -50,9 +50,10 @@ go run ./cmd/benchmark -connection "..." -format benchfmt -output report.bench
 | `-warmup` | `1` | Untimed iterations per worker; use `0` to include cold-query cost |
 | `-workers` | `1` | Concurrent workers per scenario; each contributes `-iterations` samples |
 | `-pg-v2-cache-entries` | `64` | V2 translations retained per physical PostgreSQL connection |
+| `-pg-v2-shared-shortest-path-template-entries` | `128` | Immutable shortest-path SQL templates shared across V2 physical connections; zero disables the L2 tier |
 | `-pg-v2-min-conns` | `5` | V2 minimum physical PostgreSQL connections |
 | `-pg-v2-max-conns` | `50` | V2 maximum physical PostgreSQL connections |
-| `-explain` | `false` | Capture PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` and translated SQL for Cypher scenarios in JSON output |
+| `-explain` | `false` | Capture PostgreSQL JSON `EXPLAIN (ANALYZE, BUFFERS, SETTINGS)` and translated SQL for Cypher scenarios |
 | `-dataset` | | Run only this dataset |
 | `-local-dataset` | | Add a local dataset to the default set |
 | `-dataset-dir` | `integration/testdata` | Path to testdata directory |
@@ -66,7 +67,8 @@ Use `-format benchfmt` when comparing scenario timings with `benchstat`. Each ti
 It constructs a matching v2 pool and driver directly, uses the default 64-entry cache per physical PostgreSQL connection,
 and supports the same PostgreSQL EXPLAIN capture as `pg`.
 Its JSON and Markdown reports also include query-text-free translation-cache, traversal-workspace, and prepared-statement
-counters plus configured pool limits. Use a cold (`-warmup 0`) and warm (`-warmup 2`) run with the same worker count and
+counters, structured PostgreSQL planning/execution timings, and configured pool limits. For shortest paths it also reports
+query-text-free parse, cache/bind, translation, formatting, and dispatch totals plus shared-template L2 activity. Use a cold (`-warmup 0`) and warm (`-warmup 2`) run with the same worker count and
 V2 pool configuration to measure cache effectiveness; do not compare their latency distributions without accounting for the
 intentionally different warm-up state.
 

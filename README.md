@@ -38,8 +38,8 @@ defer database.Close(ctx)
 ```
 
 `pgv2.DefaultConfig()` uses 64 retained translation entries per live physical PostgreSQL connection and a 5-50 connection
-pool. Pass `pgv2.Config{TranslationCacheEntries: 0}` to `pgv2.NewPool` to disable retention, or configure an exact bounded
-pool with `pgv2.Config{TranslationCacheEntries: 64, Pool: &pgv2.PoolConfig{MinConnections: 0, MaxConnections: 4}}`. Negative cache capacity, negative minimums,
+pool. Pass `pgv2.Config{TranslationCacheEntries: 0}` to `pgv2.NewPool` to disable connection-local retention, or configure an exact bounded
+pool with `pgv2.Config{TranslationCacheEntries: 64, SharedShortestPathTemplateEntries: 128, Pool: &pgv2.PoolConfig{MinConnections: 0, MaxConnections: 4}}`. The shared shortest-path tier retains only immutable SQL templates and fresh bindings are always negotiated per execution; set its capacity to zero to disable it. Negative cache capacity, negative minimums,
 zero maximums, and inverted limits are rejected. The theoretical aggregate entry bound is live physical connections
 multiplied by this capacity, not a global bound.
 
