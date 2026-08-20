@@ -4,7 +4,9 @@ import (
 	"container/list"
 	"strings"
 	"sync"
+	"sync/atomic"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 )
@@ -13,6 +15,10 @@ const (
 	// defaultCypherParseCacheEntries is the maximum number of parsed ASTs
 	// retained when no cache capacity is configured.
 	defaultCypherParseCacheEntries = 256
+
+	// targetCypherParseCacheEntriesPerShard keeps unrelated query shapes from
+	// contending on one LRU lock while retaining a bounded shared AST cache.
+	targetCypherParseCacheEntriesPerShard = 16
 
 	// MaxCachedCypherQueryBytes excludes oversized query strings from reusable
 	// parse and translation caches while still allowing them to execute.
@@ -40,30 +46,33 @@ type cypherParseCall struct {
 	err error
 }
 
-// cypherParseCache retains immutable parser output. Translation is safe to run
-// concurrently against a cached query because the optimizer copies the Cypher
-// AST before applying rules or lowering it.
-type cypherParseCache struct {
-	// lock protects cache entries, pending calls, closure state, and counters.
+// cypherParseCacheShard owns one bounded LRU and its single-flight parse
+// calls. A query hashes to exactly one shard, so identical query text still
+// shares one immutable AST while unrelated text can proceed independently.
+type cypherParseCacheShard struct {
 	lock sync.Mutex
 
-	// capacity is the maximum number of completed parses retained in entries.
+	capacity int
+	entries  map[string]*list.Element
+	lru      *list.List
+	pending  map[string]*cypherParseCall
+	stats    ParseCacheStats
+}
+
+// cypherParseCache retains immutable parser output in independently locked
+// shards. Translation is safe to run concurrently against a cached query
+// because the optimizer copies the Cypher AST before applying rules or
+// lowering it.
+type cypherParseCache struct {
+	// capacity is the exact aggregate maximum number of completed parses.
 	capacity int
 
-	// entries indexes completed parses by normalized query text.
-	entries map[string]*list.Element
+	// shards partition query text and each contain a local LRU.
+	shards []cypherParseCacheShard
 
-	// lru orders completed entries from most to least recently used.
-	lru *list.List
-
-	// pending coalesces concurrent misses for the same normalized query.
-	pending map[string]*cypherParseCall
-
-	// closed prevents completed or future parses from being retained.
-	closed bool
-
-	// stats accumulates cache activity for this cache instance.
-	stats ParseCacheStats
+	// closed prevents completed or future parses from being retained. It is
+	// atomic so hot cache hits do not need a driver-wide lifecycle lock.
+	closed atomic.Bool
 }
 
 // ParseCacheStats contains aggregate, query-text-free diagnostics. It is a
@@ -79,7 +88,7 @@ type ParseCacheStats struct {
 	// Bypasses counts queries parsed without retention because caching was unavailable or disallowed.
 	Bypasses uint64 `json:"bypasses"`
 
-	// Evictions counts least-recently-used entries removed at capacity.
+	// Evictions counts least-recently-used translations removed at capacity.
 	Evictions uint64 `json:"evictions"`
 
 	// CoalescedMisses counts callers that waited for an existing parse of the same query.
@@ -90,16 +99,49 @@ type ParseCacheStats struct {
 
 	// Pending is the number of in-flight parses when the snapshot was taken.
 	Pending int `json:"pending"`
+
+	// Shards is the number of independently locked cache partitions.
+	Shards int `json:"shards"`
 }
 
-// newCypherParseCache initializes an empty LRU parse cache with the requested capacity.
+// newCypherParseCache initializes a bounded shared AST cache with independently locked shards.
 func newCypherParseCache(capacity int) *cypherParseCache {
-	return &cypherParseCache{
+	shardCount := parseCacheShardCount(capacity)
+	cache := &cypherParseCache{
 		capacity: capacity,
-		entries:  make(map[string]*list.Element, capacity),
-		lru:      list.New(),
-		pending:  map[string]*cypherParseCall{},
+		shards:   make([]cypherParseCacheShard, shardCount),
 	}
+	for index := range cache.shards {
+		shardCapacity := capacity / shardCount
+		if index < capacity%shardCount {
+			shardCapacity++
+		}
+		cache.shards[index] = cypherParseCacheShard{
+			capacity: shardCapacity,
+			entries:  make(map[string]*list.Element, shardCapacity),
+			lru:      list.New(),
+			pending:  map[string]*cypherParseCall{},
+		}
+	}
+	return cache
+}
+
+func parseCacheShardCount(capacity int) int {
+	if capacity <= 0 {
+		return 1
+	}
+	count := capacity / targetCypherParseCacheEntriesPerShard
+	if count < 1 {
+		return 1
+	}
+	if count > targetCypherParseCacheEntriesPerShard {
+		return targetCypherParseCacheEntriesPerShard
+	}
+	return count
+}
+
+func (s *cypherParseCache) shardForQuery(query string) *cypherParseCacheShard {
+	return &s.shards[xxhash.Sum64String(query)%uint64(len(s.shards))]
 }
 
 // Parse returns an immutable Cypher AST and reports whether it came from a completed or coalesced cache hit.
@@ -109,40 +151,32 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 	// query padded with a very large amount of whitespace must not retain that
 	// backing allocation through an LRU key.
 	if s == nil {
-		parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
-		if err != nil {
-			return nil, false, err
-		}
-
-		return parsed, false, nil
+		parsed, err := parseCypher(query)
+		return parsed, false, err
 	}
 
-	s.lock.Lock()
-	if s.closed || s.capacity <= 0 || len(input) > MaxCachedCypherQueryBytes {
-		s.stats.Bypasses++
-		s.lock.Unlock()
-		parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
-		if err != nil {
-			return nil, false, err
-		}
-
-		return parsed, false, nil
+	shard := s.shardForQuery(query)
+	shard.lock.Lock()
+	if s.closed.Load() || s.capacity <= 0 || len(input) > MaxCachedCypherQueryBytes {
+		shard.stats.Bypasses++
+		shard.lock.Unlock()
+		parsed, err := parseCypher(query)
+		return parsed, false, err
 	}
-	if element, found := s.entries[query]; found {
-		s.stats.Hits++
-		s.lru.MoveToFront(element)
+	if element, found := shard.entries[query]; found {
+		shard.stats.Hits++
+		shard.lru.MoveToFront(element)
 		parsed := element.Value.(cypherParseCacheEntry).parsed
-		s.lock.Unlock()
+		shard.lock.Unlock()
 		return parsed, true, nil
 	}
-	if call, found := s.pending[query]; found {
-		s.stats.CoalescedMisses++
-		s.lock.Unlock()
+	if call, found := shard.pending[query]; found {
+		shard.stats.CoalescedMisses++
+		shard.lock.Unlock()
 		<-call.done
 		if call.err != nil {
 			return nil, false, call.err
 		}
-
 		return call.parsed, true, nil
 	}
 
@@ -150,50 +184,61 @@ func (s *cypherParseCache) Parse(input string) (*cypher.RegularQuery, bool, erro
 	// using it as a pending/cache key so the zero-allocation hit path remains
 	// intact.
 	query = strings.Clone(query)
-	s.stats.Misses++
+	shard.stats.Misses++
 	call := &cypherParseCall{done: make(chan struct{})}
-	s.pending[query] = call
-	s.lock.Unlock()
+	shard.pending[query] = call
+	shard.lock.Unlock()
 
-	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+	parsed, err := parseCypher(query)
 
-	s.lock.Lock()
+	shard.lock.Lock()
 	call.parsed = parsed
 	call.err = err
-	if err == nil && !s.closed {
-		element := s.lru.PushFront(cypherParseCacheEntry{
+	if err == nil && !s.closed.Load() {
+		element := shard.lru.PushFront(cypherParseCacheEntry{
 			query:  query,
 			parsed: parsed,
 		})
-		s.entries[query] = element
-		if s.lru.Len() > s.capacity {
-			evicted := s.lru.Back()
-			s.lru.Remove(evicted)
-			delete(s.entries, evicted.Value.(cypherParseCacheEntry).query)
-			s.stats.Evictions++
+		shard.entries[query] = element
+		if shard.lru.Len() > shard.capacity {
+			evicted := shard.lru.Back()
+			shard.lru.Remove(evicted)
+			delete(shard.entries, evicted.Value.(cypherParseCacheEntry).query)
+			shard.stats.Evictions++
 		}
 	}
-	delete(s.pending, query)
+	delete(shard.pending, query)
 	close(call.done)
-	s.lock.Unlock()
+	shard.lock.Unlock()
 
 	if err != nil {
 		return nil, false, err
 	}
-
 	return parsed, false, nil
 }
 
-// Stats returns a consistent snapshot of counters and current cache occupancy.
+func parseCypher(query string) (*cypher.RegularQuery, error) {
+	return frontend.ParseCypher(frontend.NewContext(), query)
+}
+
+// Stats returns a consistent aggregate snapshot of all shard counters and occupancy.
 func (s *cypherParseCache) Stats() ParseCacheStats {
 	if s == nil {
 		return ParseCacheStats{}
 	}
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	stats := s.stats
-	stats.Entries = len(s.entries)
-	stats.Pending = len(s.pending)
+	stats := ParseCacheStats{Shards: len(s.shards)}
+	for index := range s.shards {
+		shard := &s.shards[index]
+		shard.lock.Lock()
+		stats.Hits += shard.stats.Hits
+		stats.Misses += shard.stats.Misses
+		stats.Bypasses += shard.stats.Bypasses
+		stats.Evictions += shard.stats.Evictions
+		stats.CoalescedMisses += shard.stats.CoalescedMisses
+		stats.Entries += len(shard.entries)
+		stats.Pending += len(shard.pending)
+		shard.lock.Unlock()
+	}
 	return stats
 }
 
@@ -201,12 +246,14 @@ func (s *cypherParseCache) Stats() ParseCacheStats {
 // reference. In-flight parses wake their waiters normally but do not repopulate
 // the cache after closure.
 func (s *cypherParseCache) Close() {
-	if s == nil {
+	if s == nil || s.closed.Swap(true) {
 		return
 	}
-	s.lock.Lock()
-	s.closed = true
-	s.entries = nil
-	s.lru.Init()
-	s.lock.Unlock()
+	for index := range s.shards {
+		shard := &s.shards[index]
+		shard.lock.Lock()
+		shard.entries = nil
+		shard.lru.Init()
+		shard.lock.Unlock()
+	}
 }

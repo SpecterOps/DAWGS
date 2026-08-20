@@ -55,19 +55,19 @@ func TestCypherParseCacheDoesNotRetainErrorsOrOversizedQueries(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, parsed)
 	require.False(t, hit)
-	require.Empty(t, cache.entries)
+	require.Zero(t, cache.Stats().Entries)
 
 	oversized := "MATCH (n) RETURN n // " + strings.Repeat("x", MaxCachedCypherQueryBytes)
 	_, hit, err = cache.Parse(oversized)
 	require.NoError(t, err)
 	require.False(t, hit)
-	require.Empty(t, cache.entries)
+	require.Zero(t, cache.Stats().Entries)
 
 	padded := strings.Repeat(" ", MaxCachedCypherQueryBytes) + "MATCH (n) RETURN n"
 	_, hit, err = cache.Parse(padded)
 	require.NoError(t, err)
 	require.False(t, hit)
-	require.Empty(t, cache.entries)
+	require.Zero(t, cache.Stats().Entries)
 	require.Equal(t, uint64(2), cache.Stats().Bypasses)
 }
 
@@ -99,13 +99,14 @@ func TestCypherParseCacheCoalescesConcurrentMissesAndSupportsConcurrentOptimizat
 	for idx := 1; idx < len(queries); idx++ {
 		require.Same(t, queries[0], queries[idx])
 	}
-	require.Len(t, cache.entries, 1)
+	require.Equal(t, 1, cache.Stats().Entries)
 	require.Equal(t, uint64(workers-1), cache.Stats().Hits+cache.Stats().CoalescedMisses)
 }
 
 // TestCypherParseCacheSupportsConcurrentDifferentKeys verifies independent queries can populate the cache concurrently.
 func TestCypherParseCacheSupportsConcurrentDifferentKeys(t *testing.T) {
 	cache := newCypherParseCache(64)
+	require.Equal(t, 4, cache.Stats().Shards)
 	const workers = 32
 	var waitGroup sync.WaitGroup
 	errors := make([]error, workers)
@@ -124,6 +125,25 @@ func TestCypherParseCacheSupportsConcurrentDifferentKeys(t *testing.T) {
 	require.Equal(t, workers, cache.Stats().Entries)
 }
 
+// TestCypherParseCachePartitionsUnrelatedShapes verifies that the shared AST
+// cache routes different query strings to independently locked shards while
+// retaining one shared shard for an identical shape.
+func TestCypherParseCachePartitionsUnrelatedShapes(t *testing.T) {
+	cache := newCypherParseCache(64)
+	first := cache.shardForQuery("MATCH (n) RETURN n")
+	require.Same(t, first, cache.shardForQuery("MATCH (n) RETURN n"))
+
+	var second *cypherParseCacheShard
+	for index := 0; index < 128; index++ {
+		candidate := cache.shardForQuery("MATCH (n) RETURN n // shard " + strings.Repeat("x", index))
+		if candidate != first {
+			second = candidate
+			break
+		}
+	}
+	require.NotNil(t, second)
+}
+
 // TestCypherParseCacheStatsAndCloseReleaseEntries verifies snapshots reflect activity and Close releases retained ASTs.
 func TestCypherParseCacheStatsAndCloseReleaseEntries(t *testing.T) {
 	cache := newCypherParseCache(1)
@@ -139,11 +159,12 @@ func TestCypherParseCacheStatsAndCloseReleaseEntries(t *testing.T) {
 		Misses:    2,
 		Evictions: 1,
 		Entries:   1,
+		Shards:    1,
 	}, cache.Stats())
 
 	cache.Close()
 	require.Zero(t, cache.Stats().Entries)
-	require.Nil(t, cache.entries)
+	require.Zero(t, cache.Stats().Entries)
 	_, hit, err = cache.Parse("MATCH (n) RETURN id(n)")
 	require.NoError(t, err)
 	require.False(t, hit)
