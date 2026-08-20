@@ -18,7 +18,11 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -28,9 +32,26 @@ import (
 
 // ExplainResult captures PostgreSQL-specific plan diagnostics for a scenario.
 type ExplainResult struct {
-	SQL          string                        `json:"sql"`
-	Plan         []string                      `json:"plan"`
-	Optimization translate.OptimizationSummary `json:"optimization"`
+	SQL            string                        `json:"sql"`
+	SQLFingerprint string                        `json:"sql_fingerprint"`
+	Plan           []string                      `json:"plan"`
+	Optimization   translate.OptimizationSummary `json:"optimization"`
+	PostgreSQL     PostgreSQLExplainMetrics      `json:"postgresql"`
+}
+
+// PostgreSQLExplainMetrics contains structured server-side timings and
+// configuration emitted by EXPLAIN. It is intentionally independent of the
+// human-readable plan text so benchmark comparisons need not parse it.
+type PostgreSQLExplainMetrics struct {
+	PlanningTime  time.Duration     `json:"planning_time"`
+	ExecutionTime time.Duration     `json:"execution_time"`
+	Settings      map[string]string `json:"settings,omitempty"`
+}
+
+type postgresExplainDocument struct {
+	PlanningTime  float64           `json:"Planning Time"`
+	ExecutionTime float64           `json:"Execution Time"`
+	Settings      map[string]string `json:"Settings"`
 }
 
 func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFunc {
@@ -50,17 +71,22 @@ func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFun
 			return nil, err
 		}
 
-		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS) "+sqlQuery, translation.Parameters)
+		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, SETTINGS, FORMAT JSON) "+sqlQuery, translation.Parameters)
 		defer result.Close()
 
 		var plan []string
+		var metrics PostgreSQLExplainMetrics
 		for result.Next() {
 			values := result.Values()
 			if len(values) == 0 {
 				continue
 			}
 
-			plan = append(plan, fmt.Sprint(values[0]))
+			rawPlan := explainValueString(values[0])
+			plan = append(plan, rawPlan)
+			if parsed, err := parsePostgreSQLExplainMetrics(rawPlan); err == nil {
+				metrics = parsed
+			}
 		}
 
 		if err := result.Error(); err != nil {
@@ -68,9 +94,42 @@ func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFun
 		}
 
 		return &ExplainResult{
-			SQL:          sqlQuery,
-			Plan:         plan,
-			Optimization: translation.Optimization,
+			SQL:            sqlQuery,
+			SQLFingerprint: sqlFingerprint(sqlQuery),
+			Plan:           plan,
+			Optimization:   translation.Optimization,
+			PostgreSQL:     metrics,
 		}, nil
 	}
+}
+
+func explainValueString(value any) string {
+	switch typed := value.(type) {
+	case []byte:
+		return string(typed)
+	case string:
+		return typed
+	default:
+		return fmt.Sprint(value)
+	}
+}
+
+func sqlFingerprint(sqlQuery string) string {
+	digest := sha256.Sum256([]byte(sqlQuery))
+	return hex.EncodeToString(digest[:])
+}
+
+func parsePostgreSQLExplainMetrics(raw string) (PostgreSQLExplainMetrics, error) {
+	var documents []postgresExplainDocument
+	if err := json.Unmarshal([]byte(raw), &documents); err != nil {
+		return PostgreSQLExplainMetrics{}, err
+	}
+	if len(documents) == 0 {
+		return PostgreSQLExplainMetrics{}, fmt.Errorf("PostgreSQL EXPLAIN JSON is empty")
+	}
+	return PostgreSQLExplainMetrics{
+		PlanningTime:  time.Duration(documents[0].PlanningTime * float64(time.Millisecond)),
+		ExecutionTime: time.Duration(documents[0].ExecutionTime * float64(time.Millisecond)),
+		Settings:      documents[0].Settings,
+	}, nil
 }
