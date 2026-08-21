@@ -13,6 +13,7 @@ integration/testdata/local/
 
 # Local benchmark comparison output
 .bench/
+.cache/
 
 # Augment
 .augment/
