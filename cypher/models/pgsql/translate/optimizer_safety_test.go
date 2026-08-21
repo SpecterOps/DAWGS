@@ -749,6 +749,33 @@ func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *test
 	require.Empty(t, outcome.SkipReason)
 }
 
+// TestForcedAllShortestNoPathProbeUsesA1Fallback verifies that the negative
+// probe has a distinct helper identity while preserving inline M0 hydration.
+func TestForcedAllShortestNoPathProbeUsesA1Fallback(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = allShortestPaths((s)-[:MemberOf*1..8]->(e))
+		WHERE id(s) = $start_id AND id(e) = $end_id
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	translation, err := TranslateForTool(context.Background(), regularQuery, optimizerSafetyKindMapper(), map[string]any{
+		"start_id": int64(1), "end_id": int64(2),
+	}, DefaultGraphID, ToolOptions{ForceShortestPathExecutor: optimize.ShortestPathExecutorASPN1NegativeExhaustion})
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "all_shortest_paths_no_path_probe")
+	require.Contains(t, formatted, "generate_subscripts(s1.path, 1)")
+	require.NotContains(t, formatted, "ordered_edge_ids_to_path")
+
+	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
+		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
+	require.Equal(t, string(optimize.ShortestPathExecutorASPN1NegativeExhaustion), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorASPN1NegativeExhaustion), outcome.Applied)
+	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAG), outcome.Fallback)
+}
+
 // TestForcedCompactBidirectionalExecutorsUseTypedKernels verifies every SP B1/B2
 // identity reaches its scheduler wrapper without changing automatic selection.
 func TestForcedCompactBidirectionalExecutorsUseTypedKernels(t *testing.T) {

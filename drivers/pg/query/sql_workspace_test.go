@@ -114,11 +114,30 @@ func TestCompactShortestExecutorsUseReusableTypedWorkspace(t *testing.T) {
 	require.Contains(t, sqlSchemaUp, "create or replace function public.reset_shortest_dag_workspace()")
 	require.Contains(t, sqlSchemaUp, "on commit preserve rows")
 	require.Contains(t, sqlSchemaUp, "create or replace function public.all_shortest_paths_dag(")
+	require.Contains(t, sqlSchemaUp, "create or replace function public.all_shortest_paths_no_path_probe(")
 	require.Contains(t, sqlSchemaUp, "create or replace function public.shortest_path_compact(")
 	require.Contains(t, sqlSchemaUp, "rows 100")
 	require.Contains(t, sqlSchemaUp, "rows 1")
 	require.Contains(t, sqlSchemaDown, "drop function if exists all_shortest_paths_dag")
+	require.Contains(t, sqlSchemaDown, "drop function if exists all_shortest_paths_no_path_probe")
 	require.Contains(t, sqlSchemaDown, "drop function if exists shortest_path_compact")
+}
+
+// TestAllShortestNoPathProbeFailsClosed verifies the candidate can return an
+// empty set only after a reverse exhaustion proof and otherwise delegates to A1.
+func TestAllShortestNoPathProbeFailsClosed(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.all_shortest_paths_no_path_probe")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(sqlSchemaUp[start:], "create or replace function public.shortest_path_compact")
+	require.NotEqual(t, -1, end)
+	probe := sqlSchemaUp[start : start+end]
+
+	require.Contains(t, probe, "asp_n1_target_degree_zero")
+	require.Contains(t, probe, "asp_n1_reverse_exhausted")
+	require.Contains(t, probe, "asp_n1_source_reached_a1")
+	require.Contains(t, probe, "asp_n1_state_cap_a1")
+	require.Contains(t, probe, "return query select * from public.all_shortest_paths_dag")
+	require.Contains(t, probe, "limit greatest(state_limit - (select count(*) from pg_temp.spd_seen) + 1, 0)")
 }
 
 // TestCompactShortestWorkspaceHotResetPreservesV1Fallback verifies the V2
