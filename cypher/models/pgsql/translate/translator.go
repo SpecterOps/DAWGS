@@ -1505,8 +1505,8 @@ func TranslateWithProductionOptions(ctx context.Context, cypherQuery *cypher.Reg
 		if caps == nil || caps.SuffixRowLimit <= 0 || caps.StateLimit <= 0 || caps.OutputRowLimit <= 0 || caps.OutputBytesLimit <= 0 {
 			return Result{}, fmt.Errorf("production topology fixed-suffix policy requires positive immutable caps")
 		}
-		if options.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) {
-			return Result{}, fmt.Errorf("production topology fixed-suffix selector requires %q", optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
+		if options.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) && options.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1) {
+			return Result{}, fmt.Errorf("production topology fixed-suffix selector requires a supported versioned topology selector")
 		}
 	}
 	toolOptions := ToolOptions{
@@ -1655,8 +1655,8 @@ func applyProductionTopologyFixedSuffixAuthorization(plan *optimize.Plan, option
 			continue
 		}
 		matching++
-		decision.PlannedPolicy = optimize.ExpansionSearchPolicyTopologyFixedSuffixV1
-		decision.EmittedPolicy = optimize.ExpansionSearchPolicyTopologyFixedSuffixV1
+		decision.PlannedPolicy = optimize.ExpansionSearchPolicy(options.SelectorVersion)
+		decision.EmittedPolicy = optimize.ExpansionSearchPolicy(options.SelectorVersion)
 		decision.SelectionMode = "production_canary"
 		decision.SelectorVersion = options.SelectorVersion
 	}

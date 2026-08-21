@@ -360,6 +360,43 @@ RETURN path`
 	require.Equal(t, uint64(1), stats.StrategySelection.TopologySelected)
 }
 
+func TestV2TopologyFixedSuffixFirstUseExecutesWithinStableSnapshot(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 8, nil)
+	setUpV2IntegrationGraph(t, driver)
+	ctx := context.Background()
+	_, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
+	require.NoError(t, err)
+	query := `MATCH (root:PGV2IntegrationNode) WHERE root.name = 'start' MATCH path = (root)-[:PGV2IntegrationEdge*0..16]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode) RETURN path`
+	shape := pg.TraversalShape{Version: pg.TraversalFixedSuffixShapeVersion, Family: "fixed_suffix_expansion", Direction: "outbound", ObservationMode: "full_path", MinimumDepth: 0, MaximumDepth: 16, SuffixLength: 3, CandidateStrategy: string(optimize.ExpansionSearchSuffixSeededReverse)}
+	shape.Fingerprint = pg.TraversalShapeFingerprint(shape)
+	policy := v2TopologyFixedSuffixPolicy(t, query, shape)
+	policy.EnableTopologyFixedSuffix = false
+	policy.EnableTopologyFixedSuffixFirstUse = true
+	var manifest map[string]any
+	require.NoError(t, json.Unmarshal(policy.PromotionManifestJSON, &manifest))
+	firstUse := string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+	manifest["version"], manifest["candidate"], manifest["selector_version"] = 5, firstUse, firstUse
+	manifest["execution_boundary"], manifest["route_cache_protocol"] = "first_use_transaction_retry", "topology-selected-first-use-routing-v1"
+	bucket := manifest["buckets"].([]any)[0].(map[string]any)
+	bucket["sql_template_sha256"] = pg.TraversalSQLTemplateSHA256(firstUse, firstUse, "first_use_transaction_retry", shape)
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	sum := sha256.Sum256(raw)
+	policy.PromotionManifestJSON, policy.PromotionManifestSHA256 = raw, hex.EncodeToString(sum[:])
+	require.NoError(t, driver.SetTraversalPolicy(policy))
+
+	require.NoError(t, driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		result := tx.Query(query, nil)
+		for result.Next() {
+		}
+		result.Close()
+		return result.Error()
+	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	stats := driver.TranslationCacheStats()
+	require.Equal(t, uint64(1), stats.TraversalRouteDecision.FirstUseCandidate)
+	require.Equal(t, uint64(1), stats.StrategySelection.TopologySelected)
+}
+
 func snapshotQuery(ctx context.Context, database graph.Database, query string, parameters map[string]any) ([][]any, error) {
 	var rows [][]any
 	err := database.ReadTransaction(ctx, func(tx graph.Transaction) error {

@@ -162,8 +162,11 @@ func (s *SchemaManager) observeTraversalStrategySelection(query string, shape Tr
 		selection.SelectorVersion = policy.compiledManifest.SelectorVersion
 		selection.Candidate = string(policy.ShortestPathExecutor)
 		selection.Fallback = policy.compiledManifest.FallbackExecutor
-		if policy.EnableTopologyFixedSuffix {
+		if policy.EnableTopologyFixedSuffix || policy.EnableTopologyFixedSuffixFirstUse {
 			selection.Candidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
+			if policy.EnableTopologyFixedSuffixFirstUse {
+				selection.Candidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+			}
 			if bucket, authorized := policy.authorizedStructuralBucketForShape(shape); authorized {
 				selection.SelectedArm = "candidate"
 				selection.Bucket = bucket.Name
@@ -179,7 +182,7 @@ func (s *SchemaManager) observeTraversalStrategySelection(query string, shape Tr
 			selection.Mode = mode
 			selection.Reason = reason
 		}
-		if policy.EnableTopologyFixedSuffix {
+		if policy.EnableTopologyFixedSuffix || policy.EnableTopologyFixedSuffixFirstUse {
 			// The topology branch above is selected only by a transaction-local
 			// route-cache hit, never by an evidence-query allowlist.
 		} else if _, authorized := policy.compiledBuckets[TraversalPolicyQuerySHA256(strings.TrimSpace(query))]; authorized {

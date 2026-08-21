@@ -357,6 +357,8 @@ func (s *connectionCacheProvider) RecordTraversalRouteDecision(decision pg.Trave
 		s.routeDecisions.ShadowHit++
 	case "topology_route_candidate_hit":
 		s.routeDecisions.CandidateHit++
+	case "topology_route_first_use_candidate":
+		s.routeDecisions.FirstUseCandidate++
 	case "topology_estimate_rejected":
 		s.routeDecisions.EstimateRejected++
 	case "topology_route_capacity":

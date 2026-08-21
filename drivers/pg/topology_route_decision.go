@@ -81,11 +81,11 @@ func (s *transaction) recordTopologyRouteDecision(decision TraversalRouteDecisio
 	}
 }
 
-// topologyRouteDecision selects a snapshot-bound fixed-suffix candidate only
-// after an incumbent miss has populated this transaction-owned cache. Any
-// failure, a first observation, or an unavailable synopsis remains incumbent.
-// The returned instruction is valid only for the current transaction.
-func (s *transaction) topologyRouteDecision(graphID int32, shape TraversalShape, parameters map[string]any, policyIdentity, estimatorVersion string, maximumEdgeToNodeRatioPerMille int64, candidateAuthorized bool) bool {
+// topologyRouteDecision selects a snapshot-bound fixed-suffix candidate. V4
+// selects only on a repeated exact observation; v5 is a separately versioned
+// first-use protocol and may select after the same synopsis checks. The
+// returned instruction is valid only for the current transaction.
+func (s *transaction) topologyRouteDecision(graphID int32, shape TraversalShape, parameters map[string]any, policyIdentity, estimatorVersion string, maximumEdgeToNodeRatioPerMille int64, candidateAuthorized, firstUseAuthorized bool) bool {
 	if shape.Version != TraversalFixedSuffixShapeVersion {
 		return false
 	}
@@ -121,6 +121,10 @@ func (s *transaction) topologyRouteDecision(graphID int32, shape TraversalShape,
 		}
 		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "incumbent", Reason: "topology_route_shadow_hit"})
 		return false
+	}
+	if firstUseAuthorized {
+		s.recordTopologyRouteDecision(TraversalRouteDecision{Mode: "candidate", Reason: "topology_route_first_use_candidate"})
+		return true
 	}
 	entryBytes := len(key) + len(shape.Fingerprint) + len(policyIdentity) + 64
 	if entryBytes > topologyRouteDecisionMaximumEntry || len(cache.entries) == topologyRouteDecisionMaximumEntries || cache.bytes+entryBytes > topologyRouteDecisionMaximumBytes {

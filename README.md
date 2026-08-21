@@ -417,6 +417,7 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [Production-wide SQL selection](docs/experiments/production_wide_sql_selection_v1.md): staged structural and topology-aware PostgreSQL routing contract.
 - [Topology fixed-suffix v4 status](docs/experiments/topology_fixed_suffix_v4_status_v1.md): implemented default-off routing boundary and promotion non-activation record.
 - [Topology fixed-suffix v4 capture procedure](docs/experiments/topology_fixed_suffix_v4_capture_v1.md): clean-source evidence sequence required before a v4 policy may be installed.
+- [Topology fixed-suffix first-use routing](docs/experiments/topology_fixed_suffix_first_use_v1.md): separately versioned v5 selector and its promotion contract.
 - [PostgreSQL versus Neo4j performance summary](report_summary.md): current outlier measurements and evidence boundaries.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.

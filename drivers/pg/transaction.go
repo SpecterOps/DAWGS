@@ -383,7 +383,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		topologyEstimatorVersion = topologyPolicy.compiledManifest.TopologyEstimatorVersion
 		maximumEdgeToNodeRatioPerMille = topologyPolicy.compiledManifest.TopologyThresholds["maximum_edge_to_node_ratio_per_mille"]
 	}
-	topologyCandidate := s.topologyRouteDecision(graphTarget.ID, shape, parameters, topologyPolicyIdentity, topologyEstimatorVersion, maximumEdgeToNodeRatioPerMille, topologyPolicy.enabled())
+	topologyCandidate := s.topologyRouteDecision(graphTarget.ID, shape, parameters, topologyPolicyIdentity, topologyEstimatorVersion, maximumEdgeToNodeRatioPerMille, topologyPolicy.enabled(), topologyPolicy.EnableTopologyFixedSuffixFirstUse)
 	profile.Policy = time.Since(policyStarted)
 	if topologyCandidate {
 		policy = topologyPolicy

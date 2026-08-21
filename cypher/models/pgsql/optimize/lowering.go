@@ -687,6 +687,11 @@ const (
 	// tool-only suffix guard, retry, and component identity.
 	ExpansionSearchPolicyTopologyFixedSuffixV1 ExpansionSearchPolicy = "topology-fixed-suffix-v1"
 
+	// ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1 identifies the
+	// separately qualified first-use topology selector. Its manifest and route
+	// protocol are intentionally distinct from v1's cache-hit-only contract.
+	ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1 ExpansionSearchPolicy = "topology-fixed-suffix-first-use-v1"
+
 	// ExpansionSearchSelectorFixedSuffixPathV1 identifies the tool-only static
 	// selector for full-path fixed-suffix observations.
 	ExpansionSearchSelectorFixedSuffixPathV1 = "fixed-suffix-path-static-v1"

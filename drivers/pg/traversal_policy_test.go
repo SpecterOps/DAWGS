@@ -220,6 +220,34 @@ func TestTraversalPolicyV4RequiresRouteOwnedFixedSuffixSelection(t *testing.T) {
 	require.ErrorContains(t, (&Driver{SchemaManager: NewSchemaManager(nil, 0)}).SetTraversalPolicy(invalid), "maximum_edge_to_node_ratio_per_mille=1000")
 }
 
+func TestTraversalPolicyV5AuthorizesSeparateFirstUseFixedSuffixSelection(t *testing.T) {
+	query := `MATCH (root:Root) WHERE root.key = $key MATCH route = (root)-[:Expand*0..16]->()-[:Enter]->(:Middle)-[:Continue]->(:NearTerminal)-[:Complete]->(:Terminal) RETURN route`
+	parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+	require.NoError(t, err)
+	shape, err := traversalShapeForQuery(parsed)
+	require.NoError(t, err)
+
+	policy := testTopologyFixedSuffixPolicy(t, query, shape)
+	policy.EnableTopologyFixedSuffix = false
+	policy.EnableTopologyFixedSuffixFirstUse = true
+	policy = rewriteTestTraversalPolicyManifest(t, policy, func(manifest *traversalPromotionManifest) {
+		manifest.Version = 5
+		manifest.Candidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+		manifest.SelectorVersion = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+		manifest.ExecutionBoundary = "first_use_transaction_retry"
+		manifest.RouteCacheProtocol = "topology-selected-first-use-routing-v1"
+		manifest.Buckets[0].SQLTemplateSHA256 = structuralSQLTemplateSHA256(*manifest, manifest.Buckets[0])
+	})
+	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	require.NoError(t, driver.SetTraversalPolicy(policy))
+
+	ordinary, _ := driver.SchemaManager.effectiveTraversalPolicyForShape(query, shape, pgx.RepeatableRead)
+	require.False(t, ordinary.enabled())
+	topology, identity := driver.SchemaManager.topologyFixedSuffixPolicyForShape(shape, pgx.RepeatableRead)
+	require.True(t, topology.EnableTopologyFixedSuffixFirstUse)
+	require.Contains(t, identity, "first-use-candidate")
+}
+
 // TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExactCaps verifies traversal policy authorizes guarded inline asp only with stable snapshot and exact caps behavior.
 func TestTraversalPolicyAuthorizesGuardedInlineASPOnlyWithStableSnapshotAndExactCaps(t *testing.T) {
 	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}

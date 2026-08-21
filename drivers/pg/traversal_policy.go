@@ -39,12 +39,17 @@ type TraversalPolicy struct {
 	// fixed-suffix candidate. It never changes ordinary routing: the
 	// transaction route-decision cache must independently select the arm.
 	EnableTopologyFixedSuffix bool `json:"enable_topology_fixed_suffix,omitempty"`
+	// EnableTopologyFixedSuffixFirstUse permits the manifest-v5 first-use
+	// selector. It is deliberately independent of the v4 cache-hit protocol.
+	EnableTopologyFixedSuffixFirstUse bool `json:"enable_topology_fixed_suffix_first_use,omitempty"`
 	// DisableExpansionOrientation is an evidence-free emergency rollback switch
 	// for any manifest-authorized orientation selector.
 	DisableExpansionOrientation bool `json:"disable_expansion_orientation,omitempty"`
 	// DisableTopologyFixedSuffix is the evidence-free emergency rollback
 	// switch for the manifest-v4 fixed-suffix candidate.
 	DisableTopologyFixedSuffix bool `json:"disable_topology_fixed_suffix,omitempty"`
+	// DisableTopologyFixedSuffixFirstUse is the emergency rollback for v5.
+	DisableTopologyFixedSuffixFirstUse bool `json:"disable_topology_fixed_suffix_first_use,omitempty"`
 	// DisableEndpointSeededReverse indicates whether disable endpoint seeded reverse applies.
 	DisableEndpointSeededReverse bool `json:"disable_endpoint_seeded_reverse,omitempty"`
 	// DisableInlineASPDAG indicates whether disable inline aspdag applies.
@@ -63,20 +68,20 @@ type TraversalPolicy struct {
 
 // enabled reports whether the policy changes any production translation behavior.
 func (s TraversalPolicy) enabled() bool {
-	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.EnableTopologyFixedSuffix || s.DisableExpansionOrientation || s.DisableTopologyFixedSuffix || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
+	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.EnableTopologyFixedSuffix || s.EnableTopologyFixedSuffixFirstUse || s.DisableExpansionOrientation || s.DisableTopologyFixedSuffix || s.DisableTopologyFixedSuffixFirstUse || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
 }
 
 // rollbackActive reports whether an emergency rollback can change the SQL
 // authorized by a promotion manifest. Rollback generations retain their own
 // cache identity, but must not compare incumbent SQL with the candidate anchor.
 func (s TraversalPolicy) rollbackActive() bool {
-	return s.DisableExpansionOrientation || s.DisableTopologyFixedSuffix || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
+	return s.DisableExpansionOrientation || s.DisableTopologyFixedSuffix || s.DisableTopologyFixedSuffixFirstUse || s.DisableEndpointSeededReverse || s.DisableInlineASPDAG || s.DisableInlineSPWitness || s.DisableInlineSPDistance
 }
 
 // manifestCandidateEnabled reports whether this policy carries a candidate
 // whose authorization depends on a promotion manifest.
 func (s TraversalPolicy) manifestCandidateEnabled() bool {
-	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.EnableTopologyFixedSuffix
+	return s.ShortestPathExecutor != "" || s.EnableExpansionOrientation || s.EnableTopologyFixedSuffix || s.EnableTopologyFixedSuffixFirstUse
 }
 
 // rollbackSwitchCount returns the number of emergency controls enabled in the
@@ -87,6 +92,7 @@ func (s TraversalPolicy) rollbackSwitchCount() int {
 	for _, enabled := range []bool{
 		s.DisableExpansionOrientation,
 		s.DisableTopologyFixedSuffix,
+		s.DisableTopologyFixedSuffixFirstUse,
 		s.DisableEndpointSeededReverse,
 		s.DisableInlineASPDAG,
 		s.DisableInlineSPWitness,
@@ -111,6 +117,9 @@ func (s TraversalPolicy) matchingCandidateRollbackActive() bool {
 	if s.EnableTopologyFixedSuffix {
 		return s.DisableTopologyFixedSuffix
 	}
+	if s.EnableTopologyFixedSuffixFirstUse {
+		return s.DisableTopologyFixedSuffixFirstUse
+	}
 	switch s.ShortestPathExecutor {
 	case optimize.ShortestPathExecutorASPI1DAG:
 		return s.DisableInlineASPDAG
@@ -129,6 +138,7 @@ func (s TraversalPolicy) withoutManifestCandidate() TraversalPolicy {
 	s.ShortestPathExecutor = ""
 	s.EnableExpansionOrientation = false
 	s.EnableTopologyFixedSuffix = false
+	s.EnableTopologyFixedSuffixFirstUse = false
 	return s
 }
 
@@ -165,7 +175,7 @@ func (s TraversalPolicy) productionOptionsForShape(query string, shape Traversal
 		DisableInlineSPDistance:      s.DisableInlineSPDistance,
 		SelectorVersion:              selectorVersion,
 	}
-	if s.EnableTopologyFixedSuffix && !s.DisableTopologyFixedSuffix {
+	if (s.EnableTopologyFixedSuffix && !s.DisableTopologyFixedSuffix) || (s.EnableTopologyFixedSuffixFirstUse && !s.DisableTopologyFixedSuffixFirstUse) {
 		options.EnableTopologyFixedSuffix = true
 		options.TopologyFixedSuffixCaps = &translate.ProductionFixedSuffixCaps{
 			SuffixRowLimit:   manifest.Caps["suffix_row_limit"],
@@ -257,7 +267,7 @@ func (s TraversalPolicy) structuralBucketForShape(shape TraversalShape) (travers
 // template. A v4 match authorizes only the route-decision candidate path; it
 // does not make ordinary translation select that candidate.
 func (s TraversalPolicy) authorizedStructuralBucketForShape(shape TraversalShape) (traversalPromotionBucket, bool) {
-	if !shape.Available() || (s.compiledManifest.Version != 3 && s.compiledManifest.Version != 4) {
+	if !shape.Available() || (s.compiledManifest.Version != 3 && s.compiledManifest.Version != 4 && s.compiledManifest.Version != 5) {
 		return traversalPromotionBucket{}, false
 	}
 	var matched *traversalPromotionBucket
@@ -512,7 +522,7 @@ func (s TraversalPolicy) validate() error {
 		return fmt.Errorf("enabled traversal policy requires a nonzero generation")
 	}
 	candidateFamilies := 0
-	for _, enabled := range []bool{s.ShortestPathExecutor != "", s.EnableExpansionOrientation, s.EnableTopologyFixedSuffix} {
+	for _, enabled := range []bool{s.ShortestPathExecutor != "", s.EnableExpansionOrientation, s.EnableTopologyFixedSuffix, s.EnableTopologyFixedSuffixFirstUse} {
 		if enabled {
 			candidateFamilies++
 		}
@@ -540,8 +550,8 @@ func (s TraversalPolicy) validate() error {
 	if hex.EncodeToString(digest[:]) != s.PromotionManifestSHA256 {
 		return fmt.Errorf("promotion manifest content does not match its SHA-256 digest")
 	}
-	if (manifest.Version != 2 && manifest.Version != 3 && manifest.Version != 4) || strings.TrimSpace(manifest.SelectorVersion) == "" {
-		return fmt.Errorf("promotion manifest requires version 2, 3, or 4 and a selector version")
+	if (manifest.Version != 2 && manifest.Version != 3 && manifest.Version != 4 && manifest.Version != 5) || strings.TrimSpace(manifest.SelectorVersion) == "" {
+		return fmt.Errorf("promotion manifest requires version 2, 3, 4, or 5 and a selector version")
 	}
 	if strings.TrimSpace(manifest.SourceCommit) == "" || !lowerHexSHA256(manifest.SourceSHA256) || !lowerHexSHA256(manifest.BinarySHA256) || !lowerHexSHA256(manifest.CorpusSHA256) {
 		return fmt.Errorf("promotion manifest requires source commit and lowercase source, binary, and corpus SHA-256 digests")
@@ -560,6 +570,9 @@ func (s TraversalPolicy) validate() error {
 	if s.EnableTopologyFixedSuffix {
 		expectedCandidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
 	}
+	if s.EnableTopologyFixedSuffixFirstUse {
+		expectedCandidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+	}
 	if manifest.Candidate != expectedCandidate {
 		return fmt.Errorf("promotion manifest candidate %q does not authorize %q", manifest.Candidate, expectedCandidate)
 	}
@@ -568,6 +581,8 @@ func (s TraversalPolicy) validate() error {
 		expectedBoundary = "guarded_dual_arm"
 	} else if s.EnableTopologyFixedSuffix {
 		expectedBoundary = "transaction_retry"
+	} else if s.EnableTopologyFixedSuffixFirstUse {
+		expectedBoundary = "first_use_transaction_retry"
 	} else if s.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG || s.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || s.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistance {
 		expectedBoundary = "guarded_dual_arm"
 	}
@@ -596,7 +611,7 @@ func (s TraversalPolicy) validate() error {
 			return fmt.Errorf("%s promotion manifest requires fallback %q", manifest.SelectorVersion, optimize.ExpansionSearchStepwiseForward)
 		}
 	}
-	if s.EnableTopologyFixedSuffix {
+	if s.EnableTopologyFixedSuffix || s.EnableTopologyFixedSuffixFirstUse {
 		expectedCaps := map[string]int64{
 			"suffix_row_limit":   optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit,
 			"state_limit":        optimize.ExpansionSearchSuffixReverseGuardStateLimit,
@@ -611,8 +626,12 @@ func (s TraversalPolicy) validate() error {
 				return fmt.Errorf("topology fixed-suffix promotion manifest requires %s=%d", name, expected)
 			}
 		}
-		if manifest.Version != 4 || manifest.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) || manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) || manifest.TopologyEstimatorVersion != "topology-fixed-suffix-counts-v1" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != "topology-selected-routing-v1" {
-			return fmt.Errorf("topology fixed-suffix promotion manifest requires v4 selector, fallback, estimator, synopsis schema, and route-cache protocol bindings")
+		expectedVersion, expectedSelector, expectedProtocol := 4, string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1), "topology-selected-routing-v1"
+		if s.EnableTopologyFixedSuffixFirstUse {
+			expectedVersion, expectedSelector, expectedProtocol = 5, string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1), "topology-selected-first-use-routing-v1"
+		}
+		if manifest.Version != expectedVersion || manifest.SelectorVersion != expectedSelector || manifest.FallbackExecutor != string(optimize.ExpansionSearchStepwiseForward) || manifest.TopologyEstimatorVersion != "topology-fixed-suffix-counts-v1" || manifest.SynopsisSchemaVersion != "topology-synopsis-schema-v2" || manifest.RouteCacheProtocol != expectedProtocol {
+			return fmt.Errorf("topology fixed-suffix promotion manifest requires versioned selector, fallback, estimator, synopsis schema, and route-cache protocol bindings")
 		}
 		if !slices.EqualFunc(sortedTopologyThresholds(manifest.TopologyThresholds), []topologyThreshold{{Name: "maximum_edge_to_node_ratio_per_mille", Value: 1000}}, func(left, right topologyThreshold) bool {
 			return left == right
@@ -945,7 +964,7 @@ func (s *SchemaManager) effectiveTraversalPolicyForShape(query string, shape Tra
 	// Manifest v4 has a separate, snapshot-owned selection path. An exact
 	// evidence query must not make it eligible through the ordinary translation
 	// cache path, otherwise a route-cache miss could silently execute it.
-	if policy.EnableTopologyFixedSuffix || (candidateRollback && policy.compiledManifest.Version == 4) {
+	if policy.EnableTopologyFixedSuffix || policy.EnableTopologyFixedSuffixFirstUse || (candidateRollback && (policy.compiledManifest.Version == 4 || policy.compiledManifest.Version == 5)) {
 		if candidateRollback {
 			return policy, policy.compiledIdentity
 		}
@@ -967,10 +986,10 @@ func (s *SchemaManager) effectiveTraversalPolicyForShape(query string, shape Tra
 func (s *SchemaManager) hasStructuralTraversalPolicy() bool {
 	s.traversalPolicyLock.RLock()
 	defer s.traversalPolicyLock.RUnlock()
-	return s.traversalPolicy.manifestCandidateEnabled() && (s.traversalPolicy.compiledManifest.Version == 3 || s.traversalPolicy.compiledManifest.Version == 4) && !s.traversalPolicy.rollbackActive()
+	return s.traversalPolicy.manifestCandidateEnabled() && (s.traversalPolicy.compiledManifest.Version == 3 || s.traversalPolicy.compiledManifest.Version == 4 || s.traversalPolicy.compiledManifest.Version == 5) && !s.traversalPolicy.rollbackActive()
 }
 
-// topologyFixedSuffixPolicyForShape returns a validated v4 policy only for
+// topologyFixedSuffixPolicyForShape returns a validated v4 or v5 policy only for
 // the narrow structural bucket it authorizes. The caller must still own a
 // stable transaction snapshot and receive a route-cache hit before it can
 // execute the returned candidate.
@@ -981,11 +1000,14 @@ func (s *SchemaManager) topologyFixedSuffixPolicyForShape(shape TraversalShape, 
 	s.traversalPolicyLock.RLock()
 	policy := s.traversalPolicy
 	s.traversalPolicyLock.RUnlock()
-	if !policy.EnableTopologyFixedSuffix || policy.rollbackActive() || policy.compiledManifest.Version != 4 {
+	if (!policy.EnableTopologyFixedSuffix && !policy.EnableTopologyFixedSuffixFirstUse) || policy.rollbackActive() || (policy.compiledManifest.Version != 4 && policy.compiledManifest.Version != 5) {
 		return TraversalPolicy{}, ""
 	}
 	if _, authorized := policy.authorizedStructuralBucketForShape(shape); !authorized {
 		return TraversalPolicy{}, ""
+	}
+	if policy.EnableTopologyFixedSuffixFirstUse {
+		return policy, policy.compiledIdentity + "-topology-fixed-suffix-first-use-candidate"
 	}
 	return policy, policy.compiledIdentity + "-topology-fixed-suffix-candidate"
 }

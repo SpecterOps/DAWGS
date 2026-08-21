@@ -83,6 +83,7 @@ type TraversalRouteDecisionStats struct {
 	ShadowMiss          uint64 `json:"shadow_miss"`
 	ShadowHit           uint64 `json:"shadow_hit"`
 	CandidateHit        uint64 `json:"candidate_hit"`
+	FirstUseCandidate   uint64 `json:"first_use_candidate"`
 	EstimateRejected    uint64 `json:"estimate_rejected"`
 	Capacity            uint64 `json:"capacity"`
 	ParametersInvalid   uint64 `json:"parameters_invalid"`

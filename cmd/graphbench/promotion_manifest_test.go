@@ -1569,7 +1569,7 @@ func TestVerifyPromotionManifestRejectsVersionOne(t *testing.T) {
 	verification, err := verifyPromotionManifest(path)
 	require.NoError(t, err)
 	require.False(t, verification.Passed)
-	require.Contains(t, verification.Reasons, "manifest version must be 2, 3, or 4")
+	require.Contains(t, verification.Reasons, "manifest version must be 2, 3, 4, or 5")
 }
 
 func TestPromotionManifestDecodingRejectsUnknownAndTrailingJSON(t *testing.T) {
