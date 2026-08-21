@@ -45,6 +45,7 @@ func benchmarkShortestPathExecutor(executor optimize.ShortestPathExecutor) bool 
 	switch executor {
 	case optimize.ShortestPathExecutorB2SmallerCurrentLevelDistance,
 		optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness,
+		optimize.ShortestPathExecutorASPB1AlternatingNodeDAG,
 		optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG,
 		optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 		optimize.ShortestPathExecutorASPI1DAG,

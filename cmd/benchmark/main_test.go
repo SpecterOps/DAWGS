@@ -51,6 +51,7 @@ func TestBenchmarkShortestPathExecutorAllowlist(t *testing.T) {
 	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness))
 	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG))
 	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorASPI1DAG))
+	require.True(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorASPB1AlternatingNodeDAG))
 	require.False(t, benchmarkShortestPathExecutor(optimize.ShortestPathExecutorIncumbentWorkspace))
 	require.False(t, benchmarkShortestPathExecutor("unknown"))
 	require.True(t, benchmarkPlanCacheMode("auto"))
