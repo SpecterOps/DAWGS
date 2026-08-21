@@ -2761,7 +2761,8 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 
 func compactExecutorNeedsPathHydration(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
-	case optimize.ShortestPathExecutorS4CanonicalWitness,
+	case optimize.ShortestPathExecutorASPA1DAG,
+		optimize.ShortestPathExecutorS4CanonicalWitness,
 		optimize.ShortestPathExecutorB1AlternatingNodeWitness,
 		optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness,
 		optimize.ShortestPathExecutorASPB1AlternatingNodeDAG,
