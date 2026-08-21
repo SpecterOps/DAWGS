@@ -76,7 +76,7 @@ func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[st
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	return formatted
+	return formatted.Statement
 }
 
 func TestExclusiveDisjunctionTranslates(t *testing.T) {
@@ -271,8 +271,8 @@ RETURN n`)
 
 	// Extract the individual CTE bodies so each assertion is scoped to the CTE it
 	// describes, rather than matching anywhere in the flattened query string.
-	s1Body := extractCTEBody(t, formatted, "s1")
-	s2Body := extractCTEBody(t, formatted, "s2")
+	s1Body := extractCTEBody(t, formatted.Statement, "s1")
+	s2Body := extractCTEBody(t, formatted.Statement, "s2")
 
 	// The predicate root CTE (s1) must NOT have the outer MATCH frame (s0) as a
 	// comma-joined FROM source.  OmitPreviousFrameSource suppresses it so the subquery

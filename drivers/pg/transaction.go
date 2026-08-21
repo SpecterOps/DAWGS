@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
@@ -284,7 +285,8 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	} else if sqlQuery, err := translate.Translated(translated); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
-		return s.Raw(sqlQuery, translated.Parameters)
+		maps.Copy(translated.Parameters, sqlQuery.Parameters)
+		return s.Raw(sqlQuery.Statement, translated.Parameters)
 	}
 }
 
