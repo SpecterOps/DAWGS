@@ -2078,3 +2078,167 @@ func TestInboundTraversalReversalSkipsShortestPathPattern(t *testing.T) {
 	require.False(t, patternPart.PathDirectionReversed)
 	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
 }
+
+func TestInboundTraversalReversalReversesQualifyingTraversalAfterWith(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.enabled = true
+		WITH u
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: true})
+
+	require.NotNil(t, plan.Query.SingleQuery.MultiPartQuery)
+	patternPart := plan.Query.SingleQuery.MultiPartQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.True(t, patternPart.PathDirectionReversed)
+
+	// The traversal following the WITH is driven from the constrained d:Computer terminal inward
+	// toward s:User, with each relationship direction flipped from outbound to inbound.
+	require.Equal(t, []string{"d", "g", "s"}, patternNodeSymbols(patternPart))
+	require.Equal(t, []graph.Direction{graph.DirectionInbound, graph.DirectionInbound}, patternRelationshipDirections(patternPart))
+}
+
+func TestInboundTraversalReversalSkipsWhenSourceCarriedAcrossWith(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s:User)
+		WITH s
+		MATCH p = (s)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	require.NotNil(t, plan.Query.SingleQuery.MultiPartQuery)
+	patternPart := plan.Query.SingleQuery.MultiPartQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}
+
+func TestInboundTraversalReversalSkipsWhenSourceBoundByUnwindOfCarriedCollection(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (n:User)
+		WHERE n.enabled = true
+		WITH collect(n) AS users
+		UNWIND users AS s
+		MATCH p = (s)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+
+	// The traversal source s is bound by the UNWIND of a carried collection, so reversing it would
+	// break the established drive order for the externally provided source.
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	require.NotNil(t, plan.Query.SingleQuery.MultiPartQuery)
+	patternPart := plan.Query.SingleQuery.MultiPartQuery.SinglePartQuery.ReadingClauses[1].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}
+
+func TestInboundTraversalReversalRejectsAmbiguousSingleAndMultiPartQuery(t *testing.T) {
+	t.Parallel()
+
+	singlePartQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+	require.NotNil(t, singlePartQuery.SingleQuery.SinglePartQuery)
+
+	multiPartQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.enabled = true
+		WITH u
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+	require.NotNil(t, multiPartQuery.SingleQuery.MultiPartQuery)
+
+	// An ambiguous representation carrying both a single-part and a multi-part query is rejected
+	// rather than silently optimizing only one of the two.
+	plan := &Plan{
+		Query: &cypher.RegularQuery{
+			SingleQuery: &cypher.SingleQuery{
+				SinglePartQuery: singlePartQuery.SingleQuery.SinglePartQuery,
+				MultiPartQuery:  multiPartQuery.SingleQuery.MultiPartQuery,
+			},
+		},
+	}
+
+	applied, err := InboundTraversalReversalRule{}.Apply(plan)
+	require.NoError(t, err)
+	require.False(t, applied)
+
+	// Neither representation is mutated when the ambiguous query is rejected.
+	singlePartPattern := plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, singlePartPattern.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(singlePartPattern))
+
+	multiPartPattern := plan.Query.SingleQuery.MultiPartQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, multiPartPattern.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(multiPartPattern))
+}
+
+func TestInboundTraversalReversalRejectsMultiPartQueryWithoutTerminalSinglePartQuery(t *testing.T) {
+	t.Parallel()
+
+	const query = `
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		WITH p
+		RETURN p
+	`
+
+	// Control: with the terminal single-part query intact, the qualifying pattern in the preceding
+	// part is reversed, establishing that this part is reversible.
+	control, err := frontend.ParseCypher(frontend.NewContext(), query)
+	require.NoError(t, err)
+	require.NotNil(t, control.SingleQuery.MultiPartQuery)
+	require.NotEmpty(t, control.SingleQuery.MultiPartQuery.Parts)
+	require.NotNil(t, control.SingleQuery.MultiPartQuery.SinglePartQuery)
+
+	applied, err := InboundTraversalReversalRule{}.Apply(&Plan{Query: control})
+	require.NoError(t, err)
+	require.True(t, applied)
+	require.True(t, control.SingleQuery.MultiPartQuery.Parts[0].ReadingClauses[0].Match.Pattern[0].PathDirectionReversed)
+
+	// Removing the terminal single-part query models an unsupported multi-part representation, which
+	// is rejected up front so the preceding part is left untouched.
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), query)
+	require.NoError(t, err)
+	multiPartQuery := regularQuery.SingleQuery.MultiPartQuery
+	require.NotNil(t, multiPartQuery)
+	require.NotEmpty(t, multiPartQuery.Parts)
+	multiPartQuery.SinglePartQuery = nil
+
+	applied, err = InboundTraversalReversalRule{}.Apply(&Plan{Query: regularQuery})
+	require.NoError(t, err)
+	require.False(t, applied)
+
+	patternPart := multiPartQuery.Parts[0].ReadingClauses[0].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}
