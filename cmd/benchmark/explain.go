@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -50,7 +51,9 @@ func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFun
 			return nil, err
 		}
 
-		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS) "+sqlQuery, translation.Parameters)
+		maps.Copy(translation.Parameters, sqlQuery.Parameters)
+
+		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS) "+sqlQuery.Statement, translation.Parameters)
 		defer result.Close()
 
 		var plan []string
@@ -67,8 +70,9 @@ func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFun
 			return nil, err
 		}
 
+		// TODO: should this get the parameters as well?
 		return &ExplainResult{
-			SQL:          sqlQuery,
+			SQL:          sqlQuery.Statement,
 			Plan:         plan,
 			Optimization: translation.Optimization,
 		}, nil
