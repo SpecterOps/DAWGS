@@ -16,6 +16,14 @@ func TestParsePostgreSQLExplainMetrics(t *testing.T) {
 	require.Equal(t, "822ae07d4783158bc1912bb623e5107cc9002d519e1143a9c200ed6ee18b6d0f", sqlFingerprint("select 1"))
 }
 
+func TestParsePostgreSQLExplainMetricsCollectsNamedStages(t *testing.T) {
+	metrics, err := parsePostgreSQLExplainMetrics(`[{"Plan":{"Node Type":"CTE Scan","CTE Name":"asp_distance","Actual Rows":3,"Actual Loops":2,"Actual Total Time":1.5,"Plans":[{"Node Type":"Function Scan","Function Name":"all_shortest_paths_dag","Actual Rows":3,"Actual Loops":1,"Actual Total Time":2.0}]},"Planning Time":0.1,"Execution Time":3.1}]`)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(metrics.Stages))
+	require.Equal(t, 3*time.Millisecond, metrics.Stages["asp_distance"].Total)
+	require.Equal(t, 2*time.Millisecond, metrics.Stages["all_shortest_paths_dag"].Total)
+}
+
 func TestParsePostgreSQLExplainMetricsRejectsNonJSON(t *testing.T) {
 	_, err := parsePostgreSQLExplainMetrics("Seq Scan on node")
 	require.Error(t, err)

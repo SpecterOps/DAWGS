@@ -26,7 +26,10 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-type ExplainFunc func(ctx context.Context, tx graph.Transaction, cypher string) (*ExplainResult, error)
+// ExplainFunc captures a plan for the exact scenario values that were timed.
+// Passing the Scenario prevents parameterized endpoint plans from silently
+// explaining an empty query instead of the workload under measurement.
+type ExplainFunc func(ctx context.Context, tx graph.Transaction, scenario Scenario) (*ExplainResult, error)
 
 type RunOptions struct {
 	Explain          ExplainFunc
@@ -86,7 +89,7 @@ func runScenario(ctx context.Context, db graph.Database, s Scenario, iterations 
 
 	if options.Explain != nil && s.Cypher != "" {
 		if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-			explain, err := options.Explain(ctx, tx, s.Cypher)
+			explain, err := options.Explain(ctx, tx, s)
 			result.Explain = explain
 			return err
 		}); err != nil {

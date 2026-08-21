@@ -45,9 +45,19 @@ type ExplainResult struct {
 // configuration emitted by EXPLAIN. It is intentionally independent of the
 // human-readable plan text so benchmark comparisons need not parse it.
 type PostgreSQLExplainMetrics struct {
-	PlanningTime  time.Duration     `json:"planning_time"`
-	ExecutionTime time.Duration     `json:"execution_time"`
-	Settings      map[string]string `json:"settings,omitempty"`
+	PlanningTime  time.Duration                     `json:"planning_time"`
+	ExecutionTime time.Duration                     `json:"execution_time"`
+	Settings      map[string]string                 `json:"settings,omitempty"`
+	Stages        map[string]PostgreSQLExplainStage `json:"stages,omitempty"`
+}
+
+// PostgreSQLExplainStage is an additive node timing derived from the exact
+// JSON plan. It carries no SQL, parameters, or result values.
+type PostgreSQLExplainStage struct {
+	NodeType string        `json:"node_type"`
+	Rows     int64         `json:"rows"`
+	Loops    int64         `json:"loops"`
+	Total    time.Duration `json:"total"`
 }
 
 type postgresExplainDocument struct {
@@ -61,17 +71,17 @@ func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFun
 }
 
 func newPostgresExplainerWithExecutor(kindMapper pgsql.KindMapper, graphID int32, executor optimize.ShortestPathExecutor) ExplainFunc {
-	return func(ctx context.Context, tx graph.Transaction, cypherQuery string) (*ExplainResult, error) {
-		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+	return func(ctx context.Context, tx graph.Transaction, scenario Scenario) (*ExplainResult, error) {
+		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), scenario.Cypher)
 		if err != nil {
 			return nil, err
 		}
 
 		var translation translate.Result
-		if executor != "" && strings.Contains(strings.ToLower(cypherQuery), "shortestpath") {
-			translation, err = translate.TranslateForTool(ctx, regularQuery, kindMapper, nil, graphID, translate.ToolOptions{ForceShortestPathExecutor: executor})
+		if executor != "" && strings.Contains(strings.ToLower(scenario.Cypher), "shortestpath") {
+			translation, err = translate.TranslateForTool(ctx, regularQuery, kindMapper, scenario.Parameters, graphID, translate.ToolOptions{ForceShortestPathExecutor: executor})
 		} else {
-			translation, err = translate.Translate(ctx, regularQuery, kindMapper, nil, graphID)
+			translation, err = translate.Translate(ctx, regularQuery, kindMapper, scenario.Parameters, graphID)
 		}
 		if err != nil {
 			return nil, err
@@ -141,9 +151,66 @@ func parsePostgreSQLExplainMetrics(raw string) (PostgreSQLExplainMetrics, error)
 	if len(documents) == 0 {
 		return PostgreSQLExplainMetrics{}, fmt.Errorf("PostgreSQL EXPLAIN JSON is empty")
 	}
-	return PostgreSQLExplainMetrics{
+	metrics := PostgreSQLExplainMetrics{
 		PlanningTime:  time.Duration(documents[0].PlanningTime * float64(time.Millisecond)),
 		ExecutionTime: time.Duration(documents[0].ExecutionTime * float64(time.Millisecond)),
 		Settings:      documents[0].Settings,
-	}, nil
+		Stages:        map[string]PostgreSQLExplainStage{},
+	}
+	var rawDocuments []map[string]any
+	if err := json.Unmarshal([]byte(raw), &rawDocuments); err != nil {
+		return PostgreSQLExplainMetrics{}, err
+	}
+	if len(rawDocuments) > 0 {
+		collectPostgreSQLExplainStages(rawDocuments[0]["Plan"], metrics.Stages)
+	}
+	if len(metrics.Stages) == 0 {
+		metrics.Stages = nil
+	}
+	return metrics, nil
+}
+
+func collectPostgreSQLExplainStages(value any, stages map[string]PostgreSQLExplainStage) {
+	node, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	name := ""
+	for _, key := range []string{"CTE Name", "Function Name", "Subplan Name"} {
+		if candidate, ok := node[key].(string); ok && candidate != "" {
+			name = candidate
+			break
+		}
+	}
+	if name != "" {
+		stage := PostgreSQLExplainStage{NodeType: stringExplainValue(node["Node Type"]), Rows: int64ExplainValue(node["Actual Rows"]), Loops: int64ExplainValue(node["Actual Loops"])}
+		stage.Total = time.Duration(floatExplainValue(node["Actual Total Time"]) * float64(time.Millisecond) * float64(stage.Loops))
+		if existing, found := stages[name]; found {
+			existing.Rows += stage.Rows
+			existing.Loops += stage.Loops
+			existing.Total += stage.Total
+			stages[name] = existing
+		} else {
+			stages[name] = stage
+		}
+	}
+	if children, ok := node["Plans"].([]any); ok {
+		for _, child := range children {
+			collectPostgreSQLExplainStages(child, stages)
+		}
+	}
+}
+
+func stringExplainValue(value any) string {
+	result, _ := value.(string)
+	return result
+}
+
+func floatExplainValue(value any) float64 {
+	result, _ := value.(float64)
+	return result
+}
+
+func int64ExplainValue(value any) int64 {
+	return int64(floatExplainValue(value))
 }
