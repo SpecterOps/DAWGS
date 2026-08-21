@@ -150,6 +150,16 @@ func (s *Driver) WarmStatements(ctx context.Context, statements ...string) error
 	return s.pool.WarmStatements(ctx, statements...)
 }
 
+// SetStatementWarmupPolicy installs an opt-in persistent warm set. It warms
+// current idle connections and applies the same selected SQL to new pool
+// connections without executing either the statements or graph queries.
+func (s *Driver) SetStatementWarmupPolicy(ctx context.Context, statements ...string) error {
+	if s == nil || s.pool == nil {
+		return nil
+	}
+	return s.pool.SetStatementWarmupPolicy(ctx, statements...)
+}
+
 // ParseCacheStats forwards v1's still-driver-wide parse-cache statistics.
 func (s *Driver) ParseCacheStats() pg.ParseCacheStats {
 	if s == nil || s.delegate == nil {

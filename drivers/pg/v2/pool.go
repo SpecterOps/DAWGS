@@ -19,8 +19,32 @@ const poolInitConnectionTimeout = 10 * time.Second
 type Pool struct {
 	pool     *pgxpool.Pool
 	provider *connectionCacheProvider
+	warmups  *statementWarmupPolicy
 
 	closeOnce sync.Once
+}
+
+// statementWarmupPolicy retains only normalized SQL selected by an operator.
+// It is deliberately empty by default and is shared with AfterConnect so new
+// physical connections receive the same warming policy as current ones.
+type statementWarmupPolicy struct {
+	lock       sync.RWMutex
+	statements []preparedStatementWarmup
+}
+
+func (s *statementWarmupPolicy) snapshot() []preparedStatementWarmup {
+	if s == nil {
+		return nil
+	}
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return append([]preparedStatementWarmup(nil), s.statements...)
+}
+
+func (s *statementWarmupPolicy) replace(statements []preparedStatementWarmup) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.statements = append([]preparedStatementWarmup(nil), statements...)
 }
 
 type poolLifecycleHooks struct {
@@ -35,7 +59,7 @@ func productionPoolLifecycleHooks() poolLifecycleHooks {
 	}
 }
 
-func composePoolConfig(poolConfig *pgxpool.Config, v2Config Config, provider *connectionCacheProvider, hooks poolLifecycleHooks) (*pgxpool.Config, error) {
+func composePoolConfig(poolConfig *pgxpool.Config, v2Config Config, provider *connectionCacheProvider, warmups *statementWarmupPolicy, hooks poolLifecycleHooks) (*pgxpool.Config, error) {
 	if poolConfig == nil || poolConfig.ConnConfig == nil {
 		return nil, fmt.Errorf("PostgreSQL pool config is required")
 	}
@@ -66,6 +90,14 @@ func composePoolConfig(poolConfig *pgxpool.Config, v2Config Config, provider *co
 			}
 		}
 		provider.registerConnection(conn)
+		if statements := warmups.snapshot(); len(statements) > 0 {
+			if err := provider.warmStatementsForConnection(conn, statements, func(name, sql string) error {
+				_, err := conn.Prepare(ctx, name, sql)
+				return err
+			}); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	configuredPool.AfterRelease = func(conn *pgx.Conn) bool {
@@ -98,7 +130,8 @@ func NewPool(ctx context.Context, poolConfig *pgxpool.Config, config Config) (*P
 	if err != nil {
 		return nil, err
 	}
-	configuredPool, err := composePoolConfig(poolConfig, config, provider, productionPoolLifecycleHooks())
+	warmups := &statementWarmupPolicy{}
+	configuredPool, err := composePoolConfig(poolConfig, config, provider, warmups, productionPoolLifecycleHooks())
 	if err != nil {
 		provider.close()
 		return nil, err
@@ -114,7 +147,26 @@ func NewPool(ctx context.Context, poolConfig *pgxpool.Config, config Config) (*P
 	return &Pool{
 		pool:     underlying,
 		provider: provider,
+		warmups:  warmups,
 	}, nil
+}
+
+// SetStatementWarmupPolicy replaces the opt-in warm set, prepares it on
+// currently idle connections, and applies it to every subsequently created
+// physical connection. Passing no statements clears the future warm set.
+func (s *Pool) SetStatementWarmupPolicy(ctx context.Context, statements ...string) error {
+	if s == nil || s.pool == nil || s.provider == nil || s.warmups == nil {
+		return fmt.Errorf("PostgreSQL v2 pool is not initialized")
+	}
+	warmups, err := normalizePreparedStatementWarmups(statements)
+	if err != nil {
+		return err
+	}
+	if err := s.WarmStatements(ctx, statements...); err != nil {
+		return err
+	}
+	s.warmups.replace(warmups)
+	return nil
 }
 
 // NewDefaultPool constructs an opt-in v2 pool with DefaultConfig.

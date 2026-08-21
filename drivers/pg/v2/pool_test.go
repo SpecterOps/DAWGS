@@ -47,7 +47,7 @@ func TestComposePoolConfigCopiesAndOrdersHooks(t *testing.T) {
 		},
 	}
 
-	composed, err := composePoolConfig(config, DefaultConfig(), provider, hooks)
+	composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, hooks)
 	require.NoError(t, err)
 	require.NotSame(t, config, composed)
 	require.Equal(t, int32(1), config.MinConns)
@@ -71,7 +71,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 	t.Run("failed required connect does not register state", func(t *testing.T) {
 		config := testPoolConfig(t)
 		expected := errors.New("required setup failed")
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterConnect: func(context.Context, *pgx.Conn) error { return expected },
 		})
 		require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 		config := testPoolConfig(t)
 		expected := errors.New("caller setup failed")
 		config.AfterConnect = func(context.Context, *pgx.Conn) error { return expected }
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterConnect: func(context.Context, *pgx.Conn) error { return nil },
 		})
 		require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 			called = true
 			return true
 		}
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterRelease: func(*pgx.Conn) bool { return false },
 		})
 		require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 	t.Run("caller release rejection is preserved", func(t *testing.T) {
 		config := testPoolConfig(t)
 		config.AfterRelease = func(*pgx.Conn) bool { return false }
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterRelease: func(*pgx.Conn) bool { return true },
 		})
 		require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestConfigValidatesAndAppliesExplicitPoolLimits(t *testing.T) {
 	}
 	provider, err := newConnectionCacheProvider(config)
 	require.NoError(t, err)
-	composed, err := composePoolConfig(testPoolConfig(t), config, provider, poolLifecycleHooks{})
+	composed, err := composePoolConfig(testPoolConfig(t), config, provider, &statementWarmupPolicy{}, poolLifecycleHooks{})
 	require.NoError(t, err)
 	require.Equal(t, int32(0), composed.MinConns)
 	require.Equal(t, int32(2), composed.MaxConns)

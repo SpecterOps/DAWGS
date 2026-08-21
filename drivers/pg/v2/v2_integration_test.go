@@ -77,11 +77,12 @@ func newV2IntegrationDriver(t *testing.T, maxConns int32, capacity int, afterRel
 	}
 	provider, err := newConnectionCacheProvider(config)
 	require.NoError(t, err)
-	configuredPool, err := composePoolConfig(poolConfig, config, provider, productionPoolLifecycleHooks())
+	warmups := &statementWarmupPolicy{}
+	configuredPool, err := composePoolConfig(poolConfig, config, provider, warmups, productionPoolLifecycleHooks())
 	require.NoError(t, err)
 	underlying, err := pgxpool.NewWithConfig(ctx, configuredPool)
 	require.NoError(t, err)
-	driver := NewDriver(0, &Pool{pool: underlying, provider: provider})
+	driver := NewDriver(0, &Pool{pool: underlying, provider: provider, warmups: warmups})
 	t.Cleanup(func() {
 		require.NoError(t, driver.Close(context.Background()))
 	})
@@ -549,6 +550,21 @@ func TestV2StatementWarmupUsesPooledPGXCacheNames(t *testing.T) {
 		stats := driver.TranslationCacheStats()
 		return stats.LiveConnections == 0 && stats.PreparedStatements.Entries == 0
 	}, "prepared statement retirement")
+}
+
+func TestV2StatementWarmupPolicyAppliesToNewConnections(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 1, nil)
+	ctx := context.Background()
+	require.NoError(t, driver.SetStatementWarmupPolicy(ctx, "select 1"))
+	driver.pool.Reset()
+	requireEventually(t, func() bool { return driver.TranslationCacheStats().LiveConnections == 0 }, "warm connection retirement")
+	connection, err := driver.pool.pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer connection.Release()
+	identity := sha256.Sum256([]byte("select 1"))
+	var prepared int
+	require.NoError(t, connection.QueryRow(ctx, "select count(*) from pg_prepared_statements where name = $1", pgxStatementCacheName(identity)).Scan(&prepared))
+	require.Equal(t, 1, prepared)
 }
 
 func TestV2PhysicalConnectionsHaveIndependentCaches(t *testing.T) {

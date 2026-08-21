@@ -62,6 +62,8 @@ if err := database.WarmStatements(ctx, "select 1"); err != nil {
 Warm-up touches each currently idle physical connection and uses pgx's normal `CacheStatement` identity, so the first
 regular execution adopts the prepared server statement rather than creating a second one. V2 records only SHA-256
 statement identities in its lifecycle state; `TranslationCacheStats` includes aggregate workspace and warm-up counters.
+For a persistent, explicitly selected warm set that also applies to new physical connections, use
+`database.SetStatementWarmupPolicy(ctx, statements...)`; passing no statements clears the future warm set.
 
 ## Quick Start
 
