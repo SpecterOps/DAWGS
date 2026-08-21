@@ -13,6 +13,8 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+var ErrGraphQueryExecutionFailed = errors.New("query execution failed")
+
 func FetchAllNodeProperties(tx graph.Transaction, nodes graph.NodeSet) error {
 	return tx.Nodes().Filter(
 		query.InIDs(query.NodeID(), nodes.IDs()...),
@@ -195,7 +197,7 @@ func FetchByQuery(tx graph.Transaction, query string) (QueryResult, error) {
 	)
 
 	if queryResult := tx.Query(query, map[string]any{}); queryResult.Error() != nil {
-		return result, queryResult.Error()
+		return result, fmt.Errorf("%w: %w", ErrGraphQueryExecutionFailed, queryResult.Error())
 	} else {
 		defer queryResult.Close()
 
@@ -235,7 +237,7 @@ func FetchByQuery(tx graph.Transaction, query string) (QueryResult, error) {
 				)
 
 				if currentPathSize > tx.GraphQueryMemoryLimit() || pathSetSize+literalSize > tx.GraphQueryMemoryLimit() {
-					return result, fmt.Errorf("%s - Limit: %.2f MB", "query required more memory than allowed", tx.GraphQueryMemoryLimit().Mebibytes())
+					return result, fmt.Errorf("%w - Limit: %.2f MB", ErrGraphQueryMemoryLimit, tx.GraphQueryMemoryLimit().Mebibytes())
 				}
 			}
 		}

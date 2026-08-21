@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
@@ -49,4 +50,16 @@ func IsNeoTimeoutError(err error) bool {
 	default:
 		return strings.Contains(e.Error(), "Neo.ClientError.Transaction.TransactionTimedOut")
 	}
+}
+
+func IsPostgresTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) &&
+		pgErr != nil &&
+		pgErr.Code == "57014" &&
+		strings.Contains(strings.ToLower(pgErr.Message), "statement timeout")
 }
