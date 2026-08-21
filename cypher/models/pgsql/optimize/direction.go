@@ -33,6 +33,10 @@ func (s InboundTraversalReversalRule) Apply(plan *Plan) (bool, error) {
 	singleQuery := plan.Query.SingleQuery
 
 	switch {
+	case singleQuery.SinglePartQuery != nil && singleQuery.MultiPartQuery != nil:
+		// An ambiguous representation with both a single-part and a multi-part query is
+		// unsupported; rejecting it avoids silently optimizing only one of the two.
+		return false, nil
 	case singleQuery.SinglePartQuery != nil:
 		return reverseInboundTraversalSinglePartQuery(singleQuery.SinglePartQuery, map[string]struct{}{}), nil
 	case singleQuery.MultiPartQuery != nil:
@@ -46,7 +50,9 @@ func (s InboundTraversalReversalRule) Apply(plan *Plan) (bool, error) {
 // including traversals that follow a WITH projection, while carrying the symbols bound by earlier
 // segments forward so a reversal is never applied to a source endpoint provided by a prior segment.
 func reverseInboundTraversalMultiPartQuery(query *cypher.MultiPartQuery) bool {
-	if query == nil {
+	// A multi-part query without a terminal single-part query is an unsupported representation.
+	// Reject it before mutating any preceding parts so a partial reversal is never applied.
+	if query == nil || query.SinglePartQuery == nil {
 		return false
 	}
 
@@ -63,8 +69,6 @@ func reverseInboundTraversalMultiPartQuery(query *cypher.MultiPartQuery) bool {
 		if reverseInboundTraversalReadingClauses(part.ReadingClauses, declaredSymbols) {
 			applied = true
 		}
-
-		declareReadingClauseSymbols(declaredSymbols, part.ReadingClauses)
 
 		if part.With != nil {
 			declaredSymbols, _ = carryProjectionSelectivity(part.With.Projection, declaredSymbols, map[string]boundSourceSelectivity{})
@@ -88,26 +92,36 @@ func reverseInboundTraversalSinglePartQuery(query *cypher.SinglePartQuery, decla
 	return reverseInboundTraversalReadingClauses(query.ReadingClauses, declaredSymbols)
 }
 
+// reverseInboundTraversalReadingClauses evaluates each reading clause in order, declaring the
+// symbols it binds immediately after it is processed. Declaring symbols per clause rather than in a
+// single pass afterward lets a MATCH observe bindings introduced by a preceding UNWIND clause, so a
+// traversal whose source endpoint is an UNWIND binding is treated as externally bound and is not
+// reversed.
 func reverseInboundTraversalReadingClauses(readingClauses []*cypher.ReadingClause, declaredSymbols map[string]struct{}) bool {
 	var applied bool
 
 	for _, readingClause := range readingClauses {
-		if readingClause == nil || readingClause.Match == nil {
+		if readingClause == nil {
 			continue
 		}
 
-		match := readingClause.Match
-		if !match.Optional {
-			searchSymbols := whereSearchPredicateSymbols(match)
+		if match := readingClause.Match; match != nil {
+			if !match.Optional {
+				searchSymbols := whereSearchPredicateSymbols(match)
 
-			for _, patternPart := range match.Pattern {
-				if reverseInboundTraversalPatternPart(patternPart, declaredSymbols, searchSymbols) {
-					applied = true
+				for _, patternPart := range match.Pattern {
+					if reverseInboundTraversalPatternPart(patternPart, declaredSymbols, searchSymbols) {
+						applied = true
+					}
 				}
 			}
+
+			declareMatchSymbols(declaredSymbols, match)
 		}
 
-		declareMatchSymbols(declaredSymbols, match)
+		if unwind := readingClause.Unwind; unwind != nil {
+			addSymbol(declaredSymbols, variableSymbol(unwind.Variable))
+		}
 	}
 
 	return applied
