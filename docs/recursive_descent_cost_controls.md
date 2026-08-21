@@ -30,7 +30,8 @@ gated until both probes finish, so overflow and cancellation cannot leak partial
 
 `asp-static-v1` selects `ASP-A1-DAG` only for one read-only, non-optional, directed `allShortestPaths` traversal with one
 static ID equality per endpoint, minimum depth one, no path/relationship predicate, and no observed relationship value.
-An open maximum uses depth 15. Minimum-depth-zero, self-endpoint, directionless, correlated, mutation, and predicate
+An open maximum uses depth 15. A1's ordered edge IDs are hydrated inline at the outer statement boundary, avoiding a
+per-result generic path materializer. Minimum-depth-zero, self-endpoint, directionless, correlated, mutation, and predicate
 shapes retain the incumbent exact executor.
 
 `sp-static-v5-contained` retains `SP-S3-U-D` for qualified distance work, with

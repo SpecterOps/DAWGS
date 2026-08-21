@@ -67,7 +67,8 @@ Current PostgreSQL optimization coverage includes:
   `sp-static-v7-contained`; explicit bounds retain `explicit` provenance.
 - Static `allShortestPaths` selection through `asp-static-v1` for a single directed, read-only endpoint pair with
   minimum depth one. `ASP-A1-DAG` has exact one- and two-hop arms, discovers minimum node-depth layers, retains every
-  relationship-distinct predecessor at those layers, and enumerates the predecessor DAG. Open maximum ranges use the
+  relationship-distinct predecessor at those layers, and enumerates the predecessor DAG. Its returned ordered edge IDs
+  are hydrated through the inline M0 relation rather than the generic per-row path helper. Open maximum ranges use the
   documented depth cap of 15. Unsupported or ambiguous forms retain exact `SP-S0` with a machine-readable reason.
 - Default-off `ASP-B1-DAG-ALT-NODE` and `ASP-B2-DAG-MIN-LEVEL` reuse compact
   two-sided search while retaining every same-minimum-depth predecessor. They
