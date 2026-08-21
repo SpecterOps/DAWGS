@@ -459,6 +459,30 @@ func TestV2StableSnapshotTraversalWorkspaceReadiness(t *testing.T) {
 	require.Equal(t, uint64(2), stats.TraversalWorkspace.Initializations)
 }
 
+// TestV2TraversalWorkspaceReadinessAlsoWarmsReadCommitted verifies the V2
+// physical-connection workspace can serve ordinary one-statement traversal
+// reads. The workspace is session-local only, so this does not widen the
+// stable-snapshot requirement for manifest-selected candidates.
+func TestV2TraversalWorkspaceReadinessAlsoWarmsReadCommitted(t *testing.T) {
+	driver := newV2IntegrationDriver(t, 1, 4, nil)
+	setUpV2IntegrationGraph(t, driver)
+	ctx := context.Background()
+	run := func() error {
+		return driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			result := tx.Query("MATCH p = shortestPath((s)-[*1..]->(e)) RETURN p", nil)
+			defer result.Close()
+			return result.Error()
+		})
+	}
+
+	require.NoError(t, run())
+	require.NoError(t, run())
+	stats := driver.TranslationCacheStats()
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Initializations)
+	require.Equal(t, uint64(1), stats.TraversalWorkspace.Reuses)
+	require.True(t, stats.Connections[0].TraversalWorkspace.Ready)
+}
+
 // TestV2StatementWarmupUsesPooledPGXCacheNames verifies that an opt-in warmup
 // creates one server statement per physical connection and leaves only a
 // query-text-free identity in V2 lifecycle state.

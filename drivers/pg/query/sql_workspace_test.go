@@ -121,6 +121,21 @@ func TestCompactShortestExecutorsUseReusableTypedWorkspace(t *testing.T) {
 	require.Contains(t, sqlSchemaDown, "drop function if exists shortest_path_compact")
 }
 
+// TestCompactShortestWorkspaceHotResetPreservesV1Fallback verifies the V2
+// connection marker only skips repeated workspace catalog checks after setup;
+// direct and V1 callers retain self-contained initialization.
+func TestCompactShortestWorkspaceHotResetPreservesV1Fallback(t *testing.T) {
+	start := strings.Index(sqlSchemaUp, "create or replace function public.reset_shortest_dag_workspace()")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(sqlSchemaUp[start:], "create or replace function public.ensure_all_shortest_paths_a1_diagnostic_workspace_v1()")
+	require.NotEqual(t, -1, end)
+	reset := sqlSchemaUp[start : start+end]
+
+	require.Contains(t, reset, "current_setting('dawgs.shortest_dag_workspace_ready', true) is distinct from 'v2'")
+	require.Contains(t, reset, "perform public.ensure_shortest_dag_workspace()")
+	require.Contains(t, reset, "truncate table pg_temp.spd_seen, pg_temp.spd_candidate, pg_temp.spd_predecessor")
+}
+
 // TestAllShortestDAGHasExactSmallDepthArmsAndLateEnumeration verifies shallow-depth specializations precede deferred path enumeration.
 func TestAllShortestDAGHasExactSmallDepthArmsAndLateEnumeration(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.all_shortest_paths_dag")

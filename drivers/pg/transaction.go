@@ -348,7 +348,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		s.invalidateTopologyRouteDecisions()
 	}
 	profile := SQLGenerationProfile{QueryClass: sqlGenerationQueryClass(query)}
-	if profile.QueryClass == "shortest_path" && stableSnapshotIsolation(s.isolation) {
+	if profile.QueryClass == "shortest_path" {
 		if provider, ok := s.schemaManager.translationCacheProvider.(StableSnapshotTraversalWorkspaceProvider); ok {
 			if err := provider.EnsureStableSnapshotTraversalWorkspaces(s.ctx, s.conn); err != nil {
 				s.recordSQLGenerationProfile(profile)

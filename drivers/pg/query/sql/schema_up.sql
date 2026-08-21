@@ -1311,7 +1311,14 @@ create or replace function public.reset_shortest_dag_workspace()
   returns void as
 $$
 begin
-  perform public.ensure_shortest_dag_workspace();
+  -- V2 establishes this versioned workspace once per physical connection and
+  -- schema generation. The trusted marker avoids a catalog lookup and three
+  -- CREATE TEMP TABLE IF NOT EXISTS checks on every hot traversal. The marker
+  -- is set only by ensure_shortest_dag_workspace below, while the fallback
+  -- keeps direct and V1 callers self-contained.
+  if current_setting('dawgs.shortest_dag_workspace_ready', true) is distinct from 'v2' then
+    perform public.ensure_shortest_dag_workspace();
+  end if;
   truncate table pg_temp.spd_seen, pg_temp.spd_candidate, pg_temp.spd_predecessor;
 end;
 $$
