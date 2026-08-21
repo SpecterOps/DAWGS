@@ -168,6 +168,19 @@ func TestProductionTopologyFixedSuffixEmitsOneGuardedCandidate(t *testing.T) {
 	require.NotContains(t, formatted, "_suffix_guard_fallback_body")
 }
 
+func TestSuffixReverseRetryLowersEveryIndependentFixedSuffixTarget(t *testing.T) {
+	plan := &optimize.Plan{LoweringPlan: optimize.LoweringPlan{ExpansionSearchStrategy: []optimize.ExpansionSearchStrategyDecision{
+		{Family: "fixed_suffix_expansion", CandidateStrategy: optimize.ExpansionSearchSuffixSeededReverse, StructurallyEligible: true, StaticallyEligible: true, ObservationMode: optimize.ExpansionSearchObservationFullPath},
+		{Family: "fixed_suffix_expansion", CandidateStrategy: optimize.ExpansionSearchSuffixSeededReverse, StructurallyEligible: true, StaticallyEligible: true, ObservationMode: optimize.ExpansionSearchObservationFullPath},
+	}}}
+	require.NoError(t, applyExpansionSuffixReverseRetryPolicy(plan, 0, 0, 0, 0))
+	for _, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		require.Equal(t, optimize.ExpansionSearchSuffixSeededReverse, decision.SelectedStrategy)
+		require.Equal(t, "transaction_retry_tool", decision.SelectionMode)
+		require.Equal(t, optimize.ExpansionSearchPolicySuffixReverseRetryV1, decision.EmittedPolicy)
+	}
+}
+
 // TestSuffixRouteComponentEmitsOneExactReverseStatement verifies the new
 // default-off preflight arm has no probe, fallback, retry, or production-policy
 // identity while retaining one runtime receipt for diagnostic attestation.

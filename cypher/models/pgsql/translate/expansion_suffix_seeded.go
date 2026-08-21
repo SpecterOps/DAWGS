@@ -85,7 +85,8 @@ func selectedSuffixReverseGuardDecision(part *PatternPart, decisions map[optimiz
 		if decision, found := decisions[step.SourceTarget]; found &&
 			(decision.EmittedPolicy == optimize.ExpansionSearchPolicySuffixReverseGuardV1 ||
 				decision.EmittedPolicy == optimize.ExpansionSearchPolicySuffixReverseRetryV1 ||
-				decision.EmittedPolicy == optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) &&
+				decision.EmittedPolicy == optimize.ExpansionSearchPolicyTopologyFixedSuffixV1 ||
+				decision.EmittedPolicy == optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1) &&
 			decision.ObservationMode == optimize.ExpansionSearchObservationFullPath {
 			return decision, true
 		}

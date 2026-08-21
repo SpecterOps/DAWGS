@@ -1660,8 +1660,8 @@ func applyProductionTopologyFixedSuffixAuthorization(plan *optimize.Plan, option
 		decision.SelectionMode = "production_canary"
 		decision.SelectorVersion = options.SelectorVersion
 	}
-	if matching != 1 {
-		return fmt.Errorf("production topology fixed-suffix policy matched %d candidates; expected exactly one", matching)
+	if matching == 0 {
+		return fmt.Errorf("production topology fixed-suffix policy matched no candidates")
 	}
 	return nil
 }
@@ -1930,29 +1930,30 @@ func applyExpansionSuffixReverseRetryPolicy(plan *optimize.Plan, suffixRowLimit,
 			matching = append(matching, idx)
 		}
 	}
-	if len(matching) != 1 {
-		return fmt.Errorf("expansion suffix reverse retry matched %d statically eligible full-path fixed-suffix targets; expected exactly one", len(matching))
+	if len(matching) == 0 {
+		return fmt.Errorf("expansion suffix reverse retry matched no statically eligible full-path fixed-suffix targets")
 	}
-
-	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
-	decision.PlannedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
-	decision.EmittedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
-	decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
-	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
-	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryTransactionRetry
-	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
-	decision.Admission = optimize.ExpansionSearchAdmission{
-		StateLimit:             stateLimit,
-		OutputRowLimit:         outputRowLimit,
-		OutputBytesLimit:       outputBytesLimit,
-		RequiresCompleteProbes: true,
-		FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
+	for _, index := range matching {
+		decision := &plan.LoweringPlan.ExpansionSearchStrategy[index]
+		decision.PlannedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
+		decision.EmittedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
+		decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
+		decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
+		decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryTransactionRetry
+		decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
+		decision.Admission = optimize.ExpansionSearchAdmission{
+			StateLimit:             stateLimit,
+			OutputRowLimit:         outputRowLimit,
+			OutputBytesLimit:       outputBytesLimit,
+			RequiresCompleteProbes: true,
+			FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
+		}
+		decision.StateLimit = stateLimit
+		decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
+		decision.SelectionMode = "transaction_retry_tool"
+		decision.SelectorVersion = string(optimize.ExpansionSearchPolicySuffixReverseRetryV1)
+		decision.FallbackReason = ""
 	}
-	decision.StateLimit = stateLimit
-	decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
-	decision.SelectionMode = "transaction_retry_tool"
-	decision.SelectorVersion = string(optimize.ExpansionSearchPolicySuffixReverseRetryV1)
-	decision.FallbackReason = ""
 	return nil
 }
 
