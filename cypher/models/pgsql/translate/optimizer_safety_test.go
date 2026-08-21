@@ -468,7 +468,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "n2.kind_ids operator (pg_catalog.@>) array [5]::int2[]")
 }
 
-func TestOptimizerSafetySuffixPredicatePlacementStaysInsideTerminalExists(t *testing.T) {
+func TestOptimizerSafetyReversalAnchorsTerminalPredicateAtDriveRoot(t *testing.T) {
 	t.Parallel()
 
 	normalizedQuery := optimizerSafetySQL(t, `
@@ -477,11 +477,16 @@ WHERE ca.name = 'target'
 RETURN p
 `)
 
+	// InboundTraversalReversal drives this pattern from the constrained ca:EnterpriseCA terminal
+	// inward, so the ca.name predicate anchors at the leading s0 segment rather than being pushed
+	// into a recursive terminal exists check.
 	requireSQLContainsInOrder(t, normalizedQuery,
-		"exists (select 1 from edge e1 join node n2",
-		"properties -> 'name'",
-		"where n1.id = e1.start_id",
+		"(n0.properties ->> 'name') = 'target'",
+		"n0.kind_ids operator (pg_catalog.@>) array [5]::int2[]",
+		"n0.id = e0.end_id",
+		"e0.kind_id = any (array [4]::int2[])",
 	)
+	require.Contains(t, normalizedQuery, "e1.kind_id = any (array [10]::int2[])")
 }
 
 func TestOptimizerSafetyPredicatePlacementRecordsExpansionRootConstraint(t *testing.T) {
@@ -1267,15 +1272,16 @@ RETURN p
 	require.NotNil(t, translation.Optimization.LoweringPlan)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.ProjectionPruning)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.LatePathMaterialization)
-	require.NotEmpty(t, translation.Optimization.LoweringPlan.ExpansionSuffixPushdown)
 	require.NotEmpty(t, translation.Optimization.LoweringPlan.PredicatePlacement)
+	// InboundTraversalReversal drives this pattern from the constrained ca:EnterpriseCA terminal
+	// inward, superseding expansion-suffix pushdown for this shape.
+	require.Contains(t, translation.Optimization.Rules, optimize.RuleResult{Name: "InboundTraversalReversal", Applied: true})
+	require.Empty(t, translation.Optimization.LoweringPlan.ExpansionSuffixPushdown)
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "LatePathMaterialization")
-	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 	requireOptimizationLowering(t, translation.Optimization, "ProjectionPruning")
 	requireOptimizationLowering(t, translation.Optimization, "LatePathMaterialization")
-	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requireOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
 }
 

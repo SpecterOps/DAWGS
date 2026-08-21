@@ -384,6 +384,11 @@ type BoundIdentifier struct {
 	LastProjection *Frame
 	Dependencies   []*BoundIdentifier
 	DataType       pgsql.DataType
+
+	// PathDirectionReversed marks a path composite binding whose dependency order was produced
+	// from an optimizer-reversed pattern. Path materialization reverses the assembled node and
+	// edge references so the path renders in its original left-to-right logical order.
+	PathDirectionReversed bool
 }
 
 func (s *BoundIdentifier) MaterializedBy(frame *Frame) {
@@ -395,12 +400,13 @@ func (s *BoundIdentifier) Copy() *BoundIdentifier {
 	copy(dependenciesCopy, s.Dependencies)
 
 	return &BoundIdentifier{
-		Identifier:     s.Identifier,
-		Alias:          s.Alias,
-		Parameter:      s.Parameter,
-		LastProjection: s.LastProjection,
-		Dependencies:   dependenciesCopy,
-		DataType:       s.DataType,
+		Identifier:            s.Identifier,
+		Alias:                 s.Alias,
+		Parameter:             s.Parameter,
+		LastProjection:        s.LastProjection,
+		Dependencies:          dependenciesCopy,
+		DataType:              s.DataType,
+		PathDirectionReversed: s.PathDirectionReversed,
 	}
 }
 

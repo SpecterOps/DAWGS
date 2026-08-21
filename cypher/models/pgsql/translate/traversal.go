@@ -638,6 +638,14 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 			s.recordLowering(optimize.LoweringExpandIntoDetection)
 		}
 
+		// The optimizer reversed this pattern's element order and relationship directions so the
+		// traversal is driven from the terminal endpoint inward. Each expansion accumulates its
+		// edges in that reversed walk order, so mark the step path-reversed to restore the
+		// original within-segment edge order for a bound path.
+		if part.PathDirectionReversed && traversalStep.Expansion != nil {
+			traversalStep.PathReversed = true
+		}
+
 		s.prepareProjectionPruning(part, idx, traversalStep)
 
 		if traversalStepFrame, err := s.scope.PushFrame(); err != nil {
@@ -795,6 +803,37 @@ func previousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, s
 				pgsql.OperatorNotEquals,
 				relationshipIDReference(scope, previousStep.Edge),
 			),
+		)
+	}
+
+	return constraint
+}
+
+// expansionPreviousRelationshipUniquenessConstraint enforces Cypher relationship uniqueness for an
+// expansion step against any preceding fixed steps. Where previousRelationshipUniquenessConstraint
+// handles a fixed step that follows an expansion, this handles the mirrored ordering (a fixed step
+// that precedes an expansion, e.g. after the optimizer reverses a pattern) by requiring that none
+// of the preceding fixed relationships appear in the expansion's accumulated path.
+func expansionPreviousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, stepIndex int, traversalStep *TraversalStep) pgsql.Expression {
+	if scope == nil || part == nil || stepIndex <= 0 || traversalStep == nil ||
+		traversalStep.Expansion == nil || traversalStep.Expansion.Frame == nil {
+		return nil
+	}
+
+	var (
+		pathIDs = pgsql.CompoundIdentifier{traversalStep.Expansion.Frame.Binding.Identifier, expansionPath}
+
+		constraint pgsql.Expression
+	)
+
+	for _, previousStep := range part.TraversalSteps[:stepIndex] {
+		if previousStep == nil || previousStep.Edge == nil || previousStep.Expansion != nil {
+			continue
+		}
+
+		constraint = pgsql.OptionalAnd(
+			constraint,
+			relationshipIDNotInPath(relationshipIDReference(scope, previousStep.Edge), pathIDs),
 		)
 	}
 

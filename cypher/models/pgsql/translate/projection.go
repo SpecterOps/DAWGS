@@ -296,6 +296,15 @@ func nullGuardPathCompositeExpression(expression, nullGuard pgsql.Expression) pg
 	}
 }
 
+// reversePathCompositeExpressions reverses a slice of path composite references in place. It is
+// used to restore original logical path order when materializing a path bound to an
+// optimizer-reversed pattern.
+func reversePathCompositeExpressions(expressions []pgsql.Expression) {
+	for left, right := 0, len(expressions)-1; left < right; left, right = left+1, right-1 {
+		expressions[left], expressions[right] = expressions[right], expressions[left]
+	}
+}
+
 func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql.Expression, error) {
 	if projected.LastProjection != nil {
 		return pgsql.CompoundIdentifier{projected.LastProjection.Binding.Identifier, projected.Identifier}, nil
@@ -346,6 +355,18 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		default:
 			return nil, fmt.Errorf("unsupported type for path rendering: %s", dependency.DataType)
 		}
+	}
+
+	// The optimizer reversed the originating pattern so the traversal could be driven from the
+	// more selective terminal endpoint. The path dependencies were therefore accumulated in
+	// reversed physical order. Restore the original left-to-right logical order by reversing the
+	// assembled cross-segment references. Within-expansion edge order is already restored by the
+	// expansion step's PathReversed flag.
+	if projected.PathDirectionReversed {
+		reversePathCompositeExpressions(edgeArrayReferences)
+		reversePathCompositeExpressions(nodeReferences)
+		reversePathCompositeExpressions(directNodeReferences)
+		reversePathCompositeExpressions(directEdgeReferences)
 	}
 
 	// Direct, non-expansion path bindings already have their node and edge composites in scope. Keep

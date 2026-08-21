@@ -1566,6 +1566,12 @@ type PatternPart struct {
 	ShortestPathPattern     bool
 	AllShortestPathsPattern bool
 	PatternElements         []*PatternElement
+
+	// PathDirectionReversed indicates the optimizer reversed this pattern's element order and
+	// relationship directions so the traversal can be driven from the more selective terminal
+	// endpoint. Downstream translation compensates for this when materializing a bound path so
+	// that the path renders in its original left-to-right logical order.
+	PathDirectionReversed bool
 }
 
 func NewPatternPart() *PatternPart {
@@ -1582,6 +1588,7 @@ func (s *PatternPart) copy() *PatternPart {
 		ShortestPathPattern:     s.ShortestPathPattern,
 		AllShortestPathsPattern: s.AllShortestPathsPattern,
 		PatternElements:         Copy(s.PatternElements),
+		PathDirectionReversed:   s.PathDirectionReversed,
 	}
 }
 
