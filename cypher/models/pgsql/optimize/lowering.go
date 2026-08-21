@@ -267,6 +267,11 @@ const (
 	// ShortestPathExecutorASPA1DAG selects all-shortest-path enumeration from a predecessor DAG.
 	ShortestPathExecutorASPA1DAG ShortestPathExecutor = "ASP-A1-DAG"
 
+	// ShortestPathExecutorASPN1NegativeExhaustion performs a bounded reverse
+	// reachability preflight for no-path results and otherwise delegates to A1.
+	// It is deliberately a distinct, default-off executor identity.
+	ShortestPathExecutorASPN1NegativeExhaustion ShortestPathExecutor = "ASP-N1-NEGATIVE-EXHAUSTION"
+
 	// ShortestPathExecutorI1CanonicalDistance selects an inline recursive SQL
 	// distance search. The distinct identity prevents evidence collected at an
 	// inline statement boundary from being attributed to a helper function.
@@ -350,6 +355,7 @@ func (s ShortestPathExecutor) Scheduler() ShortestPathScheduler {
 		ShortestPathExecutorS4CanonicalDistance,
 		ShortestPathExecutorS4CanonicalWitness,
 		ShortestPathExecutorASPA1DAG,
+		ShortestPathExecutorASPN1NegativeExhaustion,
 		ShortestPathExecutorI1CanonicalDistance,
 		ShortestPathExecutorI2GuardedDistance,
 		ShortestPathExecutorI2GuardedDistanceV2,

@@ -1767,6 +1767,130 @@ $$
   set recursive_worktable_factor = 1
   rows 100;
 
+-- all_shortest_paths_no_path_probe is a negative-only optimization boundary.
+-- It explores from the target in the reverse physical direction using the
+-- existing session-local DAG workspace. Exhaustion proves that no directed
+-- path of at most max_depth can exist and may return an empty result. Finding
+-- the source or reaching the state sentinel is deliberately inconclusive and
+-- delegates to A1 before exposing any rows.
+create or replace function public.all_shortest_paths_no_path_probe(target_graph_id int4, source_id int8, target_id int8,
+                                                                    min_depth int4, max_depth int4,
+                                                                    edge_kind_ids int2[], inbound bool,
+                                                                    state_limit int8)
+  returns table
+          (
+            root_id int8,
+            next_id int8,
+            depth int4,
+            satisfied bool,
+            is_cycle bool,
+            path int8[]
+          )
+as
+$$
+#variable_conflict use_column
+declare
+  search_depth int4;
+  retained_state int8;
+  source_reached bool := false;
+begin
+  if source_id is null or target_id is null or max_depth < 1 or state_limit <= 0 then
+    return query select * from public.all_shortest_paths_dag(target_graph_id, source_id, target_id, min_depth, max_depth, edge_kind_ids, inbound);
+    return;
+  end if;
+  if min_depth <> 1 then
+    return query select * from public.all_shortest_paths_dag(target_graph_id, source_id, target_id, min_depth, max_depth, edge_kind_ids, inbound);
+    return;
+  end if;
+  -- A1 already has exact one- and two-hop preflights. Avoid adding a probe to
+  -- those inexpensive cases, where it cannot establish a useful advantage.
+  if max_depth <= 2 then
+    return query select * from public.all_shortest_paths_dag(target_graph_id, source_id, target_id, min_depth, max_depth, edge_kind_ids, inbound);
+    return;
+  end if;
+
+  -- Most disconnected endpoint pairs have no eligible relationship entering
+  -- the target. This exact degree-zero proof avoids resetting the shared A1
+  -- workspace before returning the empty set.
+  if source_id <> target_id and (
+    (not inbound and not exists (
+      select 1 from edge e
+      where e.graph_id = target_graph_id and e.end_id = target_id
+        and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+    )) or
+    (inbound and not exists (
+      select 1 from edge e
+      where e.graph_id = target_graph_id and e.start_id = target_id
+        and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+    ))
+  ) then
+    perform public.record_requested_traversal_runtime_attestation_v1('asp_n1_target_degree_zero', false, 'ASP-N1-NEGATIVE-EXHAUSTION');
+    return;
+  end if;
+
+  perform public.reset_shortest_dag_workspace();
+  insert into pg_temp.spd_seen(node_id, depth) values (target_id, 0);
+
+  for search_depth in 1..max_depth loop
+    if not inbound then
+      insert into pg_temp.spd_candidate(node_id, depth, predecessor_id, edge_id)
+      select distinct on (e.start_id) e.start_id, search_depth, f.node_id, e.id
+      from pg_temp.spd_seen f
+      join edge e on e.graph_id = target_graph_id and e.end_id = f.node_id
+      where f.depth = search_depth - 1
+        and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        and not exists (select 1 from pg_temp.spd_seen s where s.node_id = e.start_id)
+      order by e.start_id, e.id, f.node_id
+      limit greatest(state_limit - (select count(*) from pg_temp.spd_seen) + 1, 0)
+      on conflict do nothing;
+    else
+      insert into pg_temp.spd_candidate(node_id, depth, predecessor_id, edge_id)
+      select distinct on (e.end_id) e.end_id, search_depth, f.node_id, e.id
+      from pg_temp.spd_seen f
+      join edge e on e.graph_id = target_graph_id and e.start_id = f.node_id
+      where f.depth = search_depth - 1
+        and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        and not exists (select 1 from pg_temp.spd_seen s where s.node_id = e.end_id)
+      order by e.end_id, e.id, f.node_id
+      limit greatest(state_limit - (select count(*) from pg_temp.spd_seen) + 1, 0)
+      on conflict do nothing;
+    end if;
+
+    if not exists (select 1 from pg_temp.spd_candidate where depth = search_depth) then
+      perform public.record_requested_traversal_runtime_attestation_v1('asp_n1_reverse_exhausted', false, 'ASP-N1-NEGATIVE-EXHAUSTION');
+      return;
+    end if;
+
+    select (select count(*) from pg_temp.spd_seen) +
+           (select count(distinct node_id) from pg_temp.spd_candidate where depth = search_depth)
+      into retained_state;
+    if retained_state > state_limit then
+      exit;
+    end if;
+    if exists (select 1 from pg_temp.spd_candidate where depth = search_depth and node_id = source_id) then
+      source_reached = true;
+      exit;
+    end if;
+    insert into pg_temp.spd_seen(node_id, depth)
+    select distinct node_id, search_depth from pg_temp.spd_candidate where depth = search_depth
+    on conflict do nothing;
+  end loop;
+
+  if source_reached then
+    perform public.record_requested_traversal_runtime_attestation_v1('asp_n1_source_reached_a1', false, 'ASP-A1-DAG');
+  else
+    perform public.record_requested_traversal_runtime_attestation_v1('asp_n1_state_cap_a1', true, 'ASP-A1-DAG');
+  end if;
+  return query select * from public.all_shortest_paths_dag(target_graph_id, source_id, target_id, min_depth, max_depth, edge_kind_ids, inbound);
+end;
+$$
+  language plpgsql
+  volatile
+  strict
+  cost 100
+  set recursive_worktable_factor = 1
+  rows 100;
+
 -- shortest_path_compact keeps one deterministic predecessor per minimum-depth
 -- node. If its bounded state budget is exceeded it restarts an exact
 -- relationship-trail recursive search before returning any row, preserving the

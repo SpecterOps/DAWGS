@@ -2583,6 +2583,7 @@ func (s *ExpansionBuilder) BuildAllShortestPathsRoot() (pgsql.Query, error) {
 func compactShortestExecutor(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorASPA1DAG,
+		optimize.ShortestPathExecutorASPN1NegativeExhaustion,
 		optimize.ShortestPathExecutorASPI1DAG,
 		optimize.ShortestPathExecutorASPB1AlternatingNodeDAG,
 		optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG,
@@ -2762,6 +2763,7 @@ func (s *ExpansionBuilder) buildCompactBoundShortestPathsRoot(functionName pgsql
 func compactExecutorNeedsPathHydration(executor optimize.ShortestPathExecutor) bool {
 	switch executor {
 	case optimize.ShortestPathExecutorASPA1DAG,
+		optimize.ShortestPathExecutorASPN1NegativeExhaustion,
 		optimize.ShortestPathExecutorS4CanonicalWitness,
 		optimize.ShortestPathExecutorB1AlternatingNodeWitness,
 		optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness,
@@ -2776,6 +2778,15 @@ func compactExecutorNeedsPathHydration(executor optimize.ShortestPathExecutor) b
 // BuildAllShortestPathsDAGRoot builds the bound-endpoint query that enumerates all shortest paths from a predecessor DAG.
 func (s *ExpansionBuilder) BuildAllShortestPathsDAGRoot() (pgsql.Query, error) {
 	return s.buildCompactBoundShortestPathsRoot(pgsql.FunctionAllShortestPathsDAG)
+}
+
+// BuildAllShortestPathsNoPathProbeRoot builds the exact A1 wrapper that can
+// return early only after bounded target-side reachability exhausts.
+func (s *ExpansionBuilder) BuildAllShortestPathsNoPathProbeRoot() (pgsql.Query, error) {
+	return s.buildCompactBoundShortestPathsRoot(
+		pgsql.FunctionAllShortestPathsNoPathProbe,
+		s.traversalStep.Expansion.ShortestPathStateLimit,
+	)
 }
 
 // BuildB1AllShortestPathsDAGRoot builds strict node-alternating two-sided predecessor-DAG enumeration.

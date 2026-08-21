@@ -2080,12 +2080,13 @@ func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.Shor
 	if executor == optimize.ShortestPathExecutorS3EdgeM0 || executor == optimize.ShortestPathExecutorS4CanonicalWitness || executor == optimize.ShortestPathExecutorI1CanonicalWitness || executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || executor == optimize.ShortestPathExecutorB1AlternatingNodeWitness || executor == optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness {
 		expectedObservation = optimize.ShortestPathObservationOnePath
 		expectedDescription = "one-path"
-	} else if executor == optimize.ShortestPathExecutorASPA1DAG || executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorASPB1AlternatingNodeDAG || executor == optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG {
+	} else if executor == optimize.ShortestPathExecutorASPA1DAG || executor == optimize.ShortestPathExecutorASPN1NegativeExhaustion || executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorASPB1AlternatingNodeDAG || executor == optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG {
 		expectedObservation = optimize.ShortestPathObservationAllPaths
 		expectedDescription = "all-paths"
 	}
 
 	allShortestExecutor := executor == optimize.ShortestPathExecutorASPA1DAG ||
+		executor == optimize.ShortestPathExecutorASPN1NegativeExhaustion ||
 		executor == optimize.ShortestPathExecutorASPI1DAG ||
 		executor == optimize.ShortestPathExecutorASPB1AlternatingNodeDAG ||
 		executor == optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG
@@ -2163,6 +2164,7 @@ func supportedForcedShortestPathExecutor(executor optimize.ShortestPathExecutor)
 		optimize.ShortestPathExecutorS4CanonicalDistance,
 		optimize.ShortestPathExecutorS4CanonicalWitness,
 		optimize.ShortestPathExecutorASPA1DAG,
+		optimize.ShortestPathExecutorASPN1NegativeExhaustion,
 		optimize.ShortestPathExecutorASPI1DAG,
 		optimize.ShortestPathExecutorI1CanonicalDistance,
 		optimize.ShortestPathExecutorI2GuardedDistance,

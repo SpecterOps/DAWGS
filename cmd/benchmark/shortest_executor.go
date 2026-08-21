@@ -49,6 +49,7 @@ func benchmarkShortestPathExecutor(executor optimize.ShortestPathExecutor) bool 
 		optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG,
 		optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 		optimize.ShortestPathExecutorASPI1DAG,
+		optimize.ShortestPathExecutorASPN1NegativeExhaustion,
 		optimize.ShortestPathExecutorI2GuardedDistanceV2:
 		return true
 	default:

@@ -78,6 +78,7 @@ drop function if exists record_traversal_runtime_attestation_v1(text, text, bool
 drop function if exists begin_traversal_runtime_attestation_v1(text, text);
 drop function if exists ensure_traversal_runtime_attestation_workspace_v1();
 drop function if exists shortest_path_compact(int4, int8, int8, int4, int4, int2[], bool, int8);
+drop function if exists all_shortest_paths_no_path_probe(int4, int8, int8, int4, int4, int2[], bool, int8);
 drop function if exists all_shortest_paths_dag(int4, int8, int8, int4, int4, int2[], bool);
 drop function if exists clear_all_shortest_paths_a1_diagnostic_v1(text);
 drop function if exists read_all_shortest_paths_a1_diagnostic_v1(text);

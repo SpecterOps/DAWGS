@@ -16,6 +16,12 @@ const (
 	// FunctionAllShortestPathsDAG identifies the SQL helper that materializes every shortest path from a predecessor DAG.
 	FunctionAllShortestPathsDAG Identifier = "all_shortest_paths_dag"
 
+	// FunctionAllShortestPathsNoPathProbe identifies the bounded target-side
+	// reachability preflight. It returns an exact empty result only after the
+	// reverse component is exhausted; every positive or capped probe delegates
+	// to the A1 predecessor-DAG helper.
+	FunctionAllShortestPathsNoPathProbe Identifier = "all_shortest_paths_no_path_probe"
+
 	// FunctionShortestPathCompact identifies the SQL helper that materializes one compact shortest-path witness.
 	FunctionShortestPathCompact Identifier = "shortest_path_compact"
 
