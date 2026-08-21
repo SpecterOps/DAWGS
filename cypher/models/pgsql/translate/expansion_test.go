@@ -245,10 +245,10 @@ func TestZeroDepthExpansionBuildKeepsPrimerBranch(t *testing.T) {
 	primerBranch := "select 1, 2, 1, true, e0.start_id = e0.end_id, array [7]"
 	recursiveBranch := "select 1, 3, 2, true, false, array [8]"
 
-	require.Contains(t, formattedQuery, zeroDepthBranch)
-	require.Contains(t, formattedQuery, primerBranch)
-	require.Contains(t, formattedQuery, recursiveBranch)
-	require.Contains(t, formattedQuery, "where s1.depth > 0")
-	require.Less(t, strings.Index(formattedQuery, zeroDepthBranch), strings.Index(formattedQuery, primerBranch))
-	require.Less(t, strings.Index(formattedQuery, primerBranch), strings.Index(formattedQuery, recursiveBranch))
+	require.Contains(t, formattedQuery.Statement, zeroDepthBranch)
+	require.Contains(t, formattedQuery.Statement, primerBranch)
+	require.Contains(t, formattedQuery.Statement, recursiveBranch)
+	require.Contains(t, formattedQuery.Statement, "where s1.depth > 0")
+	require.Less(t, strings.Index(formattedQuery.Statement, zeroDepthBranch), strings.Index(formattedQuery.Statement, primerBranch))
+	require.Less(t, strings.Index(formattedQuery.Statement, primerBranch), strings.Index(formattedQuery.Statement, recursiveBranch))
 }

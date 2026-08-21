@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"strconv"
 	"strings"
@@ -187,9 +188,11 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		return postgresExplain{}, err
 	}
 
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+
 	var plan []string
 	if err := s.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) "+sqlQuery, translation.Parameters)
+		result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) "+sqlQuery.Statement, translation.Parameters)
 		defer result.Close()
 
 		for result.Next() {
@@ -206,8 +209,9 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		return postgresExplain{}, err
 	}
 
+	// TODO: should this get the parameters as well?
 	return postgresExplain{
-		SQL:          sqlQuery,
+		SQL:          sqlQuery.Statement,
 		Plan:         plan,
 		Metrics:      parsePostgresPlanMetrics(plan),
 		Optimization: translation.Optimization,

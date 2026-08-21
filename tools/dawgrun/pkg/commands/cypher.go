@@ -102,15 +102,21 @@ func translateToPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
 
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
+			formattedQuery, err := sqlfmt.Format(sqlQuery.Statement, &sqlfmt.Options{
 				Distance: 0,
 			})
 			if err != nil {
 				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
+				formattedQuery = sqlQuery.Statement
 			}
 
 			ctx.output.WriteHighlighted(formattedQuery, "postgres")
+			if len(sqlQuery.Parameters) > 0 {
+				fmt.Fprintf(ctx.output, "PARAMETERS\n\n")
+				ctx.output.WriteHighlighted(spew.Sdump(sqlQuery.Parameters), "golang")
+				fmt.Fprintf(ctx.output, "\n")
+			}
+
 			return nil
 		},
 	}
@@ -163,19 +169,24 @@ func explainAsPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
 
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
+			formattedQuery, err := sqlfmt.Format(sqlQuery.Statement, &sqlfmt.Options{
 				Distance: 2,
 			})
 			if err != nil {
 				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
+				formattedQuery = sqlQuery.Statement
 			}
 			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", formattedQuery)
 			ctx.output.WriteHighlighted(explainSQLQuery, "postgres")
 			fmt.Fprint(ctx.output, "\n\n")
+			if len(sqlQuery.Parameters) > 0 {
+				fmt.Fprintf(ctx.output, "PARAMETERS\n\n")
+				ctx.output.WriteHighlighted(spew.Sdump(sqlQuery.Parameters), "golang")
+				fmt.Fprintf(ctx.output, "\n")
+			}
 
 			err = conn.ReadTransaction(ctx, func(tx graph.Transaction) error {
-				result := tx.Raw(explainSQLQuery, nil)
+				result := tx.Raw(explainSQLQuery, sqlQuery.Parameters)
 				if err := result.Error(); err != nil {
 					return fmt.Errorf("error running raw query: '%s': %w", explainSQLQuery, err)
 				}
