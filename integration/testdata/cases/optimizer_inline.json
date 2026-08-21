@@ -356,6 +356,78 @@
         "path_node_ids": [["role", "direct-user"], ["role", "delegated-group"], ["role", "delegated-group", "delegated-user"]],
         "path_edge_kinds": [["AZHasRole"], ["AZHasRole"], ["AZHasRole", "AZMemberOf"]]
       }
+    },
+    {
+      "name": "inbound traversal reversal returns valid path for traversal after WITH",
+      "cypher": "MATCH (u:User) WHERE u.enabled = true WITH u MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer) WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER' RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "anchor", "kinds": ["User"], "properties": {"enabled": true}},
+          {"id": "s1", "kinds": ["User"]},
+          {"id": "g1", "kinds": ["Group"]},
+          {"id": "g2", "kinds": ["Group"]},
+          {"id": "d1", "kinds": ["Computer"], "properties": {"operatingsystem": "WINDOWS SERVER 2019"}},
+          {"id": "d2", "kinds": ["Computer"], "properties": {"operatingsystem": "WINDOWS 10"}}
+        ],
+        "edges": [
+          {"start_id": "s1", "end_id": "g1", "kind": "MemberOf"},
+          {"start_id": "g1", "end_id": "d1", "kind": "AdminTo"},
+          {"start_id": "s1", "end_id": "g2", "kind": "MemberOf"},
+          {"start_id": "g2", "end_id": "d2", "kind": "AdminTo"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["s1", "g1", "d1"]],
+        "path_edge_kinds": [["MemberOf", "AdminTo"]]
+      }
+    },
+    {
+      "name": "inbound traversal reversal returns valid path for traversal before WITH barrier",
+      "cypher": "MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer) WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER' WITH p RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "s1", "kinds": ["User"]},
+          {"id": "s2", "kinds": ["User"]},
+          {"id": "g1", "kinds": ["Group"]},
+          {"id": "g2", "kinds": ["Group"]},
+          {"id": "d1", "kinds": ["Computer"], "properties": {"operatingsystem": "WINDOWS SERVER 2022"}},
+          {"id": "d2", "kinds": ["Computer"], "properties": {"operatingsystem": "LINUX"}}
+        ],
+        "edges": [
+          {"start_id": "s1", "end_id": "g1", "kind": "MemberOf"},
+          {"start_id": "g1", "end_id": "d1", "kind": "AdminTo"},
+          {"start_id": "s2", "end_id": "g2", "kind": "MemberOf"},
+          {"start_id": "g2", "end_id": "d2", "kind": "AdminTo"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["s1", "g1", "d1"]],
+        "path_edge_kinds": [["MemberOf", "AdminTo"]]
+      }
+    },
+    {
+      "name": "inbound traversal reversal skipped for source carried across WITH still returns valid path",
+      "cypher": "MATCH (s:User) WHERE s.samaccountname =~ '(?i)admin.*' WITH s MATCH p = (s)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer) WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER' RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "admin", "kinds": ["User"], "properties": {"samaccountname": "admin-01"}},
+          {"id": "bob", "kinds": ["User"], "properties": {"samaccountname": "bob-01"}},
+          {"id": "g1", "kinds": ["Group"]},
+          {"id": "d1", "kinds": ["Computer"], "properties": {"operatingsystem": "WINDOWS SERVER 2019"}}
+        ],
+        "edges": [
+          {"start_id": "admin", "end_id": "g1", "kind": "MemberOf"},
+          {"start_id": "bob", "end_id": "g1", "kind": "MemberOf"},
+          {"start_id": "g1", "end_id": "d1", "kind": "AdminTo"}
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "path_node_ids": [["admin", "g1", "d1"]],
+        "path_edge_kinds": [["MemberOf", "AdminTo"]]
+      }
     }
   ]
 }

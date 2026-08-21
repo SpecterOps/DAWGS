@@ -2078,3 +2078,52 @@ func TestInboundTraversalReversalSkipsShortestPathPattern(t *testing.T) {
 	require.False(t, patternPart.PathDirectionReversed)
 	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
 }
+
+func TestInboundTraversalReversalReversesQualifyingTraversalAfterWith(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (u:User)
+		WHERE u.enabled = true
+		WITH u
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: true})
+
+	require.NotNil(t, plan.Query.SingleQuery.MultiPartQuery)
+	patternPart := plan.Query.SingleQuery.MultiPartQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.True(t, patternPart.PathDirectionReversed)
+
+	// The traversal following the WITH is driven from the constrained d:Computer terminal inward
+	// toward s:User, with each relationship direction flipped from outbound to inbound.
+	require.Equal(t, []string{"d", "g", "s"}, patternNodeSymbols(patternPart))
+	require.Equal(t, []graph.Direction{graph.DirectionInbound, graph.DirectionInbound}, patternRelationshipDirections(patternPart))
+}
+
+func TestInboundTraversalReversalSkipsWhenSourceCarriedAcrossWith(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH (s:User)
+		WITH s
+		MATCH p = (s)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Contains(t, plan.Rules, RuleResult{Name: "InboundTraversalReversal", Applied: false})
+
+	require.NotNil(t, plan.Query.SingleQuery.MultiPartQuery)
+	patternPart := plan.Query.SingleQuery.MultiPartQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0]
+	require.False(t, patternPart.PathDirectionReversed)
+	require.Equal(t, []string{"s", "g", "d"}, patternNodeSymbols(patternPart))
+}

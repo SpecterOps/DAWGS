@@ -26,20 +26,72 @@ func (s InboundTraversalReversalRule) Name() string {
 }
 
 func (s InboundTraversalReversalRule) Apply(plan *Plan) (bool, error) {
-	if plan == nil || plan.Query == nil || plan.Query.SingleQuery == nil || plan.Query.SingleQuery.SinglePartQuery == nil {
+	if plan == nil || plan.Query == nil || plan.Query.SingleQuery == nil {
 		return false, nil
 	}
 
-	return reverseInboundTraversalSinglePartQuery(plan.Query.SingleQuery.SinglePartQuery), nil
+	singleQuery := plan.Query.SingleQuery
+
+	switch {
+	case singleQuery.SinglePartQuery != nil:
+		return reverseInboundTraversalSinglePartQuery(singleQuery.SinglePartQuery, map[string]struct{}{}), nil
+	case singleQuery.MultiPartQuery != nil:
+		return reverseInboundTraversalMultiPartQuery(singleQuery.MultiPartQuery), nil
+	default:
+		return false, nil
+	}
 }
 
-func reverseInboundTraversalSinglePartQuery(query *cypher.SinglePartQuery) bool {
+// reverseInboundTraversalMultiPartQuery processes each single-part segment of a multi-part query,
+// including traversals that follow a WITH projection, while carrying the symbols bound by earlier
+// segments forward so a reversal is never applied to a source endpoint provided by a prior segment.
+func reverseInboundTraversalMultiPartQuery(query *cypher.MultiPartQuery) bool {
+	if query == nil {
+		return false
+	}
+
 	var (
 		applied         bool
 		declaredSymbols = map[string]struct{}{}
 	)
 
-	for _, readingClause := range query.ReadingClauses {
+	for _, part := range query.Parts {
+		if part == nil {
+			continue
+		}
+
+		if reverseInboundTraversalReadingClauses(part.ReadingClauses, declaredSymbols) {
+			applied = true
+		}
+
+		declareReadingClauseSymbols(declaredSymbols, part.ReadingClauses)
+
+		if part.With != nil {
+			declaredSymbols, _ = carryProjectionSelectivity(part.With.Projection, declaredSymbols, map[string]boundSourceSelectivity{})
+		}
+	}
+
+	if finalPart := query.SinglePartQuery; finalPart != nil {
+		if reverseInboundTraversalSinglePartQuery(finalPart, declaredSymbols) {
+			applied = true
+		}
+	}
+
+	return applied
+}
+
+func reverseInboundTraversalSinglePartQuery(query *cypher.SinglePartQuery, declaredSymbols map[string]struct{}) bool {
+	if query == nil {
+		return false
+	}
+
+	return reverseInboundTraversalReadingClauses(query.ReadingClauses, declaredSymbols)
+}
+
+func reverseInboundTraversalReadingClauses(readingClauses []*cypher.ReadingClause, declaredSymbols map[string]struct{}) bool {
+	var applied bool
+
+	for _, readingClause := range readingClauses {
 		if readingClause == nil || readingClause.Match == nil {
 			continue
 		}
