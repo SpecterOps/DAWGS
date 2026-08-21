@@ -22,6 +22,7 @@ type dumpCheckpointIdentity struct {
 	Graphs            []string         `json:"graphs"`
 	Compression       CompressionCodec `json:"compression"`
 	CompressionLevel  int              `json:"compression_level"`
+	Parquet           bool             `json:"parquet"`
 	Scrub             ScrubMode        `json:"scrub"`
 	ScrubRulesVersion string           `json:"scrub_rules_version,omitempty"`
 	ScrubConfigSHA256 string           `json:"scrub_config_sha256,omitempty"`
@@ -54,6 +55,7 @@ func newDumpCheckpointIdentity(driverName string, targets []GraphTarget, options
 		Graphs:           make([]string, len(targets)),
 		Compression:      options.Compression,
 		CompressionLevel: options.ZstdLevel,
+		Parquet:          options.Parquet,
 		Scrub:            options.Scrub,
 		ShardSize:        options.ShardSize,
 		BatchSize:        options.BatchSize,
@@ -142,7 +144,7 @@ func loadCompatibleDumpCheckpoint(outputDir string, expected dumpCheckpointIdent
 		return dumpCheckpoint{}, err
 	}
 	if !reflect.DeepEqual(value.Identity, expected) {
-		return dumpCheckpoint{}, fmt.Errorf("dump checkpoint is incompatible with the requested driver, graphs, scrub, compression, shard, or batch options")
+		return dumpCheckpoint{}, fmt.Errorf("dump checkpoint is incompatible with the requested driver, graphs, scrub, compression, Parquet, shard, or batch options")
 	}
 	if err := validateDumpCheckpoint(value, targetCount); err != nil {
 		return dumpCheckpoint{}, err
@@ -271,11 +273,21 @@ func removeKnownDumpCheckpointTemps(outputDir string, value dumpCheckpoint) erro
 		if err != nil {
 			return err
 		}
-		paths = append(paths, filepath.Join(outputDir, filepath.FromSlash(nextPath))+".tmp")
+		jsonlPath := filepath.Join(outputDir, filepath.FromSlash(nextPath))
+		jsonlStagingPath := jsonlPath + ".tmp"
+		paths = append(paths, jsonlPath, jsonlStagingPath)
+		if value.Identity.Parquet {
+			nextParquetPath, err := parquetFragmentPath(value.Current.Name, value.Current.Phase, len(phaseFiles)+1)
+			if err != nil {
+				return err
+			}
+			parquetPath := filepath.Join(outputDir, filepath.FromSlash(nextParquetPath))
+			paths = append(paths, parquetPath, parquetPath+".tmp")
+		}
 	}
 	for _, candidate := range paths {
 		if err := os.Remove(candidate); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove stale dump temporary file %q: %w", candidate, err)
+			return fmt.Errorf("remove uncheckpointed dump file %q: %w", candidate, err)
 		}
 	}
 	return nil
@@ -284,25 +296,13 @@ func removeKnownDumpCheckpointTemps(outputDir string, value dumpCheckpoint) erro
 func validateDumpCheckpointFiles(outputDir string, value dumpCheckpoint) error {
 	expected := map[string]struct{}{dumpCheckpointFileName: {}}
 	for _, graphEntry := range value.Manifest.Graphs {
-		for _, fileEntry := range graphEntry.Files {
-			if _, found := expected[fileEntry.Path]; found {
-				return fmt.Errorf("dump checkpoint contains duplicate fragment path %q", fileEntry.Path)
-			}
-			expected[fileEntry.Path] = struct{}{}
-			if err := verifyDumpCheckpointFile(outputDir, fileEntry); err != nil {
-				return err
-			}
+		if err := addExpectedDumpCheckpointFiles(outputDir, expected, graphEntry.Name, graphEntry.Files, value.Identity.Parquet); err != nil {
+			return err
 		}
 	}
 	if value.Current != nil {
-		for _, fileEntry := range value.Current.Files {
-			if _, found := expected[fileEntry.Path]; found {
-				return fmt.Errorf("dump checkpoint contains duplicate fragment path %q", fileEntry.Path)
-			}
-			expected[fileEntry.Path] = struct{}{}
-			if err := verifyDumpCheckpointFile(outputDir, fileEntry); err != nil {
-				return err
-			}
+		if err := addExpectedDumpCheckpointFiles(outputDir, expected, value.Current.Name, value.Current.Files, value.Identity.Parquet); err != nil {
+			return err
 		}
 	}
 
@@ -325,6 +325,36 @@ func validateDumpCheckpointFiles(outputDir string, value dumpCheckpoint) error {
 	})
 }
 
+func addExpectedDumpCheckpointFiles(outputDir string, expected map[string]struct{}, graphName string, files []FileManifest, parquetEnabled bool) error {
+	phaseShards := map[Phase]int{}
+	for _, fileEntry := range files {
+		if _, found := expected[fileEntry.Path]; found {
+			return fmt.Errorf("dump checkpoint contains duplicate fragment path %q", fileEntry.Path)
+		}
+		expected[fileEntry.Path] = struct{}{}
+		if err := verifyDumpCheckpointFile(outputDir, fileEntry); err != nil {
+			return err
+		}
+
+		phaseShards[fileEntry.Phase]++
+		if !parquetEnabled {
+			continue
+		}
+		parquetPath, err := parquetFragmentPath(graphName, fileEntry.Phase, phaseShards[fileEntry.Phase])
+		if err != nil {
+			return err
+		}
+		if _, found := expected[parquetPath]; found {
+			return fmt.Errorf("dump checkpoint contains duplicate Parquet fragment path %q", parquetPath)
+		}
+		expected[parquetPath] = struct{}{}
+		if err := verifyDumpCheckpointParquetFile(outputDir, parquetPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func verifyDumpCheckpointFile(outputDir string, fileEntry FileManifest) error {
 	absolutePath := filepath.Join(outputDir, filepath.FromSlash(fileEntry.Path))
 	info, err := os.Lstat(absolutePath)
@@ -335,6 +365,18 @@ func verifyDumpCheckpointFile(outputDir string, fileEntry FileManifest) error {
 		return fmt.Errorf("dump checkpoint fragment %q is not a regular file", fileEntry.Path)
 	}
 	return verifyChecksum(absolutePath, fileEntry.SHA256, fileEntry.CompressedBytes)
+}
+
+func verifyDumpCheckpointParquetFile(outputDir, relativePath string) error {
+	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
+	info, err := os.Lstat(absolutePath)
+	if err != nil {
+		return fmt.Errorf("inspect dump checkpoint Parquet fragment %q: %w", relativePath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("dump checkpoint Parquet fragment %q is not a regular file", relativePath)
+	}
+	return nil
 }
 
 func filterPhaseFiles(files []FileManifest, phase Phase) []FileManifest {

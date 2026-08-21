@@ -101,8 +101,8 @@ func BenchmarkEdgeMetricsAllocation(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for index := 0; index < b.N; index++ {
+
+	for b.Loop() {
 		if err := builder.observeDatabaseRelationship(1, 2, "Edge"); err != nil {
 			b.Fatal(err)
 		}
@@ -121,8 +121,8 @@ func BenchmarkEdgeScrubAllocation(b *testing.B) {
 	scrubber.scrubPropertiesWithCounts(properties)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for index := 0; index < b.N; index++ {
+
+	for b.Loop() {
 		scrubber.scrubPropertiesWithCounts(properties)
 	}
 }

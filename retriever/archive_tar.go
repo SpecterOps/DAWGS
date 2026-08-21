@@ -376,11 +376,6 @@ func unpackTar(reader io.Reader, outputDir string, force bool) error {
 	return UnpackTar(reader, outputDir, force)
 }
 
-func unpackTarFile(reader io.Reader, outputDir, relativePath string, expectedSize int64) error {
-	_, err := unpackTarFileTracked(reader, outputDir, relativePath, expectedSize, false)
-	return err
-}
-
 func unpackTarFileTracked(reader io.Reader, outputDir, relativePath string, expectedSize int64, trackIntegrity bool) (unpackedFileIntegrity, error) {
 	absolutePath := filepath.Join(outputDir, filepath.FromSlash(relativePath))
 	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {

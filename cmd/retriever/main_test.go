@@ -33,7 +33,7 @@ func TestCommandRuntimeHelpAndValidation(t *testing.T) {
 		t.Fatalf("expected unknown command error, got %v", err)
 	}
 
-	err = runtime.run(context.Background(), []string{"dump", "-out", t.TempDir(), "-scrub", "full"})
+	err = runtime.run(context.Background(), []string{"dump", "-out", t.TempDir(), "-parquet", "-scrub", "full"})
 	if err == nil || !strings.Contains(err.Error(), "-scrub full requires") {
 		t.Fatalf("expected scrub salt validation error, got %v", err)
 	}
