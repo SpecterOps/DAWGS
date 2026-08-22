@@ -21,27 +21,24 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg"
-	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/stretchr/testify/require"
 )
 
-// TestPostgresBenchmarkDriverModes verifies that v2 is an explicit benchmark
-// mode while retaining PostgreSQL-only explain support.
+// TestPostgresBenchmarkDriverModes verifies PostgreSQL-only explain support.
 func TestPostgresBenchmarkDriverModes(t *testing.T) {
 	require.True(t, isPostgresBenchmarkDriver(pg.DriverName))
-	require.True(t, isPostgresBenchmarkDriver(pgV2BenchmarkDriver))
 	require.False(t, isPostgresBenchmarkDriver("neo4j"))
 }
 
-func TestBenchmarkV2ConfigValidatesAndConvertsPoolLimits(t *testing.T) {
-	config, err := benchmarkV2Config(32, 16, 0, 4)
+func TestBenchmarkRuntimeConfigValidatesAndConvertsPoolLimits(t *testing.T) {
+	config, err := benchmarkRuntimeConfig(32, 16, 0, 4)
 	require.NoError(t, err)
 	require.Equal(t, 32, config.TranslationCacheEntries)
 	require.Equal(t, 16, config.SharedShortestPathTemplateEntries)
-	require.Equal(t, &pgv2.PoolConfig{MinConnections: 0, MaxConnections: 4}, config.Pool)
+	require.Equal(t, &pg.PoolConfig{MinConnections: 0, MaxConnections: 4}, config.Pool)
 
 	for _, arguments := range [][4]int{{-1, 0, 0, 1}, {1, -1, 0, 1}, {1, 0, -1, 1}, {1, 0, 1, 0}, {1, 0, 2, 1}} {
-		_, err := benchmarkV2Config(arguments[0], arguments[1], arguments[2], arguments[3])
+		_, err := benchmarkRuntimeConfig(arguments[0], arguments[1], arguments[2], arguments[3])
 		require.Error(t, err)
 	}
 }

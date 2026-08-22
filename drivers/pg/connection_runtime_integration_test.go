@@ -1,6 +1,6 @@
 //go:build manual_integration
 
-package v2
+package pg
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/databaseguard"
-	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -71,31 +70,13 @@ func newV2IntegrationDriver(t *testing.T, maxConns int32, capacity int, afterRel
 	poolConfig.MaxConns = maxConns
 	poolConfig.AfterRelease = afterRelease
 
-	config := Config{
+	config := RuntimeConfig{
 		TranslationCacheEntries: capacity,
 		Pool:                    &PoolConfig{MinConnections: 0, MaxConnections: maxConns},
 	}
-	provider, err := newConnectionCacheProvider(config)
+	pool, err := NewPoolWithRuntimeConfig(ctx, poolConfig, config)
 	require.NoError(t, err)
-	warmups := &statementWarmupPolicy{}
-	configuredPool, err := composePoolConfig(poolConfig, config, provider, warmups, productionPoolLifecycleHooks())
-	require.NoError(t, err)
-	underlying, err := pgxpool.NewWithConfig(ctx, configuredPool)
-	require.NoError(t, err)
-	driver := NewDriver(0, &Pool{pool: underlying, provider: provider, warmups: warmups})
-	t.Cleanup(func() {
-		require.NoError(t, driver.Close(context.Background()))
-	})
-	return driver
-}
-
-func newV1IntegrationDriver(t *testing.T) *pg.Driver {
-	t.Helper()
-	poolConfig, err := pgxpool.ParseConfig(postgresV2IntegrationConnectionString(t))
-	require.NoError(t, err)
-	pool, err := pg.NewPool(poolConfig)
-	require.NoError(t, err)
-	driver := pg.NewDriver(0, pool)
+	driver := NewDriver(0, pool)
 	t.Cleanup(func() {
 		require.NoError(t, driver.Close(context.Background()))
 	})
@@ -186,10 +167,10 @@ func TestV2RefreshTraversalTopologySynopsisTracksGraphMutation(t *testing.T) {
 	require.GreaterOrEqual(t, refreshed.NodeCount, initial.NodeCount+1)
 }
 
-func structuralASPV3Policy(t *testing.T, evidenceQuery string) pg.TraversalPolicy {
+func structuralASPV3Policy(t *testing.T, evidenceQuery string) TraversalPolicy {
 	t.Helper()
-	shape := pg.TraversalShape{
-		Version:               pg.TraversalShapeVersion,
+	shape := TraversalShape{
+		Version:               TraversalShapeVersion,
 		Family:                "ASP",
 		Direction:             "outbound",
 		ObservationMode:       "all_paths",
@@ -197,11 +178,11 @@ func structuralASPV3Policy(t *testing.T, evidenceQuery string) pg.TraversalPolic
 		MaximumDepth:          4,
 		RelationshipKindCount: 1,
 	}
-	shape.Fingerprint = pg.TraversalShapeFingerprint(shape)
+	shape.Fingerprint = TraversalShapeFingerprint(shape)
 	candidate := string(optimize.ShortestPathExecutorASPI1DAG)
 	selector := "v2-structural-asp-v1"
-	template := pg.TraversalSQLTemplateSHA256(candidate, selector, "guarded_dual_arm", shape)
-	digest := pg.TraversalPolicyQuerySHA256(evidenceQuery)
+	template := TraversalSQLTemplateSHA256(candidate, selector, "guarded_dual_arm", shape)
+	digest := TraversalPolicyQuerySHA256(evidenceQuery)
 	evidence := map[string]map[string]string{}
 	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
 		evidence[role] = map[string]string{"path": role + ".json", "sha256": strings.Repeat("0", sha256.Size*2)}
@@ -223,7 +204,7 @@ func structuralASPV3Policy(t *testing.T, evidenceQuery string) pg.TraversalPolic
 	})
 	require.NoError(t, err)
 	sum := sha256.Sum256(raw)
-	return pg.TraversalPolicy{
+	return TraversalPolicy{
 		Generation:              1,
 		PromotionManifestSHA256: hex.EncodeToString(sum[:]),
 		PromotionManifestJSON:   raw,
@@ -246,7 +227,7 @@ func TestV2StructuralTraversalPolicyExecutesVerifiedEquivalentShape(t *testing.T
 		for result.Next() {
 		}
 		return result.Error()
-	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	}, OptionSetTransactionIsolation(pgx.RepeatableRead)))
 	stats := driver.TranslationCacheStats()
 	require.Equal(t, uint64(1), stats.StrategySelection.StructuralAuthorized)
 }
@@ -274,15 +255,15 @@ RETURN path`
 			}
 		}
 		return nil
-	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	}, OptionSetTransactionIsolation(pgx.RepeatableRead)))
 	stats := driver.TranslationCacheStats().TraversalRouteDecision
 	require.Equal(t, uint64(1), stats.ShadowMiss)
 	require.Equal(t, uint64(1), stats.ShadowHit)
 }
 
-func v2TopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape pg.TraversalShape) pg.TraversalPolicy {
+func v2TopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape TraversalShape) TraversalPolicy {
 	t.Helper()
-	digest := pg.TraversalPolicyQuerySHA256(evidenceQuery)
+	digest := TraversalPolicyQuerySHA256(evidenceQuery)
 	candidate := string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1)
 	evidence := map[string]map[string]string{}
 	for _, role := range []string{"aa", "confirmation", "performance", "resource", "reference_closure", "operational"} {
@@ -293,7 +274,7 @@ func v2TopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape pg.Tr
 		"direction": shape.Direction, "observation_mode": shape.ObservationMode, "minimum_depth": shape.MinimumDepth, "maximum_depth": shape.MaximumDepth,
 		"suffix_length": shape.SuffixLength, "candidate_strategy": shape.CandidateStrategy,
 		"structural_shape_version": shape.Version, "structural_family": shape.Family, "structural_shape_sha256": shape.Fingerprint,
-		"sql_template_sha256": pg.TraversalSQLTemplateSHA256(candidate, candidate, "transaction_retry", shape),
+		"sql_template_sha256": TraversalSQLTemplateSHA256(candidate, candidate, "transaction_retry", shape),
 	}
 	raw, err := json.Marshal(map[string]any{
 		"version": 4, "candidate": candidate, "selector_version": candidate, "execution_boundary": "transaction_retry", "fallback_executor": string(optimize.ExpansionSearchStepwiseForward),
@@ -309,7 +290,7 @@ func v2TopologyFixedSuffixPolicy(t *testing.T, evidenceQuery string, shape pg.Tr
 	})
 	require.NoError(t, err)
 	sum := sha256.Sum256(raw)
-	return pg.TraversalPolicy{
+	return TraversalPolicy{
 		Generation:                1,
 		PromotionManifestSHA256:   hex.EncodeToString(sum[:]),
 		PromotionManifestJSON:     raw,
@@ -329,8 +310,8 @@ MATCH (root:PGV2IntegrationNode)
 WHERE root.name = 'start'
 MATCH path = (root)-[:PGV2IntegrationEdge*0..16]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)
 RETURN path`
-	shape := pg.TraversalShape{
-		Version:           pg.TraversalFixedSuffixShapeVersion,
+	shape := TraversalShape{
+		Version:           TraversalFixedSuffixShapeVersion,
 		Family:            "fixed_suffix_expansion",
 		Direction:         "outbound",
 		ObservationMode:   "full_path",
@@ -339,8 +320,8 @@ RETURN path`
 		SuffixLength:      3,
 		CandidateStrategy: string(optimize.ExpansionSearchSuffixSeededReverse),
 	}
-	shape.Fingerprint = pg.TraversalShapeFingerprint(shape)
-	require.Equal(t, pg.TraversalFixedSuffixShapeVersion, shape.Version)
+	shape.Fingerprint = TraversalShapeFingerprint(shape)
+	require.Equal(t, TraversalFixedSuffixShapeVersion, shape.Version)
 	require.NoError(t, driver.SetTraversalPolicy(v2TopologyFixedSuffixPolicy(t, query, shape)))
 
 	require.NoError(t, driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -354,7 +335,7 @@ RETURN path`
 			}
 		}
 		return nil
-	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	}, OptionSetTransactionIsolation(pgx.RepeatableRead)))
 	stats := driver.TranslationCacheStats()
 	require.Equal(t, uint64(1), stats.TraversalRouteDecision.ShadowMiss)
 	require.Equal(t, uint64(1), stats.TraversalRouteDecision.CandidateHit)
@@ -368,8 +349,8 @@ func TestV2TopologyFixedSuffixFirstUseExecutesWithinStableSnapshot(t *testing.T)
 	_, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
 	require.NoError(t, err)
 	query := `MATCH (root:PGV2IntegrationNode) WHERE root.name = 'start' MATCH path = (root)-[:PGV2IntegrationEdge*0..16]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode) RETURN path`
-	shape := pg.TraversalShape{Version: pg.TraversalFixedSuffixShapeVersion, Family: "fixed_suffix_expansion", Direction: "outbound", ObservationMode: "full_path", MinimumDepth: 0, MaximumDepth: 16, SuffixLength: 3, CandidateStrategy: string(optimize.ExpansionSearchSuffixSeededReverse)}
-	shape.Fingerprint = pg.TraversalShapeFingerprint(shape)
+	shape := TraversalShape{Version: TraversalFixedSuffixShapeVersion, Family: "fixed_suffix_expansion", Direction: "outbound", ObservationMode: "full_path", MinimumDepth: 0, MaximumDepth: 16, SuffixLength: 3, CandidateStrategy: string(optimize.ExpansionSearchSuffixSeededReverse)}
+	shape.Fingerprint = TraversalShapeFingerprint(shape)
 	policy := v2TopologyFixedSuffixPolicy(t, query, shape)
 	policy.EnableTopologyFixedSuffix = false
 	policy.EnableTopologyFixedSuffixFirstUse = true
@@ -379,7 +360,7 @@ func TestV2TopologyFixedSuffixFirstUseExecutesWithinStableSnapshot(t *testing.T)
 	manifest["version"], manifest["candidate"], manifest["selector_version"] = 5, firstUse, firstUse
 	manifest["execution_boundary"], manifest["route_cache_protocol"] = "first_use_transaction_retry", "topology-selected-first-use-routing-v1"
 	bucket := manifest["buckets"].([]any)[0].(map[string]any)
-	bucket["sql_template_sha256"] = pg.TraversalSQLTemplateSHA256(firstUse, firstUse, "first_use_transaction_retry", shape)
+	bucket["sql_template_sha256"] = TraversalSQLTemplateSHA256(firstUse, firstUse, "first_use_transaction_retry", shape)
 	raw, err := json.Marshal(manifest)
 	require.NoError(t, err)
 	sum := sha256.Sum256(raw)
@@ -392,7 +373,7 @@ func TestV2TopologyFixedSuffixFirstUseExecutesWithinStableSnapshot(t *testing.T)
 		}
 		result.Close()
 		return result.Error()
-	}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+	}, OptionSetTransactionIsolation(pgx.RepeatableRead)))
 	stats := driver.TranslationCacheStats()
 	require.Equal(t, uint64(1), stats.TraversalRouteDecision.FirstUseCandidate)
 	require.Equal(t, uint64(1), stats.StrategySelection.TopologySelected)
@@ -428,7 +409,7 @@ func v2ScalarQuery() string {
 func TestV2NewPoolConstructsAnExplicitOptInDriver(t *testing.T) {
 	poolConfig, err := pgxpool.ParseConfig(postgresV2IntegrationConnectionString(t))
 	require.NoError(t, err)
-	pool, err := NewPool(context.Background(), poolConfig, Config{
+	pool, err := NewPoolWithRuntimeConfig(context.Background(), poolConfig, RuntimeConfig{
 		TranslationCacheEntries: 2,
 		Pool:                    &PoolConfig{MinConnections: 0, MaxConnections: 1},
 	})
@@ -479,7 +460,7 @@ func TestV2StableSnapshotTraversalWorkspaceReadiness(t *testing.T) {
 			result := tx.Query("MATCH p = shortestPath((s)-[*1..]->(e)) RETURN p", nil)
 			defer result.Close()
 			return result.Error()
-		}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+		}, OptionSetTransactionIsolation(pgx.RepeatableRead))
 	}
 
 	require.NoError(t, stableSnapshot())
@@ -530,7 +511,7 @@ func TestV2StatementWarmupUsesPooledPGXCacheNames(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, driver.WarmStatements(ctx, "select 1", "select 1"))
 
-	connection, err := driver.pool.pool.Acquire(ctx)
+	connection, err := driver.pool.Acquire(ctx)
 	require.NoError(t, err)
 	identity := sha256.Sum256([]byte("select 1"))
 	var prepared int
@@ -558,7 +539,7 @@ func TestV2StatementWarmupPolicyAppliesToNewConnections(t *testing.T) {
 	require.NoError(t, driver.SetStatementWarmupPolicy(ctx, "select 1"))
 	driver.pool.Reset()
 	requireEventually(t, func() bool { return driver.TranslationCacheStats().LiveConnections == 0 }, "warm connection retirement")
-	connection, err := driver.pool.pool.Acquire(ctx)
+	connection, err := driver.pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer connection.Release()
 	identity := sha256.Sum256([]byte("select 1"))
@@ -570,17 +551,17 @@ func TestV2StatementWarmupPolicyAppliesToNewConnections(t *testing.T) {
 func TestV2PhysicalConnectionsHaveIndependentCaches(t *testing.T) {
 	driver := newV2IntegrationDriver(t, 2, 2, nil)
 	ctx := context.Background()
-	first, err := driver.pool.pool.Acquire(ctx)
+	first, err := driver.pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer first.Release()
-	second, err := driver.pool.pool.Acquire(ctx)
+	second, err := driver.pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer second.Release()
 	require.NotSame(t, first.Conn(), second.Conn())
 
-	firstCache, ok := driver.pool.provider.CacheForConnection(first.Conn()).(*connectionTranslationCache)
+	firstCache, ok := driver.runtime.provider.CacheForConnection(first.Conn()).(*connectionTranslationCache)
 	require.True(t, ok)
-	secondCache, ok := driver.pool.provider.CacheForConnection(second.Conn()).(*connectionTranslationCache)
+	secondCache, ok := driver.runtime.provider.CacheForConnection(second.Conn()).(*connectionTranslationCache)
 	require.True(t, ok)
 	_, _, err = firstCache.TranslateWithPolicy("RETURN 1", 1, nil, "integration", func() (translate.Result, string, error) {
 		return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
@@ -617,10 +598,10 @@ func TestV2ConnectionCloseAndRejectedReleaseDestroyCaches(t *testing.T) {
 	t.Run("rejected release closes registered cache", func(t *testing.T) {
 		driver := newV2IntegrationDriver(t, 1, 2, func(*pgx.Conn) bool { return false })
 		setUpV2IntegrationGraph(t, driver)
-		conn, err := driver.pool.pool.Acquire(context.Background())
+		conn, err := driver.pool.Acquire(context.Background())
 		require.NoError(t, err)
 		physical := conn.Conn()
-		cache, ok := driver.pool.provider.CacheForConnection(physical).(*connectionTranslationCache)
+		cache, ok := driver.runtime.provider.CacheForConnection(physical).(*connectionTranslationCache)
 		require.True(t, ok)
 		_, _, err = cache.TranslateWithPolicy("RETURN 1", 1, nil, "integration", func() (translate.Result, string, error) {
 			return translate.Result{Parameters: map[string]any{}, ParameterSources: map[string]string{}}, "select 1", nil
@@ -628,7 +609,7 @@ func TestV2ConnectionCloseAndRejectedReleaseDestroyCaches(t *testing.T) {
 		require.NoError(t, err)
 		conn.Release()
 		requireEventually(t, func() bool {
-			return driver.pool.provider.CacheForConnection(physical) == nil
+			return driver.runtime.provider.CacheForConnection(physical) == nil
 		}, "rejected-release cache cleanup")
 	})
 }
@@ -659,11 +640,16 @@ func TestV2SchemaGenerationAndCapacityPreventStaleTranslationReuse(t *testing.T)
 	require.Equal(t, 1, stats.CapacityPerConnection)
 }
 
-func TestV2MatchesV1ForCoreResultsAndFailureBoundaries(t *testing.T) {
-	v2Driver := newV2IntegrationDriver(t, 1, 4, nil)
-	fixture := setUpV2IntegrationGraph(t, v2Driver)
-	v1Driver := newV1IntegrationDriver(t)
-	require.NoError(t, v1Driver.AssertSchema(context.Background(), v2IntegrationSchema))
+func TestFinalizedDriverPreservesCoreResultsAndFailureBoundaries(t *testing.T) {
+	configuredDriver := newV2IntegrationDriver(t, 1, 4, nil)
+	fixture := setUpV2IntegrationGraph(t, configuredDriver)
+	poolConfig, err := pgxpool.ParseConfig(postgresV2IntegrationConnectionString(t))
+	require.NoError(t, err)
+	pool, err := NewPool(poolConfig)
+	require.NoError(t, err)
+	defaultDriver := NewDriver(0, pool)
+	t.Cleanup(func() { require.NoError(t, defaultDriver.Close(context.Background())) })
+	require.NoError(t, defaultDriver.AssertSchema(context.Background(), v2IntegrationSchema))
 
 	for _, testCase := range []struct {
 		name       string
@@ -677,23 +663,23 @@ func TestV2MatchesV1ForCoreResultsAndFailureBoundaries(t *testing.T) {
 		{"no rows", "MATCH (n:PGV2IntegrationNode) WHERE id(n) = $id RETURN n", map[string]any{"id": graph.ID(0)}},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			v1Rows, v1Err := snapshotQuery(context.Background(), v1Driver, testCase.query, testCase.parameters)
-			v2Rows, v2Err := snapshotQuery(context.Background(), v2Driver, testCase.query, testCase.parameters)
-			require.NoError(t, v1Err)
-			require.NoError(t, v2Err)
-			require.True(t, reflect.DeepEqual(v1Rows, v2Rows), "v1 rows %v differ from v2 rows %v", v1Rows, v2Rows)
+			configuredRows, configuredErr := snapshotQuery(context.Background(), configuredDriver, testCase.query, testCase.parameters)
+			defaultRows, defaultErr := snapshotQuery(context.Background(), defaultDriver, testCase.query, testCase.parameters)
+			require.NoError(t, configuredErr)
+			require.NoError(t, defaultErr)
+			require.True(t, reflect.DeepEqual(configuredRows, defaultRows), "configured rows %v differ from default rows %v", configuredRows, defaultRows)
 		})
 	}
 
-	_, v1TranslationErr := snapshotQuery(context.Background(), v1Driver, "MATCH (", nil)
-	_, v2TranslationErr := snapshotQuery(context.Background(), v2Driver, "MATCH (", nil)
-	require.Error(t, v1TranslationErr)
-	require.Error(t, v2TranslationErr)
-	require.Error(t, rawExecutionError(context.Background(), v1Driver))
-	require.Error(t, rawExecutionError(context.Background(), v2Driver))
+	_, configuredTranslationErr := snapshotQuery(context.Background(), configuredDriver, "MATCH (", nil)
+	_, defaultTranslationErr := snapshotQuery(context.Background(), defaultDriver, "MATCH (", nil)
+	require.Error(t, configuredTranslationErr)
+	require.Error(t, defaultTranslationErr)
+	require.Error(t, rawExecutionError(context.Background(), configuredDriver))
+	require.Error(t, rawExecutionError(context.Background(), defaultDriver))
 
 	rollback := errors.New("force rollback")
-	for _, database := range []graph.Database{v1Driver, v2Driver} {
+	for _, database := range []graph.Database{configuredDriver, defaultDriver} {
 		err := database.WriteTransaction(context.Background(), func(tx graph.Transaction) error {
 			if _, err := tx.CreateNode(graph.NewProperties(), v2IntegrationNodeKind); err != nil {
 				return err
@@ -708,7 +694,7 @@ func TestV2MatchesV1ForCoreResultsAndFailureBoundaries(t *testing.T) {
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	cancelErr := v2Driver.ReadTransaction(cancelCtx, func(tx graph.Transaction) error {
+	cancelErr := configuredDriver.ReadTransaction(cancelCtx, func(tx graph.Transaction) error {
 		result := tx.Raw("select pg_sleep(1)", nil)
 		defer result.Close()
 		for result.Next() {
@@ -716,7 +702,7 @@ func TestV2MatchesV1ForCoreResultsAndFailureBoundaries(t *testing.T) {
 		return result.Error()
 	})
 	require.Error(t, cancelErr)
-	rows, err := snapshotQuery(context.Background(), v2Driver, v2ScalarQuery(), nil)
+	rows, err := snapshotQuery(context.Background(), configuredDriver, v2ScalarQuery(), nil)
 	require.NoError(t, err)
 	require.Equal(t, [][]any{{int64(2)}}, rows)
 }

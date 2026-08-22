@@ -1,4 +1,4 @@
-package v2
+package pg
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	dawgscache "github.com/specterops/dawgs/cache"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/drivers/pg"
 )
 
 // translationEntry contains only immutable SQL and parameter-source metadata.
@@ -76,7 +75,7 @@ type connectionTranslationCache struct {
 }
 
 // The CypherTranslationCache assertion ensures the local cache remains compatible with pg transactions.
-var _ pg.CypherTranslationCache = (*connectionTranslationCache)(nil)
+var _ CypherTranslationCache = (*connectionTranslationCache)(nil)
 
 // newConnectionTranslationCache initializes one physical connection's bounded translation cache.
 func newConnectionTranslationCache(capacity int, generation func() uint64, shared *sharedTemplateCache) *connectionTranslationCache {
@@ -104,7 +103,7 @@ func (s *connectionTranslationCache) TranslateWithPolicy(query string, graphID i
 	key := newTranslationKey(query, graphID, parameters, policyIdentity, schemaGeneration)
 
 	s.lock.Lock()
-	if s.closed || s.capacity == 0 || len(query) > pg.MaxCachedCypherQueryBytes {
+	if s.closed || s.capacity == 0 || len(query) > MaxCachedCypherQueryBytes {
 		s.stats.Misses++
 		s.stats.Bypasses++
 		s.lock.Unlock()
@@ -192,23 +191,6 @@ func buildUncached(build func() (translate.Result, string, error)) (string, map[
 		return "", nil, err
 	}
 	return sql, result.Parameters, nil
-}
-
-// cacheableTranslation reports whether every generated parameter can bind fresh caller input.
-func cacheableTranslation(result translate.Result, parameters map[string]any) bool {
-	if len(result.Parameters) != len(result.ParameterSources) {
-		return false
-	}
-	for identifier := range result.Parameters {
-		source, found := result.ParameterSources[identifier]
-		if !found || source == "" {
-			return false
-		}
-		if _, found := parameters[source]; !found {
-			return false
-		}
-	}
-	return true
 }
 
 // cloneParameterSources detaches cached source metadata from translator-owned storage.
@@ -322,7 +304,7 @@ type connectionCacheProvider struct {
 	shapeCapacity int
 
 	// shapeCache maps query digests to immutable structural classifications.
-	shapeCache map[[sha256.Size]byte]pg.TraversalShape
+	shapeCache map[[sha256.Size]byte]TraversalShape
 
 	// shapeOrder preserves insertion order for bounded shape-cache eviction.
 	shapeOrder [][sha256.Size]byte
@@ -335,33 +317,33 @@ type connectionCacheProvider struct {
 }
 
 // The CypherTranslationCacheProvider assertion preserves pg transaction cache selection.
-var _ pg.CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
+var _ CypherTranslationCacheProvider = (*connectionCacheProvider)(nil)
 
 // The StableSnapshotTraversalWorkspaceProvider assertion preserves workspace setup support.
-var _ pg.StableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
+var _ StableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
 
 // The LazyStableSnapshotTraversalWorkspaceProvider assertion preserves lazy workspace setup support.
-var _ pg.LazyStableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
+var _ LazyStableSnapshotTraversalWorkspaceProvider = (*connectionCacheProvider)(nil)
 
 // The SQLGenerationProfileCollector assertion preserves SQL timing telemetry collection.
-var _ pg.SQLGenerationProfileCollector = (*connectionCacheProvider)(nil)
+var _ SQLGenerationProfileCollector = (*connectionCacheProvider)(nil)
 
 // The TraversalStrategySelectionCollector assertion preserves routing telemetry collection.
-var _ pg.TraversalStrategySelectionCollector = (*connectionCacheProvider)(nil)
+var _ TraversalStrategySelectionCollector = (*connectionCacheProvider)(nil)
 
 // The TraversalShapeCacheProvider assertion preserves bounded structural classification caching.
-var _ pg.TraversalShapeCacheProvider = (*connectionCacheProvider)(nil)
+var _ TraversalShapeCacheProvider = (*connectionCacheProvider)(nil)
 
 // The TraversalRouteDecisionCollector assertion preserves topology decision telemetry collection.
-var _ pg.TraversalRouteDecisionCollector = (*connectionCacheProvider)(nil)
+var _ TraversalRouteDecisionCollector = (*connectionCacheProvider)(nil)
 
 // TraversalShapeFor caches a bounded classifier result by a query digest. It
 // never retains source text, values, parsed ASTs, or database state.
-func (s *connectionCacheProvider) TraversalShapeFor(query string, classify func() (pg.TraversalShape, error)) (pg.TraversalShape, error) {
+func (s *connectionCacheProvider) TraversalShapeFor(query string, classify func() (TraversalShape, error)) (TraversalShape, error) {
 	if classify == nil {
-		return pg.TraversalShape{}, fmt.Errorf("traversal shape classifier is required")
+		return TraversalShape{}, fmt.Errorf("traversal shape classifier is required")
 	}
-	if s == nil || len(query) > pg.MaxCachedCypherQueryBytes {
+	if s == nil || len(query) > MaxCachedCypherQueryBytes {
 		return classify()
 	}
 	identity := sha256.Sum256([]byte(strings.TrimSpace(query)))
@@ -376,7 +358,7 @@ func (s *connectionCacheProvider) TraversalShapeFor(query string, classify func(
 
 	shape, err := classify()
 	if err != nil {
-		return pg.TraversalShape{}, err
+		return TraversalShape{}, err
 	}
 	if s.shapeCapacity == 0 {
 		return shape, nil
@@ -401,7 +383,7 @@ func (s *connectionCacheProvider) TraversalShapeFor(query string, classify func(
 
 // RecordTraversalStrategySelection records an observation-only routing
 // outcome. No per-query, SQL, graph, parameter, or decision data is retained.
-func (s *connectionCacheProvider) RecordTraversalStrategySelection(selection pg.TraversalStrategySelection) {
+func (s *connectionCacheProvider) RecordTraversalStrategySelection(selection TraversalStrategySelection) {
 	if s == nil {
 		return
 	}
@@ -424,7 +406,7 @@ func (s *connectionCacheProvider) RecordTraversalStrategySelection(selection pg.
 }
 
 // RecordTraversalRouteDecision records a query-text-free topology routing outcome.
-func (s *connectionCacheProvider) RecordTraversalRouteDecision(decision pg.TraversalRouteDecision) {
+func (s *connectionCacheProvider) RecordTraversalRouteDecision(decision TraversalRouteDecision) {
 	if s == nil {
 		return
 	}
@@ -455,7 +437,7 @@ func (s *connectionCacheProvider) RecordTraversalRouteDecision(decision pg.Trave
 // RecordSQLGenerationProfile retains query-text-free timing totals for the
 // v2 architecture. A profile is recorded after pgx has returned a row stream,
 // not after its rows are consumed.
-func (s *connectionCacheProvider) RecordSQLGenerationProfile(profile pg.SQLGenerationProfile) {
+func (s *connectionCacheProvider) RecordSQLGenerationProfile(profile SQLGenerationProfile) {
 	if s == nil {
 		return
 	}
@@ -475,7 +457,7 @@ func (s *connectionCacheProvider) DeferStableSnapshotTraversalWorkspaces() bool 
 }
 
 // newConnectionCacheProvider initializes cache state shared by one v2 pool.
-func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error) {
+func newConnectionCacheProvider(config RuntimeConfig) (*connectionCacheProvider, error) {
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
@@ -483,7 +465,7 @@ func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error)
 	return &connectionCacheProvider{
 		capacity:        config.TranslationCacheEntries,
 		shapeCapacity:   config.TranslationCacheEntries,
-		shapeCache:      map[[sha256.Size]byte]pg.TraversalShape{},
+		shapeCache:      map[[sha256.Size]byte]TraversalShape{},
 		shapeStats:      TraversalShapeCacheStats{Capacity: config.TranslationCacheEntries},
 		sharedTemplates: newSharedTemplateCache(config.SharedShortestPathTemplateEntries),
 		minConnections:  poolConfig.MinConnections,
@@ -496,7 +478,7 @@ func newConnectionCacheProvider(config Config) (*connectionCacheProvider, error)
 // CacheForConnection returns the cache owned by conn's physical connection.
 // A connection that was not registered or was already removed bypasses
 // retention through the v1 transaction seam.
-func (s *connectionCacheProvider) CacheForConnection(conn *pgx.Conn) pg.CypherTranslationCache {
+func (s *connectionCacheProvider) CacheForConnection(conn *pgx.Conn) CypherTranslationCache {
 	if s == nil || conn == nil {
 		return nil
 	}
@@ -517,7 +499,7 @@ func (s *connectionCacheProvider) EnsureStableSnapshotTraversalWorkspaces(ctx co
 		return fmt.Errorf("PostgreSQL connection is required for traversal workspace setup")
 	}
 	return s.ensureWorkspaceForConnection(conn.Conn(), func() error {
-		return pg.EnsureStableSnapshotTraversalWorkspaces(ctx, conn)
+		return EnsureStableSnapshotTraversalWorkspaces(ctx, conn)
 	})
 }
 
@@ -602,8 +584,8 @@ func normalizePreparedStatementWarmups(statements []string) ([]preparedStatement
 		if statement == "" {
 			return nil, fmt.Errorf("prepared statement SQL must not be empty")
 		}
-		if len(statement) > pg.MaxCachedCypherQueryBytes {
-			return nil, fmt.Errorf("prepared statement SQL exceeds %d bytes", pg.MaxCachedCypherQueryBytes)
+		if len(statement) > MaxCachedCypherQueryBytes {
+			return nil, fmt.Errorf("prepared statement SQL exceeds %d bytes", MaxCachedCypherQueryBytes)
 		}
 		identity := sha256.Sum256([]byte(statement))
 		if _, exists := seen[identity]; exists {
@@ -702,7 +684,7 @@ func (s *connectionCacheProvider) advanceSchemaGeneration() uint64 {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.generation++
-	s.shapeCache = map[[sha256.Size]byte]pg.TraversalShape{}
+	s.shapeCache = map[[sha256.Size]byte]TraversalShape{}
 	s.shapeOrder = nil
 	s.shapeStats.Entries = 0
 	for _, state := range s.states {

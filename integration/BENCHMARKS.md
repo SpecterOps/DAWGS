@@ -54,21 +54,21 @@ fixture because workspace execution dominated the small search. Forced custom
 planning also regressed both shortest-path shapes; `auto` remains the selected
 plan policy. The B2 executor remains available only for diagnostic/tool runs.
 
-### V2 production-policy path
+### Production-policy path
 
 The forced-executor measurements above establish a candidate SQL comparison,
-but do not exercise V2's manifest selection or connection-local translation
+but do not exercise the driver's manifest selection or connection-local translation
 cache. `cmd/benchmark` now has a separate `production_policy` mode that loads a
 GraphBench-verified manifest into `Driver.SetTraversalPolicy`, requires
 Repeatable Read, and runs exactly its single allowlisted parameterized Cypher
 scenario. A live PostgreSQL manual integration test renders the candidate SQL,
-binds its SHA-256 into a schema-v2 manifest, installs that policy on `pg-v2`,
+binds its SHA-256 into a schema-v2 manifest, installs that policy on `pg`,
 and executes the route successfully.
 
 No forced-mode latency is relabeled as a production-policy result here: a
 comparable publication requires a clean-source, GraphBench-verified manifest
 whose SQL anchor and exact query digest match the current benchmark schema.
-The V2 policy route was nevertheless executed live against PostgreSQL on
+The policy route was nevertheless executed live against PostgreSQL on
 2026-08-20: `TestPostgresV2BenchmarkPolicyPath` rendered and anchor-validated
 the candidate statement, installed it through `SetTraversalPolicy`, and
 returned the expected path. The full PostgreSQL `make test_all` suite also
@@ -77,15 +77,15 @@ evidence.
 
 For a new qualified manifest, first derive its SQL anchor from the actual
 benchmark graph and parameterized scenario. This preflight record is not
-evidence and cannot activate a V2 policy:
+evidence and cannot activate a production policy:
 
 ```bash
 go run ./cmd/benchmark \
-  -driver pg-v2 \
+  -driver pg \
   -connection "postgresql://user:password@localhost/database" \
   -dataset traversal_shapes \
-  -pg-v2-traversal-policy-preflight-manifest .coverage/provisional.json \
-  -pg-v2-traversal-policy-preflight-output .coverage/policy-preflight.json
+  -pg-traversal-policy-preflight-manifest .coverage/provisional.json \
+  -pg-traversal-policy-preflight-output .coverage/policy-preflight.json
 ```
 
 Copy the emitted `operational_candidate_sql_sha256` into the provisional
@@ -99,23 +99,23 @@ When that evidence is available, run:
 ```bash
 go run ./cmd/graphbench -promotion-manifest .coverage/promotion.json
 go run ./cmd/benchmark \
-  -driver pg-v2 \
+  -driver pg \
   -connection "postgresql://user:password@localhost/database" \
   -dataset traversal_shapes \
-  -pg-v2-traversal-policy-manifest .coverage/promotion.json \
-  -pg-v2-traversal-policy-generation 7 \
+  -pg-traversal-policy-manifest .coverage/promotion.json \
+  -pg-traversal-policy-generation 7 \
   -pg-plan-cache-mode auto \
   -iterations 20 -warmup 2 -workers 1
 ```
 
 ```bash
 go run ./cmd/benchmark \
-  -driver pg-v2 \
+  -driver pg \
   -connection "postgresql://user:password@localhost/database" \
   -dataset traversal_shapes \
   -iterations 20 -warmup 2 -workers 1 \
-  -pg-v2-min-conns 0 -pg-v2-max-conns 1 \
-  -pg-v2-shortest-path-executor 'ASP-I1-U-DAG+MAT-M0' \
+  -pg-min-conns 0 -pg-max-conns 1 \
+  -pg-shortest-path-executor 'ASP-I1-U-DAG+MAT-M0' \
   -pg-plan-cache-mode auto
 ```
 

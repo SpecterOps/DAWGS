@@ -69,12 +69,9 @@ type SchemaManager struct {
 	// parseCache retains immutable Cypher ASTs keyed by normalized query text.
 	parseCache *cypherParseCache
 
-	// translationCache retains parameter-rebindable SQL translations by graph and parameter shape.
-	translationCache *cypherTranslationCache
-
-	// translationCacheProvider selects the translation cache for each physical
-	// PostgreSQL connection. V1 installs a provider for translationCache;
-	// absent or nil selections safely bypass retention.
+	// translationCacheProvider selects the connection-local translation cache
+	// for each physical PostgreSQL connection. A missing provider deliberately
+	// bypasses retention for pools not constructed by this package.
 	translationCacheProvider CypherTranslationCacheProvider
 
 	// hasDefaultGraph distinguishes a cached default graph from the zero-value graph model.
@@ -102,22 +99,23 @@ type SchemaManager struct {
 	traversalPolicy TraversalPolicy
 }
 
-// NewSchemaManager creates an empty metadata manager with bounded parse and translation caches for pool.
-func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *SchemaManager {
-	translationCache := newCypherTranslationCache(defaultCypherTranslationCacheEntries)
+// NewSchemaManager creates an empty metadata manager with a bounded parse
+// cache and an optional connection-local translation-cache provider.
+func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, providers ...CypherTranslationCacheProvider) *SchemaManager {
+	var provider CypherTranslationCacheProvider
+	if len(providers) > 0 {
+		provider = providers[0]
+	}
 	return &SchemaManager{
-		pool:             pool,
-		parseCache:       newCypherParseCache(defaultCypherParseCacheEntries),
-		translationCache: translationCache,
-		translationCacheProvider: sharedCypherTranslationCacheProvider{
-			cache: translationCache,
-		},
-		hasDefaultGraph:       false,
-		graphs:                map[string]model.Graph{},
-		kindsByID:             map[graph.Kind]int16{},
-		kindIDsByKind:         map[int16]graph.Kind{},
-		lock:                  &sync.RWMutex{},
-		graphQueryMemoryLimit: graphQueryMemoryLimit,
+		pool:                     pool,
+		parseCache:               newCypherParseCache(defaultCypherParseCacheEntries),
+		translationCacheProvider: provider,
+		hasDefaultGraph:          false,
+		graphs:                   map[string]model.Graph{},
+		kindsByID:                map[graph.Kind]int16{},
+		kindIDsByKind:            map[int16]graph.Kind{},
+		lock:                     &sync.RWMutex{},
+		graphQueryMemoryLimit:    graphQueryMemoryLimit,
 	}
 }
 

@@ -1,6 +1,4 @@
-// Package v2 provides an explicit opt-in PostgreSQL driver with translation
-// caches owned by individual physical PostgreSQL connections.
-package v2
+package pg
 
 import "fmt"
 
@@ -18,8 +16,8 @@ const (
 	defaultMaxConnections = 50
 )
 
-// PoolConfig controls the pgx pool size owned by a v2 driver. It is optional
-// in Config so existing callers retain the v1-compatible 5-50 connection
+// PoolConfig controls the pgx pool size owned by a PostgreSQL driver. It is optional
+// in RuntimeConfig so existing callers retain the 5-50 connection
 // defaults. Supplying PoolConfig permits a minimum of zero connections.
 type PoolConfig struct {
 	// MinConnections keeps this many idle physical connections available when possible.
@@ -29,8 +27,8 @@ type PoolConfig struct {
 	MaxConnections int32
 }
 
-// Config configures the v2 connection-resident translation cache.
-type Config struct {
+// RuntimeConfig configures the connection-resident translation cache.
+type RuntimeConfig struct {
 	// TranslationCacheEntries is the exact SIEVE entry capacity for each live
 	// physical PostgreSQL connection. Zero disables retention.
 	TranslationCacheEntries int
@@ -45,11 +43,11 @@ type Config struct {
 	Pool *PoolConfig
 }
 
-// DefaultConfig returns the conservative v2 defaults. The aggregate upper
+// DefaultRuntimeConfig returns the conservative PostgreSQL defaults. The aggregate upper
 // bound is TranslationCacheEntries multiplied by the number of live physical
 // PostgreSQL connections.
-func DefaultConfig() Config {
-	return Config{
+func DefaultRuntimeConfig() RuntimeConfig {
+	return RuntimeConfig{
 		TranslationCacheEntries:           defaultTranslationCacheEntries,
 		SharedShortestPathTemplateEntries: defaultSharedShortestPathTemplateEntries,
 		Pool: &PoolConfig{
@@ -60,7 +58,7 @@ func DefaultConfig() Config {
 }
 
 // validate reports whether cache and pool limits can be safely applied to pgx.
-func (s Config) validate() error {
+func (s RuntimeConfig) validate() error {
 	if s.TranslationCacheEntries < 0 {
 		return fmt.Errorf("translation cache entries must not be negative: %d", s.TranslationCacheEntries)
 	}
@@ -82,7 +80,7 @@ func (s Config) validate() error {
 }
 
 // resolvedPoolConfig returns either the explicit limits or the v1-compatible defaults.
-func (s Config) resolvedPoolConfig() PoolConfig {
+func (s RuntimeConfig) resolvedPoolConfig() PoolConfig {
 	if s.Pool != nil {
 		return *s.Pool
 	}

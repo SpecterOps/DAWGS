@@ -1,4 +1,4 @@
-package v2
+package pg
 
 import (
 	"errors"
@@ -8,13 +8,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/stretchr/testify/require"
 )
 
 func newTestCache(t *testing.T, capacity int) (*connectionCacheProvider, *connectionTranslationCache, *pgx.Conn) {
 	t.Helper()
-	provider, err := newConnectionCacheProvider(Config{TranslationCacheEntries: capacity})
+	provider, err := newConnectionCacheProvider(RuntimeConfig{TranslationCacheEntries: capacity})
 	require.NoError(t, err)
 	conn := &pgx.Conn{}
 	provider.registerConnection(conn)
@@ -51,10 +50,10 @@ func TestConnectionTranslationCacheRebindsCurrentValues(t *testing.T) {
 
 func TestStrategySelectionStatsRemainQueryTextFree(t *testing.T) {
 	provider, _, _ := newTestCache(t, 2)
-	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "incumbent", Reason: "shape_unavailable"})
-	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "exact_query_canary", Reason: "exact_query_authorized"})
-	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "structural_shadow", Reason: "structural_bucket-qualified"})
-	provider.RecordTraversalStrategySelection(pg.TraversalStrategySelection{Mode: "structural_authorized", Reason: "structural_bucket-qualified"})
+	provider.RecordTraversalStrategySelection(TraversalStrategySelection{Mode: "incumbent", Reason: "shape_unavailable"})
+	provider.RecordTraversalStrategySelection(TraversalStrategySelection{Mode: "exact_query_canary", Reason: "exact_query_authorized"})
+	provider.RecordTraversalStrategySelection(TraversalStrategySelection{Mode: "structural_shadow", Reason: "structural_bucket-qualified"})
+	provider.RecordTraversalStrategySelection(TraversalStrategySelection{Mode: "structural_authorized", Reason: "structural_bucket-qualified"})
 
 	stats := provider.stats().StrategySelection
 	require.Equal(t, uint64(1), stats.Incumbent)
@@ -67,9 +66,9 @@ func TestStrategySelectionStatsRemainQueryTextFree(t *testing.T) {
 func TestTraversalShapeCacheRetainsOnlyBoundedClassifications(t *testing.T) {
 	provider, _, _ := newTestCache(t, 1)
 	builds := 0
-	classify := func() (pg.TraversalShape, error) {
+	classify := func() (TraversalShape, error) {
 		builds++
-		return pg.TraversalShape{Version: pg.TraversalShapeVersion, Family: "SP", Fingerprint: "shape"}, nil
+		return TraversalShape{Version: TraversalShapeVersion, Family: "SP", Fingerprint: "shape"}, nil
 	}
 
 	first, err := provider.TraversalShapeFor(" MATCH p = shortestPath((a)-[*]->(b)) RETURN p ", classify)
@@ -194,7 +193,7 @@ func TestConnectionTranslationCacheDoesNotRetainFailures(t *testing.T) {
 }
 
 func TestConnectionCacheProviderSeparatesAndRetiresPhysicalConnections(t *testing.T) {
-	provider, err := newConnectionCacheProvider(Config{TranslationCacheEntries: 2})
+	provider, err := newConnectionCacheProvider(RuntimeConfig{TranslationCacheEntries: 2})
 	require.NoError(t, err)
 	first, second := &pgx.Conn{}, &pgx.Conn{}
 	provider.registerConnection(first)
@@ -225,7 +224,7 @@ func TestConnectionCacheProviderSeparatesAndRetiresPhysicalConnections(t *testin
 }
 
 func TestConnectionCacheProviderRejectsNegativeCapacity(t *testing.T) {
-	provider, err := newConnectionCacheProvider(Config{TranslationCacheEntries: -1})
+	provider, err := newConnectionCacheProvider(RuntimeConfig{TranslationCacheEntries: -1})
 	require.Nil(t, provider)
 	require.ErrorContains(t, err, "must not be negative")
 }
@@ -371,10 +370,10 @@ func TestPreparedStatementWarmupDoesNotRetainFailures(t *testing.T) {
 // TestConnectionCacheProviderRecordsSQLGenerationProfiles verifies V2
 // aggregates query-text-free timing samples by shortest-path classification.
 func TestConnectionCacheProviderRecordsSQLGenerationProfiles(t *testing.T) {
-	provider, err := newConnectionCacheProvider(DefaultConfig())
+	provider, err := newConnectionCacheProvider(DefaultRuntimeConfig())
 	require.NoError(t, err)
 
-	provider.RecordSQLGenerationProfile(pg.SQLGenerationProfile{
+	provider.RecordSQLGenerationProfile(SQLGenerationProfile{
 		QueryClass: "shortest_path",
 		Parse:      time.Millisecond,
 		Graph:      2 * time.Millisecond,
@@ -384,7 +383,7 @@ func TestConnectionCacheProviderRecordsSQLGenerationProfiles(t *testing.T) {
 		Format:     6 * time.Millisecond,
 		Dispatch:   7 * time.Millisecond,
 	})
-	provider.RecordSQLGenerationProfile(pg.SQLGenerationProfile{QueryClass: "other", Parse: time.Millisecond})
+	provider.RecordSQLGenerationProfile(SQLGenerationProfile{QueryClass: "other", Parse: time.Millisecond})
 
 	stats := provider.stats().SQLGeneration
 	require.Equal(t, uint64(1), stats.ShortestPath.Count)
@@ -398,7 +397,7 @@ func TestConnectionCacheProviderRecordsSQLGenerationProfiles(t *testing.T) {
 // verifies the V2 L2 retains only immutable templates and still negotiates
 // fresh caller values for a different physical connection.
 func TestSharedShortestPathTemplateCacheReusesCompilationAcrossConnections(t *testing.T) {
-	provider, err := newConnectionCacheProvider(Config{TranslationCacheEntries: 2, SharedShortestPathTemplateEntries: 2})
+	provider, err := newConnectionCacheProvider(RuntimeConfig{TranslationCacheEntries: 2, SharedShortestPathTemplateEntries: 2})
 	require.NoError(t, err)
 	firstConn, secondConn := &pgx.Conn{}, &pgx.Conn{}
 	provider.registerConnection(firstConn)

@@ -104,26 +104,28 @@ type Driver struct {
 	// pool supplies connections for graph transactions and maintenance operations.
 	pool *pgxpool.Pool
 
+	// runtime owns the connection-local cache provider installed by the pool
+	// constructor. It is nil only for an externally constructed pool.
+	runtime *poolRuntime
+
 	// SchemaManager owns asserted graph metadata, kind mappings, and query caches.
 	*SchemaManager
 }
 
-// NewDriver creates a PostgreSQL graph driver with the default driver-wide translation cache.
+// NewDriver creates a PostgreSQL graph driver for pool. Pool constructors are
+// responsible for installing all required lifecycle hooks; this constructor
+// uses the associated connection-local runtime when present.
 func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
-	return NewDriverWithTranslationCacheProvider(graphQueryMemoryLimit, pool, nil)
-}
-
-// NewDriverWithTranslationCacheProvider creates a PostgreSQL driver whose
-// transactions select translations through provider. A nil provider preserves
-// the default v1 driver-wide cache behavior.
-func NewDriverWithTranslationCacheProvider(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, provider CypherTranslationCacheProvider) *Driver {
-	schemaManager := NewSchemaManager(pool, graphQueryMemoryLimit)
-	if provider != nil {
-		schemaManager.translationCacheProvider = provider
+	runtime := poolRuntimeFor(pool)
+	var provider CypherTranslationCacheProvider
+	if runtime != nil {
+		provider = runtime.provider
 	}
+	schemaManager := NewSchemaManager(pool, graphQueryMemoryLimit, provider)
 
 	return &Driver{
 		pool:          pool,
+		runtime:       runtime,
 		SchemaManager: schemaManager,
 	}
 }
@@ -183,19 +185,22 @@ func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 func (s *Driver) Close(ctx context.Context) error {
 	if s.SchemaManager != nil {
 		s.SchemaManager.parseCache.Close()
-		s.SchemaManager.translationCache.Close()
 	}
-	s.pool.Close()
+	if s.runtime != nil {
+		s.runtime.close()
+	} else if s.pool != nil {
+		s.pool.Close()
+	}
 	return nil
 }
 
 // TranslationCacheStats returns query-text-free counters for this driver's
 // bounded Cypher-to-SQL translation cache.
-func (s *Driver) TranslationCacheStats() TranslationCacheStats {
-	if s == nil || s.SchemaManager == nil {
-		return TranslationCacheStats{}
+func (s *Driver) TranslationCacheStats() Stats {
+	if s == nil || s.runtime == nil || s.runtime.provider == nil {
+		return Stats{}
 	}
-	return s.SchemaManager.translationCache.Stats()
+	return s.runtime.provider.stats()
 }
 
 // ParseCacheStats returns query-text-free counters for this driver's bounded Cypher parse cache.
@@ -257,6 +262,9 @@ func (s *Driver) AssertSchema(ctx context.Context, schema graph.Schema) error {
 			return err
 		}
 	}
+	if s.runtime != nil && s.runtime.provider != nil {
+		s.runtime.provider.advanceSchemaGeneration()
+	}
 
 	return nil
 }
@@ -288,7 +296,31 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 
 	// Wipe this map to be rebuilt in the fetch call below
 	s.SchemaManager.kindIDsByKind = map[int16]graph.Kind{}
-	return s.SchemaManager.Fetch(ctx)
+	if err := s.SchemaManager.Fetch(ctx); err != nil {
+		return err
+	}
+	if s.runtime != nil && s.runtime.provider != nil {
+		s.runtime.provider.advanceSchemaGeneration()
+	}
+	return nil
+}
+
+// WarmStatements prepares selected SQL on currently idle physical
+// connections without executing it.
+func (s *Driver) WarmStatements(ctx context.Context, statements ...string) error {
+	if s == nil || s.runtime == nil {
+		return nil
+	}
+	return s.runtime.warmStatements(ctx, statements...)
+}
+
+// SetStatementWarmupPolicy installs the warm set for current and future
+// physical connections.
+func (s *Driver) SetStatementWarmupPolicy(ctx context.Context, statements ...string) error {
+	if s == nil || s.runtime == nil {
+		return nil
+	}
+	return s.runtime.setStatementWarmupPolicy(ctx, statements...)
 }
 
 // OptimizeStorage runs PostgreSQL storage maintenance on a leased pool connection.

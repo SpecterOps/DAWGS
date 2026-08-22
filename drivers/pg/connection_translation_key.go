@@ -1,10 +1,6 @@
-package v2
+package pg
 
-import (
-	"strings"
-
-	"github.com/specterops/dawgs/drivers/pg"
-)
+import "strings"
 
 // translationCacheKeyVersion partitions retained translations by key schema.
 const translationCacheKeyVersion uint8 = 1
@@ -37,7 +33,7 @@ func newTranslationKey(query string, graphID int32, parameters map[string]any, p
 		version:          translationCacheKeyVersion,
 		query:            strings.TrimSpace(query),
 		graphID:          graphID,
-		parameterTypes:   pg.TranslationParameterTypeKey(parameters),
+		parameterTypes:   TranslationParameterTypeKey(parameters),
 		policyIdentity:   policyIdentity,
 		schemaGeneration: schemaGeneration,
 	}
