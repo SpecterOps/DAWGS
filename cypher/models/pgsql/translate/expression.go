@@ -10,6 +10,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/walk"
 )
 
+// unwrapParenthetical removes every enclosing parenthetical expression and returns the innermost operand.
 func unwrapParenthetical(parenthetical pgsql.Expression) pgsql.Expression {
 	next := parenthetical
 
@@ -26,6 +27,7 @@ func unwrapParenthetical(parenthetical pgsql.Expression) pgsql.Expression {
 	return parenthetical
 }
 
+// expressionHasCompositeProperties reports whether a data type exposes an entity properties field.
 func expressionHasCompositeProperties(expressionType pgsql.DataType) bool {
 	switch expressionType {
 	case pgsql.NodeComposite, pgsql.EdgeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionEdge, pgsql.ExpansionTerminalNode:
@@ -36,10 +38,12 @@ func expressionHasCompositeProperties(expressionType pgsql.DataType) bool {
 	}
 }
 
+// isCompositePropertyLookupTarget reports whether a type-hinted expression exposes composite properties.
 func isCompositePropertyLookupTarget(expression pgsql.TypeHinted) bool {
 	return expressionHasCompositeProperties(expression.TypeHint())
 }
 
+// translateCompositePropertyLookup pushes a lookup of the properties field from a composite expression.
 func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, lookup *cypher.PropertyLookup) error {
 	if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
 		return err
@@ -53,6 +57,8 @@ func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, l
 		return s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup)
 	}
 }
+
+// translatePropertyLookup lowers a validated Cypher property access according to its translated atom type.
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
 	if err := cypher.ValidatePropertyKeyName(lookup.Symbol); err != nil {
 		return err
@@ -157,6 +163,7 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 	return nil
 }
 
+// translateCypherAssignmentOperator maps supported Cypher assignment operators to their PostgreSQL AST equivalents.
 func translateCypherAssignmentOperator(operator cypher.AssignmentOperator) (pgsql.Operator, error) {
 	switch operator {
 	case cypher.OperatorAssignment:
@@ -191,6 +198,7 @@ func ExtractSyntaxNodeReferences(root pgsql.SyntaxNode) (*pgsql.IdentifierSet, e
 	))
 }
 
+// rewriteStringWildCardLiteral escapes LIKE metacharacters in a literal string operand.
 func rewriteStringWildCardLiteral(expression pgsql.Expression) (pgsql.Expression, error) {
 	switch typedExpression := expression.(type) {
 	case pgsql.Literal:
@@ -210,6 +218,7 @@ func rewriteStringWildCardLiteral(expression pgsql.Expression) (pgsql.Expression
 	}
 }
 
+// rewritePropertyLookupOperator selects JSON text extraction, JSON extraction, and casts for the requested result type.
 func rewritePropertyLookupOperator(propertyLookup *pgsql.BinaryExpression, dataType pgsql.DataType) pgsql.Expression {
 	if dataType.IsArrayType() {
 		// Ensure that array conversions use JSONB
@@ -241,6 +250,7 @@ func rewritePropertyLookupOperator(propertyLookup *pgsql.BinaryExpression, dataT
 	}
 }
 
+// isJSONScalarEqualityType reports whether a scalar can be normalized to JSONB for Cypher equality.
 func isJSONScalarEqualityType(dataType pgsql.DataType) bool {
 	switch dataType {
 	case pgsql.Boolean, pgsql.Float4, pgsql.Float8, pgsql.Int, pgsql.Int2, pgsql.Int4, pgsql.Int8, pgsql.Numeric:
@@ -251,6 +261,7 @@ func isJSONScalarEqualityType(dataType pgsql.DataType) bool {
 	}
 }
 
+// rewriteJSONScalarEqualityOperand converts a non-null supported scalar to comparable JSONB.
 func rewriteJSONScalarEqualityOperand(expression pgsql.Expression) (pgsql.Expression, bool) {
 	if literal, isLiteral := expression.(pgsql.Literal); isLiteral && literal.Null {
 		return nil, false
@@ -271,6 +282,7 @@ func rewriteJSONScalarEqualityOperand(expression pgsql.Expression) (pgsql.Expres
 	}
 }
 
+// rewriteStringEqualityOperand accepts a non-null text expression for string-specific equality handling.
 func rewriteStringEqualityOperand(expression pgsql.Expression) (pgsql.Expression, bool) {
 	if literal, isLiteral := expression.(pgsql.Literal); isLiteral && literal.Null {
 		return nil, false
@@ -285,6 +297,7 @@ func rewriteStringEqualityOperand(expression pgsql.Expression) (pgsql.Expression
 	return expression, true
 }
 
+// lookupRequiresElementType reports whether an array comparison expects a property's element type rather than its array type.
 func lookupRequiresElementType(typeHint pgsql.DataType, operator pgsql.Operator, otherOperand pgsql.SyntaxNode) bool {
 	if typeHint.IsArrayType() {
 		switch operator {
@@ -301,6 +314,7 @@ func lookupRequiresElementType(typeHint pgsql.DataType, operator pgsql.Operator,
 	return false
 }
 
+// TypeCastExpression applies a type hint, rewriting property comparisons when the operator requires element typing.
 func TypeCastExpression(expression pgsql.Expression, dataType pgsql.DataType) (pgsql.Expression, error) {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
 		lookupTypeHint := dataType
@@ -316,6 +330,24 @@ func TypeCastExpression(expression pgsql.Expression, dataType pgsql.DataType) (p
 	return pgsql.NewTypeCast(expression, dataType), nil
 }
 
+// jsonNullLiteral returns the JSONB representation of a JSON null value.
+func jsonNullLiteral() pgsql.Expression {
+	return pgsql.NewTypeCast(pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text), pgsql.JSONB)
+}
+
+// nullifyJSONPropertyLookup converts a JSON null property value to SQL NULL with NULLIF.
+func nullifyJSONPropertyLookup(propertyLookup *pgsql.BinaryExpression) pgsql.Expression {
+	return pgsql.FunctionCall{
+		Function: pgsql.FunctionNullIf,
+		Parameters: []pgsql.Expression{
+			propertyLookup,
+			jsonNullLiteral(),
+		},
+		CastType: pgsql.JSONB,
+	}
+}
+
+// rewritePropertyLookupOperands assigns extraction operators and casts using the comparison's opposite operand.
 func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) error {
 	var (
 		leftPropertyLookup, hasLeftPropertyLookup   = expressionToPropertyLookupBinaryExpression(expression.LOperand)
@@ -328,6 +360,8 @@ func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expressio
 		(pgsql.OperatorIsComparator(expression.Operator) || expression.Operator == pgsql.OperatorCypherNotEquals) {
 		leftPropertyLookup.Operator = pgsql.OperatorJSONField
 		rightPropertyLookup.Operator = pgsql.OperatorJSONField
+		expression.LOperand = nullifyJSONPropertyLookup(leftPropertyLookup)
+		expression.ROperand = nullifyJSONPropertyLookup(rightPropertyLookup)
 
 		return nil
 	}
@@ -414,6 +448,7 @@ func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expressio
 	return nil
 }
 
+// newFunctionCallComparatorError returns a focused type-mismatch error for function comparisons with special Cypher semantics.
 func newFunctionCallComparatorError(functionCall pgsql.FunctionCall, operator pgsql.Operator, comparisonType pgsql.DataType) error {
 	switch functionCall.Function {
 	case pgsql.FunctionCoalesce:
@@ -516,6 +551,7 @@ func NewExpressionTreeTranslator(kindMapper *contextAwareKindMapper) *Expression
 	}
 }
 
+// mergeUserAndTranslationConstraints combines user predicates with translator-added safety constraints.
 func mergeUserAndTranslationConstraints(userConstraints, translationConstraints *Constraint) *Constraint {
 	if userConstraints.Expression != nil {
 		// Fold the user constraints into the translation constraints wrapped in a parenthetical
@@ -528,10 +564,14 @@ func mergeUserAndTranslationConstraints(userConstraints, translationConstraints 
 	return translationConstraints
 }
 
+// HasAnyConstraints reports whether the supplied scope can evaluate any satisfiable user or translator constraint.
 func (s *ExpressionTreeTranslator) HasAnyConstraints(scope *pgsql.IdentifierSet) (bool, error) {
-	if hasUser, err := s.UserConstraints.HasConstraints(scope); err != nil || hasUser {
-		return hasUser, err
+	if hasUser, err := s.UserConstraints.HasConstraints(scope); err != nil {
+		return false, err
+	} else if hasUser {
+		return true, nil
 	}
+
 	return s.TranslationConstraints.HasConstraints(scope)
 }
 
@@ -580,6 +620,7 @@ func (s *ExpressionTreeTranslator) PopOperand() (pgsql.Expression, error) {
 	return s.treeBuilder.PopOperand(s.kindMapper)
 }
 
+// popOperandAsUserConstraint removes the next operand, normalizes bare property truth tests, and records its dependencies.
 func (s *ExpressionTreeTranslator) popOperandAsUserConstraint() error {
 	if nextExpression, err := s.PopOperand(); err != nil {
 		return err
@@ -662,6 +703,7 @@ func (s *ExpressionTreeTranslator) PopBinaryExpression(operator pgsql.Operator) 
 	}
 }
 
+// rewriteIdentityOperands replaces entity comparisons with comparisons of their scalar identity fields.
 func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression) error {
 	switch typedLOperand := newExpression.LOperand.(type) {
 	case pgsql.Identifier:
@@ -759,6 +801,7 @@ func rewriteIdentityOperands(scope *Scope, newExpression *pgsql.BinaryExpression
 	return nil
 }
 
+// isPropertyLookup reports whether expression is a property-lookup binary expression, including wrapped forms.
 func isPropertyLookup(expression pgsql.Expression) bool {
 	_, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression)
 	return isPropertyLookup
@@ -793,6 +836,7 @@ func isConcatenationOperation(lOperand, rOperand pgsql.Expression, lOperandType,
 	return false
 }
 
+// isEmptyArrayLiteralPropertyComparison finds a property lookup paired with an untyped empty array literal.
 func isEmptyArrayLiteralPropertyComparison(expression *pgsql.BinaryExpression) (*pgsql.BinaryExpression, bool) {
 	var (
 		hasPropertyLookup    bool
@@ -821,11 +865,13 @@ func isEmptyArrayLiteralPropertyComparison(expression *pgsql.BinaryExpression) (
 	return propertyLookup, hasPropertyLookup && hasEmptyArrayLiteral
 }
 
+// isEmptyAnyArrayLiteral reports whether expression is an empty array with no inferred element type.
 func isEmptyAnyArrayLiteral(expression pgsql.Expression) bool {
 	arrayLiteral, isArrayLiteral := expression.(pgsql.ArrayLiteral)
 	return isArrayLiteral && arrayLiteral.CastType == pgsql.AnyArray && len(arrayLiteral.Values) == 0
 }
 
+// isKnownEmptyArrayExpression reports whether expression is an untyped empty array or a parameter statically typed as NULL.
 func isKnownEmptyArrayExpression(expression pgsql.Expression) bool {
 	if isEmptyAnyArrayLiteral(expression) {
 		return true
@@ -841,14 +887,12 @@ func isKnownEmptyArrayExpression(expression pgsql.Expression) bool {
 	}
 }
 
-func jsonNullLiteral() pgsql.Expression {
-	return pgsql.NewTypeCast(pgsql.NewLiteral(pgsql.StringLiteralNull, pgsql.Text), pgsql.JSONB)
-}
-
+// jsonEmptyArrayLiteral returns the JSONB representation of an empty array.
 func jsonEmptyArrayLiteral() pgsql.Expression {
 	return pgsql.NewTypeCast(pgsql.NewLiteral(pgsql.StringLiteralEmptyArray, pgsql.Text), pgsql.JSONB)
 }
 
+// rewritePropertyLookupNullCheck preserves Cypher null semantics for missing keys and explicit JSON null values.
 func rewritePropertyLookupNullCheck(propertyLookup *pgsql.BinaryExpression, isNotNull bool) pgsql.Expression {
 	propertyLookup.Operator = pgsql.OperatorJSONField
 
@@ -880,14 +924,17 @@ func rewritePropertyLookupNullCheck(propertyLookup *pgsql.BinaryExpression, isNo
 	))
 }
 
+// jsonFieldPropertyLookup copies a property lookup using JSONB field extraction.
 func jsonFieldPropertyLookup(propertyLookup *pgsql.BinaryExpression) *pgsql.BinaryExpression {
 	return pgsql.NewBinaryExpression(propertyLookup.LOperand, pgsql.OperatorJSONField, propertyLookup.ROperand)
 }
 
+// jsonTextPropertyLookup copies a property lookup using text field extraction.
 func jsonTextPropertyLookup(propertyLookup *pgsql.BinaryExpression) *pgsql.BinaryExpression {
 	return pgsql.NewBinaryExpression(propertyLookup.LOperand, pgsql.OperatorJSONTextField, propertyLookup.ROperand)
 }
 
+// jsonbTypeof returns a call that inspects an expression's JSONB value type.
 func jsonbTypeof(expression pgsql.Expression) pgsql.Expression {
 	return pgsql.FunctionCall{
 		Function:   pgsql.FunctionJSONBTypeof,
@@ -895,6 +942,7 @@ func jsonbTypeof(expression pgsql.Expression) pgsql.Expression {
 	}
 }
 
+// jsonbStringTypeCheck reports at SQL runtime whether a property contains a JSON string.
 func jsonbStringTypeCheck(propertyLookup *pgsql.BinaryExpression) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		jsonbTypeof(jsonFieldPropertyLookup(propertyLookup)),
@@ -903,6 +951,7 @@ func jsonbStringTypeCheck(propertyLookup *pgsql.BinaryExpression) pgsql.Expressi
 	)
 }
 
+// toJSONBTextOperand converts expression through text to a JSONB scalar for type-safe comparison.
 func toJSONBTextOperand(expression pgsql.Expression) pgsql.Expression {
 	return pgsql.FunctionCall{
 		Function: pgsql.FunctionToJSONB,
@@ -913,6 +962,7 @@ func toJSONBTextOperand(expression pgsql.Expression) pgsql.Expression {
 	}
 }
 
+// buildStringPropertyEqualityComparison compares a property's text extraction with a text operand in the original operand order.
 func buildStringPropertyEqualityComparison(propertyLookup *pgsql.BinaryExpression, textOperand pgsql.Expression, propertyOnLeft bool, operator pgsql.Operator) pgsql.Expression {
 	textPropertyLookup := jsonTextPropertyLookup(propertyLookup)
 
@@ -923,6 +973,7 @@ func buildStringPropertyEqualityComparison(propertyLookup *pgsql.BinaryExpressio
 	return pgsql.NewBinaryExpression(textOperand, operator, textPropertyLookup)
 }
 
+// buildStringPropertyEqualityPredicate recognizes string/property equality and builds its type-aware predicate.
 func buildStringPropertyEqualityPredicate(expression *pgsql.BinaryExpression) (pgsql.Expression, bool) {
 	if !expression.Operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorCypherNotEquals) {
 		return nil, false
@@ -948,6 +999,7 @@ func buildStringPropertyEqualityPredicate(expression *pgsql.BinaryExpression) (p
 	return nil, false
 }
 
+// buildStringPropertyComparisonPredicate guards text comparison by JSON type while preserving inequality for non-string values.
 func buildStringPropertyComparisonPredicate(propertyLookup *pgsql.BinaryExpression, textOperand pgsql.Expression, propertyOnLeft bool, operator pgsql.Operator) pgsql.Expression {
 	stringComparison := buildStringPropertyEqualityComparison(propertyLookup, textOperand, propertyOnLeft, operator)
 
@@ -983,6 +1035,7 @@ func buildStringPropertyComparisonPredicate(propertyLookup *pgsql.BinaryExpressi
 	))
 }
 
+// buildEmptyArrayPropertyComparison compares a property with [] while retaining null taint and optional negation.
 func buildEmptyArrayPropertyComparison(propertyLookup *pgsql.BinaryExpression, negated bool) *pgsql.BinaryExpression {
 	var (
 		emptyArrayExpression = pgsql.NewBinaryExpression(
@@ -1029,6 +1082,7 @@ func buildEmptyArrayPropertyComparison(propertyLookup *pgsql.BinaryExpression, n
 	)
 }
 
+// cypherStringPredicateTextOperand converts a predicate operand to text while retaining null propagation.
 func cypherStringPredicateTextOperand(operand pgsql.Expression) (pgsql.Expression, error) {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(operand); isPropertyLookup {
 		propertyLookup.Operator = pgsql.OperatorJSONTextField
@@ -1042,6 +1096,7 @@ func cypherStringPredicateTextOperand(operand pgsql.Expression) (pgsql.Expressio
 	return pgsql.NewTypeCast(operand, pgsql.Text), nil
 }
 
+// cypherStringPredicateFunction maps a Cypher string predicate operator to its PostgreSQL helper function.
 func cypherStringPredicateFunction(function pgsql.Identifier, lOperand, rOperand pgsql.Expression) (pgsql.Expression, error) {
 	leftText, err := cypherStringPredicateTextOperand(lOperand)
 	if err != nil {
@@ -1063,6 +1118,7 @@ func cypherStringPredicateFunction(function pgsql.Identifier, lOperand, rOperand
 	}, nil
 }
 
+// rewriteBinaryExpression applies operator-specific casts, wildcard escaping, and Cypher null semantics before pushing the result.
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -25,12 +26,21 @@ import (
 )
 
 const (
-	prefixCase          = "case:"
+	// prefixCase introduces a named translation case in a fixture file.
+	prefixCase = "case:"
+
+	// prefixExclusiveTest marks a fixture case that must run without the other cases.
 	prefixExclusiveTest = "exclusive:"
-	prefixCypherParams  = "cypher_params:"
-	prefixPgSQLParams   = "pgsql_params:"
+
+	// prefixCypherParams introduces the JSON parameter map supplied to Cypher translation.
+	prefixCypherParams = "cypher_params:"
+
+	// prefixPgSQLParams introduces the JSON parameter map expected in rendered PostgreSQL.
+	prefixPgSQLParams = "pgsql_params:"
 )
 
+// testCaseFiles embeds the translation fixtures consumed by the package test runner.
+//
 //go:embed translation_cases/*
 var testCaseFiles embed.FS
 
@@ -61,6 +71,7 @@ func (s *TranslationTestCase) Copy() *TranslationTestCase {
 	}
 }
 
+// writeStrings writes each string to writer in order and returns the first write failure.
 func writeStrings(output io.Writer, strs ...string) error {
 	for _, str := range strs {
 		if _, err := output.Write([]byte(str)); err != nil {
@@ -71,6 +82,7 @@ func writeStrings(output io.Writer, strs ...string) error {
 	return nil
 }
 
+// licenseHeader is the exact header required at the start of every generated fixture file.
 var licenseHeader = `-- Copyright %d Specter Ops, Inc.
 --
 -- Licensed under the Apache License, Version 2.0
@@ -147,6 +159,7 @@ func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMap
 	return nil
 }
 
+// Assert translates the case and compares normalized SQL and parameters with the golden expectations.
 func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMapper pgsql.KindMapper) {
 	if regularQuery, err := frontend.ParseCypher(frontend.NewContext(), s.Cypher); err != nil {
 		t.Fatalf("Failed to compile cypher query: %s - %v", s.Cypher, err)
@@ -177,7 +190,15 @@ func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMappe
 			require.Equalf(t, expectedSQL, normalizedActual, "Test case for cypher query: '%s' failed to match.", s.Cypher)
 
 			if s.PgSQLParams != nil {
-				require.Equal(t, s.PgSQLParams, translation.Parameters)
+				// Golden parameters are stored as JSON, whose decoder represents
+				// numbers as float64. Compare the translated bag through the same
+				// serialization boundary so typed integer parameters do not create a
+				// false mismatch while their values and emitted casts remain exact.
+				var normalizedParameters map[string]any
+				encodedParameters, err := json.Marshal(translation.Parameters)
+				require.NoError(t, err)
+				require.NoError(t, json.Unmarshal(encodedParameters, &normalizedParameters))
+				require.Equal(t, s.PgSQLParams, normalizedParameters)
 			}
 		}
 	}
@@ -323,6 +344,7 @@ func ReadTranslationTestCaseFile(path string, fin fs.File) (TranslationTestCaseF
 	}, err
 }
 
+// updatedCasesDir returns the configured fixture update directory or an isolated temporary directory.
 func updatedCasesDir() (string, error) {
 	if workingDir, err := os.Getwd(); err != nil {
 		return "", err
@@ -337,6 +359,7 @@ func updatedCasesDir() (string, error) {
 	}
 }
 
+// UpdateTranslationTestCases regenerates SQL golden files from their embedded Cypher cases.
 func UpdateTranslationTestCases(mapper pgsql.KindMapper) error {
 	if updatedCasesPath, err := updatedCasesDir(); err != nil {
 		return err
@@ -357,20 +380,28 @@ func UpdateTranslationTestCases(mapper pgsql.KindMapper) error {
 						return err
 					} else if nextCases, _, err := caseFile.Load(); err != nil {
 						return err
-					} else if output, err := os.OpenFile(updatedCaseFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644); err != nil {
-						return err
 					} else {
+						var output strings.Builder
 						formattedLicenseHeader := fmt.Sprintf(licenseHeader, time.Now().Year())
 
-						if _, err := io.WriteString(output, formattedLicenseHeader); err != nil {
+						if _, err := io.WriteString(&output, formattedLicenseHeader); err != nil {
 							return err
 						}
 
 						for _, nextCase := range nextCases {
-							nextCase.WriteTo(output, mapper)
+							if err := nextCase.WriteTo(&output, mapper); err != nil {
+								return err
+							}
 						}
 
-						output.Close()
+						trailingNewlines := "\n"
+						if bytes.HasSuffix(caseFile.content, []byte("\n\n")) {
+							trailingNewlines = "\n\n"
+						}
+						content := strings.TrimRight(output.String(), "\n") + trailingNewlines
+						if err := os.WriteFile(updatedCaseFilePath, []byte(content), 0644); err != nil {
+							return err
+						}
 					}
 				}
 			}

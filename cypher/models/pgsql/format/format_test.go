@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// mustAsLiteral converts value to a PostgreSQL literal and panics if the value type is unsupported.
 func mustAsLiteral(value any) pgsql.Literal {
 	if literal, err := pgsql.AsLiteral(value); err != nil {
 		panic(fmt.Sprintf("%v", err))
@@ -24,6 +25,17 @@ func TestFormat_TypeCastedParenthetical(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Equal(t, "('str')::text", formattedQuery)
+}
+
+// TestFormat_QuotesExpressionShapedIdentifiers verifies that identifier text resembling an expression remains an identifier.
+func TestFormat_QuotesExpressionShapedIdentifiers(t *testing.T) {
+	formatted, err := format.Expression(
+		pgsql.CompoundIdentifier{"s0", "id(n)"},
+		format.NewOutputBuilder(),
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, `s0."id(n)"`, formatted)
 }
 
 func TestFormat_Case(t *testing.T) {
@@ -68,6 +80,26 @@ func TestFormat_SelectDistinct(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Equal(t, "select distinct id from node;", formattedQuery)
+}
+
+func TestFormat_SelectHaving(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{pgsql.Identifier("depth")},
+			From: []pgsql.FromClause{{
+				Source: pgsql.TableReference{Name: pgsql.CompoundIdentifier{"frontier"}},
+			}},
+			GroupBy: []pgsql.Expression{pgsql.Identifier("depth")},
+			Having: pgsql.NewBinaryExpression(
+				pgsql.FunctionCall{Function: pgsql.FunctionCount, Parameters: []pgsql.Expression{pgsql.Wildcard{}}},
+				pgsql.OperatorGreaterThan,
+				pgsql.NewLiteral(int64(100), pgsql.Int8),
+			),
+		},
+	}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "select depth from frontier group by depth having count(*) > 100;", formattedQuery)
 }
 
 func TestFormat_LateralSubqueryJoin(t *testing.T) {
@@ -116,6 +148,27 @@ func TestFormat_LateralSubqueryJoin(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Equal(t, "select n.id, e.id from node n join lateral (select e.id from edge e where e.start_id = n.id offset 0) e on true;", formattedQuery)
+}
+
+// TestFormat_FunctionAggregateOrderBy verifies that aggregate input ordering renders inside the function call.
+func TestFormat_FunctionAggregateOrderBy(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{
+				pgsql.FunctionCall{
+					Function:   pgsql.FunctionArrayAggregate,
+					Parameters: []pgsql.Expression{pgsql.CompoundIdentifier{"edge", "id"}},
+					OrderBy: []*pgsql.OrderBy{{
+						Expression: pgsql.Identifier("ordinality"),
+						Ascending:  true,
+					}},
+				},
+			},
+		},
+	}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "select array_agg(edge.id order by ordinality);", formattedQuery)
 }
 
 func TestFormat_Delete(t *testing.T) {
@@ -662,6 +715,44 @@ func TestFormat_CTEs(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Equal(t, "with recursive expansion_1(root_id, next_id, depth, stop, is_cycle, path) as materialized (select r.start_id, r.end_id, 1, false, r.start_id = r.end_id, array [r.id] from edge r join node a on a.id = r.start_id where a.kind_ids operator (pg_catalog.&&) array [23]::int2[] union all select expansion_1.root_id, r.end_id, expansion_1.depth + 1, b.kind_ids operator (pg_catalog.&&) array [24]::int2[], r.id = any(expansion_1.path), expansion_1.path || r.id from expansion_1 join edge r on r.start_id = expansion_1.next_id join node b on b.id = r.end_id where not expansion_1.is_cycle and not expansion_1.stop) select a.properties, b.properties from expansion_1 join node a on a.id = expansion_1.root_id join node b on b.id = expansion_1.next_id where not expansion_1.is_cycle and expansion_1.stop;", formattedQuery)
+}
+
+// TestFormat_SetOperationParenthesizesQueryOperand verifies that a query operand retains its WITH clause under a set operation.
+func TestFormat_SetOperationParenthesizesQueryOperand(t *testing.T) {
+	formattedQuery, err := format.Statement(pgsql.Query{
+		Body: pgsql.SetOperation{
+			Operator: pgsql.OperatorUnion,
+			All:      true,
+			LOperand: pgsql.Select{
+				Projection: pgsql.Projection{mustAsLiteral(1)},
+			},
+			ROperand: pgsql.Query{
+				CommonTableExpressions: &pgsql.With{
+					Expressions: []pgsql.CommonTableExpression{{
+						Alias: pgsql.TableAlias{
+							Name: "value",
+						},
+						Query: pgsql.Query{
+							Body: pgsql.Select{
+								Projection: pgsql.Projection{mustAsLiteral(2)},
+							},
+						},
+					}},
+				},
+				Body: pgsql.Select{
+					Projection: pgsql.Projection{pgsql.Wildcard{}},
+					From: []pgsql.FromClause{{
+						Source: pgsql.TableReference{
+							Name: pgsql.CompoundIdentifier{"value"},
+						},
+					}},
+				},
+			},
+		},
+	}, format.NewOutputBuilder())
+
+	require.NoError(t, err)
+	require.Equal(t, "select 1 union all (with value as (select 2) select * from value);", formattedQuery)
 }
 
 func TestFormat_QueryInjection(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// strippedLiteral replaces literal values when emitting a privacy-preserving Cypher query.
 const strippedLiteral = "$STRIPPED"
 
 func writeJoinedKinds(output io.Writer, delimiter string, kinds graph.Kinds) error {
@@ -317,6 +318,7 @@ func (s Emitter) formatWhere(output io.Writer, whereClause *cypher.Where) error 
 	return nil
 }
 
+// formatMapLiteral renders a Cypher map literal with each property key escaped as needed.
 func (s Emitter) formatMapLiteral(output io.Writer, mapLiteral cypher.MapLiteral) error {
 	if _, err := io.WriteString(output, "{"); err != nil {
 		return err
@@ -446,6 +448,7 @@ func (s Emitter) formatLiteral(output io.Writer, literal *cypher.Literal) error 
 	return nil
 }
 
+// WriteExpression renders an expression and its nested operands as Cypher syntax.
 func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression) error {
 	switch typedExpression := expression.(type) {
 	case *cypher.ProjectionItem:

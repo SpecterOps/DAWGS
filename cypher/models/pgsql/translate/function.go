@@ -11,6 +11,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// legacyToIntegerFunction identifies the legacy spelling normalized to Cypher's toInteger function.
 const legacyToIntegerFunction = "toint"
 
 func SymbolsFor(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
@@ -27,6 +28,7 @@ func SymbolsFor(node pgsql.SyntaxNode) (*pgsql.SymbolTable, error) {
 	}))
 }
 
+// asFunctionCall unwraps parentheses and returns a PostgreSQL function call when expression contains one.
 func asFunctionCall(node pgsql.SyntaxNode) (pgsql.FunctionCall, bool) {
 	switch typedNode := node.(type) {
 	case pgsql.FunctionCall:
@@ -110,6 +112,7 @@ func ContainsAggregateFunction(node pgsql.SyntaxNode) (bool, error) {
 	}))
 }
 
+// appendIfReferencedGroupByExpression appends expression to GROUP BY only when it contains a binding reference.
 func appendIfReferencedGroupByExpression(groupByExpressions []pgsql.Expression, expression pgsql.Expression) ([]pgsql.Expression, error) {
 	if references, err := ExtractSyntaxNodeReferences(expression); err != nil {
 		return nil, err
@@ -120,6 +123,7 @@ func appendIfReferencedGroupByExpression(groupByExpressions []pgsql.Expression, 
 	}
 }
 
+// appendNonAggregateGroupByExpressions adds non-aggregate projection expressions required by PostgreSQL grouping rules.
 func appendNonAggregateGroupByExpressions(groupByExpressions []pgsql.Expression, expressions ...pgsql.Expression) ([]pgsql.Expression, error) {
 	for _, expression := range expressions {
 		nextGroupByExpressions, err := NonAggregateGroupByExpressions(expression)
@@ -272,6 +276,7 @@ func NonAggregateGroupByExpressions(expression pgsql.Expression) ([]pgsql.Expres
 	}
 }
 
+// bindingExpressionType returns the effective data type of a bound identifier expression.
 func bindingExpressionType(binding *BoundIdentifier) pgsql.DataType {
 	switch binding.DataType {
 	case pgsql.ExpansionEdge:
@@ -288,6 +293,7 @@ func bindingExpressionType(binding *BoundIdentifier) pgsql.DataType {
 	}
 }
 
+// inferRowColumnReferenceType infers a composite field's data type from the referenced binding and column.
 func inferRowColumnReferenceType(expression pgsql.RowColumnReference) pgsql.DataType {
 	switch expression.Column {
 	case pgsql.ColumnGraphID, pgsql.ColumnID, pgsql.ColumnStartID, pgsql.ColumnEndID:
@@ -313,6 +319,7 @@ func inferRowColumnReferenceType(expression pgsql.RowColumnReference) pgsql.Data
 	}
 }
 
+// inferExpressionType resolves an expression's SQL data type using scope information when needed.
 func (s *Translator) inferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	switch typedExpression := unwrapParenthetical(expression).(type) {
 	case pgsql.Identifier:
@@ -339,6 +346,7 @@ func (s *Translator) inferExpressionType(expression pgsql.Expression) (pgsql.Dat
 	return InferExpressionType(expression)
 }
 
+// inferArrayExpressionType resolves an array expression's element-derived PostgreSQL array type.
 func (s *Translator) inferArrayExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	if expressionType, err := s.inferExpressionType(expression); err != nil {
 		return pgsql.UnsetDataType, err
@@ -351,6 +359,7 @@ func (s *Translator) inferArrayExpressionType(expression pgsql.Expression) (pgsq
 	}
 }
 
+// expressionForPath returns the path representation carried by binding or reports that it cannot satisfy the requested use.
 func (s *Translator) expressionForPath(expression pgsql.Expression) (pgsql.Expression, error) {
 	switch typedExpression := unwrapParenthetical(expression).(type) {
 	case pgsql.Identifier:
@@ -378,6 +387,7 @@ func (s *Translator) expressionForPath(expression pgsql.Expression) (pgsql.Expre
 	}
 }
 
+// translateHeadFunction lowers head(list) to safe PostgreSQL array indexing.
 func (s *Translator) translateHeadFunction(functionInvocation *cypher.FunctionInvocation) error {
 	if functionInvocation.NumArguments() != 1 {
 		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
@@ -400,6 +410,7 @@ func (s *Translator) translateHeadFunction(functionInvocation *cypher.FunctionIn
 	return nil
 }
 
+// translateTailFunction lowers tail(list) to a PostgreSQL array slice that excludes the first element.
 func (s *Translator) translateTailFunction(functionInvocation *cypher.FunctionInvocation) error {
 	if functionInvocation.NumArguments() != 1 {
 		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
@@ -429,6 +440,7 @@ func (s *Translator) translateTailFunction(functionInvocation *cypher.FunctionIn
 	return nil
 }
 
+// cypherMinMaxFunction selects the Cypher-aware minimum or maximum SQL aggregate for the invocation name.
 func cypherMinMaxFunction(function pgsql.Identifier, argument pgsql.Expression) pgsql.FunctionCall {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(argument); isPropertyLookup {
 		propertyLookup.Operator = pgsql.OperatorJSONField
@@ -456,6 +468,7 @@ func cypherMinMaxFunction(function pgsql.Identifier, argument pgsql.Expression) 
 	}
 }
 
+// translatePathComponentFunction lowers nodes(path) or relationships(path) from the binding's carried path representation.
 func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.FunctionInvocation, column pgsql.Identifier, castType pgsql.DataType) error {
 	if functionInvocation.NumArguments() != 1 {
 		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
@@ -498,6 +511,86 @@ func (s *Translator) translatePathComponentFunction(functionInvocation *cypher.F
 	return nil
 }
 
+// translatePathLengthFunction lowers length(path) to the cardinality of carried ordered edge IDs when possible.
+func (s *Translator) translatePathLengthFunction(functionInvocation *cypher.FunctionInvocation) error {
+	if functionInvocation.NumArguments() != 1 {
+		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
+	}
+
+	argument, err := s.treeTranslator.PopOperand()
+	if err != nil {
+		return err
+	}
+
+	if literal, isLiteral := argument.(pgsql.Literal); isLiteral && literal.Null {
+		s.treeTranslator.PushOperand(pgsql.NewTypeCast(literal, pgsql.Int))
+		return nil
+	}
+
+	if identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier); isIdentifier {
+		binding, bound := s.scope.Lookup(identifier)
+		if !bound {
+			binding, bound = s.scope.AliasedLookup(identifier)
+		}
+		if !bound {
+			return fmt.Errorf("unable to resolve path identifier %s", identifier)
+		}
+		if binding.DistanceOnly {
+			var distance pgsql.Expression = binding.Identifier
+			if binding.LastProjection != nil {
+				distance = pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier}
+			} else {
+				for _, dependency := range binding.Dependencies {
+					if dependency.DistanceOnly && dependency.LastProjection != nil {
+						distance = pgsql.CompoundIdentifier{dependency.LastProjection.Binding.Identifier, dependency.Identifier}
+						break
+					}
+				}
+			}
+			s.treeTranslator.PushOperand(pgsql.NewTypeCast(distance, pgsql.Int))
+			return nil
+		}
+		if binding.DataType != pgsql.PathComposite {
+			return fmt.Errorf("expected path expression but received %s", binding.DataType)
+		}
+
+		var edges pgsql.Expression
+		if binding.LastProjection == nil {
+			edges, err = pathCompositeEdgeIDArrayExpression(s.scope, binding)
+		} else {
+			edges = pgsql.RowColumnReference{
+				Identifier: pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier},
+				Column:     pgsql.ColumnEdges,
+			}
+		}
+		if err != nil {
+			return err
+		}
+
+		s.treeTranslator.PushOperand(pgsql.FunctionCall{
+			Function:   pgsql.FunctionCardinality,
+			Parameters: []pgsql.Expression{edges},
+			CastType:   pgsql.Int,
+		})
+		return nil
+	}
+
+	pathExpression, err := s.expressionForPath(argument)
+	if err != nil {
+		return err
+	}
+	s.treeTranslator.PushOperand(pgsql.FunctionCall{
+		Function: pgsql.FunctionCardinality,
+		Parameters: []pgsql.Expression{pgsql.RowColumnReference{
+			Identifier: pathExpression,
+			Column:     pgsql.ColumnEdges,
+		}},
+		CastType: pgsql.Int,
+	})
+	return nil
+}
+
+// prepareCollectExpression prepares a value and result type for PostgreSQL array aggregation.
 func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression, functionName string) (pgsql.Expression, pgsql.DataType, error) {
 	castType := pgsql.AnyArray
 
@@ -529,6 +622,7 @@ func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression
 	return collectedExpression, castType, nil
 }
 
+// prepareCollectIDExpression extracts a scalar entity ID before collection and records the ID-only alias.
 func prepareCollectIDExpression(scope *Scope, collectedExpression pgsql.Expression) (pgsql.Expression, bool) {
 	identifier, isIdentifier := unwrapParenthetical(collectedExpression).(pgsql.Identifier)
 	if !isIdentifier {
@@ -551,6 +645,7 @@ func prepareCollectIDExpression(scope *Scope, collectedExpression pgsql.Expressi
 	}
 }
 
+// translateNodeLabelsExpression lowers labels(node) to kind-name lookup over the node's kind IDs.
 func translateNodeLabelsExpression(identifier pgsql.Identifier) pgsql.TypeHinted {
 	const (
 		kindAlias      pgsql.Identifier = "_kind"
@@ -602,6 +697,7 @@ func translateNodeLabelsExpression(identifier pgsql.Identifier) pgsql.TypeHinted
 	}, pgsql.TextArray)
 }
 
+// relationshipEndpointFunctionArgument expands a bound edge identifier to the composite accepted by startNode or endNode.
 func (s *Translator) relationshipEndpointFunctionArgument(argument pgsql.Expression) pgsql.Expression {
 	identifier, isIdentifier := unwrapParenthetical(argument).(pgsql.Identifier)
 	if !isIdentifier {
@@ -619,6 +715,7 @@ func (s *Translator) relationshipEndpointFunctionArgument(argument pgsql.Express
 	return argument
 }
 
+// translateRelationshipEndpointFunction lowers startNode or endNode with graph-scoped entity hydration.
 func (s *Translator) translateRelationshipEndpointFunction(function pgsql.Identifier, functionInvocation *cypher.FunctionInvocation) error {
 	if functionInvocation.NumArguments() != 1 {
 		return fmt.Errorf("expected only one argument for cypher function: %s", functionInvocation.Name)
@@ -637,6 +734,7 @@ func (s *Translator) translateRelationshipEndpointFunction(function pgsql.Identi
 	return nil
 }
 
+// translateFunction dispatches a Cypher function invocation to its function-specific PostgreSQL lowering.
 func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocation) {
 	switch formattedName := strings.ToLower(typedExpression.Name); formattedName {
 	case cypher.DurationFunction:
@@ -662,6 +760,8 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(err)
 		} else if referenceArgument, typeOK := argument.(pgsql.Identifier); !typeOK {
 			s.SetErrorf("expected an identifier for the cypher function: %s but received %T", typedExpression.Name, argument)
+		} else if binding, bound := s.scope.Lookup(referenceArgument); bound && binding.IDOnly && binding.LastProjection != nil {
+			s.treeTranslator.PushOperand(referenceArgument)
 		} else {
 			s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{referenceArgument, pgsql.ColumnID})
 		}
@@ -790,29 +890,37 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
 		} else {
-			var functionCall pgsql.FunctionCall
+			var sizeExpression pgsql.Expression
 
 			if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(argument); isPropertyLookup {
 				// Ensure that the JSONB array length function receives the JSONB type
 				propertyLookup.Operator = pgsql.OperatorJSONField
 
-				functionCall = pgsql.FunctionCall{
-					Function:   pgsql.FunctionJSONBArrayLength,
-					Parameters: []pgsql.Expression{argument},
-					CastType:   pgsql.Int,
+				sizeExpression = pgsql.Case{
+					Conditions: []pgsql.Expression{pgsql.NewBinaryExpression(
+						jsonbTypeof(argument),
+						pgsql.OperatorEquals,
+						pgsql.NewLiteral("array", pgsql.Text),
+					)},
+					Then: []pgsql.Expression{pgsql.FunctionCall{
+						Function:   pgsql.FunctionJSONBArrayLength,
+						Parameters: []pgsql.Expression{argument},
+						CastType:   pgsql.Int,
+					}},
+					Else: pgsql.NullLiteral(),
 				}
 			} else if isKnownEmptyArrayExpression(argument) {
 				s.treeTranslator.PushOperand(pgsql.NewLiteral(0, pgsql.Int))
 				return
 			} else {
-				functionCall = pgsql.FunctionCall{
+				sizeExpression = pgsql.FunctionCall{
 					Function:   pgsql.FunctionCardinality,
 					Parameters: []pgsql.Expression{argument},
 					CastType:   pgsql.Int,
 				}
 			}
 
-			s.treeTranslator.PushOperand(functionCall)
+			s.treeTranslator.PushOperand(sizeExpression)
 		}
 
 	case cypher.HeadFunction:
@@ -832,6 +940,11 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 
 	case cypher.RelationshipsFunction:
 		if err := s.translatePathComponentFunction(typedExpression, pgsql.ColumnEdges, pgsql.EdgeCompositeArray); err != nil {
+			s.SetError(err)
+		}
+
+	case cypher.PathLengthFunction:
+		if err := s.translatePathLengthFunction(typedExpression); err != nil {
 			s.SetError(err)
 		}
 
@@ -1001,6 +1114,7 @@ func functionWrapCollectToArray(distinct bool, collectedExpression pgsql.Express
 	}
 }
 
+// translateDateTimeFunctionCall lowers Cypher temporal constructors and validates supported argument forms.
 func (s *Translator) translateDateTimeFunctionCall(cypherFunc *cypher.FunctionInvocation, dataType pgsql.DataType) error {
 	// Ensure the local date time function uses the default precision
 	const defaultTimestampPrecision = 6
@@ -1068,6 +1182,7 @@ func (s *Translator) translateDateTimeFunctionCall(cypherFunc *cypher.FunctionIn
 	return nil
 }
 
+// translateCoalesceFunction lowers coalesce after reconciling every argument to one compatible result type.
 func (s *Translator) translateCoalesceFunction(functionInvocation *cypher.FunctionInvocation) error {
 	if numArgs := functionInvocation.NumArguments(); numArgs == 0 {
 		s.SetError(fmt.Errorf("expected at least one argument for cypher function: %s", functionInvocation.Name))

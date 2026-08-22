@@ -6,6 +6,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+// translateWith closes the current query part, projects WITH items, and opens the scope consumed by the next part.
 func (s *Translator) translateWith() error {
 	currentPart := s.query.CurrentPart()
 
@@ -14,6 +15,7 @@ func (s *Translator) translateWith() error {
 	} else {
 		var (
 			projectedItems = pgsql.NewIdentifierSet()
+			materialized   []*BoundIdentifier
 
 			// aggregatedItems contains a set of symbols of projected aggregate functions.
 			aggregatedItems = pgsql.NewSymbolTable()
@@ -124,8 +126,11 @@ func (s *Translator) translateWith() error {
 						currentPart.projections.Items[idx].Alias = pgsql.AsOptionalIdentifier(projectedBinding.Identifier)
 					}
 
-					// Assign the frame to the binding's last projection backref
-					projectedBinding.MaterializedBy(currentPart.Frame)
+					// Delay the back-reference update until every select item has
+					// been built. Path projections may depend on node bindings that
+					// appear earlier in a greedy WITH projection, and those
+					// dependencies must still reference the input frame here.
+					materialized = append(materialized, projectedBinding)
 
 					// Reveal and export the identifier in the current multipart query part's frame
 					currentPart.Frame.Reveal(projectedBinding.Identifier)
@@ -143,8 +148,7 @@ func (s *Translator) translateWith() error {
 						// Track this projected item for scope pruning
 						projectedItems.Add(binding.Identifier)
 
-						// Assign the frame to the binding's last projection backref
-						binding.LastProjection = currentPart.Frame
+						materialized = append(materialized, binding)
 
 						// Reveal and export the identifier in the current multipart query part's frame
 						currentPart.Frame.Reveal(binding.Identifier)
@@ -155,6 +159,9 @@ func (s *Translator) translateWith() error {
 					}
 				}
 			}
+		}
+		for _, binding := range materialized {
+			binding.MaterializedBy(currentPart.Frame)
 		}
 
 		if !aggregatedItems.IsEmpty() {

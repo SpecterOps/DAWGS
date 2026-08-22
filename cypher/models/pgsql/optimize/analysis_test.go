@@ -9,18 +9,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const adcsQuery = `
-MATCH (n:Group)
-WHERE n.objectid = 'S-1-5-21-2643190041-1319121918-239771340-513'
-MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
-WHERE ct.authenticationenabled = true
-AND ct.requiresmanagerapproval = false
-AND ct.enrolleesuppliessubject = true
-AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+// fixedSuffixExpansionQuery exercises one variable expansion followed by a three-edge typed suffix.
+const fixedSuffixExpansionQuery = `
+MATCH (root:ExpansionRoot)
+WHERE root.root_key = 'root'
+MATCH p1 = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+MATCH p2 = (root)-[:Expand*0..16]->()-[:OptionA|OptionB|OptionC]->(predicate:PredicateNode)-[:JoinSuffix]->(head)-[:HeadToBridge|HeadToAlternateBridge*1..16]->(:BridgeNode)-[:ReachTerminal]->(terminal)
+WHERE predicate.eligible = true
+AND predicate.requires_review = false
+AND predicate.allows_direct = true
+AND (predicate.version = 1 OR predicate.required_approvals = 0)
 RETURN p1, p2
 `
 
+// analyzeCypher parses query, runs optimizer analysis, and requires both stages to succeed.
 func analyzeCypher(t *testing.T, query string) Analysis {
 	t.Helper()
 
@@ -30,6 +32,7 @@ func analyzeCypher(t *testing.T, query string) Analysis {
 	return Analyze(regularQuery)
 }
 
+// requireBinding requires an analyzed binding with the expected symbol and kind.
 func requireBinding(t *testing.T, bindings []Binding, symbol string, kind BindingKind) {
 	t.Helper()
 
@@ -42,6 +45,7 @@ func requireBinding(t *testing.T, bindings []Binding, symbol string, kind Bindin
 	t.Fatalf("expected binding %s:%s in %#v", symbol, kind, bindings)
 }
 
+// requirePathVariable requires a path variable with the expected relationship count and range shape.
 func requirePathVariable(t *testing.T, pathVariables []PathVariable, symbol string, relationshipCount int, expectedVariableLength bool) {
 	t.Helper()
 
@@ -56,10 +60,11 @@ func requirePathVariable(t *testing.T, pathVariables []PathVariable, symbol stri
 	t.Fatalf("expected path variable %s in %#v", symbol, pathVariables)
 }
 
-func TestAnalyzeIdentifiesEligibleADCSRegion(t *testing.T) {
+// TestAnalyzeIdentifiesEligibleFixedSuffixExpansionRegion verifies that analysis isolates the variable expansion and its fixed suffix.
+func TestAnalyzeIdentifiesEligibleFixedSuffixExpansionRegion(t *testing.T) {
 	t.Parallel()
 
-	analysis := analyzeCypher(t, adcsQuery)
+	analysis := analyzeCypher(t, fixedSuffixExpansionQuery)
 
 	require.Len(t, analysis.QueryParts, 1)
 
@@ -77,13 +82,13 @@ func TestAnalyzeIdentifiesEligibleADCSRegion(t *testing.T) {
 	require.Len(t, region.Clauses, 3)
 	require.Len(t, region.BindingOccurrences, 10)
 	require.Len(t, region.Predicates, 2)
-	require.Equal(t, []string{"n"}, region.Predicates[0].Dependencies)
-	require.Equal(t, []string{"ct"}, region.Predicates[1].Dependencies)
+	require.Equal(t, []string{"root"}, region.Predicates[0].Dependencies)
+	require.Equal(t, []string{"predicate"}, region.Predicates[1].Dependencies)
 
-	requireBinding(t, region.Bindings, "n", BindingKindNode)
-	requireBinding(t, region.Bindings, "ca", BindingKindNode)
-	requireBinding(t, region.Bindings, "ct", BindingKindNode)
-	requireBinding(t, region.Bindings, "d", BindingKindNode)
+	requireBinding(t, region.Bindings, "root", BindingKindNode)
+	requireBinding(t, region.Bindings, "head", BindingKindNode)
+	requireBinding(t, region.Bindings, "predicate", BindingKindNode)
+	requireBinding(t, region.Bindings, "terminal", BindingKindNode)
 	requireBinding(t, region.Bindings, "p1", BindingKindPath)
 	requireBinding(t, region.Bindings, "p2", BindingKindPath)
 
@@ -132,18 +137,19 @@ func TestAnalyzeSegmentsRegionsAtSemanticBarriers(t *testing.T) {
 	require.Equal(t, []string{"m"}, secondPart.ProjectionDependencies)
 }
 
+// TestAnalysisDiagnosticsAreStable verifies that diagnostic ordering and query coordinates remain deterministic.
 func TestAnalysisDiagnosticsAreStable(t *testing.T) {
 	t.Parallel()
 
 	var (
-		analysis    = analyzeCypher(t, adcsQuery)
+		analysis    = analyzeCypher(t, fixedSuffixExpansionQuery)
 		diagnostics = strings.Join(analysis.Diagnostics(), "\n")
 	)
 
 	require.Contains(t, diagnostics, "query_part[0] kind=single projection_deps=p1,p2")
 	require.Contains(t, diagnostics, "region[0] part=0 clauses=0..2 matches=3")
-	require.Contains(t, diagnostics, "bindings=n:node,p1:path,ca:node,d:node,p2:path,ct:node")
+	require.Contains(t, diagnostics, "bindings=root:node,p1:path,head:node,terminal:node,p2:path,predicate:node")
 	require.Contains(t, diagnostics, "paths=p1,p2")
-	require.Contains(t, diagnostics, "predicates=n,ct")
+	require.Contains(t, diagnostics, "predicates=root,predicate")
 	require.Contains(t, diagnostics, "barrier[0] part=0 clause=3 kind=return deps=p1,p2")
 }

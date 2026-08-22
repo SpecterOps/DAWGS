@@ -1,9 +1,11 @@
 package translate
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
+	cypherFormat "github.com/specterops/dawgs/cypher/models/cypher/format"
 	"github.com/specterops/dawgs/cypher/models/walk"
 
 	"github.com/specterops/dawgs/cypher/models"
@@ -11,11 +13,16 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// BoundProjections pairs rendered select items with the identifiers they carry into the next frame.
 type BoundProjections struct {
-	Items    pgsql.Projection
+	// Items contains the SQL expressions emitted by the projection.
+	Items pgsql.Projection
+
+	// Bindings contains the scope bindings represented by Items.
 	Bindings []*BoundIdentifier
 }
 
+// rewriteConstraintIdentifierReferences resolves constraint bindings through the preceding projection frame.
 func rewriteConstraintIdentifierReferences(scope *Scope, frame *Frame, constraints []*Constraint) error {
 	if frame.Previous == nil {
 		return nil
@@ -30,6 +37,7 @@ func rewriteConstraintIdentifierReferences(scope *Scope, frame *Frame, constrain
 	return nil
 }
 
+// buildExternalProjection renders user-visible projection expressions and applies their requested aliases.
 func buildExternalProjection(scope *Scope, projections []*Projection) (pgsql.Projection, error) {
 	var sqlProjection pgsql.Projection
 
@@ -82,6 +90,7 @@ func buildExternalProjection(scope *Scope, projections []*Projection) (pgsql.Pro
 	return sqlProjection, nil
 }
 
+// buildInternalProjection renders each distinct bound identifier required by an internal frame.
 func buildInternalProjection(scope *Scope, projectedBindings []*BoundIdentifier) (BoundProjections, error) {
 	var (
 		boundProjections = BoundProjections{
@@ -113,6 +122,7 @@ func buildInternalProjection(scope *Scope, projectedBindings []*BoundIdentifier)
 	return boundProjections, nil
 }
 
+// buildVisibleProjections renders the bindings known to the current scope frame.
 func buildVisibleProjections(scope *Scope) (BoundProjections, error) {
 	currentFrame := scope.CurrentFrame()
 
@@ -123,7 +133,21 @@ func buildVisibleProjections(scope *Scope) (BoundProjections, error) {
 	}
 }
 
+// buildProjectionForExpansionPath projects an expansion's distance or accumulated edge-identifier path.
 func buildProjectionForExpansionPath(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.DistanceOnly {
+		reference := scope.CurrentFrame().Binding.Identifier
+		column := expansionDepth
+		if projected.LastProjection != nil {
+			reference = referenceFrame.Binding.Identifier
+			column = projected.Identifier
+		}
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{reference, column},
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
@@ -141,6 +165,7 @@ func buildProjectionForExpansionPath(alias pgsql.Identifier, projected *BoundIde
 	}, nil
 }
 
+// concatenatePathCompositeParts joins ordered path fragments into one array expression.
 func concatenatePathCompositeParts(parts []pgsql.Expression) pgsql.Expression {
 	if len(parts) == 0 {
 		return nil
@@ -154,6 +179,7 @@ func concatenatePathCompositeParts(parts []pgsql.Expression) pgsql.Expression {
 	return joined
 }
 
+// bindingFrameReference returns the qualified reference to a binding in its latest projection frame.
 func bindingFrameReference(scope *Scope, binding *BoundIdentifier) pgsql.CompoundIdentifier {
 	frameIdentifier := scope.CurrentFrameBinding().Identifier
 	if binding.LastProjection != nil {
@@ -163,6 +189,7 @@ func bindingFrameReference(scope *Scope, binding *BoundIdentifier) pgsql.Compoun
 	return pgsql.CompoundIdentifier{frameIdentifier, binding.Identifier}
 }
 
+// pathBindingReference resolves a path binding against its latest available frame.
 func pathBindingReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
 	if binding.LastProjection != nil {
 		return pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier}
@@ -175,6 +202,7 @@ func pathBindingReference(scope *Scope, binding *BoundIdentifier) pgsql.Expressi
 	return binding.Identifier
 }
 
+// pathCompositeReference returns a projected path value or constructs a composite from table columns.
 func pathCompositeReference(scope *Scope, binding *BoundIdentifier, columns []pgsql.Identifier) pgsql.Expression {
 	if binding.LastProjection != nil || scope.CurrentFrameBinding() != nil {
 		return pathBindingReference(scope, binding)
@@ -191,6 +219,7 @@ func pathCompositeReference(scope *Scope, binding *BoundIdentifier, columns []pg
 	}
 }
 
+// edgeCompositeValue constructs an edge composite from a table alias or row-valued expression.
 func edgeCompositeValue(expression pgsql.Expression) pgsql.CompositeValue {
 	value := pgsql.CompositeValue{
 		DataType: pgsql.EdgeComposite,
@@ -211,6 +240,7 @@ func edgeCompositeValue(expression pgsql.Expression) pgsql.CompositeValue {
 	return value
 }
 
+// pathCompositeColumnReference addresses a column of either a projected path composite or its source table.
 func pathCompositeColumnReference(scope *Scope, binding *BoundIdentifier, column pgsql.Identifier) pgsql.Expression {
 	if binding.LastProjection != nil || scope.CurrentFrameBinding() != nil {
 		return pgsql.RowColumnReference{
@@ -222,6 +252,7 @@ func pathCompositeColumnReference(scope *Scope, binding *BoundIdentifier, column
 	return pgsql.CompoundIdentifier{binding.Identifier, column}
 }
 
+// pathEdgeIDReference resolves the identifier of an edge used as a path component.
 func pathEdgeIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expression {
 	if binding.LastProjection != nil || scope.CurrentFrameBinding() != nil {
 		return pathBindingReference(scope, binding)
@@ -230,23 +261,30 @@ func pathEdgeIDReference(scope *Scope, binding *BoundIdentifier) pgsql.Expressio
 	return pgsql.CompoundIdentifier{binding.Identifier, pgsql.ColumnID}
 }
 
-func pathEdgeArrayExpression(scope *Scope, edge *BoundIdentifier) pgsql.Expression {
+// edgeArrayFromPathIDs creates a graph-scoped edge-array materializer for ordered edge identifiers.
+func edgeArrayFromPathIDs(scope *Scope, pathIDs pgsql.Expression) *pgsql.EdgeArrayFromPathIDs {
 	return &pgsql.EdgeArrayFromPathIDs{
-		PathIDs: pgsql.ArrayLiteral{
-			Values: []pgsql.Expression{
-				pathEdgeIDReference(scope, edge),
-			},
-			CastType: pgsql.Int8Array,
-		},
+		PathIDs: pathIDs,
+		GraphID: pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
 	}
 }
 
-func expansionPathEdgeArrayExpression(scope *Scope, expansionPath *BoundIdentifier) (pgsql.Expression, error) {
-	return &pgsql.EdgeArrayFromPathIDs{
-		PathIDs: pathBindingReference(scope, expansionPath),
-	}, nil
+// pathEdgeArrayExpression materializes one path-edge binding as an edge-composite array.
+func pathEdgeArrayExpression(scope *Scope, edge *BoundIdentifier) pgsql.Expression {
+	return edgeArrayFromPathIDs(scope, pgsql.ArrayLiteral{
+		Values: []pgsql.Expression{
+			pathEdgeIDReference(scope, edge),
+		},
+		CastType: pgsql.Int8Array,
+	})
 }
 
+// expansionPathEdgeArrayExpression materializes an expansion's edge-identifier path as edge composites.
+func expansionPathEdgeArrayExpression(scope *Scope, expansionPath *BoundIdentifier) (pgsql.Expression, error) {
+	return edgeArrayFromPathIDs(scope, pathBindingReference(scope, expansionPath)), nil
+}
+
+// optionalOr combines two predicates while treating a nil operand as absent.
 func optionalOr(leftOperand, rightOperand pgsql.Expression) pgsql.Expression {
 	if leftOperand == nil {
 		return rightOperand
@@ -257,17 +295,19 @@ func optionalOr(leftOperand, rightOperand pgsql.Expression) pgsql.Expression {
 	return pgsql.NewBinaryExpression(leftOperand, pgsql.OperatorOr, rightOperand)
 }
 
+// expressionIsNull builds an SQL null test for an expression.
 func expressionIsNull(expression pgsql.Expression) pgsql.Expression {
 	return pgsql.NewBinaryExpression(expression, pgsql.OperatorIs, pgsql.NullLiteral())
 }
 
+// pathCompositeDependencyNullGuard returns the null test appropriate for a path component binding.
 func pathCompositeDependencyNullGuard(scope *Scope, dependency *BoundIdentifier) pgsql.Expression {
 	if dependency == nil {
 		return nil
 	}
 
 	switch dependency.DataType {
-	case pgsql.ExpansionPath:
+	case pgsql.ExpansionPath, pgsql.PathComposite:
 		return expressionIsNull(pathBindingReference(scope, dependency))
 
 	case pgsql.EdgeComposite:
@@ -284,6 +324,7 @@ func pathCompositeDependencyNullGuard(scope *Scope, dependency *BoundIdentifier)
 	}
 }
 
+// nullGuardPathCompositeExpression yields SQL null instead of constructing a path when a dependency is null.
 func nullGuardPathCompositeExpression(expression, nullGuard pgsql.Expression) pgsql.Expression {
 	if nullGuard == nil {
 		return expression
@@ -305,6 +346,7 @@ func reversePathCompositeExpressions(expressions []pgsql.Expression) {
 	}
 }
 
+// expressionForPathComposite assembles a path value from complete paths, node composites, and ordered edge components.
 func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql.Expression, error) {
 	if projected.LastProjection != nil {
 		return pgsql.CompoundIdentifier{projected.LastProjection.Binding.Identifier, projected.Identifier}, nil
@@ -315,10 +357,26 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		nodeReferences       []pgsql.Expression
 		directNodeReferences []pgsql.Expression
 		directEdgeReferences []pgsql.Expression
+		allRawPathIDParts    []pgsql.Expression
 		seenExpansionPath    = false
 		seenPathEdge         = false
+		seenDirectEdge       = false
+		directPath           pgsql.Expression
 		nullGuard            pgsql.Expression
+		pendingPathIDParts   []pgsql.Expression
 	)
+
+	flushPathIDParts := func() {
+		if len(pendingPathIDParts) == 0 {
+			return
+		}
+
+		edgeArrayReferences = append(edgeArrayReferences, edgeArrayFromPathIDs(
+			scope,
+			concatenatePathCompositeParts(pendingPathIDParts),
+		))
+		pendingPathIDParts = nil
+	}
 
 	// Path composite components are encoded as dependencies on the bound identifier representing the
 	// path. This is not ideal as it escapes normal translation flow as driven by the structure of the
@@ -327,15 +385,21 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		nullGuard = optionalOr(nullGuard, pathCompositeDependencyNullGuard(scope, dependency))
 
 		switch dependency.DataType {
+		case pgsql.PathComposite:
+			if directPath != nil {
+				return nil, fmt.Errorf("path rendering contains multiple complete path dependencies")
+			}
+			directPath = pathBindingReference(scope, dependency)
+
 		case pgsql.ExpansionPath:
 			seenExpansionPath = true
-			if edgeArrayReference, err := expansionPathEdgeArrayExpression(scope, dependency); err != nil {
-				return nil, err
-			} else {
-				edgeArrayReferences = append(edgeArrayReferences, edgeArrayReference)
-			}
+			pathIDs := pathBindingReference(scope, dependency)
+			pendingPathIDParts = append(pendingPathIDParts, pathIDs)
+			allRawPathIDParts = append(allRawPathIDParts, pathIDs)
 
 		case pgsql.EdgeComposite:
+			seenDirectEdge = true
+			flushPathIDParts()
 			directEdgeReference := pathCompositeReference(scope, dependency, pgsql.EdgeTableColumns)
 
 			directEdgeReferences = append(directEdgeReferences, directEdgeReference)
@@ -346,7 +410,12 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 
 		case pgsql.PathEdge:
 			seenPathEdge = true
-			edgeArrayReferences = append(edgeArrayReferences, pathEdgeArrayExpression(scope, dependency))
+			pathIDs := pgsql.ArrayLiteral{
+				Values:   []pgsql.Expression{pathEdgeIDReference(scope, dependency)},
+				CastType: pgsql.Int8Array,
+			}
+			pendingPathIDParts = append(pendingPathIDParts, pathIDs)
+			allRawPathIDParts = append(allRawPathIDParts, pathIDs)
 
 		case pgsql.NodeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode:
 			directNodeReferences = append(directNodeReferences, pathCompositeReference(scope, dependency, pgsql.NodeTableColumns))
@@ -355,6 +424,13 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		default:
 			return nil, fmt.Errorf("unsupported type for path rendering: %s", dependency.DataType)
 		}
+	}
+	flushPathIDParts()
+	if directPath != nil {
+		if seenExpansionPath || seenPathEdge || seenDirectEdge {
+			return nil, fmt.Errorf("complete path dependency cannot be mixed with edge path components")
+		}
+		return nullGuardPathCompositeExpression(directPath, nullGuard), nil
 	}
 
 	// The optimizer reversed the originating pattern so the traversal could be driven from the
@@ -394,6 +470,34 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 			return nil, fmt.Errorf("expansion path %s does not contain a root node reference", projected.Identifier)
 		}
 
+		knownNodes := pgsql.ArrayLiteral{
+			Values:   directNodeReferences,
+			CastType: pgsql.NodeCompositeArray,
+		}
+
+		// Read expansions carry edge IDs in path order. When every edge
+		// component is still an ID, let the graph-scoped linear materializer
+		// hydrate and walk the stream once. A direct edge composite indicates a
+		// mixed or mutation-returning path and retains the conservative generic
+		// materializer below.
+		if !seenDirectEdge {
+			pathIDs := concatenatePathCompositeParts(allRawPathIDParts)
+			if pathIDs == nil {
+				pathIDs = pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+			}
+
+			return nullGuardPathCompositeExpression(pgsql.FunctionCall{
+				Function: pgsql.FunctionOrderedEdgeIDsToPath,
+				Parameters: []pgsql.Expression{
+					pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
+					directNodeReferences[0],
+					pathIDs,
+					knownNodes,
+				},
+				CastType: pgsql.PathComposite,
+			}, nullGuard), nil
+		}
+
 		edgeArrayExpression := concatenatePathCompositeParts(edgeArrayReferences)
 		if edgeArrayExpression == nil {
 			edgeArrayExpression = pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}
@@ -402,12 +506,10 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		return nullGuardPathCompositeExpression(pgsql.FunctionCall{
 			Function: pgsql.FunctionOrderedEdgesToPath,
 			Parameters: []pgsql.Expression{
+				pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
 				directNodeReferences[0],
 				edgeArrayExpression,
-				pgsql.ArrayLiteral{
-					Values:   directNodeReferences,
-					CastType: pgsql.NodeCompositeArray,
-				},
+				knownNodes,
 			},
 			CastType: pgsql.PathComposite,
 		}, nullGuard), nil
@@ -415,6 +517,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 		return nullGuardPathCompositeExpression(pgsql.FunctionCall{
 			Function: pgsql.FunctionNodesToPath,
 			Parameters: []pgsql.Expression{
+				pgsql.NewLiteral(scope.GraphID(), pgsql.Int4),
 				pgsql.Variadic{
 					Expression: pgsql.ArrayLiteral{
 						Values:   nodeReferences,
@@ -429,7 +532,21 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 	return nil, fmt.Errorf("path variable does not contain valid components")
 }
 
+// buildProjectionForPathComposite projects either a path's distance or its assembled composite value.
 func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
+	if projected.DistanceOnly {
+		reference := scope.CurrentFrame().Binding.Identifier
+		column := expansionDepth
+		if projected.LastProjection != nil {
+			reference = projected.LastProjection.Binding.Identifier
+			column = projected.Identifier
+		}
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{reference, column},
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if expression, err := expressionForPathComposite(projected, scope); err != nil {
 		return nil, err
 	} else {
@@ -442,7 +559,20 @@ func buildProjectionForPathComposite(alias pgsql.Identifier, projected *BoundIde
 	}
 }
 
+// buildProjectionForExpansionNode projects an expansion endpoint as an identifier or hydrated node composite.
 func buildProjectionForExpansionNode(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.IDOnly {
+		var expression pgsql.Expression = pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID}
+		if projected.LastProjection != nil {
+			expression = pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier}
+		}
+
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: expression,
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
@@ -472,7 +602,20 @@ func buildProjectionForExpansionNode(alias pgsql.Identifier, projected *BoundIde
 	}, nil
 }
 
+// buildProjectionForNodeComposite projects an existing node binding as an identifier or node composite.
 func buildProjectionForNodeComposite(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.IDOnly {
+		var expression pgsql.Expression = pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID}
+		if projected.LastProjection != nil {
+			expression = pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier}
+		}
+
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: expression,
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
 			&pgsql.AliasedExpression{
@@ -499,6 +642,7 @@ func buildProjectionForNodeComposite(alias pgsql.Identifier, projected *BoundIde
 	}, nil
 }
 
+// buildProjectionForExpansionEdge materializes an expansion path's edge identifiers as edge composites.
 func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
 	// Change the type to the edge composite now that this is projected
 	projected.DataType = pgsql.EdgeComposite
@@ -506,17 +650,16 @@ func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIde
 	// Create a new final projection that's aliased to the visible binding's identifier
 	return []pgsql.SelectItem{
 		&pgsql.AliasedExpression{
-			Expression: &pgsql.EdgeArrayFromPathIDs{
-				PathIDs: pgsql.CompoundIdentifier{
-					scope.CurrentFrame().Binding.Identifier,
-					pgsql.ColumnPath,
-				},
-			},
+			Expression: edgeArrayFromPathIDs(scope, pgsql.CompoundIdentifier{
+				scope.CurrentFrame().Binding.Identifier,
+				pgsql.ColumnPath,
+			}),
 			Alias: pgsql.AsOptionalIdentifier(alias),
 		},
 	}, nil
 }
 
+// buildProjectionForEdgeComposite projects an edge binding from its latest frame or source columns.
 func buildProjectionForEdgeComposite(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
 	if projected.LastProjection != nil {
 		return []pgsql.SelectItem{
@@ -536,6 +679,7 @@ func buildProjectionForEdgeComposite(alias pgsql.Identifier, projected *BoundIde
 	}, nil
 }
 
+// buildProjectionForPathEdge projects the identifier carried by a single-edge path component.
 func buildProjectionForPathEdge(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
 	var expression pgsql.Expression
 
@@ -557,7 +701,21 @@ func buildProjectionForPathEdge(alias pgsql.Identifier, projected *BoundIdentifi
 	}, nil
 }
 
+// buildProjection dispatches a bound identifier to the projection form required by its data type.
 func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	if projected.DistanceOnly {
+		reference := scope.CurrentFrame().Binding.Identifier
+		column := expansionDepth
+		if projected.LastProjection != nil {
+			reference = referenceFrame.Binding.Identifier
+			column = projected.Identifier
+		}
+		return []pgsql.SelectItem{&pgsql.AliasedExpression{
+			Expression: pgsql.CompoundIdentifier{reference, column},
+			Alias:      pgsql.AsOptionalIdentifier(alias),
+		}}, nil
+	}
+
 	switch projected.DataType {
 	case pgsql.ExpansionPath:
 		return buildProjectionForExpansionPath(alias, projected, scope, referenceFrame)
@@ -598,6 +756,7 @@ func buildProjection(alias pgsql.Identifier, projected *BoundIdentifier, scope *
 	}
 }
 
+// buildInlineProjection renders a query part's prepared expressions directly into a select statement.
 func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error) {
 	sqlSelect := pgsql.Select{
 		Distinct: part.projections.Distinct,
@@ -659,6 +818,7 @@ func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error
 	return sqlSelect, nil
 }
 
+// collectProjectionFromFrames collects the frame sources required by projected bindings and path dependencies.
 func (s *Translator) collectProjectionFromFrames(projections []*Projection) []pgsql.FromClause {
 	fromClauseBuilder := NewFromClauseBuilder()
 
@@ -691,6 +851,7 @@ func (s *Translator) collectProjectionFromFrames(projections []*Projection) []pg
 	return fromClauseBuilder.Clauses()
 }
 
+// countLimitPushdownShortestPathHarnessCalls counts eligible shortest-path harness calls throughout a query's CTE tree.
 func countLimitPushdownShortestPathHarnessCalls(query pgsql.Query) int {
 	var count int
 
@@ -712,10 +873,12 @@ func countLimitPushdownShortestPathHarnessCalls(query pgsql.Query) int {
 	return count
 }
 
+// isLimitPushdownShortestPathHarness reports whether a function accepts the shortest-path limit parameter.
 func isLimitPushdownShortestPathHarness(function pgsql.Identifier) bool {
 	return function == pgsql.FunctionUnidirectionalSPHarness || function == pgsql.FunctionBidirectionalSPHarness
 }
 
+// appendLimitToShortestPathHarness passes a limit to each eligible harness and bounds its containing function scan.
 func appendLimitToShortestPathHarness(query *pgsql.Query, limit pgsql.Expression) {
 	if query.CommonTableExpressions != nil {
 		for idx := range query.CommonTableExpressions.Expressions {
@@ -724,6 +887,7 @@ func appendLimitToShortestPathHarness(query *pgsql.Query, limit pgsql.Expression
 	}
 
 	if selectBody, isSelect := query.Body.(pgsql.Select); isSelect {
+		containsHarness := false
 		for idx := range selectBody.From {
 			if functionCall, isFunctionCall := selectBody.From[idx].Source.(pgsql.FunctionCall); isFunctionCall &&
 				isLimitPushdownShortestPathHarness(functionCall.Function) {
@@ -732,13 +896,22 @@ func appendLimitToShortestPathHarness(query *pgsql.Query, limit pgsql.Expression
 				// outer query will discard.
 				functionCall.Parameters = append(functionCall.Parameters, pgsql.NewTypeCast(limit, pgsql.Int8))
 				selectBody.From[idx].Source = functionCall
+				containsHarness = true
 			}
 		}
 
 		query.Body = selectBody
+		if containsHarness {
+			// Keep the internal limit so the BFS can stop early, and also bound
+			// the containing FunctionScan so downstream planning sees the same
+			// cardinality ceiling. In particular, LIMIT 0 must prevent invoking
+			// the harness because the harness uses zero to mean "unlimited".
+			query.Limit = limit
+		}
 	}
 }
 
+// selectContainsAggregate reports whether a select body contains an aggregate function call.
 func selectContainsAggregate(selectBody pgsql.Select) bool {
 	containsAggregate := false
 
@@ -753,6 +926,7 @@ func selectContainsAggregate(selectBody pgsql.Select) bool {
 	return containsAggregate
 }
 
+// compoundIdentifierEqual reports whether two qualified identifiers contain the same components.
 func compoundIdentifierEqual(left, right pgsql.CompoundIdentifier) bool {
 	if len(left) != len(right) {
 		return false
@@ -767,6 +941,7 @@ func compoundIdentifierEqual(left, right pgsql.CompoundIdentifier) bool {
 	return true
 }
 
+// directShortestPathHarnessFrame returns the sole CTE that directly invokes an eligible shortest-path harness.
 func directShortestPathHarnessFrame(query pgsql.Query) (pgsql.Identifier, bool) {
 	if query.CommonTableExpressions == nil {
 		return "", false
@@ -795,11 +970,13 @@ func directShortestPathHarnessFrame(query pgsql.Query) (pgsql.Identifier, bool) 
 	return harnessFrame, harnessFrame != ""
 }
 
+// isCompoundIdentifierOperand reports whether an expression is the requested qualified identifier.
 func isCompoundIdentifierOperand(expression pgsql.Expression, identifier pgsql.CompoundIdentifier) bool {
 	compoundIdentifier, isCompoundIdentifier := unwrapParenthetical(expression).(pgsql.CompoundIdentifier)
 	return isCompoundIdentifier && compoundIdentifierEqual(compoundIdentifier, identifier)
 }
 
+// isEqualityBetweenCompoundIdentifiers recognizes equality between two qualified identifiers in either order.
 func isEqualityBetweenCompoundIdentifiers(expression pgsql.Expression, left, right pgsql.CompoundIdentifier) bool {
 	binaryExpression, isBinaryExpression := unwrapParenthetical(expression).(*pgsql.BinaryExpression)
 	if !isBinaryExpression || binaryExpression.Operator != pgsql.OperatorEquals {
@@ -810,6 +987,7 @@ func isEqualityBetweenCompoundIdentifiers(expression pgsql.Expression, left, rig
 		(isCompoundIdentifierOperand(binaryExpression.LOperand, right) && isCompoundIdentifierOperand(binaryExpression.ROperand, left))
 }
 
+// expansionEndpointJoin identifies a node-table join to the root or terminal column of a harness frame.
 func expansionEndpointJoin(join pgsql.Join, harnessFrame pgsql.Identifier) (pgsql.Identifier, pgsql.Identifier, bool) {
 	tableReference, isTableReference := join.Table.(pgsql.TableReference)
 	if !isTableReference ||
@@ -836,6 +1014,7 @@ func expansionEndpointJoin(join pgsql.Join, harnessFrame pgsql.Identifier) (pgsq
 	return "", "", false
 }
 
+// shortestPathEndpointAliases finds distinct node aliases joined to a shortest-path harness's root and terminal columns.
 func shortestPathEndpointAliases(query pgsql.Query) (pgsql.Identifier, pgsql.Identifier, bool) {
 	harnessFrame, hasHarnessFrame := directShortestPathHarnessFrame(query)
 	if !hasHarnessFrame {
@@ -865,6 +1044,7 @@ func shortestPathEndpointAliases(query pgsql.Query) (pgsql.Identifier, pgsql.Ide
 	return rootAlias, terminalAlias, rootAlias != "" && terminalAlias != "" && rootAlias != terminalAlias
 }
 
+// harnessEndpointColumn recognizes a root or terminal identifier column belonging to a harness frame.
 func harnessEndpointColumn(expression pgsql.Expression, harnessFrame pgsql.Identifier) (pgsql.Identifier, bool) {
 	compoundIdentifier, isCompoundIdentifier := unwrapParenthetical(expression).(pgsql.CompoundIdentifier)
 	if !isCompoundIdentifier ||
@@ -877,6 +1057,7 @@ func harnessEndpointColumn(expression pgsql.Expression, harnessFrame pgsql.Ident
 	return compoundIdentifier[1], true
 }
 
+// rowIDReferenceAlias extracts the row alias named by a composite identifier-field reference.
 func rowIDReferenceAlias(expression pgsql.Expression) (pgsql.Identifier, bool) {
 	rowColumnReference, isRowColumnReference := unwrapParenthetical(expression).(pgsql.RowColumnReference)
 	if !isRowColumnReference || rowColumnReference.Column != pgsql.ColumnID {
@@ -891,6 +1072,7 @@ func rowIDReferenceAlias(expression pgsql.Expression) (pgsql.Identifier, bool) {
 	return compoundIdentifier[1], true
 }
 
+// sourceAliasMatchesEndpointColumn reports whether a source alias corresponds to a harness endpoint column.
 func sourceAliasMatchesEndpointColumn(sourceAlias, endpointColumn, rootAlias, terminalAlias pgsql.Identifier) bool {
 	switch endpointColumn {
 	case expansionRootID:
@@ -902,6 +1084,7 @@ func sourceAliasMatchesEndpointColumn(sourceAlias, endpointColumn, rootAlias, te
 	}
 }
 
+// isBoundEndpointProjectionConstraint recognizes a shape-preserving equality between a harness endpoint and its node alias.
 func isBoundEndpointProjectionConstraint(expression pgsql.Expression, harnessFrame, rootAlias, terminalAlias pgsql.Identifier) bool {
 	binaryExpression, isBinaryExpression := unwrapParenthetical(expression).(*pgsql.BinaryExpression)
 	if !isBinaryExpression || binaryExpression.Operator != pgsql.OperatorEquals {
@@ -917,6 +1100,7 @@ func isBoundEndpointProjectionConstraint(expression pgsql.Expression, harnessFra
 		(rightIsEndpoint && leftIsRowIDReference && sourceAliasMatchesEndpointColumn(leftSourceAlias, rightEndpointColumn, rootAlias, terminalAlias))
 }
 
+// shortestPathSourceWhereTransparent reports whether a source CTE filters only by endpoint projection equalities.
 func shortestPathSourceWhereTransparent(query pgsql.Query, rootAlias, terminalAlias pgsql.Identifier) bool {
 	harnessFrame, hasHarnessFrame := directShortestPathHarnessFrame(query)
 	if !hasHarnessFrame {
@@ -944,6 +1128,7 @@ func shortestPathSourceWhereTransparent(query pgsql.Query, rootAlias, terminalAl
 	return true
 }
 
+// endpointIDReference extracts an endpoint alias from an identifier-field reference in the source frame.
 func endpointIDReference(expression pgsql.Expression, sourceFrame pgsql.Identifier) (pgsql.Identifier, bool) {
 	rowColumnReference, isRowColumnReference := unwrapParenthetical(expression).(pgsql.RowColumnReference)
 	compoundIdentifier, isCompoundIdentifier := unwrapParenthetical(rowColumnReference.Identifier).(pgsql.CompoundIdentifier)
@@ -958,11 +1143,13 @@ func endpointIDReference(expression pgsql.Expression, sourceFrame pgsql.Identifi
 	return compoundIdentifier[1], true
 }
 
+// isEndpointAliasPair reports whether two aliases are the root and terminal aliases in either order.
 func isEndpointAliasPair(leftAlias, rightAlias, rootAlias, terminalAlias pgsql.Identifier) bool {
 	return (leftAlias == rootAlias && rightAlias == terminalAlias) ||
 		(leftAlias == terminalAlias && rightAlias == rootAlias)
 }
 
+// isEndpointInequality recognizes a non-equality predicate between the source frame's root and terminal identifiers.
 func isEndpointInequality(expression pgsql.Expression, sourceFrame, rootAlias, terminalAlias pgsql.Identifier) bool {
 	binaryExpression, isBinaryExpression := unwrapParenthetical(expression).(*pgsql.BinaryExpression)
 	if !isBinaryExpression ||
@@ -976,6 +1163,7 @@ func isEndpointInequality(expression pgsql.Expression, sourceFrame, rootAlias, t
 	return hasLeftAlias && hasRightAlias && isEndpointAliasPair(leftAlias, rightAlias, rootAlias, terminalAlias)
 }
 
+// shortestPathLimitPushdownTransparentWhere permits only the endpoint anti-reflexive predicate above a transparent source CTE.
 func shortestPathLimitPushdownTransparentWhere(currentPart *QueryPart, sourceFrame pgsql.Identifier, where pgsql.Expression) bool {
 	if where == nil {
 		return true
@@ -1003,6 +1191,7 @@ func shortestPathLimitPushdownTransparentWhere(currentPart *QueryPart, sourceFra
 	return true
 }
 
+// limitPushdownTailSource returns the sole pass-through source CTE when the tail select preserves limit semantics.
 func limitPushdownTailSource(currentPart *QueryPart, tailSelect pgsql.Select) (pgsql.Identifier, bool) {
 	// Keep this intentionally narrow: LIMIT can move into the harness only when
 	// the tail SELECT is a simple pass-through over one shortest-path CTE. Sorts,
@@ -1047,6 +1236,7 @@ func limitPushdownTailSource(currentPart *QueryPart, tailSelect pgsql.Select) (p
 	return sourceFrame, true
 }
 
+// pushDownShortestPathLimit moves an outer limit into a single eligible shortest-path harness call.
 func pushDownShortestPathLimit(currentPart *QueryPart, tailSelect pgsql.Select) bool {
 	sourceFrame, canPushDown := limitPushdownTailSource(currentPart, tailSelect)
 	if !canPushDown {
@@ -1065,6 +1255,7 @@ func pushDownShortestPathLimit(currentPart *QueryPart, tailSelect pgsql.Select) 
 	return false
 }
 
+// findCTE returns the named top-level common table expression, if present.
 func findCTE(query *pgsql.Query, cteName pgsql.Identifier) *pgsql.CommonTableExpression {
 	if query.CommonTableExpressions == nil {
 		return nil
@@ -1081,6 +1272,7 @@ func findCTE(query *pgsql.Query, cteName pgsql.Identifier) *pgsql.CommonTableExp
 	return nil
 }
 
+// applyLimitToCTE assigns a limit to the named common table expression.
 func applyLimitToCTE(query *pgsql.Query, cteName pgsql.Identifier, limit pgsql.Expression) bool {
 	if cte := findCTE(query, cteName); cte != nil {
 		cte.Query.Limit = limit
@@ -1090,6 +1282,7 @@ func applyLimitToCTE(query *pgsql.Query, cteName pgsql.Identifier, limit pgsql.E
 	return false
 }
 
+// pushDownTraversalLimit moves an outer limit to a semantically transparent traversal CTE.
 func pushDownTraversalLimit(currentPart *QueryPart, tailSelect pgsql.Select) bool {
 	sourceFrame, canPushDown := limitPushdownTailSource(currentPart, tailSelect)
 	if !canPushDown || !currentPart.CanPushDownLimitTo(sourceFrame) {
@@ -1099,6 +1292,7 @@ func pushDownTraversalLimit(currentPart *QueryPart, tailSelect pgsql.Select) boo
 	return applyLimitToCTE(currentPart.Model, sourceFrame, currentPart.Limit)
 }
 
+// projectionAliasBindings maps internal binding identifiers to their visible projection aliases.
 func projectionAliasBindings(scope *Scope, projections []*Projection) map[pgsql.Identifier]pgsql.Identifier {
 	aliases := map[pgsql.Identifier]pgsql.Identifier{}
 
@@ -1115,6 +1309,7 @@ func projectionAliasBindings(scope *Scope, projections []*Projection) map[pgsql.
 	return aliases
 }
 
+// rewriteOrderByProjectionAlias replaces an internal ORDER BY identifier with its visible projection alias.
 func rewriteOrderByProjectionAlias(orderBy *pgsql.OrderBy, aliases map[pgsql.Identifier]pgsql.Identifier) {
 	identifier, isIdentifier := orderBy.Expression.(pgsql.Identifier)
 	if !isIdentifier {
@@ -1126,21 +1321,32 @@ func rewriteOrderByProjectionAlias(orderBy *pgsql.OrderBy, aliases map[pgsql.Ide
 	}
 }
 
+// pathCompositeReferenceCount records how a path and each of its component arrays are reused by a projection stage.
 type pathCompositeReferenceCount struct {
+	// binding is the unmaterialized path binding being counted.
 	binding *BoundIdentifier
-	full    int
-	nodes   int
-	edges   int
+
+	// full counts references to the complete path value.
+	full int
+
+	// nodes counts references to the path's node array.
+	nodes int
+
+	// edges counts references to the path's edge array.
+	edges int
 }
 
+// componentReferences returns the combined number of node-array and edge-array references.
 func (s pathCompositeReferenceCount) componentReferences() int {
 	return s.nodes + s.edges
 }
 
+// totalReferences returns the number of complete-path and component-array references.
 func (s pathCompositeReferenceCount) totalReferences() int {
 	return s.full + s.componentReferences()
 }
 
+// pathCompositeBinding resolves an identifier to an unmaterialized path-composite binding.
 func pathCompositeBinding(scope *Scope, identifier pgsql.Identifier) (*BoundIdentifier, bool) {
 	binding, bound := scope.Lookup(identifier)
 	if !bound {
@@ -1154,6 +1360,7 @@ func pathCompositeBinding(scope *Scope, identifier pgsql.Identifier) (*BoundIden
 	return binding, true
 }
 
+// ensurePathCompositeReferenceCount returns the stable counter for a binding and records first-seen order.
 func ensurePathCompositeReferenceCount(
 	counts map[pgsql.Identifier]*pathCompositeReferenceCount,
 	orderedCounts *[]*pathCompositeReferenceCount,
@@ -1173,6 +1380,7 @@ func ensurePathCompositeReferenceCount(
 	return count
 }
 
+// countPathCompositeComponents counts references to node and edge arrays of unmaterialized path composites.
 func countPathCompositeComponents(scope *Scope, expressions ...pgsql.Expression) ([]*pathCompositeReferenceCount, error) {
 	var (
 		counts        = map[pgsql.Identifier]*pathCompositeReferenceCount{}
@@ -1215,6 +1423,7 @@ func countPathCompositeComponents(scope *Scope, expressions ...pgsql.Expression)
 	return orderedCounts, nil
 }
 
+// countPathCompositeProjectionReferences counts complete and component references made by projection items.
 func countPathCompositeProjectionReferences(scope *Scope, projections []*Projection) ([]*pathCompositeReferenceCount, error) {
 	var (
 		counts        = map[pgsql.Identifier]*pathCompositeReferenceCount{}
@@ -1252,6 +1461,7 @@ func countPathCompositeProjectionReferences(scope *Scope, projections []*Project
 	return orderedCounts, nil
 }
 
+// tailPathCompositeStageBindings selects paths whose node arrays must be staged for a tail constraint.
 func tailPathCompositeStageBindings(scope *Scope, expression pgsql.Expression) ([]*BoundIdentifier, error) {
 	counts, err := countPathCompositeComponents(scope, expression)
 	if err != nil {
@@ -1268,6 +1478,7 @@ func tailPathCompositeStageBindings(scope *Scope, expression pgsql.Expression) (
 	return bindings, nil
 }
 
+// projectionPathCompositeStageBindings selects paths reused enough to warrant one intermediate materialization.
 func projectionPathCompositeStageBindings(scope *Scope, projections []*Projection) ([]*BoundIdentifier, error) {
 	counts, err := countPathCompositeProjectionReferences(scope, projections)
 	if err != nil {
@@ -1289,6 +1500,7 @@ func projectionPathCompositeStageBindings(scope *Scope, projections []*Projectio
 	return bindings, nil
 }
 
+// mergePathCompositeStageBindings combines binding lists in first-seen order without duplicates.
 func mergePathCompositeStageBindings(bindingSets ...[]*BoundIdentifier) []*BoundIdentifier {
 	var (
 		merged = make([]*BoundIdentifier, 0)
@@ -1309,6 +1521,7 @@ func mergePathCompositeStageBindings(bindingSets ...[]*BoundIdentifier) []*Bound
 	return merged
 }
 
+// stagePathCompositeBindings adds lateral sources that materialize selected paths once for downstream reuse.
 func (s *Translator) stagePathCompositeBindings(fromClauses []pgsql.FromClause, bindings []*BoundIdentifier) ([]pgsql.FromClause, error) {
 	for _, binding := range bindings {
 		stageBinding, err := s.scope.DefineNew(pgsql.Scope)
@@ -1348,6 +1561,7 @@ func (s *Translator) stagePathCompositeBindings(fromClauses []pgsql.FromClause, 
 	return fromClauses, nil
 }
 
+// buildTailProjection renders the final select, stages reused paths, and applies grouping, ordering, skip, and limit.
 func (s *Translator) buildTailProjection() error {
 	var (
 		currentPart           = s.query.CurrentPart()
@@ -1447,6 +1661,7 @@ func (s *Translator) buildTailProjection() error {
 	return nil
 }
 
+// ensureProjectionAliasBinding defines an inferred scope binding for an expression alias not already known.
 func (s *Translator) ensureProjectionAliasBinding(alias pgsql.Identifier, selectItem pgsql.SelectItem) error {
 	if _, isBound := s.scope.AliasedLookup(alias); isBound {
 		return nil
@@ -1466,6 +1681,7 @@ func (s *Translator) ensureProjectionAliasBinding(alias pgsql.Identifier, select
 	return nil
 }
 
+// ensureSortItemProjectionAliases registers visible aliases that ORDER BY items may reference.
 func (s *Translator) ensureSortItemProjectionAliases() error {
 	currentPart := s.query.CurrentPart()
 	if currentPart.projections == nil {
@@ -1489,7 +1705,53 @@ func (s *Translator) ensureSortItemProjectionAliases() error {
 	return nil
 }
 
+// isGreedyProjectionItem reports whether a Cypher projection item is the wildcard expression.
+func isGreedyProjectionItem(projectionItem *cypher.ProjectionItem) bool {
+	variable, isVariable := projectionItem.Expression.(*cypher.Variable)
+	return isVariable && variable.Symbol == cypher.TokenLiteralAsterisk
+}
+
+// translateGreedyProjection replaces a wildcard placeholder with every named binding visible in the frame.
+func (s *Translator) translateGreedyProjection(scope *Scope) error {
+	currentPart := s.query.CurrentPart()
+	if _, err := s.treeTranslator.PopOperand(); err != nil {
+		return err
+	}
+	if currentPart.projections == nil || len(currentPart.projections.Items) == 0 {
+		return fmt.Errorf("greedy projection has no prepared projection item")
+	}
+
+	// Entering the projection item reserves one slot. Replace that placeholder
+	// with a projection for every named binding visible at this boundary.
+	currentPart.projections.Items = currentPart.projections.Items[:len(currentPart.projections.Items)-1]
+	projected := 0
+	for _, identifier := range scope.CurrentFrame().Known().Slice() {
+		binding, found := scope.Lookup(identifier)
+		if !found {
+			return fmt.Errorf("unable to resolve greedy projection binding %s", identifier)
+		}
+		for _, symbol := range scope.Symbols(binding) {
+			currentPart.projections.Items = append(currentPart.projections.Items, &Projection{
+				SelectItem: binding.Identifier,
+				Alias:      models.OptionalValue(symbol),
+			})
+			projected++
+		}
+	}
+
+	if projected == 0 {
+		return fmt.Errorf("greedy projection requires at least one named binding")
+	}
+	currentPart.projections.Frame = scope.CurrentFrame()
+	return nil
+}
+
+// translateProjectionItem records one translated select expression and establishes its explicit or implicit alias.
 func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cypher.ProjectionItem) error {
+	if isGreedyProjectionItem(projectionItem) {
+		return s.translateGreedyProjection(scope)
+	}
+
 	if alias, hasAlias, err := extractIdentifierFromCypherExpression(projectionItem); err != nil {
 		return err
 	} else if nextExpression, err := s.treeTranslator.PopOperand(); err != nil {
@@ -1502,6 +1764,15 @@ func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cyphe
 		} else if identifiers.Len() > 0 {
 			// Identifier lookups will require a scope reference
 			s.query.CurrentPart().projections.Frame = s.scope.CurrentFrame()
+		}
+
+		if !hasAlias {
+			var buffer bytes.Buffer
+			if err := cypherFormat.NewCypherEmitter(false).WriteExpression(&buffer, projectionItem.Expression); err != nil {
+				return fmt.Errorf("format implicit projection name: %w", err)
+			}
+			alias = pgsql.Identifier(buffer.String())
+			hasAlias = true
 		}
 
 		switch typedSelectItem := unwrapParenthetical(selectItem).(type) {
@@ -1548,6 +1819,7 @@ func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cyphe
 	return nil
 }
 
+// prepareProjection initializes a query part's projection state and validates literal SKIP and LIMIT values.
 func (s *Translator) prepareProjection(projection *cypher.Projection) error {
 	currentPart := s.query.CurrentPart()
 	currentPart.PrepareProjections(projection.Distinct)
