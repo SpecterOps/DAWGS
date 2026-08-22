@@ -1,0 +1,48 @@
+{
+  "schema": "p5-adjacency-materialization-feasibility-v2-disposition",
+  "generation": "p5-adjacency-materialization-feasibility-v2",
+  "report": {
+    "sha256": "c8c4d7f88d0904bd00d1b85355f2f5806dcb74cf84a41d80237bf081a7222d04",
+    "source_commit": "d257cd921134970583acea19c960f279f4d8fd5a",
+    "protocol_sha256": "f291f062c5099a1648ed6999db91ee4337aee2a3aaffa5f5d90872206446aee4",
+    "source_archive_sha256": "b6b2e40e1e12039fe9990bd2a84882ab08118fbf84697f8ad59392d843118063",
+    "captured_at": "2026-08-18T22:50:32.030359211Z"
+  },
+  "capture_validation": {
+    "passed": true,
+    "conditions": 24,
+    "committed_calibrations": 42,
+    "all_statement_wal_single_call": true,
+    "all_statement_wal_positive": true,
+    "all_lsn_cross_checks_quiescent": true,
+    "cancellation_and_pool_reuse": true,
+    "cleanup_complete": true
+  },
+  "physical_evidence": {
+    "storage_combined_over_base": {
+      "targets_1000": 1.9171974522292994,
+      "targets_2000": 1.9489795918367347
+    },
+    "statement_wal_shadow_over_base": {
+      "batch_relationship_create_targets_2000": 2.2165474653460677,
+      "batched_relationship_delete_targets_2000": 3,
+      "batched_node_delete_cascade_targets_2000": 2.4236811990934997,
+      "graph_clear_reload_targets_2000": 2.4498487823236283,
+      "graph_drop_targets_2000": 2.4492160409045787
+    },
+    "timing_shadow_over_base_upper_median": {
+      "batch_relationship_create_targets_2000": 8.61297789497717,
+      "batched_relationship_delete_targets_2000": 1324.2618967987025,
+      "batched_node_delete_cascade_targets_2000": 524.4560213961504,
+      "graph_clear_reload_targets_2000": 639.7219324653876,
+      "graph_drop_targets_2000": 558.9572434471479
+    },
+    "raw_lookup_is_not_a_candidate": true
+  },
+  "decision": {
+    "candidate_authorized": false,
+    "budget_decision_created": false,
+    "reason": "The shadow relation adds nearly one base-relation's worth of storage, doubles or triples attributed WAL for structural writes, and creates two-to-four orders of magnitude destructive-write latency regressions. Raw lookup probes do not offset those physical maintenance costs and are not Cypher results.",
+    "terminal": true
+  }
+}
