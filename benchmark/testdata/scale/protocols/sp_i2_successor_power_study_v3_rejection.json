@@ -1,0 +1,16 @@
+{
+  "schema": "sp-i2-successor-power-study-rejection-v3",
+  "generation": "sp-i2-distance-v3-power-study",
+  "protocol_sha256": "e11090bbbe73cc36dfae2af97e26b6e1fc4d42590fc6fd331b2204c7a9e04f31",
+  "implementation": "sp-i2-power-simulation-v3/chacha8-sha256-normal-pivot",
+  "runs_per_scenario": 20000,
+  "failed_gates": [
+    {"scenario":"aa_order_odd_high","metric":"admission_power_wilson_lower","observed":0.14201232557116983,"required":0.9},
+    {"scenario":"aa_order_even_high","metric":"admission_power_wilson_lower","observed":0.14723913101703448,"required":0.9}
+  ],
+  "candidate_implemented": false,
+  "corpus_created": false,
+  "database_timing_started": false,
+  "holdout_opened": false,
+  "terminal": true
+}

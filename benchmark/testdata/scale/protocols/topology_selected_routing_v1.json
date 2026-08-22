@@ -1,0 +1,43 @@
+{
+  "schema": "topology-selected-routing-v1",
+  "status": "frozen_implementation_protocol",
+  "production_default": "off",
+  "manifest_versions": {
+    "v2": "exact_query",
+    "v3": "graph_independent_structural",
+    "v4": "topology_selected_fixed_suffix"
+  },
+  "transaction": {
+    "required_isolation": ["repeatable_read", "serializable"],
+    "read_only": true,
+    "same_snapshot_synopsis_read": true
+  },
+  "selector": {
+    "estimator_version": "topology-fixed-suffix-counts-v1",
+    "maximum_edge_to_node_ratio_per_mille": 1000,
+    "comparison": "edge_count * 1000 <= node_count * maximum_edge_to_node_ratio_per_mille"
+  },
+  "route_cache": {
+    "scope": "one_active_transaction",
+    "maximum_entries": 64,
+    "maximum_total_bytes": 65536,
+    "maximum_entry_bytes": 4096,
+    "miss": "incumbent_only",
+    "eviction": "forbidden",
+    "invalidation": ["write", "savepoint", "rollback", "cancellation", "retry", "pool_release", "transaction_end"]
+  },
+  "execution": {
+    "candidate": "new_fixed_suffix_production_identity",
+    "single_arm": true,
+    "candidate_output_buffered": true,
+    "fallback": "exact_forward_same_snapshot"
+  },
+  "fallback_conditions": ["missing", "building", "failed", "incompatible", "stale", "ambiguous", "resource_limited"],
+  "activation": {
+    "semantic_oracles": "exact",
+    "p50_improvement": "at_least_5_percent_or_100us",
+    "p95_ratio_maximum": 1.05,
+    "selector_overhead": "at_most_1.10x_or_100us",
+    "evidence": "clean_source_training_then_frozen_holdout"
+  }
+}
