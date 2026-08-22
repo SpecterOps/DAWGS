@@ -69,18 +69,15 @@ type SchemaManager struct {
 	// parseCache retains immutable Cypher ASTs keyed by normalized query text.
 	parseCache *cypherParseCache
 
-	// translationCache retains parameter-rebindable SQL translations by graph and parameter shape.
-	translationCache *cypherTranslationCache
-
 	// compilationCache retains upstream compiler results and provenance.
 	compilationCache *translationCache
 
 	// compilationCacheProvider supplies the upstream compiler cache.
 	compilationCacheProvider translationCacheProvider
 
-	// translationCacheProvider selects the translation cache for each physical
-	// PostgreSQL connection. V1 installs a provider for translationCache;
-	// absent or nil selections safely bypass retention.
+	// translationCacheProvider selects the connection-local translation cache
+	// for each physical PostgreSQL connection. A missing provider deliberately
+	// bypasses retention for pools not constructed by this package.
 	translationCacheProvider CypherTranslationCacheProvider
 
 	// hasDefaultGraph distinguishes a cached default graph from the zero-value graph model.
@@ -108,9 +105,14 @@ type SchemaManager struct {
 	traversalPolicy TraversalPolicy
 }
 
-// NewSchemaManager creates an empty metadata manager with bounded parse and translation caches for pool.
-func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *SchemaManager {
-	return NewSchemaManagerWithOptions(pool, graphQueryMemoryLimit, DefaultDriverOptions())
+// NewSchemaManager creates an empty metadata manager with bounded parse and
+// compilation caches and an optional connection-local translation provider.
+func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, providers ...CypherTranslationCacheProvider) *SchemaManager {
+	var provider CypherTranslationCacheProvider
+	if len(providers) > 0 {
+		provider = providers[0]
+	}
+	return newSchemaManagerWithOptionsAndProvider(pool, graphQueryMemoryLimit, DefaultDriverOptions(), provider)
 }
 
 // NewSchemaManagerWithTranslationCache permits an application to disable the
@@ -125,24 +127,24 @@ func NewSchemaManagerWithTranslationCache(pool *pgxpool.Pool, graphQueryMemoryLi
 // NewSchemaManagerWithOptions constructs the shared compilation service with
 // a bounded translation cache.
 func NewSchemaManagerWithOptions(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, options DriverOptions) *SchemaManager {
+	return newSchemaManagerWithOptionsAndProvider(pool, graphQueryMemoryLimit, options, nil)
+}
+
+func newSchemaManagerWithOptionsAndProvider(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, options DriverOptions, provider CypherTranslationCacheProvider) *SchemaManager {
 	options = normalizeDriverOptions(options)
 	compilationCache := newTranslationCache(options.TranslationCacheEntries)
-	translationCache := newCypherTranslationCache(defaultCypherTranslationCacheEntries)
 
 	return &SchemaManager{
-		pool:             pool,
-		parseCache:       newCypherParseCache(defaultCypherParseCacheEntries),
-		translationCache: translationCache,
-		translationCacheProvider: sharedCypherTranslationCacheProvider{
-			cache: translationCache,
-		},
-		hasDefaultGraph:       false,
-		graphs:                map[string]model.Graph{},
-		kindsByID:             map[graph.Kind]int16{},
-		kindIDsByKind:         map[int16]graph.Kind{},
-		lock:                  &sync.RWMutex{},
-		graphQueryMemoryLimit: graphQueryMemoryLimit,
-		compilationCache:      compilationCache,
+		pool:                     pool,
+		parseCache:               newCypherParseCache(defaultCypherParseCacheEntries),
+		translationCacheProvider: provider,
+		hasDefaultGraph:          false,
+		graphs:                   map[string]model.Graph{},
+		kindsByID:                map[graph.Kind]int16{},
+		kindIDsByKind:            map[int16]graph.Kind{},
+		lock:                     &sync.RWMutex{},
+		graphQueryMemoryLimit:    graphQueryMemoryLimit,
+		compilationCache:         compilationCache,
 		compilationCacheProvider: sharedTranslationCacheProvider{
 			cache: compilationCache,
 		},

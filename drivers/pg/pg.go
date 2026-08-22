@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,9 +20,6 @@ const (
 	// defaultBatchWriteSize is currently set to 2k. This is meant to strike a balance between the cost of thousands
 	// of round-trips against the cost of locking tables for too long.
 	defaultBatchWriteSize = 2_000
-
-	// poolInitConnectionTimeout limits how long pool setup waits for the first connection to initialize.
-	poolInitConnectionTimeout = time.Second * 10
 )
 
 // AfterPooledConnectionEstablished loads and registers the driver's owned graph composite types on a new pooled connection.
@@ -56,27 +52,10 @@ func AfterPooledConnectionRelease(conn *pgx.Conn) bool {
 	return true
 }
 
-// pgx pool config
+// NewPool constructs the default PostgreSQL pool. The returned bare pgx pool
+// carries all DAWGS lifecycle hooks and is safe to pass through dawgs.Config.
 func NewPool(poolCfg *pgxpool.Config) (*pgxpool.Pool, error) {
-	poolCtx, done := context.WithTimeout(context.Background(), poolInitConnectionTimeout)
-	defer done()
-
-	// TODO: Min and Max connections for the pool should be configurable
-	poolCfg.MinConns = 5
-	poolCfg.MaxConns = 50
-
-	// Bind functions to the AfterConnect and AfterRelease hooks to ensure that composite type registration occurs.
-	// Without composite type registration, the pgx connection type will not be able to marshal PG OIDs to their
-	// respective Golang structs.
-	poolCfg.AfterConnect = AfterPooledConnectionEstablished
-	poolCfg.AfterRelease = AfterPooledConnectionRelease
-
-	pool, err := pgxpool.NewWithConfig(poolCtx, poolCfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return pool, nil
+	return NewPoolWithRuntimeConfig(context.Background(), poolCfg, DefaultRuntimeConfig())
 }
 
 func init() {
