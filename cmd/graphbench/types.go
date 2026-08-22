@@ -20,14 +20,22 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/specterops/dawgs/testutil"
 )
 
 const (
-	ModePostgresSQL    ExecutionMode = "postgres_sql"
+	// ModePostgresSQL selects translated PostgreSQL execution.
+	ModePostgresSQL ExecutionMode = "postgres_sql"
+
+	// ModeLocalTraversal selects in-process traversal execution.
 	ModeLocalTraversal ExecutionMode = "local_traversal"
-	ModeNeo4j          ExecutionMode = "neo4j"
+
+	// ModeNeo4j selects Neo4j execution.
+	ModeNeo4j ExecutionMode = "neo4j"
 )
 
+// validExecutionModes lists every execution mode accepted by graphbench.
 var validExecutionModes = []ExecutionMode{
 	ModePostgresSQL,
 	ModeLocalTraversal,
@@ -36,10 +44,12 @@ var validExecutionModes = []ExecutionMode{
 
 type ExecutionMode string
 
+// Valid reports whether the execution mode is one of the supported backend modes.
 func (s ExecutionMode) Valid() bool {
 	return slices.Contains(validExecutionModes, s)
 }
 
+// parseExecutionMode returns the execution mode named by text or an error for unsupported values.
 func parseExecutionMode(raw string) (ExecutionMode, error) {
 	mode := ExecutionMode(strings.TrimSpace(raw))
 	if mode.Valid() {
@@ -49,56 +59,219 @@ func parseExecutionMode(raw string) (ExecutionMode, error) {
 	return "", fmt.Errorf("unsupported execution mode %q", raw)
 }
 
+// ScaleCorpus contains the ordered benchmark cases loaded from the scale corpus.
 type ScaleCorpus struct {
+	// Cases contains loaded workloads in deterministic corpus order.
 	Cases []ScaleCase
 }
 
+// DeclaredCaseBackend identifies one case/backend combination and any declared unsupported reason.
+type DeclaredCaseBackend struct {
+	// Dataset identifies the fixture dataset.
+	Dataset string
+	// Name identifies the case or record within its dataset.
+	Name string
+	// Backend identifies the execution backend.
+	Backend ExecutionMode
+	// UnsupportedReason explains why a declared case cannot run on the selected backend.
+	UnsupportedReason string
+}
+
+// DeclaredBackends expands a scale case into the backend declarations consumed during gate validation.
+func (s ScaleCorpus) DeclaredBackends() []DeclaredCaseBackend {
+	declared := make([]DeclaredCaseBackend, 0, len(s.Cases)*2)
+	for _, testCase := range s.Cases {
+		for _, backend := range testCase.CandidateModes {
+			declared = append(declared, DeclaredCaseBackend{
+				Dataset: testCase.Dataset,
+				Name:    testCase.Name,
+				Backend: backend,
+			})
+		}
+		for backend, reason := range testCase.UnsupportedModes {
+			declared = append(declared, DeclaredCaseBackend{
+				Dataset:           testCase.Dataset,
+				Name:              testCase.Name,
+				Backend:           backend,
+				UnsupportedReason: reason,
+			})
+		}
+	}
+	return declared
+}
+
+// ScaleCaseFile models the JSON envelope containing a group of scale cases.
 type ScaleCaseFile struct {
+	// Cases contains the workload declarations decoded from one corpus file.
 	Cases []ScaleCase `json:"cases"`
 }
 
+// ScaleCase declares one executable workload, its parameters, backend support, and exact expectations.
 type ScaleCase struct {
-	Source          string            `json:"-"`
-	Name            string            `json:"name"`
-	Dataset         string            `json:"dataset"`
-	Category        string            `json:"category"`
-	Cypher          string            `json:"cypher"`
-	Params          map[string]any    `json:"params,omitempty"`
-	NodeParams      map[string]string `json:"node_params,omitempty"`
-	Expected        ExpectedResult    `json:"expected"`
-	Observes        ObservedValues    `json:"observes"`
-	Shape           WorkloadShape     `json:"shape"`
-	CandidateModes  []ExecutionMode   `json:"candidate_modes"`
-	Tags            []string          `json:"tags,omitempty"`
-	ReferenceDesign *ReferenceDesign  `json:"reference_design,omitempty"`
+	// Source identifies the source corpus file.
+	Source string `json:"-"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Category groups cases by workload category.
+	Category string `json:"category"`
+	// Cypher contains the Cypher statement under test.
+	Cypher string `json:"cypher"`
+	// Params supplies literal query parameters.
+	Params testutil.Params `json:"params,omitempty"`
+	// NodeParams maps query parameters to fixture node keys.
+	NodeParams map[string]string `json:"node_params,omitempty"`
+	// NodeListParams maps query parameters to ordered fixture node-key lists.
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	// GeneratedNodeListParams maps query parameters to generated fixture node sets.
+	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
+	// Expected supplies the expected input to the ScaleCase contract.
+	Expected ExpectedResult `json:"expected"`
+	// Observes identifies the normalized observation contract declared by the scale case.
+	Observes ObservedValues `json:"observes"`
+	// Shape describes the workload shape used for selection and comparison.
+	Shape WorkloadShape `json:"shape"`
+	// CandidateModes lists backends expected to participate in cross-backend comparison.
+	CandidateModes []ExecutionMode `json:"candidate_modes"`
+	// UnsupportedModes maps unsupported execution modes to their declared reasons.
+	UnsupportedModes map[ExecutionMode]string `json:"unsupported_modes,omitempty"`
+	// Tags lists selectors attached to the case.
+	Tags []string `json:"tags,omitempty"`
+	// ReferenceDesign documents reference arms and validation boundaries applicable to the scale case.
+	ReferenceDesign *ReferenceDesign `json:"reference_design,omitempty"`
+	// WriteScenario supplies the write scenario input to the ScaleCase contract.
+	WriteScenario *WriteScenario `json:"write_scenario,omitempty"`
 }
 
+// ExpectedResult groups state that must remain consistent while processing expected result.
 type ExpectedResult struct {
-	RowCount   *int64 `json:"row_count,omitempty"`
+	// RowCount records the number of row count.
+	RowCount *int64 `json:"row_count,omitempty"`
+	// ScalarInt sets the required scalar result when ResultKind is scalar_int.
+	ScalarInt *int64 `json:"scalar_int,omitempty"`
+	// ResultKind identifies how returned values must be normalized.
 	ResultKind string `json:"result_kind,omitempty"`
+	// IDRows contains the expected ordered identifier rows.
+	IDRows [][]string `json:"id_rows,omitempty"`
+	// PathRows contains the expected stable paths.
+	PathRows []ExpectedPath `json:"path_rows,omitempty"`
 }
 
+// ExpectedPath defines one expected stable node and relationship sequence.
+type ExpectedPath struct {
+	// Nodes contains the stable node sequence.
+	Nodes []string `json:"nodes"`
+	// RelationshipKinds contains the expected relationship-kind sequence.
+	RelationshipKinds []string `json:"relationship_kinds"`
+	// RelationshipKeys contains the expected fixture relationship-key sequence.
+	RelationshipKeys []string `json:"relationship_keys,omitempty"`
+}
+
+// WriteScenario defines a measured mutation and the state checks that validate it.
+type WriteScenario struct {
+	// SelectionCypher contains the write-selection Cypher statement.
+	SelectionCypher string `json:"selection_cypher"`
+	// Params supplies literal query parameters.
+	Params testutil.Params `json:"params,omitempty"`
+	// NodeParams maps query parameters to fixture node keys.
+	NodeParams map[string]string `json:"node_params,omitempty"`
+	// NodeListParams maps query parameters to ordered fixture node-key lists.
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	// GeneratedNodeListParams maps query parameters to generated fixture node sets.
+	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
+	// AffectedEntity identifies the entity class counted after a write.
+	AffectedEntity string `json:"affected_entity"`
+	// ExpectedMatched sets the required number of matched entities.
+	ExpectedMatched *int64 `json:"expected_matched"`
+	// ExpectedAffected sets the required number of affected entities.
+	ExpectedAffected *int64 `json:"expected_affected"`
+	// PostState supplies the post state input to the WriteScenario contract.
+	PostState []ScaleStateQuery `json:"post_state"`
+}
+
+// ScaleStateQuery defines a post-mutation query and its scalar or row-count expectation.
+type ScaleStateQuery struct {
+	// Name labels the post-write state assertion in diagnostics and results.
+	Name string `json:"name"`
+	// Cypher contains the Cypher statement under test.
+	Cypher string `json:"cypher"`
+	// Params supplies literal query parameters.
+	Params testutil.Params `json:"params,omitempty"`
+	// NodeParams maps query parameters to fixture node keys.
+	NodeParams map[string]string `json:"node_params,omitempty"`
+	// NodeListParams maps query parameters to ordered fixture node-key lists.
+	NodeListParams map[string][]string `json:"node_list_params,omitempty"`
+	// GeneratedNodeListParams maps query parameters to generated fixture node sets.
+	GeneratedNodeListParams map[string]testutil.GeneratedNodeListParam `json:"generated_node_list_params,omitempty"`
+	// Expected supplies the expected input to the ScaleStateQuery contract.
+	Expected ExpectedResult `json:"expected"`
+}
+
+// ObservedValues declares which entity and path features a case exposes for normalized comparison.
 type ObservedValues struct {
-	Paths         bool `json:"paths"`
-	Nodes         bool `json:"nodes"`
+	// Paths reports whether the normalized result includes materialized paths.
+	Paths bool `json:"paths"`
+	// Nodes reports whether the normalized result includes node values.
+	Nodes bool `json:"nodes"`
+	// Relationships reports whether the normalized result includes relationship values.
 	Relationships bool `json:"relationships"`
-	Properties    bool `json:"properties"`
+	// Properties reports whether normalized entity observations include properties.
+	Properties bool `json:"properties"`
 }
 
+// WorkloadShape describes traversal depth, direction, projection, and expected complexity.
 type WorkloadShape struct {
-	RootPredicate               string   `json:"root_predicate,omitempty"`
-	TerminalPredicate           string   `json:"terminal_predicate,omitempty"`
-	EdgeKinds                   []string `json:"edge_kinds,omitempty"`
-	MinDepth                    *int     `json:"min_depth,omitempty"`
-	MaxDepth                    *int     `json:"max_depth,omitempty"`
-	PathMaterializationRequired bool     `json:"path_materialization_required"`
+	// QualificationSplit identifies whether a topology bucket is training,
+	// holdout, or a diagnostic boundary. Selector tuning must not consume
+	// holdout records.
+	QualificationSplit string `json:"qualification_split,omitempty"`
+	// QualificationRole freezes the statistical role independently of observed
+	// performance. Formal SP-I2 V2 cases use adverse_control or efficacy_target.
+	QualificationRole string `json:"qualification_role,omitempty"`
+	// FallbackExpectation is the typed runtime contract for candidate execution:
+	// forbidden, required, or allowed. Prioritized corpus declarations receive a
+	// deterministic value during loading when older files omit it.
+	FallbackExpectation string `json:"fallback_expectation,omitempty"`
+	// RootPredicate describes how the traversal root is constrained.
+	RootPredicate string `json:"root_predicate,omitempty"`
+	// TerminalPredicate describes how the traversal terminal is constrained.
+	TerminalPredicate string `json:"terminal_predicate,omitempty"`
+	// EdgeKinds lists the relationship kinds traversed by the workload.
+	EdgeKinds []string `json:"edge_kinds,omitempty"`
+	// Direction sets the traversal direction.
+	Direction string `json:"direction,omitempty"`
+	// RelationshipKindCount records the number of relationship kind count.
+	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
+	// FixtureTier identifies the fixture scale tier.
+	FixtureTier string `json:"fixture_tier,omitempty"`
+	// ExpectedStateClass identifies the expected recursive-state complexity class.
+	ExpectedStateClass string `json:"expected_state_class,omitempty"`
+	// ResultCardinalityClass identifies the expected result-cardinality class.
+	ResultCardinalityClass string `json:"result_cardinality_class,omitempty"`
+	// MinDepth is the shallowest traversal depth permitted by the workload.
+	MinDepth *int `json:"min_depth,omitempty"`
+	// MaxDepth sets the maximum traversal depth.
+	MaxDepth *int `json:"max_depth,omitempty"`
+	// PathMaterializationRequired reports whether the workload must materialize complete paths.
+	PathMaterializationRequired bool `json:"path_materialization_required"`
 }
 
+// ReferenceDesign documents the independent reference implementations applicable to a case.
 type ReferenceDesign struct {
+	// AGERelevance documents how the reference design relates to Apache AGE execution.
 	AGERelevance []string `json:"age_relevance,omitempty"`
-	Notes        string   `json:"notes,omitempty"`
+	// Notes contains human-readable caveats attached to the artifact or case.
+	Notes string `json:"notes,omitempty"`
 }
 
+// Supports reports whether the case declares the requested execution mode as a candidate backend.
 func (s ScaleCase) Supports(mode ExecutionMode) bool {
 	return slices.Contains(s.CandidateModes, mode)
+}
+
+// UnsupportedReason returns the declared reason that a scale case cannot run in the requested mode.
+func (s ScaleCase) UnsupportedReason(mode ExecutionMode) (string, bool) {
+	reason, unsupported := s.UnsupportedModes[mode]
+	return reason, unsupported
 }

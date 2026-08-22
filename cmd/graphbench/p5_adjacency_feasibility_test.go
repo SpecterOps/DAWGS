@@ -1,0 +1,54 @@
+// Copyright 2026 Specter Ops, Inc.
+//
+// Licensed under the Apache License, Version 2.0
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import (
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestParseConfigP5AdjacencyFeasibility(t *testing.T) {
+	cfg, err := parseConfig([]string{"-p5-adjacency-feasibility-output", "p5.json"}, func(string) string { return "" })
+	require.NoError(t, err)
+	require.Equal(t, "p5.json", cfg.P5AdjacencyFeasibilityOutput)
+
+	_, err = parseConfig([]string{"-p5-adjacency-feasibility-output", "p5.json", "-pool-size", "2"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "requires pool-size 1")
+
+	_, err = parseConfig([]string{"-p5-adjacency-feasibility-output", "p5.json", "-modes", "neo4j"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "requires only postgres_sql mode")
+
+	_, err = parseConfig([]string{"-p5-adjacency-feasibility-output", "p5.json", "-cases", "SP-S0-DIRECT"}, func(string) string { return "" })
+	require.ErrorContains(t, err, "does not accept corpus selectors")
+}
+
+func TestP5AdjacencyQuantiles(t *testing.T) {
+	median, p95 := p5AdjacencyQuantiles([]time.Duration{5, 1, 3, 2, 4})
+	require.Equal(t, 3*time.Nanosecond, median)
+	require.Equal(t, 5*time.Nanosecond, p95)
+}
+
+func TestP5AdjacencyStatementWALTag(t *testing.T) {
+	tag := p5AdjacencyStatementWALTag("batched_relationship_delete")
+	require.Equal(t, "p5_adjacency_v2_wal_batched_relationship_delete", tag)
+
+	delta, err := p5AdjacencyStatementWALDelta(
+		P5AdjacencyStatementWAL{Tag: tag, Calls: 3, Records: 10, FPI: 1, Bytes: 100},
+		P5AdjacencyStatementWAL{Tag: tag, Calls: 4, Records: 13, FPI: 2, Bytes: 140},
+	)
+	require.NoError(t, err)
+	require.Equal(t, P5AdjacencyStatementWAL{Tag: tag, Calls: 1, Records: 3, FPI: 1, Bytes: 40}, delta)
+}
+
+func TestWriteP5AdjacencyFeasibilityReportIsImmutable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "p5.json")
+	report := P5AdjacencyFeasibilityReport{Schema: p5AdjacencyFeasibilitySchema, Passed: true}
+	require.NoError(t, writeP5AdjacencyFeasibilityReport(path, report))
+	require.ErrorContains(t, writeP5AdjacencyFeasibilityReport(path, report), "create immutable")
+}
