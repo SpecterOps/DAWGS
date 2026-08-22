@@ -99,6 +99,8 @@ func (s runtimeIdentifiers) End() *cypher.Variable {
 	return cypher.NewVariableWithSymbol(s.end)
 }
 
+// Identifiers exposes the canonical variables used for path, node, start,
+// relationship, and end expressions.
 var Identifiers = runtimeIdentifiers{
 	path:         "p",
 	node:         "n",
@@ -373,7 +375,10 @@ func Or(operands ...cypher.SyntaxNode) cypher.SyntaxNode {
 type SortDirection int
 
 const (
+	// SortAscending orders values from least to greatest.
 	SortAscending SortDirection = iota
+
+	// SortDescending orders values from greatest to least.
 	SortDescending
 )
 
@@ -652,6 +657,7 @@ func (s *entity[T]) ID() IdentityContinuation {
 	}
 }
 
+// Property returns a comparison continuation for a validated property lookup or records an invalid-key error.
 func (s *entity[T]) Property(propertyName string) PropertyContinuation {
 	if err := cypher.ValidatePropertyKeyName(propertyName); err != nil {
 		return &propertyContinuation{
@@ -783,9 +789,16 @@ type QueryBuilder interface {
 type updatingClauseKind int
 
 const (
+	// updatingClauseSet identifies a pending SET clause.
 	updatingClauseSet updatingClauseKind = iota
+
+	// updatingClauseRemove identifies a pending REMOVE clause.
 	updatingClauseRemove
+
+	// updatingClauseDelete identifies a pending DELETE clause.
 	updatingClauseDelete
+
+	// updatingClauseCreate identifies a pending CREATE clause.
 	updatingClauseCreate
 )
 

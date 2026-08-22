@@ -7,10 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCanEmitBarePropertyKeyName verifies the Unicode and punctuation rules for unescaped property keys.
 func TestCanEmitBarePropertyKeyName(t *testing.T) {
 	testCases := []struct {
-		name     string
-		input    string
+		// name labels the property-key form under test.
+		name string
+		// input is the decoded property-key name.
+		input string
+		// expected indicates whether input may be rendered without backticks.
 		expected bool
 	}{
 		{name: "simple", input: "name", expected: true},
@@ -36,10 +40,14 @@ func TestCanEmitBarePropertyKeyName(t *testing.T) {
 	}
 }
 
+// TestEscapePropertyKeyName verifies canonical quoting and embedded-backtick escaping for property keys.
 func TestEscapePropertyKeyName(t *testing.T) {
 	testCases := []struct {
-		name     string
-		input    string
+		// name labels the property-key form under test.
+		name string
+		// input is the decoded property-key name.
+		input string
+		// expected is the canonical property-key token.
 		expected string
 	}{
 		{name: "simple", input: "name", expected: "name"},
@@ -67,15 +75,20 @@ func TestEscapePropertyKeyName(t *testing.T) {
 	}
 }
 
+// TestValidatePropertyKeyName verifies that only empty decoded property-key names are invalid.
 func TestValidatePropertyKeyName(t *testing.T) {
 	require.NoError(t, cypher.ValidatePropertyKeyName("   "))
 	require.ErrorIs(t, cypher.ValidatePropertyKeyName(""), cypher.ErrEmptyPropertyKeyName)
 }
 
+// TestUnescapePropertyKeyName verifies decoding of quoted keys and doubled backticks.
 func TestUnescapePropertyKeyName(t *testing.T) {
 	testCases := []struct {
-		name     string
-		input    string
+		// name labels the property-key token under test.
+		name string
+		// input is the rendered property-key token.
+		input string
+		// expected is the decoded property-key name.
 		expected string
 	}{
 		{name: "simple", input: "name", expected: "name"},

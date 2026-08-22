@@ -43,6 +43,7 @@ func TestTranslatorRejectsUnsupportedPropertyLookupSourcesDirectly(t *testing.T)
 	require.Contains(t, err.Error(), "unsupported property lookup prop on expression type int8[]")
 }
 
+// TestTranslatorRejectsEmptyPropertyLookupKeys verifies that invalid empty keys cannot reach SQL translation.
 func TestTranslatorRejectsEmptyPropertyLookupKeys(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
