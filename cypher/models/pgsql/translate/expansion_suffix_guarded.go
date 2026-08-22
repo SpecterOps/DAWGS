@@ -65,7 +65,8 @@ func newSuffixReverseGuardIdentifiers(finalFrame pgsql.Identifier) suffixReverse
 func (s *Translator) rewriteTraversalPatternAsSuffixReverseGuard(part *PatternPart, decision optimize.ExpansionSearchStrategyDecision, firstCTE int) error {
 	if (decision.EmittedPolicy != optimize.ExpansionSearchPolicySuffixReverseGuardV1 &&
 		decision.EmittedPolicy != optimize.ExpansionSearchPolicySuffixReverseRetryV1 &&
-		decision.EmittedPolicy != optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) ||
+		decision.EmittedPolicy != optimize.ExpansionSearchPolicyTopologyFixedSuffixV1 &&
+		decision.EmittedPolicy != optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1) ||
 		decision.ObservationMode != optimize.ExpansionSearchObservationFullPath || part.PatternBinding == nil {
 		return fmt.Errorf("suffix reverse guard requires the full-path policy envelope")
 	}
@@ -174,7 +175,9 @@ func (s *Translator) buildSuffixReverseGuardQuery(
 		decision.Admission.StateLimit,
 	)
 	admission := buildSuffixReverseGuardAdmission(ids, decision.ProbeCaps.ReverseSeedRowLimit, decision.Admission.StateLimit)
-	retryOnly := decision.EmittedPolicy == optimize.ExpansionSearchPolicySuffixReverseRetryV1 || decision.EmittedPolicy == optimize.ExpansionSearchPolicyTopologyFixedSuffixV1
+	retryOnly := decision.EmittedPolicy == optimize.ExpansionSearchPolicySuffixReverseRetryV1 ||
+		decision.EmittedPolicy == optimize.ExpansionSearchPolicyTopologyFixedSuffixV1 ||
+		decision.EmittedPolicy == optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1
 	decisionCTE := buildSuffixReverseGuardDecision(ids, retryOnly)
 	markers := buildSuffixReverseGuardMarkers(ids)
 
