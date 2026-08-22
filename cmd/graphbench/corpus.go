@@ -21,9 +21,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 )
 
+// loadScaleCorpus loads all scale-case JSON files and rejects duplicate or invalid declarations.
 func loadScaleCorpus(root string) (ScaleCorpus, error) {
 	casePaths, err := filepath.Glob(filepath.Join(root, "cases", "*.json"))
 	if err != nil {
@@ -45,6 +48,7 @@ func loadScaleCorpus(root string) (ScaleCorpus, error) {
 		source := filepath.ToSlash(path)
 		for idx, testCase := range file.Cases {
 			testCase.Source = source
+			normalizeFallbackExpectation(&testCase)
 			if err := validateScaleCase(testCase); err != nil {
 				return ScaleCorpus{}, fmt.Errorf("%s case %d: %w", source, idx, err)
 			}
@@ -56,6 +60,25 @@ func loadScaleCorpus(root string) (ScaleCorpus, error) {
 	return corpus, nil
 }
 
+// normalizeFallbackExpectation normalizes fallback expectation.
+func normalizeFallbackExpectation(testCase *ScaleCase) {
+	if testCase == nil || testCase.Shape.FallbackExpectation != "" || !requiresQualificationSplit(*testCase) {
+		return
+	}
+	testCase.Shape.FallbackExpectation = "forbidden"
+	if testCase.Shape.FixtureTier == "stress" {
+		testCase.Shape.FallbackExpectation = "allowed"
+	}
+	for _, tag := range testCase.Tags {
+		normalized := strings.ToLower(tag)
+		if strings.Contains(normalized, "fallback") || strings.Contains(normalized, "overflow") {
+			testCase.Shape.FallbackExpectation = "required"
+			return
+		}
+	}
+}
+
+// validateScaleCase checks case identity, modes, parameters, expectations, and workload shape.
 func validateScaleCase(testCase ScaleCase) error {
 	if testCase.Name == "" {
 		return fmt.Errorf("name is required")
@@ -78,10 +101,141 @@ func validateScaleCase(testCase ScaleCase) error {
 			return fmt.Errorf("unsupported candidate mode %q", mode)
 		}
 	}
+	for mode, reason := range testCase.UnsupportedModes {
+		if !mode.Valid() {
+			return fmt.Errorf("invalid unsupported mode %q", mode)
+		}
+		if reason == "" {
+			return fmt.Errorf("unsupported mode %q requires a reason", mode)
+		}
+		if testCase.Supports(mode) {
+			return fmt.Errorf("mode %q cannot be both candidate and unsupported", mode)
+		}
+	}
+	if testCase.Shape.RelationshipKindCount < 0 {
+		return fmt.Errorf("shape.relationship_kind_count must not be negative")
+	}
+	if tier := testCase.Shape.FixtureTier; tier != "" && tier != "normal" && tier != "envelope" && tier != "stress" {
+		return fmt.Errorf("shape.fixture_tier must be normal, envelope, or stress")
+	}
+	if split := testCase.Shape.QualificationSplit; split != "" && split != "training" && split != "holdout" && split != "diagnostic" {
+		return fmt.Errorf("shape.qualification_split must be training, holdout, or diagnostic")
+	}
+	if role := testCase.Shape.QualificationRole; role != "" && role != "adverse_control" && role != "efficacy_target" {
+		return fmt.Errorf("shape.qualification_role must be adverse_control or efficacy_target")
+	}
+	if slices.Contains(testCase.Tags, "sp-i2-distance-v2-training") || slices.Contains(testCase.Tags, "sp-i2-distance-v2-holdout") {
+		if testCase.Shape.QualificationRole == "" {
+			return fmt.Errorf("formal SP-I2 V2 cases require shape.qualification_role")
+		}
+	}
+	if expectation := testCase.Shape.FallbackExpectation; expectation != "" && expectation != "forbidden" && expectation != "required" && expectation != "allowed" {
+		return fmt.Errorf("shape.fallback_expectation must be forbidden, required, or allowed")
+	}
+	if requiresQualificationSplit(testCase) && testCase.Shape.QualificationSplit == "" {
+		return fmt.Errorf("shape.qualification_split is required for traversal qualification cases")
+	}
+	if testCase.Shape.FixtureTier == "stress" && testCase.Shape.QualificationSplit != "diagnostic" && requiresQualificationSplit(testCase) {
+		return fmt.Errorf("stress traversal qualification cases must use shape.qualification_split diagnostic")
+	}
+	if slices.Contains(testCase.Tags, "holdout") && testCase.Shape.QualificationSplit != "holdout" {
+		return fmt.Errorf("holdout-tagged cases must use shape.qualification_split holdout")
+	}
+	if testCase.Shape.QualificationSplit == "holdout" && !slices.Contains(testCase.Tags, "holdout") {
+		return fmt.Errorf("shape.qualification_split holdout requires the holdout tag")
+	}
+	if direction := testCase.Shape.Direction; direction != "" && direction != "outbound" && direction != "inbound" && direction != "directionless" && direction != "mirrored" {
+		return fmt.Errorf("shape.direction must be outbound, inbound, directionless, or mirrored")
+	}
+
+	if len(testCase.Expected.IDRows) > 0 {
+		if testCase.Expected.ResultKind != "id_rows" {
+			return fmt.Errorf("expected.id_rows requires result_kind id_rows")
+		}
+		if testCase.Expected.RowCount == nil || int64(len(testCase.Expected.IDRows)) != *testCase.Expected.RowCount {
+			return fmt.Errorf("expected.id_rows must contain exactly row_count rows")
+		}
+	}
+	if len(testCase.Expected.PathRows) > 0 {
+		if testCase.Expected.ResultKind != "path_set" {
+			return fmt.Errorf("expected.path_rows requires result_kind path_set")
+		}
+		if testCase.Expected.RowCount == nil || int64(len(testCase.Expected.PathRows)) != *testCase.Expected.RowCount {
+			return fmt.Errorf("expected.path_rows must contain exactly row_count rows")
+		}
+		for idx, path := range testCase.Expected.PathRows {
+			if len(path.Nodes) != len(path.RelationshipKinds)+1 {
+				return fmt.Errorf("expected.path_rows[%d] must have one more node than relationship kind", idx)
+			}
+			if slices.Contains(testCase.Tags, "fixed-suffix-expansion-v3") && len(path.RelationshipKeys) != len(path.RelationshipKinds) {
+				return fmt.Errorf("fixed-suffix v3 expected.path_rows[%d] must identify every relationship", idx)
+			}
+		}
+	}
+	if slices.Contains(testCase.Tags, "fixed-suffix-expansion-v3") && testCase.Expected.ResultKind == "path_set" && len(testCase.Expected.PathRows) == 0 {
+		return fmt.Errorf("fixed-suffix v3 path_set cases require exact expected.path_rows")
+	}
+
+	if testCase.WriteScenario != nil {
+		if err := validateWriteScenario(*testCase.WriteScenario); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
+// requiresQualificationSplit identifies traversal-program declarations whose
+// training/holdout boundary is part of their immutable workload identity.
+// Older general-purpose scale cases remain loadable while each prioritized
+// traversal family is migrated deliberately.
+func requiresQualificationSplit(testCase ScaleCase) bool {
+	switch testCase.Category {
+	case "generated_shortest_path_v2", "expand_into_one_hop", "generated_endpoint_seeded_expansion":
+		return true
+	case "generated_fixed_suffix_expansion":
+		return slices.Contains(testCase.Tags, "fixed-suffix-expansion-v2") ||
+			slices.Contains(testCase.Tags, "fixed-suffix-expansion-v3") ||
+			slices.Contains(testCase.Tags, "fixed-suffix-expansion-boundary")
+	default:
+		return slices.Contains(testCase.Tags, "traversal-qualification")
+	}
+}
+
+// validateWriteScenario checks mutation expectations and post-state query completeness.
+func validateWriteScenario(scenario WriteScenario) error {
+	if scenario.SelectionCypher == "" {
+		return fmt.Errorf("write_scenario.selection_cypher is required")
+	}
+	if scenario.ExpectedMatched == nil {
+		return fmt.Errorf("write_scenario.expected_matched is required")
+	}
+	if scenario.ExpectedAffected == nil {
+		return fmt.Errorf("write_scenario.expected_affected is required")
+	}
+	if scenario.AffectedEntity != "node" && scenario.AffectedEntity != "relationship" {
+		return fmt.Errorf("write_scenario.affected_entity must be node or relationship")
+	}
+	if len(scenario.PostState) == 0 {
+		return fmt.Errorf("write_scenario.post_state is required")
+	}
+
+	for idx, postState := range scenario.PostState {
+		if postState.Name == "" {
+			return fmt.Errorf("write_scenario.post_state[%d].name is required", idx)
+		}
+		if postState.Cypher == "" {
+			return fmt.Errorf("write_scenario.post_state[%d].cypher is required", idx)
+		}
+		if postState.Expected.RowCount == nil && postState.Expected.ScalarInt == nil {
+			return fmt.Errorf("write_scenario.post_state[%d].expected requires row_count or scalar_int", idx)
+		}
+	}
+
+	return nil
+}
+
+// decodeJSONFile reads a JSON file and decodes it into the supplied destination.
 func decodeJSONFile(path string, target any) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -94,6 +248,7 @@ func decodeJSONFile(path string, target any) error {
 	return nil
 }
 
+// scaleCorpusDatasets returns unique corpus dataset names in sorted order.
 func scaleCorpusDatasets(corpus ScaleCorpus) []string {
 	var (
 		seen     = map[string]struct{}{}
@@ -113,6 +268,7 @@ func scaleCorpusDatasets(corpus ScaleCorpus) []string {
 	return datasets
 }
 
+// scaleCasesByDataset indexes scale cases by dataset while preserving corpus order.
 func scaleCasesByDataset(corpus ScaleCorpus) map[string][]ScaleCase {
 	grouped := map[string][]ScaleCase{}
 	for _, testCase := range corpus.Cases {
