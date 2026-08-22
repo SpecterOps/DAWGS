@@ -29,6 +29,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
+	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -36,17 +37,24 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// ConnectionStringEnv names the default environment variable read by integration sessions.
 const ConnectionStringEnv = "CONNECTION_STRING"
 
 var (
-	localDatasetFlag   = flag.String("local-dataset", "", "name of a local dataset to test (e.g. local/phantom)")
+	// localDatasetFlag optionally restricts the integration harness to one local dataset.
+	localDatasetFlag = flag.String("local-dataset", "", "name of a local dataset to test (e.g. local/phantom)")
+
+	// errFixtureRollback is the sentinel returned to force successful fixture transactions to roll back.
 	errFixtureRollback = errors.New("fixture rollback")
 )
 
 type CleanupMode int
 
 const (
+	// CleanupGraph removes graph data when an integration session closes.
 	CleanupGraph CleanupMode = iota
+
+	// CloseOnly closes an integration session without deleting graph data.
 	CloseOnly
 )
 
@@ -90,7 +98,8 @@ func DriverFromConnectionString(connStr string) (string, error) {
 	}
 }
 
-func Open(t *testing.T, opts Options) *Session {
+// Open validates the configured disposable target, initializes its schema, and returns an integration session registered for cleanup.
+func Open(t testing.TB, opts Options) *Session {
 	t.Helper()
 
 	ctx := context.Background()
@@ -105,6 +114,9 @@ func Open(t *testing.T, opts Options) *Session {
 			t.Skipf("%s env var is not set", connEnv)
 		}
 		t.Fatalf("%s env var is not set", connEnv)
+	}
+	if err := databaseguard.ValidateEnvironment(connStr); err != nil {
+		t.Fatalf("integration database safety check failed: %v", err)
 	}
 
 	driver, err := DriverFromConnectionString(connStr)
@@ -226,6 +238,7 @@ func (s *Session) WithRollback(t *testing.T, delegate func(tx graph.Transaction)
 	return s.withRollback(t, delegate)
 }
 
+// withRollback runs delegate in a write transaction and converts the fixture rollback sentinel into success.
 func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction) error) error {
 	t.Helper()
 
@@ -243,7 +256,8 @@ func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction)
 	return err
 }
 
-func buildSchema(t *testing.T, opts Options) *graph.Schema {
+// buildSchema combines kinds discovered from selected datasets with explicitly requested kinds.
+func buildSchema(t testing.TB, opts Options) *graph.Schema {
 	t.Helper()
 
 	nodeKinds, edgeKinds := collectKinds(t, opts.Datasets, opts.datasetPath())
@@ -270,7 +284,7 @@ func buildSchema(t *testing.T, opts Options) *graph.Schema {
 }
 
 // collectKinds parses the given datasets and returns the union of all node and edge kinds.
-func collectKinds(t *testing.T, datasets []string, datasetPath func(name string) string) (graph.Kinds, graph.Kinds) {
+func collectKinds(t testing.TB, datasets []string, datasetPath func(name string) string) (graph.Kinds, graph.Kinds) {
 	t.Helper()
 
 	var nodeKinds, edgeKinds graph.Kinds
@@ -295,6 +309,7 @@ func collectKinds(t *testing.T, datasets []string, datasetPath func(name string)
 	return nodeKinds, edgeKinds
 }
 
+// datasetPath returns the configured dataset resolver or the repository testdata resolver.
 func (s *Options) datasetPath() func(name string) string {
 	if s.DatasetPath != nil {
 		return s.DatasetPath
@@ -305,6 +320,8 @@ func (s *Options) datasetPath() func(name string) string {
 	}
 }
 
+// graphQueryMemoryLimit returns the backend's configured query memory limit,
+// defaulting to unlimited when the driver does not expose one.
 func (s Options) graphQueryMemoryLimit() size.Size {
 	if s.GraphQueryMemoryLimit == 0 {
 		return size.Gibibyte

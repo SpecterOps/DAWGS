@@ -1,0 +1,70 @@
+{
+  "families": [
+    {
+      "name": "LOOKUP-15 empty graph counts",
+      "template": "{{query}}",
+      "fixture": {"nodes": [], "edges": []},
+      "variants": [
+        {"name": "LOOKUP-15 empty node count", "vars": {"query": "MATCH (n) RETURN count(n)"}, "assert": {"exact_int": 0}},
+        {"name": "LOOKUP-15 empty relationship count", "vars": {"query": "MATCH ()-[r]->() RETURN count(r)"}, "assert": {"exact_int": 0}}
+      ]
+    },
+    {
+      "name": "LOOKUP-15 node-only graph counts",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "node-a", "kinds": ["CountNode"], "properties": {"name": "a"}},
+          {"id": "node-b", "kinds": ["CountNode"], "properties": {"name": "b"}},
+          {"id": "node-c", "kinds": ["CountNode"], "properties": {"name": "c"}}
+        ],
+        "edges": []
+      },
+      "variants": [
+        {"name": "LOOKUP-15 node-only node count", "vars": {"query": "MATCH (n) RETURN count(n)"}, "assert": {"exact_int": 3}},
+        {"name": "LOOKUP-15 node-only relationship count", "vars": {"query": "MATCH ()-[r]->() RETURN count(r)"}, "assert": {"exact_int": 0}}
+      ]
+    },
+    {
+      "name": "LOOKUP-15 edge-bearing graph counts",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "node-a", "kinds": ["CountNode"], "properties": {"name": "a"}},
+          {"id": "node-b", "kinds": ["CountNode"], "properties": {"name": "b"}}
+        ],
+        "edges": [
+          {"start_id": "node-a", "end_id": "node-b", "kind": "CountEdge", "properties": {"marker": "edge"}}
+        ]
+      },
+      "variants": [
+        {"name": "LOOKUP-15 edge-bearing node count", "vars": {"query": "MATCH (n) RETURN count(n)"}, "assert": {"exact_int": 2}},
+        {"name": "LOOKUP-15 edge-bearing relationship count", "vars": {"query": "MATCH ()-[r]->() RETURN count(r)"}, "assert": {"exact_int": 1}}
+      ]
+    },
+    {
+      "name": "LOOKUP-15 dense graph counts",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "node-a", "kinds": ["CountNode"], "properties": {"name": "a"}},
+          {"id": "node-b", "kinds": ["CountNode"], "properties": {"name": "b"}},
+          {"id": "node-c", "kinds": ["CountNode"], "properties": {"name": "c"}},
+          {"id": "node-d", "kinds": ["CountNode"], "properties": {"name": "d"}}
+        ],
+        "edges": [
+          {"start_id": "node-a", "end_id": "node-b", "kind": "CountEdge", "properties": {"marker": "a-b"}},
+          {"start_id": "node-a", "end_id": "node-c", "kind": "CountEdge", "properties": {"marker": "a-c"}},
+          {"start_id": "node-a", "end_id": "node-d", "kind": "CountEdge", "properties": {"marker": "a-d"}},
+          {"start_id": "node-b", "end_id": "node-a", "kind": "CountEdge", "properties": {"marker": "b-a"}},
+          {"start_id": "node-c", "end_id": "node-a", "kind": "CountEdge", "properties": {"marker": "c-a"}},
+          {"start_id": "node-d", "end_id": "node-a", "kind": "CountEdge", "properties": {"marker": "d-a"}}
+        ]
+      },
+      "variants": [
+        {"name": "LOOKUP-15 dense node count", "vars": {"query": "MATCH (n) RETURN count(n)"}, "assert": {"exact_int": 4}},
+        {"name": "LOOKUP-15 dense relationship count", "vars": {"query": "MATCH ()-[r]->() RETURN count(r)"}, "assert": {"exact_int": 6}}
+      ]
+    }
+  ]
+}
