@@ -24,51 +24,128 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/specterops/dawgs/testutil"
 )
 
+// Summary aggregates benchmark records into cases, modes, improvements, and cost models.
 type Summary struct {
-	GeneratedAt  time.Time       `json:"generated_at"`
-	Modes        []ModeSummary   `json:"modes"`
-	Cases        []CaseSummary   `json:"cases"`
-	Regressions  []BaselineEntry `json:"regressions,omitempty"`
+	// GeneratedAt records when the summary was assembled.
+	GeneratedAt time.Time `json:"generated_at"`
+	// Metadata captures build and baseline metadata.
+	Metadata testutil.BaselineMetadata `json:"metadata"`
+	// Modes lists aggregate mode summaries in deterministic report order.
+	Modes []ModeSummary `json:"modes"`
+	// Cases contains per-workload aggregates in deterministic report order.
+	Cases []CaseSummary `json:"cases"`
+	// Regressions lists baseline comparisons classified as regressions.
+	Regressions []BaselineEntry `json:"regressions,omitempty"`
+	// Improvements lists baseline comparisons classified as improvements.
 	Improvements []BaselineEntry `json:"improvements,omitempty"`
+	// CostModels lists per-case client/backend latency attribution models.
+	CostModels []CostModelCase `json:"cost_models,omitempty"`
 }
 
+// CostModelCase attributes one case's end-to-end latency across compile and backend boundary components.
+type CostModelCase struct {
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Boundary identifies the measured execution boundary.
+	Boundary string `json:"boundary"`
+	// E2EMedian records median end-to-end latency attributed by the cost model.
+	E2EMedian time.Duration `json:"e2e_median"`
+	// Attribution reports the fraction of median end-to-end latency explained by measured components.
+	Attribution float64 `json:"attribution"`
+	// Components lists cost-model components in display order.
+	Components []CostModelComponent `json:"components"`
+}
+
+// CostModelComponent attributes a duration and share to one benchmark boundary component.
+type CostModelComponent struct {
+	// Name labels the measured latency component shown in the cost model.
+	Name string `json:"name"`
+	// Interval states whether the component is exclusive, derived, or inclusive and overlapping.
+	Interval string `json:"interval"`
+	// Median supplies the median input to the CostModelComponent contract.
+	Median time.Duration `json:"median"`
+	// P95 supplies the p95 input to the CostModelComponent contract.
+	P95 time.Duration `json:"p95"`
+	// Rows records the number of rows.
+	Rows int64 `json:"rows,omitempty"`
+	// ShareOfE2E reports this component's fraction of end-to-end latency.
+	ShareOfE2E float64 `json:"share_of_e2e,omitempty"`
+	// Confidence describes whether the component is directly observed, derived, or diagnostic.
+	Confidence string `json:"confidence"`
+}
+
+// ModeSummary aggregates sample and latency statistics for one execution mode.
 type ModeSummary struct {
-	Mode           ExecutionMode `json:"mode"`
-	Total          int           `json:"total"`
-	OK             int           `json:"ok"`
-	RowMismatch    int           `json:"row_mismatch"`
-	Error          int           `json:"error"`
-	NotImplemented int           `json:"not_implemented"`
+	// Mode identifies the backend whose result statuses are aggregated.
+	Mode ExecutionMode `json:"mode"`
+	// Total counts all results emitted for the execution mode.
+	Total int `json:"total"`
+	// OK counts successful results for an execution mode.
+	OK int `json:"ok"`
+	// RowMismatch counts results whose row cardinality differed from expectation.
+	RowMismatch int `json:"row_mismatch"`
+	// Error counts results that failed during backend execution.
+	Error int `json:"error"`
+	// NotImplemented counts cases unsupported by the execution mode.
+	NotImplemented int `json:"not_implemented"`
 }
 
+// CaseSummary aggregates all backend results for one dataset case.
 type CaseSummary struct {
-	Source   string                         `json:"source"`
-	Dataset  string                         `json:"dataset"`
-	Name     string                         `json:"name"`
-	Category string                         `json:"category"`
-	Modes    map[ExecutionMode]ModeCaseCell `json:"modes"`
+	// Source identifies the source corpus file.
+	Source string `json:"source"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Category groups cases by workload category.
+	Category string `json:"category"`
+	// Modes maps execution mode to its status, statistics, and baseline comparison.
+	Modes map[ExecutionMode]ModeCaseCell `json:"modes"`
 }
 
+// ModeCaseCell contains the status, statistics, and baseline comparison rendered in one summary cell.
 type ModeCaseCell struct {
-	Status         string              `json:"status"`
-	Rows           int64               `json:"rows,omitempty"`
-	Median         time.Duration       `json:"median,omitempty"`
-	Baseline       *BaselineComparison `json:"baseline,omitempty"`
-	FallbackReason string              `json:"fallback_reason,omitempty"`
-	Error          string              `json:"error,omitempty"`
+	// Status supplies the status input to the ModeCaseCell contract.
+	Status string `json:"status"`
+	// Rows records the number of rows.
+	Rows int64 `json:"rows,omitempty"`
+	// Median supplies the median input to the ModeCaseCell contract.
+	Median time.Duration `json:"median,omitempty"`
+	// Baseline contains the latency comparison with a matching baseline record.
+	Baseline *BaselineComparison `json:"baseline,omitempty"`
+	// FallbackReason explains why execution used a fallback architecture.
+	FallbackReason string `json:"fallback_reason,omitempty"`
+	// Error supplies the error input to the ModeCaseCell contract.
+	Error string `json:"error,omitempty"`
+	// RuntimeReceiptChains preserves every measured invocation's complete
+	// ordered traversal branch chain.
+	RuntimeReceiptChains [][]RuntimeReceiptEvent `json:"runtime_receipt_chains,omitempty"`
 }
 
+// BaselineEntry stores one case/backend baseline median used for future comparison.
 type BaselineEntry struct {
-	Dataset        string        `json:"dataset"`
-	Name           string        `json:"name"`
-	Mode           ExecutionMode `json:"mode"`
+	// Dataset identifies the fixture dataset.
+	Dataset string `json:"dataset"`
+	// Name identifies the case or record within its dataset.
+	Name string `json:"name"`
+	// Mode identifies the backend to which the baseline comparison applies.
+	Mode ExecutionMode `json:"mode"`
+	// BaselineMedian supplies the baseline median input to the BaselineEntry contract.
 	BaselineMedian time.Duration `json:"baseline_median"`
-	CurrentMedian  time.Duration `json:"current_median"`
-	Ratio          float64       `json:"ratio"`
+	// CurrentMedian supplies the current median input to the BaselineEntry contract.
+	CurrentMedian time.Duration `json:"current_median"`
+	// Ratio reports the candidate-to-baseline latency ratio.
+	Ratio float64 `json:"ratio"`
 }
 
+// buildSummary aggregates benchmark records by case and mode and derives boundary cost models.
 func buildSummary(records []CaseResult) Summary {
 	var (
 		summary = Summary{
@@ -79,6 +156,9 @@ func buildSummary(records []CaseResult) Summary {
 	)
 
 	for _, record := range records {
+		if summary.Metadata == (testutil.BaselineMetadata{}) {
+			summary.Metadata = record.Metadata
+		}
 		modeSummary := modeSummaries[record.ExecutionMode]
 		if modeSummary == nil {
 			modeSummary = &ModeSummary{Mode: record.ExecutionMode}
@@ -114,12 +194,13 @@ func buildSummary(records []CaseResult) Summary {
 		}
 
 		caseSummary.Modes[record.ExecutionMode] = ModeCaseCell{
-			Status:         record.Status,
-			Rows:           record.RowCount,
-			Median:         record.Stats.Median,
-			Baseline:       record.Baseline,
-			FallbackReason: record.FallbackReason,
-			Error:          record.Error,
+			Status:               record.Status,
+			Rows:                 record.RowCount,
+			Median:               record.Stats.Median,
+			Baseline:             record.Baseline,
+			FallbackReason:       record.FallbackReason,
+			Error:                record.Error,
+			RuntimeReceiptChains: runtimeReceiptChains(record.Stats.Samples),
 		}
 
 		if record.Baseline != nil {
@@ -136,6 +217,9 @@ func buildSummary(records []CaseResult) Summary {
 			} else if record.Baseline.Ratio < 1 {
 				summary.Improvements = append(summary.Improvements, entry)
 			}
+		}
+		if record.RawPGXWaterfall != nil && len(record.RawPGXWaterfall.Samples) > 0 {
+			summary.CostModels = append(summary.CostModels, buildBoundaryCostModel(record))
 		}
 	}
 
@@ -163,9 +247,119 @@ func buildSummary(records []CaseResult) Summary {
 
 	sortBaselineEntries(summary.Regressions, true)
 	sortBaselineEntries(summary.Improvements, false)
+	sort.Slice(summary.CostModels, func(i, j int) bool {
+		if summary.CostModels[i].Dataset != summary.CostModels[j].Dataset {
+			return summary.CostModels[i].Dataset < summary.CostModels[j].Dataset
+		}
+		return summary.CostModels[i].Name < summary.CostModels[j].Name
+	})
 	return summary
 }
 
+// buildBoundaryCostModel attributes end-to-end latency among compile, driver, planning, execution, and decode stages.
+func buildBoundaryCostModel(record CaseResult) CostModelCase {
+	samples := record.RawPGXWaterfall.Samples
+	total := boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.Total })
+	e2e := durationFromQuantile(total, 0.50)
+	components := []struct {
+		// name labels the latency component in the rendered cost model.
+		name string
+		// values contains the observed durations attributed to the component.
+		values []time.Duration
+	}{
+		{
+			name:   "Pool acquisition",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.PoolWait }),
+		},
+		{
+			name:   "Transaction setup",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.Transaction }),
+		},
+		{
+			name:   "Bind/prepare",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.BindPrepare }),
+		},
+		{
+			name:   "First-row transfer/decode",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.FirstRow }),
+		},
+		{
+			name:   "Remaining transfer/decode",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.AllRowsDecode }),
+		},
+		{
+			name:   "Drain/close",
+			values: boundaryDurations(samples, func(sample BoundarySample) time.Duration { return sample.DrainClose }),
+		},
+	}
+	model := CostModelCase{
+		Dataset:   record.Dataset,
+		Name:      record.Name,
+		Boundary:  record.RawPGXWaterfall.Boundary,
+		E2EMedian: e2e,
+	}
+	var attributed time.Duration
+	for _, component := range components {
+		median := durationFromQuantile(component.values, 0.50)
+		attributed += median
+		model.Components = append(model.Components, CostModelComponent{
+			Name:       component.name,
+			Interval:   "exclusive",
+			Median:     median,
+			P95:        durationFromQuantile(component.values, 0.95),
+			Rows:       samples[0].Rows,
+			ShareOfE2E: durationShare(median, e2e),
+			Confidence: "raw-pgx observed boundary",
+		})
+	}
+	residual := e2e - attributed
+	if residual < 0 {
+		residual = 0
+	}
+	model.Components = append(model.Components, CostModelComponent{
+		Name:       "Unexplained residual",
+		Interval:   "derived",
+		Median:     residual,
+		ShareOfE2E: durationShare(residual, e2e),
+		Confidence: "derived",
+	})
+	model.Attribution = durationShare(e2e-residual, e2e)
+	if record.PostgresMetrics != nil && record.PostgresMetrics.ExecutionMS != nil {
+		server := time.Duration(*record.PostgresMetrics.ExecutionMS * float64(time.Millisecond))
+		model.Components = append(model.Components, CostModelComponent{
+			Name:       "Server execution",
+			Interval:   "inclusive/overlapping",
+			Median:     server,
+			ShareOfE2E: durationShare(server, e2e),
+			Confidence: "single EXPLAIN diagnostic",
+		})
+	}
+	return model
+}
+
+// boundaryDurations extracts positive boundary-stage durations from benchmark samples.
+func boundaryDurations(samples []BoundarySample, selectDuration func(BoundarySample) time.Duration) []time.Duration {
+	values := make([]time.Duration, len(samples))
+	for idx, sample := range samples {
+		values[idx] = selectDuration(sample)
+	}
+	return values
+}
+
+// durationFromQuantile converts a floating-point duration quantile to time.Duration.
+func durationFromQuantile(values []time.Duration, probability float64) time.Duration {
+	return time.Duration(durationQuantile(values, probability))
+}
+
+// durationShare returns a component's fraction of total latency.
+func durationShare(component, total time.Duration) float64 {
+	if total <= 0 {
+		return 0
+	}
+	return float64(component) / float64(total)
+}
+
+// sortBaselineEntries orders baseline entries by dataset, case, and execution mode.
 func sortBaselineEntries(entries []BaselineEntry, descending bool) {
 	sort.Slice(entries, func(i, j int) bool {
 		if descending {
@@ -176,6 +370,7 @@ func sortBaselineEntries(entries []BaselineEntry, descending bool) {
 	})
 }
 
+// writeMarkdownSummaryFile creates a Markdown summary file and propagates write or close failures.
 func writeMarkdownSummaryFile(path string, summary Summary) error {
 	if err := ensureOutputDir(path); err != nil {
 		return err
@@ -190,6 +385,7 @@ func writeMarkdownSummaryFile(path string, summary Summary) error {
 	return writeMarkdownSummary(output, summary)
 }
 
+// writeJSONSummaryFile creates a JSON summary file and propagates encode or close failures.
 func writeJSONSummaryFile(path string, summary Summary) error {
 	if err := ensureOutputDir(path); err != nil {
 		return err
@@ -206,9 +402,11 @@ func writeJSONSummaryFile(path string, summary Summary) error {
 	return encoder.Encode(summary)
 }
 
+// writeMarkdownSummary renders benchmark overview, case matrix, improvements, and cost models as Markdown.
 func writeMarkdownSummary(w io.Writer, summary Summary) error {
 	fmt.Fprintf(w, "# GraphBench Summary\n\n")
 	fmt.Fprintf(w, "Generated: %s\n\n", summary.GeneratedAt.Format(time.RFC3339))
+	fmt.Fprintf(w, "DAWGS version: `%s`\n\n", summary.Metadata.DAWGSVersion)
 
 	fmt.Fprintf(w, "## Modes\n\n")
 	fmt.Fprintf(w, "| Mode | Total | OK | Row Mismatch | Error | Not Implemented |\n")
@@ -246,10 +444,23 @@ func writeMarkdownSummary(w io.Writer, summary Summary) error {
 		fmt.Fprintf(w, "\n## Baseline Improvements\n\n")
 		writeBaselineTable(w, summary.Improvements)
 	}
+	if len(summary.CostModels) > 0 {
+		fmt.Fprintf(w, "\n## Raw PostgreSQL Cost Models\n\n")
+		for _, model := range summary.CostModels {
+			fmt.Fprintf(w, "### %s / %s\n\n", escapeMarkdown(model.Dataset), escapeMarkdown(model.Name))
+			fmt.Fprintf(w, "Boundary attribution: %.1f%% of %s.\n\n", model.Attribution*100, formatDuration(model.E2EMedian))
+			fmt.Fprintf(w, "| Component | Interval | Median | p95 | Share of E2E | Confidence |\n")
+			fmt.Fprintf(w, "| --- | --- | ---: | ---: | ---: | --- |\n")
+			for _, component := range model.Components {
+				fmt.Fprintf(w, "| %s | %s | %s | %s | %.1f%% | %s |\n", escapeMarkdown(component.Name), component.Interval, formatDuration(component.Median), formatDuration(component.P95), component.ShareOfE2E*100, escapeMarkdown(component.Confidence))
+			}
+		}
+	}
 
 	return nil
 }
 
+// writeBaselineTable renders baseline comparisons for one summary section.
 func writeBaselineTable(w io.Writer, entries []BaselineEntry) {
 	fmt.Fprintf(w, "| Case | Dataset | Mode | Baseline | Current | Ratio |\n")
 	fmt.Fprintf(w, "| --- | --- | --- | ---: | ---: | ---: |\n")
@@ -265,6 +476,7 @@ func writeBaselineTable(w io.Writer, entries []BaselineEntry) {
 	}
 }
 
+// formatModeCell formats one backend result and its baseline comparison for Markdown.
 func formatModeCell(cell ModeCaseCell) string {
 	if cell.Status == "" {
 		return "-"
@@ -296,6 +508,7 @@ func formatModeCell(cell ModeCaseCell) string {
 	return escapeMarkdown(strings.Join(parts, "; "))
 }
 
+// formatDuration formats a duration for compact benchmark tables.
 func formatDuration(duration time.Duration) string {
 	ms := float64(duration.Microseconds()) / 1000.0
 	if ms < 1 {
@@ -308,6 +521,7 @@ func formatDuration(duration time.Duration) string {
 	return fmt.Sprintf("%.0fms", ms)
 }
 
+// escapeMarkdown escapes table delimiters and normalizes line breaks for Markdown cells.
 func escapeMarkdown(value string) string {
 	return strings.ReplaceAll(value, "|", "\\|")
 }
