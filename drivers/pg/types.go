@@ -7,14 +7,48 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// edgeComposite is the ordered Go representation of PostgreSQL's edge composite type.
 type edgeComposite struct {
-	ID         int64
-	StartID    int64
-	EndID      int64
-	KindID     int16
+	// ID is the database identifier of the decoded relationship.
+	ID int64
+
+	// StartID is the database identifier of the relationship's start node.
+	StartID int64
+
+	// EndID is the database identifier of the relationship's end node.
+	EndID int64
+
+	// KindID is the PostgreSQL int2 identifier of the relationship kind.
+	KindID int16
+
+	// Properties contains the relationship's decoded JSON property values.
 	Properties map[string]any
 }
 
+// ScanNull rejects a null edge because the owned scalar representation has no null state.
+func (s *edgeComposite) ScanNull() error {
+	return fmt.Errorf("cannot scan NULL into %T", s)
+}
+
+// ScanIndex returns the destination for a PostgreSQL edge field in schema order.
+func (s *edgeComposite) ScanIndex(index int) any {
+	switch index {
+	case 0:
+		return &s.ID
+	case 1:
+		return &s.StartID
+	case 2:
+		return &s.EndID
+	case 3:
+		return &s.KindID
+	case 4:
+		return &s.Properties
+	default:
+		return fmt.Errorf("%T only has 5 fields: index %d is out of bounds", s, index)
+	}
+}
+
+// castSlice copies either a typed slice or a pgx []any representation into []T.
 func castSlice[T any](raw any) ([]T, error) {
 	switch rawSlice := raw.(type) {
 	case []T:
@@ -38,6 +72,7 @@ func castSlice[T any](raw any) ([]T, error) {
 	}
 }
 
+// castMapValueAsSliceOf retrieves key from a fallback composite map and converts its value to []T.
 func castMapValueAsSliceOf[T any](compositeMap map[string]any, key string) ([]T, error) {
 	if src, hasKey := compositeMap[key]; !hasKey {
 		return nil, fmt.Errorf("composite map does not contain expected key %s", key)
@@ -46,6 +81,7 @@ func castMapValueAsSliceOf[T any](compositeMap map[string]any, key string) ([]T,
 	}
 }
 
+// castAndAssignMapValue assigns a fallback composite-map field to dst, allowing lossless widening of integer values.
 func castAndAssignMapValue[T any](compositeMap map[string]any, key string, dst *T) error {
 	if src, hasKey := compositeMap[key]; !hasKey {
 		return fmt.Errorf("composite map does not contain expected key %s", key)
@@ -124,52 +160,65 @@ func castAndAssignMapValue[T any](compositeMap map[string]any, key string, dst *
 	return nil
 }
 
+// nodeCompositesFromRaw converts typed or pgx fallback arrays into owned node composites.
 func nodeCompositesFromRaw(raw any) ([]nodeComposite, error) {
-	rawNodes, typeOK := raw.([]any)
-	if !typeOK {
-		return nil, fmt.Errorf("expected raw node composite array type []any but received %T", raw)
-	}
-
-	nodes := make([]nodeComposite, 0, len(rawNodes))
-	for _, rawNode := range rawNodes {
-		compositeMap, typeOK := rawNode.(map[string]any)
-		if !typeOK {
-			return nil, fmt.Errorf("unexpected type for raw node: %T", rawNode)
+	switch rawNodes := raw.(type) {
+	case []nodeComposite:
+		return rawNodes, nil
+	case []any:
+		nodes := make([]nodeComposite, len(rawNodes))
+		for idx, rawNode := range rawNodes {
+			if node, typeOK := nodeCompositeFromRaw(rawNode); !typeOK {
+				return nil, fmt.Errorf("unexpected type for raw node at index %d: %T", idx, rawNode)
+			} else {
+				nodes[idx] = node
+			}
 		}
 
-		var node nodeComposite
-		if err := node.FromMap(compositeMap); err != nil {
-			return nil, err
-		}
-
-		nodes = append(nodes, node)
+		return nodes, nil
+	default:
+		return nil, fmt.Errorf("expected raw node composite array type []nodeComposite or []any but received %T", raw)
 	}
-
-	return nodes, nil
 }
 
+// edgeCompositesFromRaw converts typed or pgx fallback arrays into owned edge composites.
 func edgeCompositesFromRaw(raw any) ([]edgeComposite, error) {
-	rawEdges, typeOK := raw.([]any)
-	if !typeOK {
-		return nil, fmt.Errorf("expected raw edge composite array type []any but received %T", raw)
-	}
-
-	edges := make([]edgeComposite, 0, len(rawEdges))
-	for _, rawEdge := range rawEdges {
-		compositeMap, typeOK := rawEdge.(map[string]any)
-		if !typeOK {
-			return nil, fmt.Errorf("unexpected type for raw edge: %T", rawEdge)
+	switch rawEdges := raw.(type) {
+	case []edgeComposite:
+		return rawEdges, nil
+	case []any:
+		edges := make([]edgeComposite, len(rawEdges))
+		for idx, rawEdge := range rawEdges {
+			if edge, typeOK := edgeCompositeFromRaw(rawEdge); !typeOK {
+				return nil, fmt.Errorf("unexpected type for raw edge at index %d: %T", idx, rawEdge)
+			} else {
+				edges[idx] = edge
+			}
 		}
 
+		return edges, nil
+	default:
+		return nil, fmt.Errorf("expected raw edge composite array type []edgeComposite or []any but received %T", raw)
+	}
+}
+
+// edgeCompositeFromRaw accepts an owned edge value, pointer, or pgx fallback map.
+func edgeCompositeFromRaw(raw any) (edgeComposite, bool) {
+	switch typedRaw := raw.(type) {
+	case edgeComposite:
+		return typedRaw, true
+	case *edgeComposite:
+		if typedRaw != nil {
+			return *typedRaw, true
+		}
+	case map[string]any:
 		var edge edgeComposite
-		if err := edge.FromMap(compositeMap); err != nil {
-			return nil, err
+		if edge.TryMap(typedRaw) {
+			return edge, true
 		}
-
-		edges = append(edges, edge)
 	}
 
-	return edges, nil
+	return edgeComposite{}, false
 }
 
 func (s *edgeComposite) TryMap(compositeMap map[string]any) bool {
@@ -215,10 +264,54 @@ func (s *edgeComposite) ToRelationship(ctx context.Context, kindMapper KindMappe
 	return nil
 }
 
+// nodeComposite is the ordered Go representation of PostgreSQL's node composite type.
 type nodeComposite struct {
-	ID         int64
-	KindIDs    []int16
+	// ID is the database identifier of the decoded node.
+	ID int64
+
+	// KindIDs contains the PostgreSQL int2 identifiers of the node's kinds.
+	KindIDs []int16
+
+	// Properties contains the node's decoded JSON property values.
 	Properties map[string]any
+}
+
+// ScanNull rejects a null node because the owned scalar representation has no null state.
+func (s *nodeComposite) ScanNull() error {
+	return fmt.Errorf("cannot scan NULL into %T", s)
+}
+
+// ScanIndex returns the destination for a PostgreSQL node field in schema order.
+func (s *nodeComposite) ScanIndex(index int) any {
+	switch index {
+	case 0:
+		return &s.ID
+	case 1:
+		return &s.KindIDs
+	case 2:
+		return &s.Properties
+	default:
+		return fmt.Errorf("%T only has 3 fields: index %d is out of bounds", s, index)
+	}
+}
+
+// nodeCompositeFromRaw accepts an owned node value, pointer, or pgx fallback map.
+func nodeCompositeFromRaw(raw any) (nodeComposite, bool) {
+	switch typedRaw := raw.(type) {
+	case nodeComposite:
+		return typedRaw, true
+	case *nodeComposite:
+		if typedRaw != nil {
+			return *typedRaw, true
+		}
+	case map[string]any:
+		var node nodeComposite
+		if node.TryMap(typedRaw) {
+			return node, true
+		}
+	}
+
+	return nodeComposite{}, false
 }
 
 func (s *nodeComposite) TryMap(compositeMap map[string]any) bool {
@@ -256,21 +349,62 @@ func (s *nodeComposite) ToNode(ctx context.Context, kindMapper KindMapper, node 
 	return nil
 }
 
+// pathComposite is the ordered Go representation of PostgreSQL's path composite type.
 type pathComposite struct {
+	// Nodes contains the path's decoded nodes in traversal order.
 	Nodes []nodeComposite
+
+	// Edges contains the path's decoded relationships in traversal order.
 	Edges []edgeComposite
+}
+
+// ScanNull rejects a null path because the owned scalar representation has no null state.
+func (s *pathComposite) ScanNull() error {
+	return fmt.Errorf("cannot scan NULL into %T", s)
+}
+
+// ScanIndex returns the destination for a PostgreSQL path field in schema order.
+func (s *pathComposite) ScanIndex(index int) any {
+	switch index {
+	case 0:
+		return &s.Nodes
+	case 1:
+		return &s.Edges
+	default:
+		return fmt.Errorf("%T only has 2 fields: index %d is out of bounds", s, index)
+	}
+}
+
+// pathCompositeFromRaw accepts an owned path value, pointer, or pgx fallback map.
+func pathCompositeFromRaw(raw any) (pathComposite, bool) {
+	switch typedRaw := raw.(type) {
+	case pathComposite:
+		return typedRaw, true
+	case *pathComposite:
+		if typedRaw != nil {
+			return *typedRaw, true
+		}
+	case map[string]any:
+		var path pathComposite
+		if path.TryMap(typedRaw) {
+			return path, true
+		}
+	}
+
+	return pathComposite{}, false
 }
 
 func (s *pathComposite) TryMap(compositeMap map[string]any) bool {
 	return s.FromMap(compositeMap) == nil
 }
 
+// FromMap populates a path composite from pgx's fallback map representation of its node and edge arrays.
 func (s *pathComposite) FromMap(compositeMap map[string]any) error {
 	if rawNodes, hasNodes := compositeMap["nodes"]; hasNodes {
 		if nodes, err := nodeCompositesFromRaw(rawNodes); err != nil {
 			return err
 		} else {
-			s.Nodes = append(s.Nodes, nodes...)
+			s.Nodes = nodes
 		}
 	}
 
@@ -278,7 +412,7 @@ func (s *pathComposite) FromMap(compositeMap map[string]any) error {
 		if edges, err := edgeCompositesFromRaw(rawEdges); err != nil {
 			return err
 		} else {
-			s.Edges = append(s.Edges, edges...)
+			s.Edges = edges
 		}
 	}
 

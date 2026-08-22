@@ -12,23 +12,43 @@ import (
 )
 
 var (
-	batchWriteSize    = defaultBatchWriteSize
+	// batchWriteSize is the process-wide flush threshold used by new batch operations.
+	batchWriteSize = defaultBatchWriteSize
+
+	// readOnlyTxOptions configures transactions that must not mutate PostgreSQL state.
 	readOnlyTxOptions = pgx.TxOptions{
 		AccessMode: pgx.ReadOnly,
 	}
 
+	// readWriteTxOptions configures transactions that may mutate PostgreSQL state.
 	readWriteTxOptions = pgx.TxOptions{
 		AccessMode: pgx.ReadWrite,
 	}
 )
 
+// Config configures PostgreSQL transaction execution for one graph operation.
 type Config struct {
-	Options            pgx.TxOptions
-	QueryExecMode      pgx.QueryExecMode
+	// Options controls PostgreSQL transaction isolation and access mode.
+	Options pgx.TxOptions
+
+	// QueryExecMode selects pgx's query execution protocol.
+	QueryExecMode pgx.QueryExecMode
+
+	// QueryResultFormats selects the PostgreSQL wire format for returned columns.
 	QueryResultFormats pgx.QueryResultFormats
-	BatchWriteSize     int
+
+	// BatchWriteSize is the number of mutations accumulated before a batch flushes.
+	BatchWriteSize int
+
+	// initializeTraversalRuntimeAttestation prepares session-local receipt state before BEGIN.
+	initializeTraversalRuntimeAttestation bool
+
+	// skipStableSnapshotTraversalWorkspaces prevents ordinary-expansion tool
+	// studies from paying unrelated SP/ASP temporary-workspace setup.
+	skipStableSnapshotTraversalWorkspaces bool
 }
 
+// OptionSetQueryExecMode classifies option set query exec mode for downstream policy decisions.
 func OptionSetQueryExecMode(queryExecMode pgx.QueryExecMode) graph.TransactionOption {
 	return func(config *graph.TransactionConfig) {
 		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
@@ -37,34 +57,98 @@ func OptionSetQueryExecMode(queryExecMode pgx.QueryExecMode) graph.TransactionOp
 	}
 }
 
-type Driver struct {
-	pool *pgxpool.Pool
-	*SchemaManager
-}
-
-func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
-	return &Driver{
-		pool:          pool,
-		SchemaManager: NewSchemaManager(pool, graphQueryMemoryLimit),
+// OptionSetTransactionIsolation requests an explicit PostgreSQL transaction at
+// the supplied isolation level. B traversal candidates are selected only for
+// REPEATABLE READ or SERIALIZABLE transactions. The driver prepares the
+// production shortest-path and all-shortest-path temporary workspaces on the
+// acquired session before beginning either stable-snapshot transaction and
+// uses PostgreSQL READ WRITE access so those session-local tables can reset.
+func OptionSetTransactionIsolation(isolation pgx.TxIsoLevel) graph.TransactionOption {
+	return func(config *graph.TransactionConfig) {
+		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
+			pgCfg.Options.IsoLevel = isolation
+			if stableSnapshotIsolation(isolation) {
+				pgCfg.Options.AccessMode = pgx.ReadWrite
+			}
+		}
 	}
 }
 
+// OptionInitializeTraversalRuntimeAttestation prepares the acquired PostgreSQL
+// session before an explicit read-only transaction begins. Callers that arm
+// traversal runtime receipts inside a graph transaction need this option
+// because PostgreSQL forbids creating the temporary workspace after BEGIN READ
+// ONLY. GraphBench normally pins and prepares its session before the timed
+// transaction instead.
+func OptionInitializeTraversalRuntimeAttestation() graph.TransactionOption {
+	return func(config *graph.TransactionConfig) {
+		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
+			pgCfg.initializeTraversalRuntimeAttestation = true
+		}
+	}
+}
+
+// OptionSkipStableSnapshotTraversalWorkspacesForTool keeps a Repeatable Read
+// ordinary-expansion measurement free of unrelated shortest-path workspace
+// setup. It is intentionally tool-scoped and does not alter production policy.
+func OptionSkipStableSnapshotTraversalWorkspacesForTool() graph.TransactionOption {
+	return func(config *graph.TransactionConfig) {
+		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
+			pgCfg.skipStableSnapshotTraversalWorkspaces = true
+		}
+	}
+}
+
+// Driver implements the graph database contract on a PostgreSQL connection pool.
+type Driver struct {
+	// pool supplies connections for graph transactions and maintenance operations.
+	pool *pgxpool.Pool
+
+	// SchemaManager owns asserted graph metadata, kind mappings, and query caches.
+	*SchemaManager
+}
+
+// NewDriver creates a PostgreSQL graph driver with the default driver-wide translation cache.
+func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
+	return NewDriverWithTranslationCacheProvider(graphQueryMemoryLimit, pool, nil)
+}
+
+// NewDriverWithTranslationCacheProvider creates a PostgreSQL driver whose
+// transactions select translations through provider. A nil provider preserves
+// the default v1 driver-wide cache behavior.
+func NewDriverWithTranslationCacheProvider(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, provider CypherTranslationCacheProvider) *Driver {
+	schemaManager := NewSchemaManager(pool, graphQueryMemoryLimit)
+	if provider != nil {
+		schemaManager.translationCacheProvider = provider
+	}
+
+	return &Driver{
+		pool:          pool,
+		SchemaManager: schemaManager,
+	}
+}
+
+// SetDefaultGraph validates and selects graphSchema as the driver's default graph.
 func (s *Driver) SetDefaultGraph(ctx context.Context, graphSchema graph.Graph) error {
 	return s.SchemaManager.SetDefaultGraph(ctx, graphSchema)
 }
 
+// KindMapper returns the driver's graph-kind to PostgreSQL-ID mapper.
 func (s *Driver) KindMapper() KindMapper {
 	return s.SchemaManager
 }
 
+// SetBatchWriteSize changes the process-wide mutation count used for new batch flushes.
 func (s *Driver) SetBatchWriteSize(size int) {
 	batchWriteSize = size
 }
 
+// SetWriteFlushSize is a no-op because PostgreSQL batches do not rotate transactions by size.
 func (s *Driver) SetWriteFlushSize(size int) {
 	// THis is a no-op function since PostgreSQL does not require transaction rotation like Neo4j does
 }
 
+// BatchOperation runs batchDelegate in a write batch using the supplied batch options.
 func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
 	batchConfig := &graph.BatchConfig{
 		BatchSize: batchWriteSize,
@@ -95,11 +179,35 @@ func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 	}
 }
 
+// Close stops the driver's query caches before releasing its PostgreSQL pool.
 func (s *Driver) Close(ctx context.Context) error {
+	if s.SchemaManager != nil {
+		s.SchemaManager.parseCache.Close()
+		s.SchemaManager.translationCache.Close()
+	}
 	s.pool.Close()
 	return nil
 }
 
+// TranslationCacheStats returns query-text-free counters for this driver's
+// bounded Cypher-to-SQL translation cache.
+func (s *Driver) TranslationCacheStats() TranslationCacheStats {
+	if s == nil || s.SchemaManager == nil {
+		return TranslationCacheStats{}
+	}
+	return s.SchemaManager.translationCache.Stats()
+}
+
+// ParseCacheStats returns query-text-free counters for this driver's bounded Cypher parse cache.
+func (s *Driver) ParseCacheStats() ParseCacheStats {
+	if s == nil || s.SchemaManager == nil {
+		return ParseCacheStats{}
+	}
+	return s.SchemaManager.parseCache.Stats()
+}
+
+// renderConfig applies transaction options to PostgreSQL defaults and rejects
+// a driver configuration of the wrong concrete type.
 func renderConfig(batchWriteSize int, pgxOptions pgx.TxOptions, userOptions []graph.TransactionOption) (*Config, error) {
 	graphCfg := graph.TransactionConfig{
 		DriverConfig: &Config{
@@ -125,6 +233,7 @@ func renderConfig(batchWriteSize int, pgxOptions pgx.TxOptions, userOptions []gr
 	return nil, fmt.Errorf("driver config is nil")
 }
 
+// FetchSchema is not implemented because PostgreSQL schema discovery is owned by SchemaManager.
 func (s *Driver) FetchSchema(ctx context.Context) (graph.Schema, error) {
 	// TODO: This is not required for existing functionality as the SchemaManager type handles most of this negotiation
 	//		 however, in the future this function would make it easier to make schema management generic and should be
@@ -132,6 +241,7 @@ func (s *Driver) FetchSchema(ctx context.Context) (graph.Schema, error) {
 	return graph.Schema{}, fmt.Errorf("not implemented")
 }
 
+// AssertSchema creates or validates the requested schema and resets pooled type metadata afterward.
 func (s *Driver) AssertSchema(ctx context.Context, schema graph.Schema) error {
 	// Resetting the pool must be done on every schema assertion as composite types may have changed OIDs
 	defer s.pool.Reset()
@@ -151,6 +261,7 @@ func (s *Driver) AssertSchema(ctx context.Context, schema graph.Schema) error {
 	return nil
 }
 
+// Run executes raw SQL in a write transaction and returns its terminal result error.
 func (s *Driver) Run(ctx context.Context, query string, parameters map[string]any) error {
 	return s.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Raw(query, parameters)
@@ -160,6 +271,7 @@ func (s *Driver) Run(ctx context.Context, query string, parameters map[string]an
 	})
 }
 
+// FetchKinds returns the current in-memory graph-kind mapping.
 func (s *Driver) FetchKinds(_ context.Context) (graph.Kinds, error) {
 	var kinds graph.Kinds
 	for _, kind := range s.SchemaManager.GetKindIDsByKind() {
@@ -169,6 +281,7 @@ func (s *Driver) FetchKinds(_ context.Context) (graph.Kinds, error) {
 	return kinds, nil
 }
 
+// RefreshKinds discards and reloads the driver's in-memory kind mapping.
 func (s *Driver) RefreshKinds(ctx context.Context) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -178,6 +291,7 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	return s.SchemaManager.Fetch(ctx)
 }
 
+// OptimizeStorage runs PostgreSQL storage maintenance on a leased pool connection.
 func (s *Driver) OptimizeStorage(ctx context.Context) error {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {

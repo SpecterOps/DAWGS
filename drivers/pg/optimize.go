@@ -14,6 +14,7 @@ type optimizeStorageConn interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 }
 
+// optimizeStorage vacuums and analyzes the partitioned node and edge parents using a simple-protocol statement.
 func optimizeStorage(ctx context.Context, conn optimizeStorageConn) error {
 	targets := []string{"node", "edge"}
 
