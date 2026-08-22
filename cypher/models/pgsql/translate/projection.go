@@ -440,6 +440,7 @@ func expressionForPathComposite(projected *BoundIdentifier, scope *Scope) (pgsql
 	// expansion step's PathReversed flag.
 	if projected.PathDirectionReversed {
 		reversePathCompositeExpressions(edgeArrayReferences)
+		reversePathCompositeExpressions(allRawPathIDParts)
 		reversePathCompositeExpressions(nodeReferences)
 		reversePathCompositeExpressions(directNodeReferences)
 		reversePathCompositeExpressions(directEdgeReferences)
