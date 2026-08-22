@@ -1,0 +1,58 @@
+{
+  "schema": "sp-i2-successor-power-study-v3",
+  "generation": "sp-i2-distance-v3-power-study",
+  "implementation": "sp-i2-power-simulation-v3/chacha8-sha256-normal-pivot",
+  "status": "prospective",
+  "archived_trace": {
+    "source_commit": "3865cbc57758b7b20b7ffe431f27235873422eed",
+    "baseline_trace_sha256": "ac3ceb27ee92e3f4e21e3994ff9ee82d483b8081e9d44ddcef8e695ffdb1b6d0",
+    "candidate_trace_sha256": "f6d79e81bdaafedaa95568d57140c14e0808fbb6fc261387abc916081137785a",
+    "rounds": 20,
+    "case_records_per_round": 12,
+    "timed_samples_per_record": 10
+  },
+  "design": {
+    "blocks": 800,
+    "ordinary_warmups": 25,
+    "timed_samples_per_arm_case_block": 100,
+    "pool_size": 1,
+    "isolation": "repeatable_read",
+    "arm_order": "odd_incumbent_then_candidate_even_candidate_then_incumbent"
+  },
+  "statistics": {
+    "bootstrap_confidence": 0.975,
+    "bootstrap_replicates": 100000,
+    "quantile": "nearest_rank",
+    "wilson_confidence": 0.95,
+    "simulation_runs_per_scenario": 20000,
+    "required_power_lower": 0.9,
+    "required_coverage": 0.975,
+    "p95_boundary_false_pass_upper": 0.015,
+    "decision_false_pass_upper": 0.0275,
+    "trace_rescaling_transform": "scaled_v2_calibration_then_paired_empirical_round_drift"
+  },
+  "gates": {
+    "aa_equivalence_ratio": 1.05,
+    "aa_first_position_ratio_upper": 1.1,
+    "aa_first_position_overhead_upper_us": 100,
+    "target_median_ratio_upper": 0.95,
+    "target_median_saving_lower_us": 100,
+    "control_median_ratio_upper": 1.1,
+    "control_median_overhead_upper_us": 100,
+    "p95_ratio_upper": 1.05,
+    "control_p95_overhead_upper_us": 100
+  },
+  "scenarios": [
+    {"name":"aa_identity","kind":"aa_power","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1000,"candidate_p95_us":2000,"odd_candidate_multiplier":1,"even_candidate_multiplier":1,"seed":"3970c10649c771c2f49b69623a7c595d60526a06221c8b5c55170183d66a6db8"},
+    {"name":"aa_upper_margin","kind":"aa_boundary","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1050,"candidate_p95_us":2100,"odd_candidate_multiplier":1,"even_candidate_multiplier":1,"seed":"c4df99870132870a933d6916b6cbee9bc5edbf660064d4f6482c5ab8e018f7ed"},
+    {"name":"aa_lower_margin","kind":"aa_boundary","baseline_p50_us":1050,"baseline_p95_us":2100,"candidate_p50_us":1000,"candidate_p95_us":2000,"odd_candidate_multiplier":1,"even_candidate_multiplier":1,"seed":"ce22d3a7048e8a14dd32ea29df8630961e40bf112f317da70b0487759f3e8f94"},
+    {"name":"target_power","kind":"target_power","baseline_p50_us":2000,"baseline_p95_us":4000,"candidate_p50_us":1800,"candidate_p95_us":3880,"odd_candidate_multiplier":1,"even_candidate_multiplier":1,"seed":"e93f43b16a398747395c1e835184071d7a2ffcc5645dc904069b36f9d769dd9b"},
+    {"name":"target_boundary","kind":"target_boundary","baseline_p50_us":2000,"baseline_p95_us":4000,"candidate_p50_us":1900,"candidate_p95_us":4200,"odd_candidate_multiplier":1,"even_candidate_multiplier":1,"seed":"f1629a1a2cbf342252293e539bfa06051c94a2c23a415b1280a348d9bd435efa"},
+    {"name":"control_power","kind":"control_power","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1000,"candidate_p95_us":1940,"odd_candidate_multiplier":1,"even_candidate_multiplier":1,"seed":"69bee821d4b945680c719a27c4cdd0a6c9e659ef305a90d562253e7624a759ca"},
+    {"name":"control_boundary","kind":"control_boundary","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1100,"candidate_p95_us":2100,"odd_candidate_multiplier":1,"even_candidate_multiplier":1,"seed":"69f30fc2544e3e3b2818bbffda9a76878bf31be125ce3e3c1afd98db6c53edf7"},
+    {"name":"aa_order_odd_high","kind":"aa_order_power","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1000,"candidate_p95_us":2000,"odd_candidate_multiplier":1.025,"even_candidate_multiplier":0.975609756097561,"seed":"64e31acbe58eb690d245d593b5a3bf389d3fe93e40b484b563ba68806069dfdd"},
+    {"name":"aa_order_even_high","kind":"aa_order_power","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1000,"candidate_p95_us":2000,"odd_candidate_multiplier":0.975609756097561,"even_candidate_multiplier":1.025,"seed":"471c1217381f594193578334c61c31a2d010222f90e2bee7ed211db4c1d63080"},
+    {"name":"aa_order_upper_margin","kind":"aa_order_boundary","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1000,"candidate_p95_us":2000,"odd_candidate_multiplier":1.05,"even_candidate_multiplier":0.9523809523809523,"seed":"f5a51d2ae1cf3d8623ee0686a84ecafb2111f226c7909a14f7fb42583c780e32"},
+    {"name":"aa_order_lower_margin","kind":"aa_order_boundary","baseline_p50_us":1000,"baseline_p95_us":2000,"candidate_p50_us":1000,"candidate_p95_us":2000,"odd_candidate_multiplier":0.9523809523809523,"even_candidate_multiplier":1.05,"seed":"0cd7214a86eb3a539bff75a43f72722a9f876e3c5c4aa24363a12e36c6724b5f"}
+  ]
+}

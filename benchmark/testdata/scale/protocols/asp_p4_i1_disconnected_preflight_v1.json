@@ -1,0 +1,105 @@
+{
+  "schema": "asp-p4-i1-disconnected-preflight-v1",
+  "generation": "asp-p4-i1-disconnected-preflight-v1",
+  "status": "terminally_rejected_current_i1_arm",
+  "production_default": "ASP-A1-DAG",
+  "purpose": "training-only A1-versus-inline-I1 telemetry preflight for the selected all-shortest disconnected target; not a power study, performance qualification, or selector change",
+  "predecessor": {
+    "protocol": "asp-p4-open-baseline-v1",
+    "source_commit": "bf055b3aaeda1f887e652a399b065290db560236",
+    "artifact": ".coverage/p4-open-baseline-bf055b3/round-1.jsonl",
+    "artifact_sha256": "69c29c0a79e2ca566bbd54e533c896138a7770b245d030dc347ebc9413e6b6fe",
+    "selection": "GSPV2-TRAINING-disconnected-all-shortest-max64; four matched PostgreSQL/Neo4j median ratios were 7.0414939412490645, 5.8250091002483355, 10.559733195363082, and 5.227608712020583"
+  },
+  "identities": {
+    "incumbent": "ASP-A1-DAG",
+    "candidate": "ASP-I1-U-DAG+MAT-M0",
+    "candidate_fallback": "ASP-A1-DAG",
+    "candidate_telemetry_schema": "asp-i1-guarded-v1",
+    "incumbent_telemetry_reader": "public.read_all_shortest_paths_a1_diagnostic_v1"
+  },
+  "design": {
+    "modes": ["postgres_sql"],
+    "pool_size": 1,
+    "postgres_isolation": "repeatable_read",
+    "postgres_traversal_telemetry": "diagnostic",
+    "warmup_iterations": 1,
+    "timed_iterations": 5,
+    "rounds": 4,
+    "arm_orders": [
+      ["A1", "I1"],
+      ["I1", "A1"],
+      ["A1", "I1"],
+      ["I1", "A1"]
+    ],
+    "cap_overrides_permitted": false,
+    "reference_and_concurrency_permitted": false
+  },
+  "corpus": {
+    "target_cases": [
+      "GSPV2-TRAINING-disconnected-all-shortest-max64"
+    ],
+    "adverse_control_cases": [
+      "GSPV2-TRAINING-early-depth1-all-shortest-max16",
+      "GSPV2-TRAINING-early-depth2-all-shortest-max64",
+      "GSPV2-TRAINING-reconvergent-all-shortest-max16"
+    ],
+    "excluded": [
+      "all generated_shortest_paths_v2 holdout cases",
+      "all generated_shortest_paths_v2 diagnostic and stress cases",
+      "all other open baseline cases",
+      "all ASP-B1 and ASP-B2 candidate executors",
+      "all historical ASP-I1 artifacts because they mixed protected holdouts"
+    ]
+  },
+  "acceptance_requirements": {
+    "exact_public_path_multiset": true,
+    "incumbent_runtime_identity": "ASP-A1-DAG",
+    "incumbent_complete_a1_telemetry": true,
+    "candidate_runtime_identity": "ASP-I1-U-DAG+MAT-M0",
+    "candidate_runtime_branches": {
+      "GSPV2-TRAINING-disconnected-all-shortest-max64": "inline_no_path",
+      "adverse_controls": "inline_predecessor_dag"
+    },
+    "candidate_complete_typed_inline_telemetry": true,
+    "candidate_fallback_disqualifies": true,
+    "complete_hydration_and_workspace_telemetry": true,
+    "missing_hidden_or_contradictory_counter_disqualifies": true
+  },
+  "result": {
+    "source_commit": "307e62f4d0e102384752e031f9c2850d6a73dbfe",
+    "binary_sha256": "ce101efdc55d173176aaa221b3ca3a18b4d40e3fb3a970fa346fdc98c125557c",
+    "artifact_directory": ".coverage/p4-i1-disconnected-307e62f",
+    "a1_artifact": "a1.jsonl",
+    "a1_artifact_sha256": "03114fd4b2cfdc50959697eebbfe08e4932ab307c38845b88415d8a287a3778f",
+    "i1_artifact": "i1.jsonl",
+    "i1_artifact_sha256": "f147df180b8b351bf14ed83977105beaf48b96a822a143a33229afbb979083b6",
+    "capture_ledger": "capture-ledger.json",
+    "capture_ledger_sha256": "9baa5f3d25f47d5efd1a496ac266fee013edd419d9a696eb3f953e65c40a29f5",
+    "records": 32,
+    "timed_samples": 160,
+    "warmup_samples": 32,
+    "public_observations": "all 32 records exact; A1 and I1 public path multisets match in every case/round pair",
+    "candidate_telemetry": "all 16 I1 records have complete asp-i1-guarded-v1 telemetry, ASP-I1-U-DAG+MAT-M0 runtime identity, and zero fallback; disconnected records use inline_no_path and every control uses inline_predecessor_dag",
+    "capture_condition": "CPU governor powersave; diagnostic preflight only",
+    "pooled_timing_i1_to_a1": {
+      "GSPV2-TRAINING-disconnected-all-shortest-max64": {"median_ratio": 0.19176668726324123, "p95_ratio": 0.24634721331782422},
+      "GSPV2-TRAINING-early-depth1-all-shortest-max16": {"median_ratio": 1.3645783077358358, "p95_ratio": 1.5156226026744484},
+      "GSPV2-TRAINING-early-depth2-all-shortest-max64": {"median_ratio": 1.410286298627804, "p95_ratio": 1.0702295806459974},
+      "GSPV2-TRAINING-reconvergent-all-shortest-max16": {"median_ratio": 1.200003319543841, "p95_ratio": 0.8959548837461973}
+    },
+    "disposition": "ASP-I1-U-DAG+MAT-M0 is much faster on the selected disconnected no-path target but fails every frozen shallow/reconvergent adverse control at the pooled median. The P4 stop gate therefore terminally rejects the current I1 arm before power, broader timing, holdout, selector, or manifest work."
+  },
+  "next_authorization": {
+    "requires": [
+      "a distinct executor identity and separately frozen roster before reopening P4 candidate timing",
+      "a new clean source capture; this result may not be retuned, pooled, or repurposed as promotion evidence"
+    ],
+    "does_not_authorize": [
+      "further ASP-I1-U-DAG+MAT-M0 timing under this P4 generation",
+      "formal power or performance qualification",
+      "protected holdout or diagnostic/stress capture",
+      "production selector, manifest, or default changes"
+    ]
+  }
+}

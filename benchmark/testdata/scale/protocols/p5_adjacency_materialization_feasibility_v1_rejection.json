@@ -1,0 +1,25 @@
+{
+  "schema": "p5-adjacency-materialization-feasibility-v1-rejection",
+  "generation": "p5-adjacency-materialization-feasibility-v1",
+  "source_commit": "5b6332184320bea2f1cb2cef24264f8e88d35b78",
+  "protocol_sha256": "497ec91c9f1ffbd922b9ec5b32ccff4374e95c06cbec9a4f0ff9ee366338eea1",
+  "report_sha256": "9f9f0e1703cb06522b3b8532a932a6dd4b00a832fde3967bae6a15c83ce3cd7d",
+  "completed_oracles": {
+    "conditions": 24,
+    "committed_calibrations": 42,
+    "cancellation_and_pool_reuse": true,
+    "shadow_cleanup": true,
+    "autovacuum_quiescent": true
+  },
+  "failed_requirement": {
+    "name": "attributed_trigger_maintenance_wal",
+    "reason": "EXPLAIN (ANALYZE, WAL) reports plan-node WAL only and omits row-trigger maintenance writes. In an isolated 1,000-edge shadow delete, EXPLAIN reported 54,000 bytes while pg_stat_statements recorded 162,000 bytes for the same top-level statement."
+  },
+  "consequence": {
+    "resource_report_accepted": false,
+    "budget_decision_created": false,
+    "cypher_candidate_authorized": false,
+    "successor_protocol": "p5-adjacency-materialization-feasibility-v2"
+  },
+  "terminal": true
+}

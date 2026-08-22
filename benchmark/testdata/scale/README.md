@@ -12,17 +12,176 @@ Apache AGE is intentionally not a benchmark mode here; it may appear only in
 
 Each JSON file contains a list of scale cases with:
 
-- `source`: the source corpus or workload family.
 - `dataset`: the fixture dataset to load from `integration/testdata`.
 - `name` and `category`: stable identifiers used in reports.
 - `cypher`: the Cypher query under test.
-- `parameters`: named parameter values.
-- `expected_rows`: the expected result cardinality.
+- `params`: named parameter values. A typed temporal parameter uses
+  `{"$type":"datetime","value":"2026-01-02T03:04:05Z"}`. A deterministic
+  large string list uses
+  `{"$type":"string_list","prefix":"missing","count":1000,"include":["target"]}`.
+- `node_params`: scalar parameters resolved from fixture node names.
+- `node_list_params`: list parameters resolved from fixture node names.
+- `generated_node_list_params`: high-cardinality fixture-ID lists made from
+  optional included names plus a prefix/count sequence, for example
+  `{"ids":{"prefix":"target","count":2000,"include":["matched-target"]}}`.
+- `expected.row_count`: the expected result cardinality for a read case.
 - `observes`: whether the query observes paths, nodes, relationships,
   properties, or only IDs internally.
 - `candidate_modes`: the execution modes that should attempt the case.
+- `unsupported_modes`: explicit backend-to-reason declarations for matrix
+  points retained as correctness oracles but not supported by that backend.
 - `reference_design`: optional design notes, including AGE observations when
   useful.
 
+Mutations are rejected as ordinary read cases. A mutation must add a
+`write_scenario` with:
+
+- a selection query and `expected_matched` count;
+- an `affected_entity` (`node` or `relationship`) and `expected_affected`
+  count;
+- one or more `post_state` queries with expected row counts or integer scalar
+  values.
+
+The runner drains the mutation result and validates those expectations inside
+one rollback transaction. Warm-up, every timed iteration, and PostgreSQL
+`EXPLAIN ANALYZE` therefore start from the same committed fixture state.
+
+The `generated_reconciliation`, `generated_trust_pruning`, `generated_hops`,
+and `generated_scan_lookups` datasets are constructed by
+`testutil.NewReconciliationScaleFixture`,
+`testutil.NewTrustPruningScaleFixture`, `testutil.NewHopScaleFixture`, and
+`testutil.NewScanLookupScaleFixture`; they are intentionally not large
+handwritten OpenGraph JSON files.
+
+The corpus also executes parameterized `generated_shortest_paths_d*_f*` and
+`generated_fixed_suffix_expansion_d*_f*_v*_p*` variants. Cases in
+`cases/generated_fixed_suffix_expansion.json` use stable `GFSE-*` identifiers.
+The normal pairwise subset covers shortest depth 1/2/4/8/16/32/64, fanout
+1/16/128/512/1000,
+outbound/inbound/directionless, distance/path/all-shortest output, and
+disconnected, diamond, cycle, parallel-edge, and self-loop shapes. The
+fixed-suffix expansion subset covers depth 0/1/2/4/8/16, fanout
+1/10/100/1000, none/sparse/half/all valid branch suffix density, endpoint/path
+output, decoys, and a 4 KiB payload.
+Each result records the exact configuration name, deterministic graph checksum,
+and node/edge cardinality.
+
+Version-two shortest fixtures use
+`generated_shortest_paths_v2_d<depth>_o<root-out>_r<root-in>_fo<intermediate-out>_fi<intermediate-in>_l<level>_k<parallel-kinds>_t<parallel-targets>_w<diamond-width>_x<disconnected-width>_p<payload>_c<cycle>_s<self-loop>`.
+Names are strict and round-trippable: negative values, partial scans, unknown
+suffixes, non-canonical numbers, impossible intermediate levels, and partial
+parallel configurations are rejected. The fixture has independent outbound
+and physical-inbound paths, so hidden downstream fan-in and its mirrored
+fan-out control coexist without changing legacy fixture identities. Every edge
+has a stable `logical_key`. Metadata records root and per-level degrees,
+physical edges by kind, distinct reachable nodes by level, minimum distance,
+path cardinalities, predecessor edges, disconnected state, parallel physical
+edges and distinct targets, checksum, and loaded physical cardinality.
+The ASP qualification subset includes separate training and frozen holdout
+cases for outbound and inbound searches, early and maximum-depth targets,
+disconnected pairs, parallel relationship kinds, diamond multiplicity, and
+stress enumeration. These shapes distinguish stored-helper `ASP-A1-DAG` from
+inline `ASP-I1-U-DAG+MAT-M0` at the same full path-multiset boundary.
+
+`cases/generated_sp_i1_inbound_v1.json` is a separate canonical-witness cohort
+for comparing exact S4 with guarded `SP-I1-C-WE+MAT-M0`. Its four training
+cases use generated depths 4 and 16 and cover full-depth, early-target, and
+disconnected inbound searches. Its three blind holdouts use fresh depths 8 and
+32 and cover full-depth and disconnected searches. Every case uses the same
+typed one-kind `shortestPath` query with maximum depth 64 and an exact path-set
+observation. The disjoint `sp-i1-inbound-v1-training` and
+`sp-i1-inbound-v1-holdout` tags are protocol identities; holdout execution is
+authorized only after GraphBench validates the training freeze. Ordinary
+default, category, dataset, and generic-tag selection omit these protected
+holdouts; only the exact holdout protocol tag or an exact holdout case name
+enters the frozen authorization path. Partial selections remain forbidden: an
+authorized confirmation executes the exact four-training/three-holdout cohort
+on PostgreSQL. Neo4j remains in the declaration for cross-backend semantic
+coverage, not as a holdout timing arm in this study.
+
+`cases/generated_sp_i2_distance_v2.json` is the fresh formal scalar-distance
+cohort for SP-I2 V2. Its eight training cases freeze three adverse controls
+(direct acyclic, direct cyclic, and post-target-cycle shapes) and five efficacy
+targets spanning early, full-depth, mixed-fan-in, high-fan-in, and disconnected
+execution. Its six protected holdouts use previously unused case and fixture
+identities and freeze two adverse controls plus four efficacy targets. Each
+declaration carries an immutable `qualification_role`; report code may not
+infer that role from timings. Ordinary selectors omit the union of V1 and V2
+protected cases. Exact V1/V2 protocol selectors cannot be mixed, and V2
+holdout resolution is rejected before database setup without V2 authorization.
+The protocol declaration binds the training, holdout, and full corpus,
+declaration, and resolved-selection digests.
+
+This V2 cohort is retired and remains checked in only for audit and semantic
+regression coverage. The frozen prospective study found that ordinary timing
+variation was wider than its A/A limits and that target/control decisions were
+reliable only about half the time instead of the required 90%. No formal A/A
+or candidate timing began, and no holdout was opened. GraphBench rejects the
+formal V2 executor and any explicit formal-cohort execution before database
+setup. A future attempt must use a newly named successor protocol rather than
+changing V2's sample count or limits.
+
+`shape.fixture_tier` is one of `normal`, `envelope`, or `stress`.
+`shape.qualification_split` is independently one of `training`, `holdout`, or
+`diagnostic`; selector thresholds may use training records but must be frozen
+before holdout records are opened. Direction,
+relationship-kind count, expected state class, and result-cardinality class
+are stored alongside it. Stress cases remain exact diagnostics and are not
+silently promoted to release p95 evidence.
+
+Version-two fixed-suffix expansion fixtures use
+`generated_fixed_suffix_expansion_v2_d<depth>_f<fanout>_r<reachable>_x<disconnected>_i<reverse-fanin>_m<suffix-paths>_z<zero-depth>_p<payload>`.
+Unlike the legacy modulus form, every integer is exact: `r0` represents zero
+reachable branch suffixes, `x` varies false boundaries independently, `i`
+controls reverse fan-in, `m` controls physical suffix multiplicity, and `z` is
+either zero or one. Fixture records include declared root rows, forward
+expansion states, suffix rows/boundaries, expected reverse states, output
+trails, physical cardinality, and checksum. Semantic relationships carry
+deterministic `logical_key` properties so relationship-distinct paths can be
+compared across backends whose physical IDs differ.
+
+Version-three fixed-suffix fixtures extend that exact grammar as
+`generated_fixed_suffix_expansion_v3_d<depth>_f<fanout>_r<reachable>_x<disconnected>_i<reverse-fanin>_m<suffix-paths>_q<root-rows>_z<zero-depth>_c<cycle>_s<self-loop>_p<payload>`.
+`q` independently controls how many distinct `ExpansionRoot` nodes match the
+root predicate; only the primary root owns the declared fanout and suffixes.
+`c1` adds two distinctly keyed `Expand` relationships from the deterministic
+productive boundary through a dedicated node and back, while `s1` adds one
+distinctly keyed `Expand` self-loop at that boundary. The primary root is the
+productive boundary when only `z1` supplies a reachable suffix; otherwise the
+first reachable branch boundary is used. Both controls require a productive
+boundary, may be enabled independently, and preserve Cypher's
+relationship-distinct trail semantics. V3 names reject implicit populations,
+invalid booleans, unproductive fan-in/topology controls, and noncanonical
+numbers. Metadata derives exact forward/reverse relationship-distinct states
+and complete output trails from the generated graph.
+The orientation-v2 declaration freezes eight training cases spanning every
+encoded dimension and four holdouts at previously unused depths 7, 11, 13,
+and 15. `orientation-v2-training` and `orientation-v2-holdout` are disjoint
+cohort tags; the legacy v2 declarations retain their original v1 evidence
+splits.
+
+`cases/fixed_suffix_expansion_limits.json` is an optimization-neutral cardinality
+holdout suite. It covers 511, 512, 513, and 600 physical suffix rows, productive
+endpoint and full-path observations, and exactly 512 physical rows with two
+suffix paths per boundary to prove bag multiplicity. These `GFSE-BOUNDARY-*`
+cases are not owned by any one optimization design; archived experiment reports
+retain their historical case names.
+The file-backed `fixed_suffix_expansion_adversarial` fixture adds 17 distinct
+root lanes converging on one boundary, a reusable-node cycle, two physical suffix
+paths, and noncanonical logical IDs. Its 68-row endpoint bag proves
+relationship-trail rejection and multiplicity independently of the generated
+limit fixtures.
+
+The file-backed `expand_into` fixture and `cases/expand_into.json` form the
+fixed-one-hop, bound-pair plan study. They cover typed, wildcard, and multi-kind
+matches; cross-kind relationship multiplicity; duplicate and missing outer
+pairs; self-loops; and both asymmetric degree orientations. The
+`source_lower_degree` and `target_lower_degree` cases deliberately reverse which
+endpoint has the cheaper typed adjacency so the pair join, lower-degree scan,
+and statement-local pair-cache references are compared at the same complete
+relationship observation boundary.
+
 Use `cmd/graphbench` to run this corpus and produce JSONL, Markdown, and JSON
-summaries.
+summaries. Exact case/dataset/category/tag selectors are intended for targeted
+diagnosis and mark their outputs diagnostic-only; they never replace a complete
+corpus capture.
