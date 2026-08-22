@@ -13,6 +13,7 @@ import (
 
 const optimizeStorageVacuumStatement = "VACUUM (ANALYZE) node, edge"
 
+// TestOptimizeStorage verifies optimization vacuums both graph storage parents in one statement.
 func TestOptimizeStorage(t *testing.T) {
 	t.Run("always vacuums node and edge", func(t *testing.T) {
 		ctx := context.Background()

@@ -1,0 +1,238 @@
+// Copyright 2026 Specter Ops, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+package pg
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/specterops/dawgs/graph"
+)
+
+// suffixReverseRetrySavepoint isolates a candidate attempt from its exact fallback.
+const suffixReverseRetrySavepoint = "dawgs_suffix_reverse_retry_v1"
+
+// SuffixReverseRetryLimits freezes the development candidate's public buffer
+// boundary independently of SQL translation. Values must match the lowering
+// metadata used to render the candidate statement.
+type SuffixReverseRetryLimits struct {
+	// OutputRows caps the number of candidate rows buffered before publication.
+	OutputRows int64
+
+	// OutputBytes caps the JSON-encoded size of buffered candidate values.
+	OutputBytes int64
+}
+
+// SuffixReverseRetryTransaction is a tool-only PostgreSQL execution surface.
+// It is intentionally absent from graph.Transaction and cannot affect ordinary
+// production queries without an explicit type assertion by repository tooling.
+type SuffixReverseRetryTransaction interface {
+	// RawSuffixReverseRetry runs a bounded candidate and, if needed, its exact fallback.
+	RawSuffixReverseRetry(candidateSQL, fallbackSQL string, candidateParameters, fallbackParameters map[string]any, limits SuffixReverseRetryLimits) graph.Result
+}
+
+// bufferedResult owns a completely drained candidate result. No database rows
+// remain live when it is returned to a caller.
+type bufferedResult struct {
+	// keys names the columns reported by every buffered row.
+	keys []string
+
+	// rows contains the complete candidate output before it is exposed.
+	rows [][]any
+
+	// mapper translates database values for consumers of the result.
+	mapper graph.ValueMapper
+
+	// index is the next buffered row position returned by Next.
+	index int
+
+	// err stores a terminal buffering error.
+	err error
+}
+
+// Next advances to the next buffered row.
+func (s *bufferedResult) Next() bool {
+	if s.index >= len(s.rows) {
+		return false
+	}
+	s.index++
+	return true
+}
+
+// Keys returns the buffered result's column names.
+func (s *bufferedResult) Keys() []string { return s.keys }
+
+// Values returns the current buffered row's values.
+func (s *bufferedResult) Values() []any {
+	if s.index == 0 || s.index > len(s.rows) {
+		return nil
+	}
+	return s.rows[s.index-1]
+}
+
+// Mapper returns the database value mapper captured from the source result.
+func (s *bufferedResult) Mapper() graph.ValueMapper { return s.mapper }
+
+// Scan maps the current row into targets using graph's standard result helper.
+func (s *bufferedResult) Scan(targets ...any) error { return graph.ScanNextResult(s, targets...) }
+
+// Error returns the terminal buffering error, if any.
+func (s *bufferedResult) Error() error { return s.err }
+
+// Close is a no-op because the source result was drained and closed before publication.
+func (s *bufferedResult) Close() {}
+
+// suffixReverseRetryFallbackResult records completion only after the exact
+// forward retry has drained without error. Closing early intentionally does
+// not create a completion receipt: an interrupted retry is not evidence of a
+// complete incumbent execution.
+type suffixReverseRetryFallbackResult struct {
+	// Result supplies rows from the exact incumbent fallback.
+	graph.Result
+
+	// complete records a successful complete fallback drain.
+	complete func() error
+
+	// completed reports whether the fallback has drained and been attested.
+	completed bool
+
+	// err stores an error from the fallback or completion attestation.
+	err error
+}
+
+// Next advances the fallback and records its completion after the final row.
+func (s *suffixReverseRetryFallbackResult) Next() bool {
+	if s.err != nil || s.completed {
+		return false
+	}
+	if s.Result.Next() {
+		return true
+	}
+	if err := s.Result.Error(); err != nil {
+		s.err = err
+		return false
+	}
+	if err := s.complete(); err != nil {
+		s.err = err
+		return false
+	}
+	s.completed = true
+	return false
+}
+
+// Error returns the fallback or completion error before the embedded result's error.
+func (s *suffixReverseRetryFallbackResult) Error() error {
+	if s.err != nil {
+		return s.err
+	}
+	return s.Result.Error()
+}
+
+// bufferGraphResult drains result and enforces both public candidate caps. The
+// returned branch is empty only when the complete buffer is publishable.
+func bufferGraphResult(result graph.Result, limits SuffixReverseRetryLimits) (*bufferedResult, string, error) {
+	defer result.Close()
+	buffered := &bufferedResult{mapper: result.Mapper()}
+	var encodedBytes int64
+	for result.Next() {
+		values := append([]any(nil), result.Values()...)
+		if buffered.keys == nil {
+			buffered.keys = append([]string(nil), result.Keys()...)
+		}
+		encoded, err := json.Marshal(values)
+		if err != nil {
+			return nil, "forward_retry_output_encoding", nil
+		}
+		encodedBytes += int64(len(encoded))
+		buffered.rows = append(buffered.rows, values)
+		if int64(len(buffered.rows)) > limits.OutputRows {
+			return nil, "forward_retry_output_rows", nil
+		}
+		if encodedBytes > limits.OutputBytes {
+			return nil, "forward_retry_output_bytes", nil
+		}
+	}
+	if err := result.Error(); err != nil {
+		return nil, "", err
+	}
+	return buffered, "", nil
+}
+
+// suffixReverseRetryExec executes a control statement within the active transaction.
+func (s *transaction) suffixReverseRetryExec(statement string, arguments ...any) error {
+	_, err := s.driver().Exec(s.ctx, statement, arguments...)
+	return err
+}
+
+// suffixReverseRetryAbort restores the savepoint and returns err as a graph result.
+func (s *transaction) suffixReverseRetryAbort(err error) graph.Result {
+	_ = s.suffixReverseRetryExec("rollback to savepoint " + suffixReverseRetrySavepoint)
+	_ = s.suffixReverseRetryExec("release savepoint " + suffixReverseRetrySavepoint)
+	return graph.NewErrorResult(err)
+}
+
+// RawSuffixReverseRetry executes a reverse-only candidate and exact incumbent
+// fallback in one stable snapshot. Candidate rows are fully buffered and
+// validated before they can be observed.
+func (s *transaction) RawSuffixReverseRetry(candidateSQL, fallbackSQL string, candidateParameters, fallbackParameters map[string]any, limits SuffixReverseRetryLimits) graph.Result {
+	if s.tx == nil || !stableSnapshotIsolation(s.isolation) {
+		return graph.NewErrorResult(fmt.Errorf("suffix reverse retry requires an explicit Repeatable Read or Serializable transaction"))
+	}
+	if limits.OutputRows <= 0 || limits.OutputBytes <= 0 {
+		return graph.NewErrorResult(fmt.Errorf("suffix reverse retry requires positive output row and byte limits"))
+	}
+	if err := s.suffixReverseRetryExec("savepoint " + suffixReverseRetrySavepoint); err != nil {
+		return graph.NewErrorResult(err)
+	}
+	if err := s.suffixReverseRetryExec("select set_config('dawgs.suffix_reverse_retry_status', '', true)"); err != nil {
+		return s.suffixReverseRetryAbort(err)
+	}
+
+	candidate, bufferBranch, err := bufferGraphResult(s.raw(candidateSQL, candidateParameters), limits)
+	if err != nil {
+		return s.suffixReverseRetryAbort(err)
+	}
+	var sqlBranch string
+	if err := s.driver().QueryRow(s.ctx, "select current_setting('dawgs.suffix_reverse_retry_status', true)").Scan(&sqlBranch); err != nil {
+		return s.suffixReverseRetryAbort(err)
+	}
+	branch := sqlBranch
+	if bufferBranch != "" {
+		branch = bufferBranch
+	}
+	if branch == "reverse_complete" {
+		if err := s.suffixReverseRetryExec("release savepoint " + suffixReverseRetrySavepoint); err != nil {
+			return graph.NewErrorResult(err)
+		}
+		return candidate
+	}
+	if branch != "forward_retry_suffix_overflow" && branch != "forward_retry_state_overflow" &&
+		branch != "forward_retry_output_rows" && branch != "forward_retry_output_bytes" &&
+		branch != "forward_retry_output_encoding" {
+		return s.suffixReverseRetryAbort(fmt.Errorf("suffix reverse retry returned unknown or empty status %q", branch))
+	}
+	if err := s.suffixReverseRetryExec("rollback to savepoint " + suffixReverseRetrySavepoint); err != nil {
+		return graph.NewErrorResult(err)
+	}
+	if err := s.suffixReverseRetryExec("release savepoint " + suffixReverseRetrySavepoint); err != nil {
+		return graph.NewErrorResult(err)
+	}
+	if err := s.suffixReverseRetryExec(
+		"select public.record_requested_traversal_runtime_attestation_v1($1, false, $2)",
+		branch,
+		"EXPANSION-STEPWISE-FORWARD",
+	); err != nil {
+		return graph.NewErrorResult(err)
+	}
+	return &suffixReverseRetryFallbackResult{
+		Result: s.raw(fallbackSQL, fallbackParameters),
+		complete: func() error {
+			return s.suffixReverseRetryExec(
+				"select public.record_requested_traversal_runtime_attestation_v1($1, true, $2)",
+				"exact_forward_retry_complete",
+				"EXPANSION-STEPWISE-FORWARD",
+			)
+		},
+	}
+}
