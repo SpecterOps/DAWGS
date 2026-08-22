@@ -58,7 +58,8 @@ func OptionSetQueryExecMode(queryExecMode pgx.QueryExecMode) graph.TransactionOp
 }
 
 type Driver struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	runtime *poolRuntime
 	*SchemaManager
 }
 
@@ -83,9 +84,15 @@ func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
 // NewDriverWithOptions constructs a PostgreSQL driver with driver-wide options.
 func NewDriverWithOptions(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, options DriverOptions) *Driver {
 	options = normalizeDriverOptions(options)
+	runtime := poolRuntimeFor(pool)
+	var provider CypherTranslationCacheProvider
+	if runtime != nil {
+		provider = runtime.provider
+	}
 	return &Driver{
 		pool:          pool,
-		SchemaManager: NewSchemaManagerWithOptions(pool, graphQueryMemoryLimit, options),
+		runtime:       runtime,
+		SchemaManager: newSchemaManagerWithOptionsAndProvider(pool, graphQueryMemoryLimit, options, provider),
 	}
 }
 
@@ -135,21 +142,6 @@ func OptionSkipStableSnapshotTraversalWorkspacesForTool() graph.TransactionOptio
 		if pgCfg, typeOK := config.DriverConfig.(*Config); typeOK {
 			pgCfg.skipStableSnapshotTraversalWorkspaces = true
 		}
-	}
-}
-
-// NewDriverWithTranslationCacheProvider creates a PostgreSQL driver whose
-// transactions select translations through provider. A nil provider preserves
-// the default v1 driver-wide cache behavior.
-func NewDriverWithTranslationCacheProvider(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, provider CypherTranslationCacheProvider) *Driver {
-	schemaManager := NewSchemaManager(pool, graphQueryMemoryLimit)
-	if provider != nil {
-		schemaManager.translationCacheProvider = provider
-	}
-
-	return &Driver{
-		pool:          pool,
-		SchemaManager: schemaManager,
 	}
 }
 
@@ -208,29 +200,31 @@ func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 func (s *Driver) Close(ctx context.Context) error {
 	if s.SchemaManager != nil {
 		s.SchemaManager.parseCache.Close()
-		s.SchemaManager.translationCache.Close()
 		s.SchemaManager.compilationCache.Close()
 	}
-	s.pool.Close()
+	if s.runtime != nil {
+		s.runtime.close()
+	} else if s.pool != nil {
+		s.pool.Close()
+	}
 	return nil
 }
 
-// TranslationCacheStats returns aggregate PostgreSQL translation-cache
-// counters. It never exposes cached query text, SQL, or parameter data.
-func (s *Driver) TranslationCacheStats() TranslationCacheStats {
+// CompilationCacheStats returns aggregate PostgreSQL compiler-cache counters.
+func (s *Driver) CompilationCacheStats() CompilationCacheStats {
 	if s == nil || s.SchemaManager == nil || s.SchemaManager.compilationCache == nil {
-		return TranslationCacheStats{}
+		return CompilationCacheStats{}
 	}
 	return s.SchemaManager.compilationCache.Stats()
 }
 
-// CypherTranslationCacheStats returns query-text-free counters for this driver's
-// policy-aware Cypher-to-SQL translation cache.
-func (s *Driver) CypherTranslationCacheStats() CypherTranslationCacheStats {
-	if s == nil || s.SchemaManager == nil {
-		return CypherTranslationCacheStats{}
+// TranslationCacheStats returns query-text-free counters for this driver's
+// bounded Cypher-to-SQL translation cache.
+func (s *Driver) TranslationCacheStats() Stats {
+	if s == nil || s.runtime == nil || s.runtime.provider == nil {
+		return Stats{}
 	}
-	return s.SchemaManager.translationCache.Stats()
+	return s.runtime.provider.stats()
 }
 
 // ParseCacheStats returns query-text-free counters for this driver's bounded Cypher parse cache.
@@ -292,6 +286,9 @@ func (s *Driver) AssertSchema(ctx context.Context, schema graph.Schema) error {
 			return err
 		}
 	}
+	if s.runtime != nil && s.runtime.provider != nil {
+		s.runtime.provider.advanceSchemaGeneration()
+	}
 
 	return nil
 }
@@ -328,7 +325,28 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 	}
 
 	s.compilationCache.Invalidate()
+	if s.runtime != nil && s.runtime.provider != nil {
+		s.runtime.provider.advanceSchemaGeneration()
+	}
 	return nil
+}
+
+// WarmStatements prepares selected SQL on currently idle physical
+// connections without executing it.
+func (s *Driver) WarmStatements(ctx context.Context, statements ...string) error {
+	if s == nil || s.runtime == nil {
+		return nil
+	}
+	return s.runtime.warmStatements(ctx, statements...)
+}
+
+// SetStatementWarmupPolicy installs the warm set for current and future
+// physical connections.
+func (s *Driver) SetStatementWarmupPolicy(ctx context.Context, statements ...string) error {
+	if s == nil || s.runtime == nil {
+		return nil
+	}
+	return s.runtime.setStatementWarmupPolicy(ctx, statements...)
 }
 
 // OptimizeStorage runs PostgreSQL storage maintenance on a leased pool connection.

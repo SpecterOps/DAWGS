@@ -1,4 +1,4 @@
-package v2
+package pg
 
 import (
 	"context"
@@ -105,7 +105,7 @@ func testPoolConfig(t *testing.T) *pgxpool.Config {
 }
 
 func TestComposePoolConfigCopiesAndOrdersHooks(t *testing.T) {
-	provider, err := newConnectionCacheProvider(DefaultConfig())
+	provider, err := newConnectionCacheProvider(DefaultRuntimeConfig())
 	require.NoError(t, err)
 	config := testPoolConfig(t)
 	var order []string
@@ -134,7 +134,7 @@ func TestComposePoolConfigCopiesAndOrdersHooks(t *testing.T) {
 		},
 	}
 
-	composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, hooks)
+	composed, err := composePoolConfig(config, DefaultRuntimeConfig(), provider, &statementWarmupPolicy{}, hooks)
 	require.NoError(t, err)
 	require.NotSame(t, config, composed)
 	require.Equal(t, int32(1), config.MinConns)
@@ -151,14 +151,14 @@ func TestComposePoolConfigCopiesAndOrdersHooks(t *testing.T) {
 }
 
 func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
-	provider, err := newConnectionCacheProvider(DefaultConfig())
+	provider, err := newConnectionCacheProvider(DefaultRuntimeConfig())
 	require.NoError(t, err)
 	conn := &pgx.Conn{}
 
 	t.Run("failed required connect does not register state", func(t *testing.T) {
 		config := testPoolConfig(t)
 		expected := errors.New("required setup failed")
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultRuntimeConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterConnect: func(context.Context, *pgx.Conn) error { return expected },
 		})
 		require.NoError(t, err)
@@ -170,7 +170,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 		config := testPoolConfig(t)
 		expected := errors.New("caller setup failed")
 		config.AfterConnect = func(context.Context, *pgx.Conn) error { return expected }
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultRuntimeConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterConnect: func(context.Context, *pgx.Conn) error { return nil },
 		})
 		require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 			called = true
 			return true
 		}
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultRuntimeConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterRelease: func(*pgx.Conn) bool { return false },
 		})
 		require.NoError(t, err)
@@ -196,7 +196,7 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 	t.Run("caller release rejection is preserved", func(t *testing.T) {
 		config := testPoolConfig(t)
 		config.AfterRelease = func(*pgx.Conn) bool { return false }
-		composed, err := composePoolConfig(config, DefaultConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
+		composed, err := composePoolConfig(config, DefaultRuntimeConfig(), provider, &statementWarmupPolicy{}, poolLifecycleHooks{
 			afterRelease: func(*pgx.Conn) bool { return true },
 		})
 		require.NoError(t, err)
@@ -205,12 +205,12 @@ func TestComposePoolConfigPreservesHookFailuresAndRejection(t *testing.T) {
 }
 
 func TestDefaultConfigUsesConservativePerConnectionCapacity(t *testing.T) {
-	require.Equal(t, defaultTranslationCacheEntries, DefaultConfig().TranslationCacheEntries)
-	require.Equal(t, &PoolConfig{MinConnections: defaultMinConnections, MaxConnections: defaultMaxConnections}, DefaultConfig().Pool)
+	require.Equal(t, defaultTranslationCacheEntries, DefaultRuntimeConfig().TranslationCacheEntries)
+	require.Equal(t, &PoolConfig{MinConnections: defaultMinConnections, MaxConnections: defaultMaxConnections}, DefaultRuntimeConfig().Pool)
 }
 
 func TestConfigValidatesAndAppliesExplicitPoolLimits(t *testing.T) {
-	config := Config{
+	config := RuntimeConfig{
 		TranslationCacheEntries: 3,
 		Pool:                    &PoolConfig{MinConnections: 0, MaxConnections: 2},
 	}
@@ -221,7 +221,7 @@ func TestConfigValidatesAndAppliesExplicitPoolLimits(t *testing.T) {
 	require.Equal(t, int32(0), composed.MinConns)
 	require.Equal(t, int32(2), composed.MaxConns)
 
-	for _, invalid := range []Config{
+	for _, invalid := range []RuntimeConfig{
 		{TranslationCacheEntries: -1},
 		{Pool: &PoolConfig{MinConnections: -1, MaxConnections: 1}},
 		{Pool: &PoolConfig{MinConnections: 0, MaxConnections: 0}},

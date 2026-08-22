@@ -17,11 +17,10 @@ and parameter-source mappings, never request values or defaults, and fail closed
 Cached query text is released by LRU eviction or driver close, and diagnostics expose aggregate counters without query
 text.
 
-### Opt-in PostgreSQL v2 translation cache
+### PostgreSQL connection-local translation cache
 
-`drivers/pg/v2` is an explicit Go API for evaluating connection-local SQL translation caches. It is not registered with
-`dawgs.Open`, adds no connection-string scheme, and does not alter the established `pg` driver. Construct the pool and
-driver directly:
+The PostgreSQL driver uses connection-local SQL translation caches. Pool construction owns the required connection
+lifecycle hooks; callers continue to hand the resulting `*pgxpool.Pool` to `dawgs.Open`:
 
 ```go
 poolConfig, err := pgxpool.ParseConfig(connectionString)
@@ -29,24 +28,27 @@ if err != nil {
 	return err
 }
 
-pool, err := pgv2.NewDefaultPool(ctx, poolConfig)
+pool, err := pg.NewPool(poolConfig)
 if err != nil {
 	return err
 }
-database := pgv2.NewDriver(0, pool)
+database, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{Pool: pool})
 defer database.Close(ctx)
 ```
 
-`pgv2.DefaultConfig()` uses 64 retained translation entries per live physical PostgreSQL connection and a 5-50 connection
-pool. Pass `pgv2.Config{TranslationCacheEntries: 0}` to `pgv2.NewPool` to disable connection-local retention, or configure an exact bounded
-pool with `pgv2.Config{TranslationCacheEntries: 64, SharedShortestPathTemplateEntries: 128, Pool: &pgv2.PoolConfig{MinConnections: 0, MaxConnections: 4}}`. The shared shortest-path tier retains only immutable SQL templates and fresh bindings are always negotiated per execution; set its capacity to zero to disable it. Negative cache capacity, negative minimums,
-zero maximums, and inverted limits are rejected. The theoretical aggregate entry bound is live physical connections
-multiplied by this capacity, not a global bound.
+`pg.DefaultRuntimeConfig()` uses 64 retained translation entries per live physical PostgreSQL connection and a 5-50
+connection pool. Pass `pg.RuntimeConfig{TranslationCacheEntries: 0}` to `pg.NewPoolWithRuntimeConfig` to disable
+connection-local retention, or configure exact bounds with `pg.RuntimeConfig{TranslationCacheEntries: 64,
+SharedShortestPathTemplateEntries: 128, Pool: &pg.PoolConfig{MinConnections: 0, MaxConnections: 4}}`. The shared
+shortest-path tier retains only immutable SQL templates and fresh bindings are always negotiated per execution; set its
+capacity to zero to disable it. Negative cache capacity, negative minimums, zero maximums, and inverted limits are
+rejected. The theoretical aggregate entry bound is live physical connections multiplied by this capacity, not a global
+bound.
 
 A cache remains with its physical `*pgx.Conn` across pool lease release and reacquisition, and is removed when that
 connection closes or the driver closes. `TranslationCacheStats` reports opaque diagnostic connection IDs and aggregate,
 query-text-free counters only. Cached entries retain immutable SQL and parameter-source metadata; every hit binds the
-current caller values. V2 keeps the parse cache driver-wide, caches neither results nor routing decisions, and advances
+current caller values. The driver keeps the parse cache driver-wide, caches neither results nor routing decisions, and advances
 its generation after successful schema assertion and kind refresh. Stable-snapshot traversal workspaces are marked ready
 only for the current physical connection and schema generation, then reinitialized after reset, closure, or generation
 change. For out-of-band schema changes that affect types or generated SQL, reset or recreate the pool before continuing.
@@ -60,10 +62,12 @@ if err := database.WarmStatements(ctx, "select 1"); err != nil {
 ```
 
 Warm-up touches each currently idle physical connection and uses pgx's normal `CacheStatement` identity, so the first
-regular execution adopts the prepared server statement rather than creating a second one. V2 records only SHA-256
+regular execution adopts the prepared server statement rather than creating a second one. The driver records only SHA-256
 statement identities in its lifecycle state; `TranslationCacheStats` includes aggregate workspace and warm-up counters.
 For a persistent, explicitly selected warm set that also applies to new physical connections, use
-`database.SetStatementWarmupPolicy(ctx, statements...)`; passing no statements clears the future warm set.
+`database.SetStatementWarmupPolicy(ctx, statements...)`; passing no statements clears the future warm set. Pools supplied
+to `pg.NewDriver` must have been created by `pg.NewPool` or `pg.NewPoolWithRuntimeConfig` so those lifecycle hooks are in
+place.
 
 ## Quick Start
 

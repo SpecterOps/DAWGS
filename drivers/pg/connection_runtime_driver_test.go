@@ -1,4 +1,4 @@
-package v2
+package pg
 
 import (
 	"testing"
@@ -8,12 +8,12 @@ import (
 )
 
 func TestDriverReportsProviderStatisticsWithoutSensitiveState(t *testing.T) {
-	provider, err := newConnectionCacheProvider(DefaultConfig())
+	provider, err := newConnectionCacheProvider(DefaultRuntimeConfig())
 	require.NoError(t, err)
-	driver := &Driver{pool: &Pool{provider: provider}}
+	driver := &Driver{runtime: &poolRuntime{provider: provider}}
 
 	stats := driver.TranslationCacheStats()
-	require.Equal(t, DefaultConfig().TranslationCacheEntries, stats.CapacityPerConnection)
+	require.Equal(t, DefaultRuntimeConfig().TranslationCacheEntries, stats.CapacityPerConnection)
 	require.Equal(t, int32(defaultMinConnections), stats.MinConnections)
 	require.Equal(t, int32(defaultMaxConnections), stats.MaxConnections)
 	require.Zero(t, stats.LiveConnections)
