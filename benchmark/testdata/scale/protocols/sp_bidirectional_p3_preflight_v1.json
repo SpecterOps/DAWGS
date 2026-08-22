@@ -1,0 +1,101 @@
+{
+  "schema": "sp-bidirectional-p3-preflight-v1",
+  "generation": "sp-bidirectional-p3-preflight-v1",
+  "status": "superseded_before_direct_floor_capture",
+  "production_default": "off",
+  "purpose": "telemetry and component-boundary readiness only; not a performance qualification",
+  "identities": {
+    "incumbent_distance": "SP-S4-C-D",
+    "incumbent_witness": "SP-S4-C-WE+MAT-M0",
+    "reference_distance": "SP-S3-U-D",
+    "reference_witness": "SP-S3-U-E+MAT-M0",
+    "b1_distance": "SP-B1-C-ALT-NODE-D",
+    "b1_witness": "SP-B1-C-ALT-NODE-WE+MAT-M0",
+    "b2_distance": "SP-B2-C-MIN-LEVEL-D",
+    "b2_witness": "SP-B2-C-MIN-LEVEL-WE+MAT-M0",
+    "direct_floor": "SP-S0-DIRECT",
+    "diagnostic_source": "public.read_bidirectional_shortest_path_diagnostic_v1"
+  },
+  "baseline": {
+    "source_commit": "57be1681140a2642639df0c06f7167bc17203e9b",
+    "round1_path": ".coverage/p0-clean-57be168-round1.jsonl",
+    "round1_sha256": "5cd14dc4b13008f5e307d44a16c56ff608eb79596b2ecaddf59d1eb70c31c6a1",
+    "round2_path": ".coverage/p0-clean-57be168-round2.jsonl",
+    "round2_sha256": "3bb71d1951b66559677abd4bba5441d844567269e6c1b1694cc95b67b4bc1f4d"
+  },
+  "design": {
+    "pool_size": 1,
+    "isolation": "repeatable_read",
+    "traversal_telemetry": "diagnostic",
+    "warmup_iterations": 1,
+    "timed_iterations": 5,
+    "primary_rounds": 4,
+    "primary_arm_order": [
+      ["S4", "B1", "S3", "B2"],
+      ["B1", "B2", "S4", "S3"],
+      ["B2", "S3", "B1", "S4"],
+      ["S3", "S4", "B2", "B1"]
+    ],
+    "direct_floor_order": ["S4", "S0", "S0", "S4"],
+    "cap_overrides_permitted": false,
+    "reference_and_concurrency_permitted": false
+  },
+  "corpus": {
+    "target_cases": [
+      "GSP-D08-F001_distance_inbound",
+      "GSP-D08-F001_path_inbound",
+      "GSP-D64-F1000_path"
+    ],
+    "control_cases": [
+      "GSP-D16-F016_distance",
+      "GSP-D16-F016_path",
+      "GSP-D04-F128_disconnected",
+      "GSP-D04-F128_path_disconnected",
+      "GSP-D02-F016_distance_cycle",
+      "GSP-D02-F016_path_cycle",
+      "GSP-D02-F016_distance_self_loop",
+      "GSP-D02-F016_path_self_loop",
+      "GSP-D01-F016_distance_parallel",
+      "GSP-D01-F016_path_parallel",
+      "shortest_distance_bound_pair",
+      "one_shortest_path_bound_pair"
+    ],
+    "direct_floor_cases": [
+      "GSP-D01-F001_distance",
+      "GSP-D01-F001_path"
+    ],
+    "excluded": [
+      "generated_shortest_paths_v2 protected training and holdout declarations",
+      "generated_sp_i1_inbound_v1 declarations",
+      "generated_sp_i2_distance_v1 declarations",
+      "generated_sp_i2_distance_v2 declarations"
+    ]
+  },
+  "readiness_requirements": {
+    "exact_public_observations": true,
+    "expected_runtime_identity": true,
+    "expected_scheduler": true,
+    "one_search_call": true,
+    "complete_bidirectional_counters": true,
+    "complete_path_hydration_counters_for_witnesses": true,
+    "measured_workspace_high_water": true,
+    "measured_plan_buffers_temp_and_wal": true,
+    "fallback_disqualifies": true,
+    "missing_or_hidden_counter_disqualifies": true,
+    "unattributed_component_disqualifies": true
+  },
+  "next_authorization": {
+    "requires": [
+      "all frozen preflight records exact",
+      "all B1/B2 target and control records have complete telemetry",
+      "separate component-boundary implementation for workspace reset, temporary-table access, search, witness recovery, hydration, and decoding",
+      "a separately frozen power simulation calibrated from the preflight trace"
+    ],
+    "does_not_authorize": [
+      "production selector",
+      "formal performance tournament",
+      "protected holdout access"
+    ]
+  },
+  "disposition": "The primary S3/S4/B1/B2 records were diagnostic-only. The direct-floor schedule named nonexistent SP-S4-C-DIRECT arms, so V1 cannot complete or qualify. V2 has distinct observation-specific direct-floor arms."
+}

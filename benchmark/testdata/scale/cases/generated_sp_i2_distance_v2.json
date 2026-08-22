@@ -1,0 +1,173 @@
+{
+  "cases": [
+    {
+      "name": "GSP-I2-V2-TRAIN-direct-acyclic-shallow",
+      "dataset": "generated_shortest_paths_v2_d1_o0_r4_fo0_fi0_l0_k0_t0_w0_x1_p0_c0_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+      "expected": {"row_count": 1, "scalar_int": 1, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "adverse_control", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_direct_acyclic_shallow_fanin", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "direct", "adverse-control", "sp-i2-distance-v2-training"]
+    },
+    {
+      "name": "GSP-I2-V2-TRAIN-direct-cycle-control",
+      "dataset": "generated_shortest_paths_v2_d7_o0_r0_fo0_fi0_l0_k0_t0_w0_x7_p0_c1_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-cycle-a", "end_id": "sp-v2-cycle-b"},
+      "expected": {"row_count": 1, "scalar_int": 1, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "adverse_control", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_direct_two_node_cycle", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "direct", "cycle", "adverse-control", "sp-i2-distance-v2-training"]
+    },
+    {
+      "name": "GSP-I2-V2-TRAIN-D02-post-target-cycle",
+      "dataset": "generated_shortest_paths_v2_d5_o0_r19_fo0_fi11_l3_k0_t0_w0_x5_p0_c1_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-linear-02"},
+      "expected": {"row_count": 1, "scalar_int": 2, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "adverse_control", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_depth_two_post_target_cycle", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "cycle", "early-target", "adverse-control", "sp-i2-distance-v2-training"]
+    },
+    {
+      "name": "GSP-I2-V2-TRAIN-D02-hidden-intermediate-fanin",
+      "dataset": "generated_shortest_paths_v2_d4_o0_r37_fo0_fi73_l2_k0_t0_w0_x4_p0_c0_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-linear-02"},
+      "expected": {"row_count": 1, "scalar_int": 2, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_early_target_hidden_intermediate_fanin", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "early-target", "sp-i2-distance-v2-training"]
+    },
+    {
+      "name": "GSP-I2-V2-TRAIN-D03-hidden-root-fanin",
+      "dataset": "generated_shortest_paths_v2_d3_o0_r83_fo0_fi41_l2_k0_t0_w0_x3_p0_c0_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+      "expected": {"row_count": 1, "scalar_int": 3, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_full_depth_hidden_root_fanin", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "sp-i2-distance-v2-training"]
+    },
+    {
+      "name": "GSP-I2-V2-TRAIN-D08-mixed-fanin",
+      "dataset": "generated_shortest_paths_v2_d8_o0_r149_fo0_fi79_l4_k0_t0_w0_x8_p0_c0_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+      "expected": {"row_count": 1, "scalar_int": 8, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_full_depth_mixed_fanin", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "sp-i2-distance-v2-training"]
+    },
+    {
+      "name": "GSP-I2-V2-TRAIN-D16-high-fanin",
+      "dataset": "generated_shortest_paths_v2_d16_o0_r263_fo0_fi521_l8_k0_t0_w0_x16_p0_c0_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+      "expected": {"row_count": 1, "scalar_int": 16, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_full_depth_high_hidden_fanin", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "sp-i2-distance-v2-training"]
+    },
+    {
+      "name": "GSP-I2-V2-TRAIN-D16-disconnected-cyclic-exhaustion",
+      "dataset": "generated_shortest_paths_v2_d16_o0_r271_fo0_fi527_l8_k0_t0_w0_x17_p0_c1_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-disconnected-end"},
+      "expected": {"row_count": 0, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "training", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_disconnected_cyclic_exhaustion", "result_cardinality_class": "empty", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "disconnected", "cycle", "sp-i2-distance-v2-training"]
+    },
+
+    {
+      "name": "GSP-I2-V2-HOLDOUT-direct-parallel-asymmetric-cycle",
+      "dataset": "generated_shortest_paths_v2_d1_o0_r17_fo0_fi0_l0_k3_t2_w0_x1_p0_c1_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+      "expected": {"row_count": 1, "scalar_int": 1, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "holdout", "qualification_role": "adverse_control", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_direct_parallel_asymmetric_cycle", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "direct", "parallel", "cycle", "holdout", "adverse-control", "sp-i2-distance-v2-holdout"]
+    },
+    {
+      "name": "GSP-I2-V2-HOLDOUT-D02-longer-competing-cycle",
+      "dataset": "generated_shortest_paths_v2_d6_o0_r43_fo0_fi29_l3_k0_t0_w0_x6_p0_c1_s1",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-linear-02"},
+      "expected": {"row_count": 1, "scalar_int": 2, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "holdout", "qualification_role": "adverse_control", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_depth_two_longer_competing_cycle", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "cycle", "holdout", "adverse-control", "sp-i2-distance-v2-holdout"]
+    },
+    {
+      "name": "GSP-I2-V2-HOLDOUT-D03-irrelevant-high-fanout",
+      "dataset": "generated_shortest_paths_v2_d9_o0_r173_fo0_fi97_l4_k0_t0_w0_x9_p0_c0_s1",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-linear-03"},
+      "expected": {"row_count": 1, "scalar_int": 3, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "holdout", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_early_target_irrelevant_high_fanout", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "early-target", "hidden-fan-in", "holdout", "sp-i2-distance-v2-holdout"]
+    },
+    {
+      "name": "GSP-I2-V2-HOLDOUT-D11-medium-fanin",
+      "dataset": "generated_shortest_paths_v2_d11_o0_r197_fo0_fi211_l6_k0_t0_w0_x11_p0_c0_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+      "expected": {"row_count": 1, "scalar_int": 11, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "holdout", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_medium_full_depth_hidden_fanin", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "holdout", "sp-i2-distance-v2-holdout"]
+    },
+    {
+      "name": "GSP-I2-V2-HOLDOUT-D23-deep-fanin",
+      "dataset": "generated_shortest_paths_v2_d23_o0_r307_fo0_fi601_l12_k0_t0_w0_x23_p0_c0_s0",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-inbound-end"},
+      "expected": {"row_count": 1, "scalar_int": 23, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "holdout", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_deep_full_depth_hidden_fanin", "result_cardinality_class": "singleton", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "holdout", "sp-i2-distance-v2-holdout"]
+    },
+    {
+      "name": "GSP-I2-V2-HOLDOUT-D27-disconnected-cycles",
+      "dataset": "generated_shortest_paths_v2_d27_o0_r313_fo0_fi607_l14_k0_t0_w0_x29_p0_c1_s1",
+      "category": "generated_shortest_path_v2",
+      "cypher": "MATCH p = shortestPath((r)<-[:Traverse*1..64]-(e)) WHERE id(r) = $root_id AND id(e) = $end_id RETURN length(p) AS distance",
+      "node_params": {"root_id": "sp-v2-inbound-root", "end_id": "sp-v2-disconnected-end"},
+      "expected": {"row_count": 0, "result_kind": "scalar"},
+      "observes": {},
+      "shape": {"qualification_split": "holdout", "qualification_role": "efficacy_target", "fallback_expectation": "forbidden", "root_predicate": "bound_id", "terminal_predicate": "bound_id", "edge_kinds": ["Traverse"], "direction": "inbound", "relationship_kind_count": 1, "fixture_tier": "normal", "expected_state_class": "v2_deep_disconnected_graph_with_cycles", "result_cardinality_class": "empty", "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["generated", "v2", "distance", "inbound", "hidden-fan-in", "disconnected", "cycle", "holdout", "sp-i2-distance-v2-holdout"]
+    }
+  ]
+}
