@@ -51,6 +51,11 @@ jobs:
         run: |
           make test
 
+      - name: Verify Generated Test Cases
+        run: |
+          make test_update
+          git diff --exit-code
+
       - name: Parse Coverage Value From Feature Branch
         run: |
           echo "current_coverage=$(tail -n 1 .coverage/coverage.txt | awk '{print $3}' | awk 'sub("%", "")')" >> $GITHUB_ENV
@@ -119,6 +124,8 @@ jobs:
       - name: Run integration tests
         env:
           CONNECTION_STRING: postgres://dawgs:weneedbetterpasswords@localhost:5432/dawgs?sslmode=disable
+          DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE: "1"
+          DAWGS_INTEGRATION_DISPOSABLE_TARGETS: postgresql://localhost:5432/dawgs
         run: |
           make test_integration
 
@@ -156,6 +163,8 @@ jobs:
       - name: Run integration tests
         env:
           CONNECTION_STRING: neo4j://neo4j:weneedbetterpasswords@localhost:7687
+          DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE: "1"
+          DAWGS_INTEGRATION_DISPOSABLE_TARGETS: neo4j://localhost:7687/<default>
         run: |
           make test_integration
 
