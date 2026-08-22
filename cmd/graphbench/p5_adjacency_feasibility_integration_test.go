@@ -23,6 +23,11 @@ func TestP5AdjacencyTaggedPGXStatementVisibleToPGStatStatements(t *testing.T) {
 	if connection == "" {
 		t.Skip("CONNECTION_STRING env var is not set")
 	}
+	target, err := databaseguard.Target(connection)
+	require.NoError(t, err)
+	if len(target) < len("postgresql://") || target[:len("postgresql://")] != "postgresql://" {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
 	require.NoError(t, databaseguard.ValidateEnvironment(connection))
 
 	ctx := context.Background()
