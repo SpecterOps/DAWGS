@@ -117,6 +117,7 @@ func TestCreateRelationshipWithExplicitEndpoints(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+// TestRawPropertyKeysRenderEscaped verifies raw property keys retain required Cypher escaping in prepared queries.
 func TestRawPropertyKeysRenderEscaped(t *testing.T) {
 	preparedQuery, err := v2.New().Return(
 		v2.Node().Property("a-aaa"),
@@ -128,6 +129,7 @@ func TestRawPropertyKeysRenderEscaped(t *testing.T) {
 	require.Equal(t, "match (n) return n.`a-aaa`, n.`has``tick`, n.`   `", renderPrepared(t, preparedQuery))
 }
 
+// TestEmptyPropertyKeyReturnsBuildError verifies an empty raw property key fails during query construction.
 func TestEmptyPropertyKeyReturnsBuildError(t *testing.T) {
 	_, err := v2.New().Return(
 		v2.Node().Property(""),
