@@ -148,7 +148,7 @@ func TestCompileRegularQueryCachesBuilderShapeAndRebindsValues(t *testing.T) {
 		require.Equal(t, uint64(1), firstValue)
 		require.Equal(t, uint64(2), secondBindings[name])
 	}
-	stats := manager.translationCache.Stats()
+	stats := manager.compilationCache.Stats()
 	require.Equal(t, int64(1), stats.Misses)
 	require.Equal(t, int64(1), stats.Hits)
 	require.Equal(t, int64(1), stats.Insertions)
@@ -191,8 +191,8 @@ func requireWarmBindingsMatchCold(t *testing.T, first, second preparedRegularQue
 	require.Equal(t, coldSQL, warmSQL)
 	require.Equal(t, coldBindings, warmBindings)
 	require.NotEqual(t, firstBindings, warmBindings, "a cache hit must not retain the first request's values")
-	require.Equal(t, int64(1), warmManager.translationCache.Stats().Misses)
-	require.Equal(t, int64(1), warmManager.translationCache.Stats().Hits)
+	require.Equal(t, int64(1), warmManager.compilationCache.Stats().Misses)
+	require.Equal(t, int64(1), warmManager.compilationCache.Stats().Hits)
 }
 
 func TestCompileRegularQueryWarmBindingsMatchColdForMultipleParameters(t *testing.T) {
@@ -339,7 +339,7 @@ func TestCompileRegularQueryPartitionsParameterTypesAndStructuralLiterals(t *tes
 	intBuilder.Apply(query.Where(query.Equals(query.NodeProperty("value"), int64(1))), query.Returning(query.Node()))
 	intQuery := compilePreparedBuilderQuery(t, intBuilder)
 	require.Equal(t, stringQuery.source, intQuery.source)
-	require.NotEqual(t, manager.translationCache.Key(stringQuery.source, 7, stringQuery.parameters), manager.translationCache.Key(intQuery.source, 7, intQuery.parameters))
+	require.NotEqual(t, manager.compilationCache.Key(stringQuery.source, 7, stringQuery.parameters), manager.compilationCache.Key(intQuery.source, 7, intQuery.parameters))
 
 	limitOne := query.NewBuilder(nil)
 	limitOne.Apply(query.Where(query.Equals(query.NodeProperty("value"), "one")), query.Limit(1), query.Returning(query.Node()))
@@ -348,13 +348,13 @@ func TestCompileRegularQueryPartitionsParameterTypesAndStructuralLiterals(t *tes
 	limitOneQuery := compilePreparedBuilderQuery(t, limitOne)
 	limitTwoQuery := compilePreparedBuilderQuery(t, limitTwo)
 	require.NotEqual(t, limitOneQuery.source, limitTwoQuery.source)
-	require.NotEqual(t, manager.translationCache.Key(limitOneQuery.source, 7, limitOneQuery.parameters), manager.translationCache.Key(limitTwoQuery.source, 7, limitTwoQuery.parameters))
+	require.NotEqual(t, manager.compilationCache.Key(limitOneQuery.source, 7, limitOneQuery.parameters), manager.compilationCache.Key(limitTwoQuery.source, 7, limitTwoQuery.parameters))
 
 	emptyIDs := map[string]any{"ids": []graph.ID{}}
 	populatedIDs := map[string]any{"ids": []graph.ID{1, 2}}
 	strings := map[string]any{"ids": []string{"1", "2"}}
-	require.Equal(t, manager.translationCache.Key("RETURN $ids", 7, emptyIDs), manager.translationCache.Key("RETURN $ids", 7, populatedIDs))
-	require.NotEqual(t, manager.translationCache.Key("RETURN $ids", 7, populatedIDs), manager.translationCache.Key("RETURN $ids", 7, strings))
+	require.Equal(t, manager.compilationCache.Key("RETURN $ids", 7, emptyIDs), manager.compilationCache.Key("RETURN $ids", 7, populatedIDs))
+	require.NotEqual(t, manager.compilationCache.Key("RETURN $ids", 7, populatedIDs), manager.compilationCache.Key("RETURN $ids", 7, strings))
 }
 
 func TestPrepareRegularQueryRenamesExplicitAndRepeatedParameterSymbols(t *testing.T) {
@@ -392,7 +392,7 @@ func TestCompileRegularQueryDisabledCacheDoesNotRetainTranslation(t *testing.T) 
 	require.NoError(t, err)
 	_, _, err = manager.compileRegularQuery(context.Background(), buildPreparedNodeLookup(t, graph.ID(2)), 7)
 	require.NoError(t, err)
-	stats := manager.translationCache.Stats()
+	stats := manager.compilationCache.Stats()
 	require.Zero(t, stats.Misses)
 	require.Zero(t, stats.Size)
 	require.Equal(t, int64(2), stats.Bypasses)
@@ -407,12 +407,12 @@ func TestCompileRegularQueryUnoptimizedBypassesAndPreservesWarmEntries(t *testin
 	first := buildPreparedNodeLookup(t, graph.ID(1))
 	_, _, err := manager.compileRegularQuery(context.Background(), first, 7)
 	require.NoError(t, err)
-	warmStats := manager.translationCache.Stats()
+	warmStats := manager.compilationCache.Stats()
 
 	setOptimizedTranslationForTest(t, false)
 	_, _, err = manager.compileRegularQuery(context.Background(), buildPreparedNodeLookup(t, graph.ID(2)), 7)
 	require.NoError(t, err)
-	disabledStats := manager.translationCache.Stats()
+	disabledStats := manager.compilationCache.Stats()
 	require.Equal(t, warmStats.Hits, disabledStats.Hits)
 	require.Equal(t, warmStats.Misses, disabledStats.Misses)
 	require.Equal(t, warmStats.Insertions, disabledStats.Insertions)
@@ -422,7 +422,7 @@ func TestCompileRegularQueryUnoptimizedBypassesAndPreservesWarmEntries(t *testin
 	setOptimizedTranslationForTest(t, true)
 	_, _, err = manager.compileRegularQuery(context.Background(), buildPreparedNodeLookup(t, graph.ID(3)), 7)
 	require.NoError(t, err)
-	require.Equal(t, warmStats.Hits+1, manager.translationCache.Stats().Hits)
+	require.Equal(t, warmStats.Hits+1, manager.compilationCache.Stats().Hits)
 }
 
 func TestCompileTextUnoptimizedBypassesCache(t *testing.T) {
@@ -433,12 +433,12 @@ func TestCompileTextUnoptimizedBypassesCache(t *testing.T) {
 
 	_, _, err := manager.compileText(context.Background(), "MATCH (n) RETURN n", nil, 7)
 	require.NoError(t, err)
-	warmStats := manager.translationCache.Stats()
+	warmStats := manager.compilationCache.Stats()
 
 	setOptimizedTranslationForTest(t, false)
 	_, _, err = manager.compileText(context.Background(), "MATCH (n) RETURN n", nil, 7)
 	require.NoError(t, err)
-	disabledStats := manager.translationCache.Stats()
+	disabledStats := manager.compilationCache.Stats()
 	require.Equal(t, warmStats.Hits, disabledStats.Hits)
 	require.Equal(t, warmStats.Misses, disabledStats.Misses)
 	require.Equal(t, warmStats.Bypasses+1, disabledStats.Bypasses)
