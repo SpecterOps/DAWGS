@@ -3937,16 +3937,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 			Name:    pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
 			Binding: models.EmptyOptional[pgsql.Identifier](),
 		},
-		Joins: []pgsql.Join{
-			expansionNodeLookupJoin(
-				traversalStep.LeftNode,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-			),
-			expansionNodeLookupJoin(
-				traversalStep.RightNode,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-			),
-		},
+		Joins: expansionProjectionNodeJoins(traversalStep, expansionModel.Frame.Binding.Identifier),
 	})
 
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {

@@ -21,6 +21,8 @@ func translateCypher(t *testing.T, cypher string) string {
 
 	kindMapper := pgutil.NewInMemoryKindMapper()
 	kindMapper.Put(graph.StringKind("NodeKind1"))
+	kindMapper.Put(graph.StringKind("EdgeKind1"))
+	kindMapper.Put(graph.StringKind("EdgeKind2"))
 
 	query, err := frontend.ParseCypher(frontend.NewContext(), cypher)
 	require.NoError(t, err)
@@ -47,6 +49,8 @@ func TestSelfLoopExpansionInLaterFrameSeedsIndependently(t *testing.T) {
 	require.NotContains(t, formatted, "(s0.n1)")
 	// The self-loop identity constraint still ties the endpoints.
 	require.Contains(t, formatted, "s2.root_id = s2.next_id")
+	// The projection hydrates the shared endpoint alias only once.
+	require.Equal(t, 2, strings.Count(formatted, "node n1"), formatted)
 	// The carried x binding is still projected.
 	require.Contains(t, formatted, "s1.n0 as x")
 }
@@ -61,6 +65,12 @@ func TestSelfLoopExpansionCarriedNodeStaysBound(t *testing.T) {
 	require.Contains(t, formatted, "select distinct (s0.n0).id as root_id from s0")
 	// The expansion stays constrained to the carried node.
 	require.Contains(t, formatted, "(s0.n0).id = s3.root_id")
+}
+
+func TestReversedExpansionPathRestoresLogicalSegmentOrder(t *testing.T) {
+	formatted := translateCypher(t, `MATCH p = (s:NodeKind1)-[:EdgeKind1*0..]->(g)-[:EdgeKind2]->(d:NodeKind1) WHERE d.name = 'terminal' RETURN p`)
+
+	require.Contains(t, formatted, ".ep0 || array [", formatted)
 }
 
 const (
