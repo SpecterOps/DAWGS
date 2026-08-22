@@ -29,6 +29,7 @@ import (
 
 // relationshipsByKindDeleter mirrors the capability the BloodHound delete path detects on the PostgreSQL driver.
 type relationshipsByKindDeleter interface {
+	// DeleteRelationshipsByKinds deletes relationships matching any supplied kind.
 	DeleteRelationshipsByKinds(ctx context.Context, kinds graph.Kinds) error
 }
 
