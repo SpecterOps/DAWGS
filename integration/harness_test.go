@@ -18,7 +18,10 @@ package integration
 
 import (
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/specterops/dawgs/databaseguard"
 )
 
 func TestOpenSessionReturnsConnectionStringError(t *testing.T) {
@@ -32,9 +35,49 @@ func TestOpenSessionReturnsConnectionStringError(t *testing.T) {
 
 func TestOpenSessionReturnsDriverMismatchError(t *testing.T) {
 	t.Setenv(ConnectionStringEnv, "postgresql://user:password@localhost:5432/database")
+	t.Setenv(databaseguard.AllowDestructiveEnv, "")
+	t.Setenv(databaseguard.DisposableTargetsEnv, "")
 
 	_, err := OpenSession(Options{RequireDriver: "neo4j"})
 	if !errors.Is(err, errDriverMismatch) {
 		t.Fatalf("OpenSession() error = %v, want driver mismatch error", err)
+	}
+}
+
+func TestOpenSessionRejectsUnconfirmedDatabase(t *testing.T) {
+	for _, testCase := range []struct {
+		name            string
+		acknowledgement string
+		targets         string
+		wantEnv         string
+	}{
+		{
+			name:    "missing acknowledgement",
+			targets: "postgresql://localhost:5432/database",
+			wantEnv: databaseguard.AllowDestructiveEnv,
+		},
+		{
+			name:            "target mismatch",
+			acknowledgement: "1",
+			targets:         "postgresql://localhost:5432/other",
+			wantEnv:         databaseguard.DisposableTargetsEnv,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Setenv(ConnectionStringEnv, "postgresql://user:password@localhost:5432/database")
+			t.Setenv(databaseguard.AllowDestructiveEnv, testCase.acknowledgement)
+			t.Setenv(databaseguard.DisposableTargetsEnv, testCase.targets)
+
+			session, err := OpenSession(Options{})
+			if session != nil {
+				t.Fatal("OpenSession() returned a session for an unconfirmed database")
+			}
+			if err == nil || !strings.Contains(err.Error(), "integration database safety check failed") || !strings.Contains(err.Error(), testCase.wantEnv) {
+				t.Fatalf("OpenSession() error = %v, want safety check failure naming %s", err, testCase.wantEnv)
+			}
+			if strings.Contains(err.Error(), "password") {
+				t.Fatalf("OpenSession() error exposed credentials: %v", err)
+			}
+		})
 	}
 }

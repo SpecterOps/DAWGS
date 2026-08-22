@@ -1,0 +1,119 @@
+{
+  "families": [
+    {
+      "name": "SCAN-01 through SCAN-04 wide relationship filters",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "ad-a", "kinds": ["ADBase"], "properties": {"name": "ad-a"}},
+          {"id": "ad-b", "kinds": ["ADBase"], "properties": {"name": "ad-b"}},
+          {"id": "az-a", "kinds": ["AZBase"], "properties": {"name": "az-a"}},
+          {"id": "az-b", "kinds": ["AZBase"], "properties": {"name": "az-b"}},
+          {"id": "plain-a", "kinds": ["Plain", "MissingPost"], "properties": {"name": "plain-a"}},
+          {"id": "plain-b", "kinds": ["Plain"], "properties": {"name": "plain-b"}},
+          {"id": "meta-start", "kinds": ["Meta", "Plain"], "properties": {"name": "meta-start"}},
+          {"id": "meta-end", "kinds": ["MetaDetail", "Plain"], "properties": {"name": "meta-end"}},
+          {"id": "meta-both", "kinds": ["Meta", "MetaDetail", "Plain"], "properties": {"name": "meta-both"}},
+          {"id": "entity-a", "kinds": ["Entity"], "properties": {"name": "entity-a"}},
+          {"id": "entity-b", "kinds": ["Entity"], "properties": {"name": "entity-b"}},
+          {"id": "not-entity", "kinds": ["Other"], "properties": {"name": "not-entity"}}
+        ],
+        "edges": [
+          {"start_id": "ad-a", "end_id": "ad-b", "kind": "PostProcessed", "properties": {"marker": "post-ad"}},
+          {"start_id": "az-a", "end_id": "az-b", "kind": "PostProcessed", "properties": {"marker": "post-az"}},
+          {"start_id": "ad-a", "end_id": "az-b", "kind": "PostProcessed", "properties": {"marker": "post-cross-a"}},
+          {"start_id": "az-a", "end_id": "ad-b", "kind": "PostProcessed", "properties": {"marker": "post-cross-b"}},
+          {"start_id": "plain-a", "end_id": "ad-b", "kind": "PostProcessed", "properties": {"marker": "post-wrong-start"}},
+          {"start_id": "ad-a", "end_id": "plain-b", "kind": "PostProcessed", "properties": {"marker": "post-wrong-end"}},
+          {"start_id": "ad-a", "end_id": "ad-b", "kind": "WrongPost", "properties": {"marker": "post-wrong-kind"}},
+          {"start_id": "plain-a", "end_id": "plain-b", "kind": "TrackerA", "properties": {"marker": "tracker-a", "hydrated": true}},
+          {"start_id": "plain-a", "end_id": "plain-b", "kind": "TrackerB", "properties": {"marker": "tracker-b", "hydrated": true}},
+          {"start_id": "meta-start", "end_id": "plain-b", "kind": "TrackerA", "properties": {"marker": "tracker-meta-start"}},
+          {"start_id": "plain-a", "end_id": "meta-end", "kind": "TrackerA", "properties": {"marker": "tracker-meta-end"}},
+          {"start_id": "meta-both", "end_id": "meta-both", "kind": "TrackerB", "properties": {"marker": "tracker-meta-both"}},
+          {"start_id": "plain-a", "end_id": "plain-b", "kind": "MigratedEdge", "properties": {"marker": "migration-present", "lastseen": "2026-01-03T00:00:00Z"}},
+          {"start_id": "plain-b", "end_id": "plain-a", "kind": "MigratedEdge", "properties": {"marker": "migration-null", "lastseen": null}},
+          {"start_id": "plain-a", "end_id": "entity-a", "kind": "MigratedEdge", "properties": {"marker": "migration-missing"}},
+          {"start_id": "meta-start", "end_id": "plain-b", "kind": "MigratedEdge", "properties": {"marker": "migration-meta-start", "lastseen": "2026-01-03T00:00:00Z"}},
+          {"start_id": "plain-a", "end_id": "meta-end", "kind": "MigratedEdge", "properties": {"marker": "migration-meta-end", "lastseen": "2026-01-03T00:00:00Z"}},
+          {"start_id": "entity-a", "end_id": "entity-b", "kind": "OwnsRaw", "properties": {"marker": "owns", "hydrated": "yes"}},
+          {"start_id": "entity-a", "end_id": "entity-b", "kind": "WriteOwnerRaw", "properties": {"marker": "write-owner", "hydrated": "yes"}},
+          {"start_id": "not-entity", "end_id": "entity-b", "kind": "OwnsRaw", "properties": {"marker": "owns-wrong-start"}}
+        ]
+      },
+      "variants": [
+        {"name": "SCAN-01 AD and Azure bases exact relationship kind", "vars": {"query": "MATCH (s)-[r:PostProcessed]->(e) WHERE (s:ADBase OR s:AZBase) AND (e:ADBase OR e:AZBase) RETURN id(r)"}, "assert": {"keys": ["id(r)"], "row_count": 4}},
+        {"name": "SCAN-01 wrong relationship kind is empty", "vars": {"query": "MATCH (s)-[r:MissingPost]->(e) WHERE (s:ADBase OR s:AZBase) AND (e:ADBase OR e:AZBase) RETURN id(r)"}, "assert": "empty"},
+        {"name": "SCAN-02 one kind excludes every Meta endpoint position", "vars": {"query": "MATCH (s)-[r:TrackerA]->(e) WHERE NOT (s:Meta OR s:MetaDetail) AND NOT (e:Meta OR e:MetaDetail) RETURN r"}, "assert": {"relationship_records": [{"start": "plain-a", "end": "plain-b", "kind": "TrackerA", "props": {"marker": "tracker-a", "hydrated": true}}]}},
+        {"name": "SCAN-02 many kinds hydrate complete relationships", "vars": {"query": "MATCH (s)-[r:TrackerA|TrackerB]->(e) WHERE NOT (s:Meta OR s:MetaDetail) AND NOT (e:Meta OR e:MetaDetail) RETURN r"}, "assert": {"relationship_records": [{"start": "plain-a", "end": "plain-b", "kind": "TrackerA", "props": {"marker": "tracker-a", "hydrated": true}}, {"start": "plain-a", "end": "plain-b", "kind": "TrackerB", "props": {"marker": "tracker-b", "hydrated": true}}]}},
+        {"name": "SCAN-03 present lastseen only with Meta decoys", "vars": {"query": "MATCH (s)-[r:MigratedEdge]->(e) WHERE NOT (s:Meta OR s:MetaDetail) AND r.lastseen IS NOT NULL AND NOT (e:Meta OR e:MetaDetail) RETURN id(r)"}, "assert": {"keys": ["id(r)"], "row_count": 1}},
+        {"name": "SCAN-04 OwnsRaw full hydration", "vars": {"query": "MATCH (s:Entity)-[r:OwnsRaw]->() RETURN r"}, "assert": {"relationship_records": [{"start": "entity-a", "end": "entity-b", "kind": "OwnsRaw", "props": {"marker": "owns", "hydrated": "yes"}}]}},
+        {"name": "SCAN-04 WriteOwnerRaw representative", "vars": {"query": "MATCH (s:Entity)-[r:WriteOwnerRaw]->() RETURN r"}, "assert": {"relationship_records": [{"start": "entity-a", "end": "entity-b", "kind": "WriteOwnerRaw", "props": {"marker": "write-owner", "hydrated": "yes"}}]}}
+      ]
+    },
+    {
+      "name": "SCAN-05 through SCAN-08 anchored scans and projections",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "target", "kinds": ["Computer"], "properties": {"name": "target"}},
+          {"id": "zero-target", "kinds": ["Computer", "MissingMember"], "properties": {"name": "zero-target"}},
+          {"id": "wrong-end", "kinds": ["Other"], "properties": {"name": "wrong-end"}},
+          {"id": "source-01", "kinds": ["Entity", "Group"], "properties": {"name": "source-01", "objectid": "S-1-5-01"}},
+          {"id": "source-02", "kinds": ["Entity", "User"], "properties": {"name": "source-02", "objectid": "S-1-5-02"}},
+          {"id": "source-03", "kinds": ["Entity", "Computer"], "properties": {"name": "source-03", "objectid": "S-1-5-03"}},
+          {"id": "source-04", "kinds": ["Entity"], "properties": {"name": "source-04"}},
+          {"id": "source-05", "kinds": ["Entity"], "properties": {"name": "source-05"}},
+          {"id": "source-06", "kinds": ["Entity"], "properties": {"name": "source-06"}},
+          {"id": "source-07", "kinds": ["Entity"], "properties": {"name": "source-07"}},
+          {"id": "source-08", "kinds": ["Entity"], "properties": {"name": "source-08"}},
+          {"id": "source-09", "kinds": ["Entity"], "properties": {"name": "source-09"}},
+          {"id": "not-entity", "kinds": ["Other"], "properties": {"name": "not-entity"}},
+          {"id": "victim-computer", "kinds": ["Computer"], "properties": {"name": "victim-computer"}},
+          {"id": "victim-other", "kinds": ["Other"], "properties": {"name": "victim-other"}},
+          {"id": "victim-unused", "kinds": ["Computer"], "properties": {"name": "victim-unused"}},
+          {"id": "attacker-group", "kinds": ["Group", "Entity"], "properties": {"name": "attacker-group"}},
+          {"id": "attacker-user", "kinds": ["User", "Entity"], "properties": {"name": "attacker-user"}},
+          {"id": "attacker-computer", "kinds": ["Computer", "Entity"], "properties": {"name": "attacker-computer"}},
+          {"id": "attacker-wrong", "kinds": ["Other"], "properties": {"name": "attacker-wrong"}}
+        ],
+        "edges": [
+          {"start_id": "source-01", "end_id": "target", "kind": "ScanEdge01", "properties": {"marker": "scan-01", "hydrated": true}},
+          {"start_id": "source-02", "end_id": "target", "kind": "ScanEdge02", "properties": {"marker": "scan-02"}},
+          {"start_id": "source-03", "end_id": "target", "kind": "ScanEdge03", "properties": {"marker": "scan-03"}},
+          {"start_id": "source-04", "end_id": "target", "kind": "ScanEdge04", "properties": {"marker": "scan-04"}},
+          {"start_id": "source-05", "end_id": "target", "kind": "ScanEdge05", "properties": {"marker": "scan-05"}},
+          {"start_id": "source-06", "end_id": "target", "kind": "ScanEdge06", "properties": {"marker": "scan-06"}},
+          {"start_id": "source-07", "end_id": "target", "kind": "ScanEdge07", "properties": {"marker": "scan-07"}},
+          {"start_id": "source-08", "end_id": "target", "kind": "ScanEdge08", "properties": {"marker": "scan-08"}},
+          {"start_id": "source-09", "end_id": "target", "kind": "ScanEdge09", "properties": {"marker": "scan-09"}},
+          {"start_id": "not-entity", "end_id": "target", "kind": "ScanEdge01", "properties": {"marker": "scan-wrong-start"}},
+          {"start_id": "source-01", "end_id": "wrong-end", "kind": "LocalToComputer", "properties": {"marker": "local-wrong-end"}},
+          {"start_id": "source-01", "end_id": "target", "kind": "LocalToComputer", "properties": {"marker": "local-valid"}},
+          {"start_id": "source-01", "end_id": "target", "kind": "MemberOf", "properties": {"marker": "member-01"}},
+          {"start_id": "source-01", "end_id": "target", "kind": "MemberOfLocalGroup", "properties": {"marker": "member-local-01"}},
+          {"start_id": "source-02", "end_id": "target", "kind": "MemberOf", "properties": {"marker": "member-02"}},
+          {"start_id": "source-02", "end_id": "target", "kind": "WrongMember", "properties": {"marker": "member-wrong"}},
+          {"start_id": "attacker-group", "end_id": "victim-computer", "kind": "GenericAll", "properties": {"marker": "esc-group"}},
+          {"start_id": "attacker-user", "end_id": "victim-other", "kind": "WritePublicInformation", "properties": {"marker": "esc-user-a-only"}},
+          {"start_id": "attacker-computer", "end_id": "victim-computer", "kind": "WriteDACL", "properties": {"marker": "esc-computer"}},
+          {"start_id": "attacker-wrong", "end_id": "victim-computer", "kind": "GenericAll", "properties": {"marker": "esc-wrong-start"}},
+          {"start_id": "attacker-group", "end_id": "victim-computer", "kind": "WrongEsc", "properties": {"marker": "esc-wrong-kind"}}
+        ]
+      },
+      "variants": [
+        {"name": "SCAN-05 zero inbound degree", "vars": {"query": "MATCH (s:Entity)-[r:ScanEdge01]->(e) WHERE id(e) = $target RETURN r, s"}, "node_params": {"target": "zero-target"}, "assert": "empty"},
+        {"name": "SCAN-05 one kind one match full hydration", "vars": {"query": "MATCH (s:Entity)-[r:ScanEdge01]->(e) WHERE id(e) = $target RETURN r, s"}, "node_params": {"target": "target"}, "assert": {"keys": ["r", "s"], "node_id_set": ["source-01"], "relationship_records": [{"start": "source-01", "end": "target", "kind": "ScanEdge01", "props": {"marker": "scan-01", "hydrated": true}}]}},
+        {"name": "SCAN-05 nine kinds high inbound degree", "vars": {"query": "MATCH (s:Entity)-[r:ScanEdge01|ScanEdge02|ScanEdge03|ScanEdge04|ScanEdge05|ScanEdge06|ScanEdge07|ScanEdge08|ScanEdge09]->(e) WHERE id(e) = $target RETURN r, s"}, "node_params": {"target": "target"}, "assert": {"keys": ["r", "s"], "row_count": 9, "node_id_set": ["source-01", "source-02", "source-03", "source-04", "source-05", "source-06", "source-07", "source-08", "source-09"]}},
+        {"name": "SCAN-06 exact FetchKinds projection", "vars": {"query": "MATCH (s)-[r:LocalToComputer]->(e:Computer) RETURN id(s), id(r), type(r), id(e)"}, "assert": {"keys": ["id(s)", "id(r)", "type(r)", "id(e)"], "row_count": 1}},
+        {"name": "SCAN-07 one kind directed endpoint IDs", "vars": {"query": "MATCH (s)-[r:MemberOf]->(e) RETURN id(s), id(e)"}, "assert": {"keys": ["id(s)", "id(e)"], "row_count": 2}},
+        {"name": "SCAN-07 many kinds retain duplicate endpoint pairs", "vars": {"query": "MATCH (s)-[r:MemberOf|MemberOfLocalGroup]->(e) RETURN id(s), id(e)"}, "assert": {"keys": ["id(s)", "id(e)"], "row_count": 3}},
+        {"name": "SCAN-07 absent kind zero matches", "vars": {"query": "MATCH (s)-[r:MissingMember]->(e) RETURN id(s), id(e)"}, "assert": "empty"},
+        {"name": "SCAN-08 scenario A empty victim list", "vars": {"query": "MATCH (s)-[r:GenericAll|GenericWrite|Owns|WriteOwner|WriteDACL|WritePublicInformation]->(e) WHERE (s:Group OR s:User OR s:Computer) AND id(e) IN $victims RETURN id(s)"}, "node_list_params": {"victims": []}, "assert": "empty"},
+        {"name": "SCAN-08 scenario A single victim", "vars": {"query": "MATCH (s)-[r:GenericAll|GenericWrite|Owns|WriteOwner|WriteDACL|WritePublicInformation]->(e) WHERE (s:Group OR s:User OR s:Computer) AND id(e) IN $victims RETURN id(s)"}, "node_list_params": {"victims": ["victim-other"]}, "assert": {"keys": ["id(s)"], "row_count": 1}},
+        {"name": "SCAN-08 scenario A thirty-two-entry victim list", "vars": {"query": "MATCH (s)-[r:GenericAll|GenericWrite|Owns|WriteOwner|WriteDACL|WritePublicInformation]->(e) WHERE (s:Group OR s:User OR s:Computer) AND id(e) IN $victims RETURN id(s)"}, "node_list_params": {"victims": ["victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other", "victim-unused", "victim-computer", "victim-other"]}, "assert": {"keys": ["id(s)"], "row_count": 3}},
+        {"name": "SCAN-08 scenario B typed end and five kinds", "vars": {"query": "MATCH (s)-[r:GenericAll|GenericWrite|Owns|WriteOwner|WriteDACL]->(e:Computer) WHERE (s:Group OR s:User OR s:Computer) AND id(e) IN $victims RETURN id(s)"}, "node_list_params": {"victims": ["victim-computer", "victim-other", "victim-unused"]}, "assert": {"keys": ["id(s)"], "row_count": 2}}
+      ]
+    }
+  ]
+}

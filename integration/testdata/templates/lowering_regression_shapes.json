@@ -1,0 +1,108 @@
+{
+  "families": [
+    {
+      "name": "greedy projection and zero-depth shortest path retain full values",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "common", "kinds": ["LoweringNode"], "properties": {"root": true, "terminal": true}},
+          {"id": "other-root", "kinds": ["LoweringNode"], "properties": {"root": true}},
+          {"id": "target", "kinds": ["LoweringNode"], "properties": {"terminal": true}}
+        ],
+        "edges": [
+          {"start_id": "common", "end_id": "target", "kind": "LoweringEdge", "properties": {"route": "common-target"}},
+          {"start_id": "other-root", "end_id": "target", "kind": "LoweringEdge", "properties": {"route": "other-target"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "RETURN star materializes nodes and paths including the equal endpoint pair",
+          "vars": {"query": "MATCH p = shortestPath((s:LoweringNode)-[:LoweringEdge*0..4]->(e:LoweringNode)) WHERE s.root = true AND e.terminal = true RETURN *"},
+          "assert": {
+            "row_count": 3,
+            "node_id_set": ["common", "other-root", "target"],
+            "path_node_ids": [["common"], ["common", "target"], ["other-root", "target"]]
+          }
+        },
+        {
+          "name": "WITH star observes the full path before a scalar final projection",
+          "vars": {"query": "MATCH p = shortestPath((s:LoweringNode)-[:LoweringEdge*0..4]->(e:LoweringNode)) WHERE s.root = true AND e.terminal = true WITH * RETURN p"},
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [["common"], ["common", "target"], ["other-root", "target"]]
+          }
+        }
+      ]
+    },
+    {
+      "name": "guarded endpoint seeded expansion preserves complete trail semantics",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "excluded-computer", "kinds": ["Computer"], "properties": {"name": "excluded"}},
+          {"id": "good-computer", "kinds": ["Computer"], "properties": {"name": "good"}},
+          {"id": "excluded-user", "kinds": ["User"], "properties": {"name": "excluded-user"}},
+          {"id": "good-user", "kinds": ["User"], "properties": {"name": "good-user"}},
+          {"id": "middle", "kinds": ["Group"], "properties": {"objectid": "MIDDLE"}},
+          {"id": "alternate-middle", "kinds": ["Group"], "properties": {"objectid": "ALTERNATE-MIDDLE"}},
+          {"id": "excluded-group", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-516"}},
+          {"id": "terminal", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-512"}},
+          {"id": "decoy", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-513"}}
+        ],
+        "edges": [
+          {"start_id": "excluded-computer", "end_id": "excluded-group", "kind": "MemberOf", "properties": {"marker": "exclude"}},
+          {"start_id": "excluded-computer", "end_id": "excluded-user", "kind": "HasSession", "properties": {"marker": "session-excluded"}},
+          {"start_id": "good-computer", "end_id": "good-user", "kind": "HasSession", "properties": {"marker": "session-good"}},
+          {"start_id": "good-user", "end_id": "good-user", "kind": "MemberOf", "properties": {"marker": "loop"}},
+          {"start_id": "good-user", "end_id": "middle", "kind": "MemberOf", "properties": {"marker": "first"}},
+          {"start_id": "middle", "end_id": "terminal", "kind": "MemberOf", "properties": {"marker": "second"}},
+          {"start_id": "good-user", "end_id": "alternate-middle", "kind": "MemberOf", "properties": {"marker": "alternate-first"}},
+          {"start_id": "alternate-middle", "end_id": "terminal", "kind": "MemberOf", "properties": {"marker": "alternate-second"}},
+          {"start_id": "good-user", "end_id": "terminal", "kind": "MemberOf", "properties": {"marker": "direct"}},
+          {"start_id": "good-user", "end_id": "decoy", "kind": "MemberOf", "properties": {"marker": "decoy"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "compound exclusion query returns ordered hydrated relationships",
+          "vars": {"query": "MATCH (s)-[:MemberOf*0..]->(excluded:Group) WHERE excluded.objectid ENDS WITH '-516' WITH COLLECT(s) AS exclude MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND NOT c IN exclude RETURN p LIMIT 1000"},
+          "assert": {
+            "row_count": 6,
+            "path_relationship_records": [
+              [{"start":"good-computer","end":"good-user","kind":"HasSession","props":{"marker":"session-good"}},{"start":"good-user","end":"terminal","kind":"MemberOf","props":{"marker":"direct"}}],
+              [{"start":"good-computer","end":"good-user","kind":"HasSession","props":{"marker":"session-good"}},{"start":"good-user","end":"middle","kind":"MemberOf","props":{"marker":"first"}},{"start":"middle","end":"terminal","kind":"MemberOf","props":{"marker":"second"}}],
+              [{"start":"good-computer","end":"good-user","kind":"HasSession","props":{"marker":"session-good"}},{"start":"good-user","end":"alternate-middle","kind":"MemberOf","props":{"marker":"alternate-first"}},{"start":"alternate-middle","end":"terminal","kind":"MemberOf","props":{"marker":"alternate-second"}}],
+              [{"start":"good-computer","end":"good-user","kind":"HasSession","props":{"marker":"session-good"}},{"start":"good-user","end":"good-user","kind":"MemberOf","props":{"marker":"loop"}},{"start":"good-user","end":"terminal","kind":"MemberOf","props":{"marker":"direct"}}],
+              [{"start":"good-computer","end":"good-user","kind":"HasSession","props":{"marker":"session-good"}},{"start":"good-user","end":"good-user","kind":"MemberOf","props":{"marker":"loop"}},{"start":"good-user","end":"middle","kind":"MemberOf","props":{"marker":"first"}},{"start":"middle","end":"terminal","kind":"MemberOf","props":{"marker":"second"}}],
+              [{"start":"good-computer","end":"good-user","kind":"HasSession","props":{"marker":"session-good"}},{"start":"good-user","end":"good-user","kind":"MemberOf","props":{"marker":"loop"}},{"start":"good-user","end":"alternate-middle","kind":"MemberOf","props":{"marker":"alternate-first"}},{"start":"alternate-middle","end":"terminal","kind":"MemberOf","props":{"marker":"alternate-second"}}]
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "metamorphic": [
+    {
+      "name": "guarded endpoint lowering matches incumbent traversal",
+      "fixture": {
+        "nodes": [
+          {"id": "computer", "kinds": ["Computer"], "properties": {}},
+          {"id": "user", "kinds": ["User"], "properties": {}},
+          {"id": "middle", "kinds": ["Group"], "properties": {}},
+          {"id": "terminal", "kinds": ["Group"], "properties": {"objectid": "S-1-5-21-512"}}
+        ],
+        "edges": [
+          {"start_id": "computer", "end_id": "user", "kind": "HasSession", "properties": {"marker": "session"}},
+          {"start_id": "user", "end_id": "user", "kind": "MemberOf", "properties": {"marker": "loop"}},
+          {"start_id": "user", "end_id": "middle", "kind": "MemberOf", "properties": {"marker": "first"}},
+          {"start_id": "middle", "end_id": "terminal", "kind": "MemberOf", "properties": {"marker": "second"}}
+        ]
+      },
+      "compare": ["path_node_ids", "path_relationship_records"],
+      "queries": [
+        {"name": "guarded endpoint seeded", "cypher": "MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p"},
+        {"name": "incumbent relationship variable", "cypher": "MATCH p = (c:Computer)-[:HasSession]->(:User)-[rels:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "graph": {
+    "nodes": [
+      {"id": "fse-root", "kinds": ["ExpansionRoot"], "properties": {"root_key": "fixed-suffix-fanout-root"}},
+      {"id": "fse-expansion-a", "kinds": ["ExpansionNode"]},
+      {"id": "fse-expansion-b", "kinds": ["ExpansionNode"]},
+      {"id": "fse-expansion-c", "kinds": ["ExpansionNode"]},
+      {"id": "fse-option-good", "kinds": ["ExpansionNode"]},
+      {"id": "fse-option-disabled", "kinds": ["ExpansionNode"]},
+      {"id": "fse-option-wrong-head", "kinds": ["ExpansionNode"]},
+      {"id": "fse-head", "kinds": ["SuffixHead"]},
+      {"id": "fse-other-head", "kinds": ["SuffixHead"]},
+      {"id": "fse-middle", "kinds": ["SuffixMiddle"]},
+      {"id": "fse-terminal", "kinds": ["SuffixTerminal"]},
+      {"id": "fse-other-terminal", "kinds": ["SuffixTerminal"]},
+      {"id": "fse-predicate-good", "kinds": ["PredicateNode"], "properties": {"eligible": true, "requires_review": false, "allows_direct": true, "version": 1, "required_approvals": 1}},
+      {"id": "fse-predicate-alt", "kinds": ["PredicateNode"], "properties": {"eligible": true, "requires_review": false, "allows_direct": true, "version": 2, "required_approvals": 0}},
+      {"id": "fse-predicate-disabled", "kinds": ["PredicateNode"], "properties": {"eligible": false, "requires_review": true, "allows_direct": false, "version": 2, "required_approvals": 1}},
+      {"id": "fse-predicate-wrong-head", "kinds": ["PredicateNode"], "properties": {"eligible": true, "requires_review": false, "allows_direct": true, "version": 1, "required_approvals": 1}},
+      {"id": "fse-bridge", "kinds": ["BridgeNode"]},
+      {"id": "fse-other-bridge", "kinds": ["BridgeNode"]}
+    ],
+    "edges": [
+      {"start_id": "fse-root", "end_id": "fse-expansion-a", "kind": "Expand"},
+      {"start_id": "fse-root", "end_id": "fse-expansion-b", "kind": "Expand"},
+      {"start_id": "fse-expansion-b", "end_id": "fse-expansion-c", "kind": "Expand"},
+      {"start_id": "fse-root", "end_id": "fse-option-good", "kind": "Expand"},
+      {"start_id": "fse-root", "end_id": "fse-option-disabled", "kind": "Expand"},
+      {"start_id": "fse-root", "end_id": "fse-option-wrong-head", "kind": "Expand"},
+      {"start_id": "fse-root", "end_id": "fse-head", "kind": "EnterSuffix"},
+      {"start_id": "fse-expansion-a", "end_id": "fse-head", "kind": "EnterSuffix"},
+      {"start_id": "fse-expansion-b", "end_id": "fse-head", "kind": "EnterSuffix"},
+      {"start_id": "fse-expansion-c", "end_id": "fse-head", "kind": "EnterSuffix"},
+      {"start_id": "fse-head", "end_id": "fse-middle", "kind": "ContinueSuffix"},
+      {"start_id": "fse-middle", "end_id": "fse-terminal", "kind": "CompleteSuffix"},
+      {"start_id": "fse-option-good", "end_id": "fse-predicate-good", "kind": "OptionA"},
+      {"start_id": "fse-option-good", "end_id": "fse-predicate-alt", "kind": "OptionB"},
+      {"start_id": "fse-option-disabled", "end_id": "fse-predicate-disabled", "kind": "OptionC"},
+      {"start_id": "fse-option-wrong-head", "end_id": "fse-predicate-wrong-head", "kind": "OptionA"},
+      {"start_id": "fse-predicate-good", "end_id": "fse-head", "kind": "JoinSuffix"},
+      {"start_id": "fse-predicate-alt", "end_id": "fse-head", "kind": "JoinSuffix"},
+      {"start_id": "fse-predicate-disabled", "end_id": "fse-head", "kind": "JoinSuffix"},
+      {"start_id": "fse-predicate-wrong-head", "end_id": "fse-other-head", "kind": "JoinSuffix"},
+      {"start_id": "fse-head", "end_id": "fse-bridge", "kind": "HeadToBridge"},
+      {"start_id": "fse-head", "end_id": "fse-other-bridge", "kind": "HeadToAlternateBridge"},
+      {"start_id": "fse-bridge", "end_id": "fse-terminal", "kind": "ReachTerminal"},
+      {"start_id": "fse-other-bridge", "end_id": "fse-other-terminal", "kind": "ReachTerminal"}
+    ]
+  }
+}
