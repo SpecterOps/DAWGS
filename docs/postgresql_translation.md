@@ -190,13 +190,14 @@ because those values cannot be reconstructed safely from caller parameters. Conc
 waiters rebuild uncacheable translations rather than inheriting the first caller's values. Driver close clears both
 caches. `ParseCacheStats` and `TranslationCacheStats` expose aggregate, query-text-free counters.
 
-### Opt-in connection-local translation caching
+### Connection-local translation caching
 
-`drivers/pg/v2` is an experimental, opt-in constructor API. It does not add a `pg-v2` connection-string scheme or
-change ordinary `pg` driver behavior. `v2.NewPool(ctx, poolConfig, config)` copies the supplied `pgxpool.Config`,
-preserves and composes its lifecycle hooks, and pairs the resulting pool with `v2.NewDriver` so callers cannot attach a
-v2 cache provider to unrelated physical connections. `v2.NewDefaultPool` selects 64 entries per physical connection;
-`Config{TranslationCacheEntries: 0}` executes exact uncached translation and a negative capacity is rejected.
+The PostgreSQL driver uses connection-local caches for every pool constructed by `pg.NewPool` or
+`pg.NewPoolWithRuntimeConfig`. The constructor copies the supplied `pgxpool.Config`, preserves and composes its
+lifecycle hooks, and associates the resulting bare `*pgxpool.Pool` with its connection-local runtime. `pg.NewDriver`
+accepts that established pool and assumes the required lifecycle handlers are already installed; it never replaces
+caller hooks or constructs a second pool. `pg.DefaultRuntimeConfig` selects 64 entries per physical connection;
+`RuntimeConfig{TranslationCacheEntries: 0}` executes exact uncached translation and a negative capacity is rejected.
 
 Each successfully initialized physical connection owns one entry-bounded SIEVE cache. State survives a healthy
 `pgxpool` lease release/reacquisition and is removed by `BeforeClose`; it is never keyed by a lease wrapper, backend
@@ -205,9 +206,9 @@ translation inputs. Successful `AssertSchema` and `RefreshKinds` calls advance t
 immediately unreachable. External schema changes are not detected automatically: reset or recreate the pool when they
 change registered types or generated SQL.
 
-`v2.Driver.TranslationCacheStats` exposes capacities, occupancy, counters, retired/live connection counts, and opaque
+`pg.Driver.TranslationCacheStats` exposes capacities, occupancy, counters, retired/live connection counts, and opaque
 diagnostic IDs. It never exposes query text, SQL, parameter names or values, pointer values, connection strings, or
-credentials. V2 stores only immutable translation artifacts and fresh bindings; it does not cache result rows, graph
+credentials. The driver stores only immutable translation artifacts and fresh bindings; it does not cache result rows, graph
 values, transaction/snapshot state, routing decisions, or errors.
 
 `pg.TraversalPolicy` is default-off and admits one candidate family per

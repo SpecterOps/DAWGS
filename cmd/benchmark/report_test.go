@@ -24,7 +24,7 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,12 +51,12 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 			Iterations:       3,
 			WarmupIterations: 1,
 			Workers:          2,
-			TranslationCache: &pgv2.Stats{
+			TranslationCache: &pg.Stats{
 				LiveConnections:    2,
-				Aggregate:          pgv2.TranslationCacheStats{Hits: 4, Misses: 2},
-				TraversalWorkspace: pgv2.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
-				PreparedStatements: pgv2.PreparedStatementStats{Prepared: 2, Reuses: 4},
-				StrategySelection:  pgv2.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
+				Aggregate:          pg.TranslationCacheStats{Hits: 4, Misses: 2},
+				TraversalWorkspace: pg.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
+				PreparedStatements: pg.PreparedStatementStats{Prepared: 2, Reuses: 4},
+				StrategySelection:  pg.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
 			},
 			Results: []Result{{
 				Section:           "Traversal",
@@ -132,12 +132,12 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 			Iterations:       3,
 			WarmupIterations: 1,
 			Workers:          2,
-			TranslationCache: &pgv2.Stats{
+			TranslationCache: &pg.Stats{
 				LiveConnections:    2,
-				Aggregate:          pgv2.TranslationCacheStats{Hits: 4, Misses: 2},
-				TraversalWorkspace: pgv2.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
-				PreparedStatements: pgv2.PreparedStatementStats{Prepared: 2, Reuses: 4},
-				StrategySelection:  pgv2.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
+				Aggregate:          pg.TranslationCacheStats{Hits: 4, Misses: 2},
+				TraversalWorkspace: pg.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
+				PreparedStatements: pg.PreparedStatementStats{Prepared: 2, Reuses: 4},
+				StrategySelection:  pg.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
 			},
 			Results: []Result{{
 				Section:           "Fixed Suffix Expansion Fanout",
@@ -164,8 +164,8 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 		"Distinct Rows",
 		"Duplicate Rows",
 		"| Fixed Suffix Expansion Fanout / combined | fixed_suffix_expansion_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
-		"V2 connection state: cache 4 hits, 2 misses, 0 bypasses, 0 evictions; workspaces 1 initialized/3 reused; statements 2 prepared/4 reused across 2 live connections.",
-		"V2 strategy selection: 3 incumbent, 1 exact-query canary, 0 structurally authorized, 2 structural-shadow, 2 shape-unavailable observations.",
+		"PostgreSQL connection state: cache 4 hits, 2 misses, 0 bypasses, 0 evictions; workspaces 1 initialized/3 reused; statements 2 prepared/4 reused across 2 live connections.",
+		"PostgreSQL strategy selection: 3 incumbent, 1 exact-query canary, 0 structurally authorized, 2 structural-shadow, 2 shape-unavailable observations.",
 	} {
 		require.Contains(t, text, expected)
 	}
@@ -173,7 +173,7 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 
 func TestWriteMarkdownIdentifiesProductionPolicyPath(t *testing.T) {
 	report := Report{
-		Driver:                        pgV2BenchmarkDriver,
+		Driver:                        pg.DriverName,
 		GitRef:                        "abcdef0",
 		Date:                          "2026-08-20",
 		Iterations:                    2,

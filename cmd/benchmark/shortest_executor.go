@@ -11,7 +11,6 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/drivers/pg/model"
-	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -129,13 +128,13 @@ func (s *traversalPolicyBenchmarkDatabase) ReadTransaction(ctx context.Context, 
 	}, options...)
 }
 
-// TranslationCacheStats preserves the V2 telemetry surface through the policy
+// TranslationCacheStats preserves the PostgreSQL telemetry surface through the policy
 // boundary wrapper so policy-path reports include actual cache activity.
-func (s *traversalPolicyBenchmarkDatabase) TranslationCacheStats() pgv2.Stats {
-	if provider, ok := s.Database.(interface{ TranslationCacheStats() pgv2.Stats }); ok {
+func (s *traversalPolicyBenchmarkDatabase) TranslationCacheStats() pg.Stats {
+	if provider, ok := s.Database.(interface{ TranslationCacheStats() pg.Stats }); ok {
 		return provider.TranslationCacheStats()
 	}
-	return pgv2.Stats{}
+	return pg.Stats{}
 }
 
 func applyPostgreSQLShortestPathBenchmarkSettings(tx graph.Transaction, planCacheMode string, jitEnabled bool) error {

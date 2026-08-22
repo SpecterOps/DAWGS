@@ -32,7 +32,6 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/pg"
-	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
 	"github.com/stretchr/testify/require"
@@ -58,7 +57,7 @@ func postgresBenchmarkIntegrationConnection(t *testing.T) string {
 // a live database, loads a graph fixture, and measures a Cypher scenario.
 func TestPostgresV2BenchmarkMode(t *testing.T) {
 	ctx := context.Background()
-	database, err := openBenchmarkDatabase(ctx, pgV2BenchmarkDriver, postgresBenchmarkIntegrationConnection(t), size.Gibibyte)
+	database, err := openBenchmarkDatabase(ctx, pg.DriverName, postgresBenchmarkIntegrationConnection(t), size.Gibibyte)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, database.Close(context.Background()))
@@ -91,7 +90,7 @@ func TestPostgresV2BenchmarkMode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), result.RowCount)
 
-	statsProvider, ok := database.(*pgv2.Driver)
+	statsProvider, ok := database.(*pg.Driver)
 	require.True(t, ok)
 	stats := statsProvider.TranslationCacheStats()
 	require.NotEmpty(t, stats.Connections)
@@ -104,9 +103,9 @@ func TestPostgresV2BenchmarkMode(t *testing.T) {
 // when the parameterized scenario executes at repeatable read.
 func TestPostgresV2BenchmarkPolicyPath(t *testing.T) {
 	ctx := context.Background()
-	database, err := openBenchmarkDatabase(ctx, pgV2BenchmarkDriver, postgresBenchmarkIntegrationConnection(t), size.Gibibyte)
+	database, err := openBenchmarkDatabase(ctx, pg.DriverName, postgresBenchmarkIntegrationConnection(t), size.Gibibyte)
 	require.NoError(t, err)
-	driver, ok := database.(*pgv2.Driver)
+	driver, ok := database.(*pg.Driver)
 	require.True(t, ok)
 	t.Cleanup(func() {
 		require.NoError(t, driver.SetTraversalPolicy(pg.TraversalPolicy{}))
