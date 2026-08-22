@@ -1,0 +1,150 @@
+{
+  "cases": [
+    {
+      "name": "REC-01_inbound_30_kind_delete",
+      "dataset": "generated_reconciliation",
+      "category": "reconciliation_mutation",
+      "cypher": "MATCH ()-[r:RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09|RecKind10|RecKind11|RecKind12|RecKind13|RecKind14|RecKind15|RecKind16|RecKind17|RecKind18|RecKind19|RecKind20|RecKind21|RecKind22|RecKind23|RecKind24|RecKind25|RecKind26|RecKind27|RecKind28|RecKind29|RecKind30]->(e:ADEntity) WHERE e.objectid = $object_id DELETE r",
+      "params": {"object_id": "rec-in"},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {
+        "terminal_predicate": "typed_endpoint_property",
+        "edge_kinds": ["RecKind01", "RecKind02", "RecKind03", "RecKind04", "RecKind05", "RecKind06", "RecKind07", "RecKind08", "RecKind09", "RecKind10", "RecKind11", "RecKind12", "RecKind13", "RecKind14", "RecKind15", "RecKind16", "RecKind17", "RecKind18", "RecKind19", "RecKind20", "RecKind21", "RecKind22", "RecKind23", "RecKind24", "RecKind25", "RecKind26", "RecKind27", "RecKind28", "RecKind29", "RecKind30"],
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["REC-01", "mutation", "inbound", "30-kinds"],
+      "write_scenario": {
+        "selection_cypher": "MATCH ()-[r:RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09|RecKind10|RecKind11|RecKind12|RecKind13|RecKind14|RecKind15|RecKind16|RecKind17|RecKind18|RecKind19|RecKind20|RecKind21|RecKind22|RecKind23|RecKind24|RecKind25|RecKind26|RecKind27|RecKind28|RecKind29|RecKind30]->(e:ADEntity) WHERE e.objectid = $object_id RETURN id(r)",
+        "params": {"object_id": "rec-in"},
+        "affected_entity": "relationship",
+        "expected_matched": 2,
+        "expected_affected": 2,
+        "post_state": [
+          {"name": "target relationships deleted", "cypher": "MATCH ()-[r]->(e:ADEntity) WHERE e.objectid = $object_id RETURN count(r)", "params": {"object_id": "rec-in"}, "expected": {"scalar_int": 0}},
+          {"name": "wrong endpoint survivor", "cypher": "MATCH ()-[r:RecKind02]->(e:ADEntity) WHERE e.objectid = $object_id RETURN count(r)", "params": {"object_id": "survivor"}, "expected": {"scalar_int": 1}}
+        ]
+      }
+    },
+    {
+      "name": "REC-02_outbound_30_kind_delete",
+      "dataset": "generated_reconciliation",
+      "category": "reconciliation_mutation",
+      "cypher": "MATCH (s:ADEntity)-[r:RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09|RecKind10|RecKind11|RecKind12|RecKind13|RecKind14|RecKind15|RecKind16|RecKind17|RecKind18|RecKind19|RecKind20|RecKind21|RecKind22|RecKind23|RecKind24|RecKind25|RecKind26|RecKind27|RecKind28|RecKind29|RecKind30]->() WHERE s.objectid = $object_id DELETE r",
+      "params": {"object_id": "rec-out"},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {
+        "root_predicate": "typed_endpoint_property",
+        "edge_kinds": ["RecKind01", "RecKind02", "RecKind03", "RecKind04", "RecKind05", "RecKind06", "RecKind07", "RecKind08", "RecKind09", "RecKind10", "RecKind11", "RecKind12", "RecKind13", "RecKind14", "RecKind15", "RecKind16", "RecKind17", "RecKind18", "RecKind19", "RecKind20", "RecKind21", "RecKind22", "RecKind23", "RecKind24", "RecKind25", "RecKind26", "RecKind27", "RecKind28", "RecKind29", "RecKind30"],
+        "path_materialization_required": false
+      },
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["REC-02", "mutation", "outbound", "30-kinds"],
+      "write_scenario": {
+        "selection_cypher": "MATCH (s:ADEntity)-[r:RecKind01|RecKind02|RecKind03|RecKind04|RecKind05|RecKind06|RecKind07|RecKind08|RecKind09|RecKind10|RecKind11|RecKind12|RecKind13|RecKind14|RecKind15|RecKind16|RecKind17|RecKind18|RecKind19|RecKind20|RecKind21|RecKind22|RecKind23|RecKind24|RecKind25|RecKind26|RecKind27|RecKind28|RecKind29|RecKind30]->() WHERE s.objectid = $object_id RETURN id(r)",
+        "params": {"object_id": "rec-out"},
+        "affected_entity": "relationship",
+        "expected_matched": 2,
+        "expected_affected": 2,
+        "post_state": [
+          {"name": "target relationships deleted", "cypher": "MATCH (s:ADEntity)-[r]->() WHERE s.objectid = $object_id RETURN count(r)", "params": {"object_id": "rec-out"}, "expected": {"scalar_int": 0}},
+          {"name": "wrong start survivor", "cypher": "MATCH (s:Source)-[r:RecKind02]->() RETURN count(r)", "expected": {"scalar_int": 1}}
+        ]
+      }
+    },
+    {
+      "name": "REC-04_large_high_match_object_id_list_delete",
+      "dataset": "generated_reconciliation",
+      "category": "reconciliation_mutation",
+      "cypher": "MATCH ()-[r:ADReconcile]->(e:ADEntity) WHERE e.objectid IN $object_ids DELETE r",
+      "params": {"object_ids": {"$type": "string_list", "prefix": "missing-high", "count": 2000, "include": ["rec-list"]}},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"terminal_predicate": "large_property_list", "edge_kinds": ["ADReconcile"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["REC-04", "mutation", "large-list", "high-match"],
+      "write_scenario": {
+        "selection_cypher": "MATCH ()-[r:ADReconcile]->(e:ADEntity) WHERE e.objectid IN $object_ids RETURN id(r)",
+        "params": {"object_ids": {"$type": "string_list", "prefix": "missing-high", "count": 2000, "include": ["rec-list"]}},
+        "affected_entity": "relationship",
+        "expected_matched": 2,
+        "expected_affected": 2,
+        "post_state": [
+          {"name": "selected list relationships deleted", "cypher": "MATCH ()-[r:ADReconcile]->(e:ADEntity) WHERE e.objectid = $object_id RETURN count(r)", "params": {"object_id": "rec-list"}, "expected": {"scalar_int": 0}},
+          {"name": "unrelated relationship survives", "cypher": "MATCH ()-[r:Survivor]->() RETURN count(r)", "expected": {"scalar_int": 1}}
+        ]
+      }
+    },
+    {
+      "name": "REC-04_thousand_item_no_match_delete",
+      "dataset": "generated_reconciliation",
+      "category": "reconciliation_mutation",
+      "cypher": "MATCH ()-[r:ADReconcile]->(e:ADEntity) WHERE e.objectid IN $object_ids DELETE r",
+      "params": {"object_ids": {"$type": "string_list", "prefix": "missing-only", "count": 1000}},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"terminal_predicate": "large_property_list", "edge_kinds": ["ADReconcile"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["REC-04", "mutation", "1000-list", "no-match"],
+      "write_scenario": {
+        "selection_cypher": "MATCH ()-[r:ADReconcile]->(e:ADEntity) WHERE e.objectid IN $object_ids RETURN id(r)",
+        "params": {"object_ids": {"$type": "string_list", "prefix": "missing-only", "count": 1000}},
+        "affected_entity": "relationship",
+        "expected_matched": 0,
+        "expected_affected": 0,
+        "post_state": [
+          {"name": "all list relationships survive", "cypher": "MATCH ()-[r:ADReconcile]->() RETURN count(r)", "expected": {"scalar_int": 2}}
+        ]
+      }
+    },
+    {
+      "name": "REC-06_large_endpoint_id_list_delete",
+      "dataset": "generated_reconciliation",
+      "category": "reconciliation_mutation",
+      "cypher": "MATCH ()-[r:DelegatedEnrollmentAgent]->(e:CertTemplate) WHERE id(e) IN $template_ids DELETE r",
+      "generated_node_list_params": {"template_ids": {"prefix": "scale-template", "count": 2000, "include": ["template"]}},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"terminal_predicate": "large_id_list", "edge_kinds": ["DelegatedEnrollmentAgent"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["REC-06", "mutation", "large-id-list"],
+      "write_scenario": {
+        "selection_cypher": "MATCH ()-[r:DelegatedEnrollmentAgent]->(e:CertTemplate) WHERE id(e) IN $template_ids RETURN id(r)",
+        "generated_node_list_params": {"template_ids": {"prefix": "scale-template", "count": 2000, "include": ["template"]}},
+        "affected_entity": "relationship",
+        "expected_matched": 2,
+        "expected_affected": 2,
+        "post_state": [
+          {"name": "delegations deleted", "cypher": "MATCH ()-[r:DelegatedEnrollmentAgent]->() RETURN count(r)", "expected": {"scalar_int": 0}},
+          {"name": "unrelated relationship survives", "cypher": "MATCH ()-[r:Survivor]->() RETURN count(r)", "expected": {"scalar_int": 1}}
+        ]
+      }
+    },
+    {
+      "name": "REC-08_large_list_high_degree_detach_delete",
+      "dataset": "generated_reconciliation",
+      "category": "reconciliation_mutation",
+      "cypher": "MATCH (n:ADEntity) WHERE n.objectid IN $object_ids DETACH DELETE n",
+      "params": {"object_ids": {"$type": "string_list", "prefix": "missing-node", "count": 2000, "include": ["delete-target"]}},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"root_predicate": "large_property_list", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["REC-08", "mutation", "large-list", "high-degree", "detach-delete"],
+      "write_scenario": {
+        "selection_cypher": "MATCH (n:ADEntity) WHERE n.objectid IN $object_ids RETURN id(n)",
+        "params": {"object_ids": {"$type": "string_list", "prefix": "missing-node", "count": 2000, "include": ["delete-target"]}},
+        "affected_entity": "node",
+        "expected_matched": 1,
+        "expected_affected": 1,
+        "post_state": [
+          {"name": "target node deleted", "cypher": "MATCH (n:ADEntity) WHERE n.objectid = $object_id RETURN count(n)", "params": {"object_id": "delete-target"}, "expected": {"scalar_int": 0}},
+          {"name": "all incident relationships cascaded", "cypher": "MATCH ()-[r:Incident]->() RETURN count(r)", "expected": {"scalar_int": 0}},
+          {"name": "decoy node survives", "cypher": "MATCH (n:ADEntity) WHERE n.objectid = $object_id RETURN count(n)", "params": {"object_id": "survivor"}, "expected": {"scalar_int": 1}}
+        ]
+      }
+    }
+  ]
+}
