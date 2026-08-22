@@ -9,13 +9,23 @@ import (
 )
 
 const (
-	limitPushdownTestSourceFrame   pgsql.Identifier = "s0"
-	limitPushdownTestHarnessFrame  pgsql.Identifier = "s1"
+	// limitPushdownTestSourceFrame identifies the source frame referenced by limit-pushdown fixtures.
+	limitPushdownTestSourceFrame pgsql.Identifier = "s0"
+
+	// limitPushdownTestHarnessFrame identifies the shortest-path harness frame in limit-pushdown fixtures.
+	limitPushdownTestHarnessFrame pgsql.Identifier = "s1"
+
+	// limitPushdownTestPreviousFrame identifies the frame that supplies bound endpoints in fixtures.
 	limitPushdownTestPreviousFrame pgsql.Identifier = "s2"
-	limitPushdownTestRootAlias     pgsql.Identifier = "n0"
+
+	// limitPushdownTestRootAlias identifies the root-node binding in limit-pushdown fixtures.
+	limitPushdownTestRootAlias pgsql.Identifier = "n0"
+
+	// limitPushdownTestTerminalAlias identifies the terminal-node binding in limit-pushdown fixtures.
 	limitPushdownTestTerminalAlias pgsql.Identifier = "n1"
 )
 
+// limitPushdownTestEndpointRef references an endpoint ID projected by the fixture source frame.
 func limitPushdownTestEndpointRef(alias pgsql.Identifier) pgsql.RowColumnReference {
 	return pgsql.RowColumnReference{
 		Identifier: pgsql.CompoundIdentifier{limitPushdownTestSourceFrame, alias},
@@ -23,6 +33,7 @@ func limitPushdownTestEndpointRef(alias pgsql.Identifier) pgsql.RowColumnReferen
 	}
 }
 
+// limitPushdownTestEndpointInequality builds the Cypher inequality used to exclude identical endpoints.
 func limitPushdownTestEndpointInequality(leftAlias, rightAlias pgsql.Identifier) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		limitPushdownTestEndpointRef(leftAlias),
@@ -31,6 +42,7 @@ func limitPushdownTestEndpointInequality(leftAlias, rightAlias pgsql.Identifier)
 	)
 }
 
+// limitPushdownTestBoundEndpointConstraint equates a previous-frame endpoint ID with a harness expansion column.
 func limitPushdownTestBoundEndpointConstraint(endpointAlias, expansionColumn pgsql.Identifier) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		pgsql.RowColumnReference{
@@ -42,6 +54,7 @@ func limitPushdownTestBoundEndpointConstraint(endpointAlias, expansionColumn pgs
 	)
 }
 
+// limitPushdownTestSourceWhere combines the fixture's root, terminal, and endpoint-pair constraints.
 func limitPushdownTestSourceWhere(t *testing.T, part *QueryPart, where pgsql.Expression) {
 	t.Helper()
 
@@ -55,6 +68,7 @@ func limitPushdownTestSourceWhere(t *testing.T, part *QueryPart, where pgsql.Exp
 	sourceCTE.Query.Body = selectBody
 }
 
+// limitPushdownTestJoin joins one bound endpoint from the previous frame to the shortest-path harness.
 func limitPushdownTestJoin(nodeAlias, expansionColumn pgsql.Identifier) pgsql.Join {
 	return pgsql.Join{
 		Table: pgsql.TableReference{
@@ -72,6 +86,7 @@ func limitPushdownTestJoin(nodeAlias, expansionColumn pgsql.Identifier) pgsql.Jo
 	}
 }
 
+// limitPushdownTestPart constructs a query part containing a bounded shortest-path harness and final projection.
 func limitPushdownTestPart(harnessFunction pgsql.Identifier) *QueryPart {
 	part := NewQueryPart(1, 0)
 	part.Limit = pgsql.NewLiteral(10, pgsql.Int)
@@ -100,6 +115,7 @@ func limitPushdownTestPart(harnessFunction pgsql.Identifier) *QueryPart {
 	return part
 }
 
+// limitPushdownTestTail returns the terminal query part used to determine whether a limit may be pushed down.
 func limitPushdownTestTail(where pgsql.Expression) pgsql.Select {
 	return pgsql.Select{
 		From: []pgsql.FromClause{{
@@ -228,6 +244,7 @@ func TestLimitPushdownTailSourceAllowsBidirectionalShortestPathEndpointInequalit
 	require.Equal(t, limitPushdownTestSourceFrame, sourceFrame)
 }
 
+// TestPushDownShortestPathLimitAppendsHarnessLimitWithEndpointInequality verifies endpoint filtering does not displace the harness limit.
 func TestPushDownShortestPathLimitAppendsHarnessLimitWithEndpointInequality(t *testing.T) {
 	var (
 		part       = limitPushdownTestPart(pgsql.FunctionUnidirectionalSPHarness)
@@ -245,6 +262,7 @@ func TestPushDownShortestPathLimitAppendsHarnessLimitWithEndpointInequality(t *t
 	require.Len(t, sourceCTE.Query.CommonTableExpressions.Expressions, 1)
 
 	harnessCTE := sourceCTE.Query.CommonTableExpressions.Expressions[0]
+	require.Equal(t, part.Limit, harnessCTE.Query.Limit)
 	selectBody, isSelect := harnessCTE.Query.Body.(pgsql.Select)
 	require.True(t, isSelect)
 	require.Len(t, selectBody.From, 1)
