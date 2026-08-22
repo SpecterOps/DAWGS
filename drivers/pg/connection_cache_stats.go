@@ -1,10 +1,6 @@
-package v2
+package pg
 
-import (
-	"time"
-
-	"github.com/specterops/dawgs/drivers/pg"
-)
+import "time"
 
 // TranslationCacheStats is a query-text-free snapshot of one connection's
 // translation cache activity and occupancy.
@@ -283,7 +279,7 @@ type SQLGenerationTiming struct {
 }
 
 // add accumulates one query-text-free SQL-generation profile.
-func (s *SQLGenerationTiming) add(profile pg.SQLGenerationProfile) {
+func (s *SQLGenerationTiming) add(profile SQLGenerationProfile) {
 	s.Count++
 	s.Parse += profile.Parse
 	s.Graph += profile.Graph

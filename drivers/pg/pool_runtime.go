@@ -1,4 +1,4 @@
-package v2
+package pg
 
 import (
 	"context"
@@ -9,16 +9,15 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/dawgs/drivers/pg"
 )
 
 // poolInitConnectionTimeout bounds initial pgx pool connection setup.
 const poolInitConnectionTimeout = 10 * time.Second
 
-// Pool owns a pgx pool and its matching connection-local cache provider. It
-// is constructed only by NewPool so the two lifecycles cannot be mismatched.
-type Pool struct {
-	// pool leases and manages pgx physical connections.
+// poolRuntime owns connection-local state for one pool. It is created together
+// with the pool by NewPool or NewPoolWithRuntimeConfig.
+type poolRuntime struct {
+	// pool leases and manages physical PostgreSQL connections.
 	pool *pgxpool.Pool
 
 	// provider owns cache state associated with each physical connection.
@@ -29,6 +28,27 @@ type Pool struct {
 
 	// closeOnce prevents duplicate pool and provider teardown.
 	closeOnce sync.Once
+}
+
+// poolRuntimes associates a pool constructed by this package with the
+// connection-local state captured by its lifecycle hooks. The association is
+// private: callers continue to exchange the established *pgxpool.Pool API.
+var poolRuntimes sync.Map // map[*pgxpool.Pool]*poolRuntime
+
+func registerPoolRuntime(pool *pgxpool.Pool, runtime *poolRuntime) {
+	if pool != nil && runtime != nil {
+		poolRuntimes.Store(pool, runtime)
+	}
+}
+
+func poolRuntimeFor(pool *pgxpool.Pool) *poolRuntime {
+	if pool == nil {
+		return nil
+	}
+	if runtime, found := poolRuntimes.Load(pool); found {
+		return runtime.(*poolRuntime)
+	}
+	return nil
 }
 
 // statementWarmupPolicy retains only normalized SQL selected by an operator.
@@ -100,20 +120,20 @@ type poolLifecycleHooks struct {
 // productionPoolLifecycleHooks returns the stable PostgreSQL connection lifecycle hooks.
 func productionPoolLifecycleHooks() poolLifecycleHooks {
 	return poolLifecycleHooks{
-		afterConnect: pg.AfterPooledConnectionEstablished,
-		afterRelease: pg.AfterPooledConnectionRelease,
+		afterConnect: AfterPooledConnectionEstablished,
+		afterRelease: AfterPooledConnectionRelease,
 	}
 }
 
 // composePoolConfig copies caller configuration and composes v2 cache lifecycle hooks.
-func composePoolConfig(poolConfig *pgxpool.Config, v2Config Config, provider *connectionCacheProvider, warmups *statementWarmupPolicy, hooks poolLifecycleHooks) (*pgxpool.Config, error) {
+func composePoolConfig(poolConfig *pgxpool.Config, runtimeConfig RuntimeConfig, provider *connectionCacheProvider, warmups *statementWarmupPolicy, hooks poolLifecycleHooks) (*pgxpool.Config, error) {
 	if poolConfig == nil || poolConfig.ConnConfig == nil {
 		return nil, fmt.Errorf("PostgreSQL pool config is required")
 	}
 	if provider == nil {
 		return nil, fmt.Errorf("connection cache provider is required")
 	}
-	if err := v2Config.validate(); err != nil {
+	if err := runtimeConfig.validate(); err != nil {
 		return nil, err
 	}
 
@@ -122,7 +142,7 @@ func composePoolConfig(poolConfig *pgxpool.Config, v2Config Config, provider *co
 	callerAfterRelease := configuredPool.AfterRelease
 	callerBeforeClose := configuredPool.BeforeClose
 
-	poolLimits := v2Config.resolvedPoolConfig()
+	poolLimits := runtimeConfig.resolvedPoolConfig()
 	configuredPool.MinConns = poolLimits.MinConnections
 	configuredPool.MaxConns = poolLimits.MaxConnections
 	configuredPool.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
@@ -165,11 +185,10 @@ func composePoolConfig(poolConfig *pgxpool.Config, v2Config Config, provider *co
 	return configuredPool, nil
 }
 
-// NewPool constructs an opt-in v2 pool. It copies poolConfig before composing
-// required and caller lifecycle hooks, leaving the caller's configuration
-// reusable. Config{} explicitly disables translation retention; use
-// DefaultConfig for the conservative 64-entry per-connection default.
-func NewPool(ctx context.Context, poolConfig *pgxpool.Config, config Config) (*Pool, error) {
+// NewPoolWithRuntimeConfig constructs a PostgreSQL pool with connection-local
+// cache state. It copies poolConfig before composing required and caller
+// lifecycle hooks, leaving the caller's configuration reusable.
+func NewPoolWithRuntimeConfig(ctx context.Context, poolConfig *pgxpool.Config, config RuntimeConfig) (*pgxpool.Pool, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("pool context is required")
 	}
@@ -191,19 +210,21 @@ func NewPool(ctx context.Context, poolConfig *pgxpool.Config, config Config) (*P
 		provider.close()
 		return nil, err
 	}
-	return &Pool{
+	runtime := &poolRuntime{
 		pool:     underlying,
 		provider: provider,
 		warmups:  warmups,
-	}, nil
+	}
+	registerPoolRuntime(underlying, runtime)
+	return underlying, nil
 }
 
 // SetStatementWarmupPolicy replaces the opt-in warm set, prepares it on
 // currently idle connections, and applies it to every subsequently created
 // physical connection. Passing no statements clears the future warm set.
-func (s *Pool) SetStatementWarmupPolicy(ctx context.Context, statements ...string) error {
+func (s *poolRuntime) setStatementWarmupPolicy(ctx context.Context, statements ...string) error {
 	if s == nil || s.pool == nil || s.provider == nil || s.warmups == nil {
-		return fmt.Errorf("PostgreSQL v2 pool is not initialized")
+		return fmt.Errorf("PostgreSQL pool runtime is not initialized")
 	}
 	warmups, err := normalizePreparedStatementWarmups(statements)
 	if err != nil {
@@ -213,20 +234,15 @@ func (s *Pool) SetStatementWarmupPolicy(ctx context.Context, statements ...strin
 	return s.warmPreparedStatements(ctx, warmups)
 }
 
-// NewDefaultPool constructs an opt-in v2 pool with DefaultConfig.
-func NewDefaultPool(ctx context.Context, poolConfig *pgxpool.Config) (*Pool, error) {
-	return NewPool(ctx, poolConfig, DefaultConfig())
-}
-
-// Close closes the underlying pool and all remaining provider state. Drivers
-// normally own this operation through Driver.Close.
-func (s *Pool) Close() {
+// close retires all runtime state after the owner closes the pool.
+func (s *poolRuntime) close() {
 	if s == nil {
 		return
 	}
 	s.closeOnce.Do(func() {
 		if s.pool != nil {
 			s.pool.Close()
+			poolRuntimes.Delete(s.pool)
 		}
 		if s.provider != nil {
 			s.provider.close()
@@ -238,7 +254,7 @@ func (s *Pool) Close() {
 // closed when released. BeforeClose retires every affected connection cache.
 // Use it after an out-of-band schema change that can affect registered types
 // or generated SQL.
-func (s *Pool) Reset() {
+func (s *poolRuntime) reset() {
 	if s != nil && s.pool != nil {
 		s.pool.Reset()
 	}
@@ -248,9 +264,9 @@ func (s *Pool) Reset() {
 // idle physical connection. It never executes the SQL. Call it after schema
 // assertion, ideally while the pool is otherwise quiescent; newly created
 // connections warm lazily through pgx's normal CacheStatement behavior.
-func (s *Pool) WarmStatements(ctx context.Context, statements ...string) error {
+func (s *poolRuntime) warmStatements(ctx context.Context, statements ...string) error {
 	if s == nil || s.pool == nil || s.provider == nil {
-		return fmt.Errorf("PostgreSQL v2 pool is not initialized")
+		return fmt.Errorf("PostgreSQL pool runtime is not initialized")
 	}
 	warmups, err := normalizePreparedStatementWarmups(statements)
 	if err != nil {
@@ -260,7 +276,7 @@ func (s *Pool) WarmStatements(ctx context.Context, statements ...string) error {
 }
 
 // warmPreparedStatements prepares a normalized warm set on idle connections.
-func (s *Pool) warmPreparedStatements(ctx context.Context, warmups []preparedStatementWarmup) error {
+func (s *poolRuntime) warmPreparedStatements(ctx context.Context, warmups []preparedStatementWarmup) error {
 	if len(warmups) == 0 {
 		return nil
 	}
@@ -289,11 +305,4 @@ func (s *Pool) warmPreparedStatements(ctx context.Context, warmups []preparedSta
 		}
 	}
 	return errors.Join(errs...)
-}
-
-// closeProvider retires cache state after the delegate has closed the pgx pool.
-func (s *Pool) closeProvider() {
-	if s != nil && s.provider != nil {
-		s.provider.close()
-	}
 }

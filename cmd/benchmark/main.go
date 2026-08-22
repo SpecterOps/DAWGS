@@ -30,7 +30,6 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/drivers/pg/model"
-	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 	"github.com/specterops/dawgs/graph"
 
 	"github.com/specterops/dawgs/opengraph"
@@ -39,8 +38,6 @@ import (
 	_ "github.com/specterops/dawgs/drivers/neo4j"
 )
 
-const pgV2BenchmarkDriver = "pg-v2"
-
 type postgresBenchmarkDriver interface {
 	KindMapper() pg.KindMapper
 	DefaultGraph() (model.Graph, bool)
@@ -48,22 +45,22 @@ type postgresBenchmarkDriver interface {
 
 func main() {
 	var (
-		driver                  = flag.String("driver", "pg", "database driver (pg, pg-v2, neo4j)")
+		driver                  = flag.String("driver", "pg", "database driver (pg, neo4j)")
 		connStr                 = flag.String("connection", "", "database connection string (or CONNECTION_STRING)")
 		iterations              = flag.Int("iterations", 10, "timed iterations per scenario")
 		warmup                  = flag.Int("warmup", 1, "untimed iterations per worker (zero measures cold queries)")
 		workers                 = flag.Int("workers", 1, "concurrent workers per scenario")
-		v2Cache                 = flag.Int("pg-v2-cache-entries", pgv2.DefaultConfig().TranslationCacheEntries, "pg-v2 translations retained per physical connection")
-		v2SharedSP              = flag.Int("pg-v2-shared-shortest-path-template-entries", pgv2.DefaultConfig().SharedShortestPathTemplateEntries, "pg-v2 immutable shortest-path templates shared across physical connections (zero disables)")
-		v2SPExecutor            = flag.String("pg-v2-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
-		v2Policy                = flag.String("pg-v2-traversal-policy-manifest", "", "verified promotion manifest to install through the real pg-v2 traversal-policy path")
-		v2PolicyGen             = flag.Uint64("pg-v2-traversal-policy-generation", 1, "nonzero generation for -pg-v2-traversal-policy-manifest")
-		v2PolicyPreflight       = flag.String("pg-v2-traversal-policy-preflight-manifest", "", "provisional manifest used only to derive the exact V2 candidate SQL anchor")
-		v2PolicyPreflightOutput = flag.String("pg-v2-traversal-policy-preflight-output", "", "JSON destination for the non-promotional traversal-policy preflight")
+		pgCache                 = flag.Int("pg-cache-entries", pg.DefaultRuntimeConfig().TranslationCacheEntries, "translations retained per physical connection")
+		pgSharedSP              = flag.Int("pg-shared-shortest-path-template-entries", pg.DefaultRuntimeConfig().SharedShortestPathTemplateEntries, "immutable shortest-path templates shared across physical connections (zero disables)")
+		pgSPExecutor            = flag.String("pg-shortest-path-executor", "", "benchmark-only qualified shortest-path executor identity (default uses production routing)")
+		pgPolicy                = flag.String("pg-traversal-policy-manifest", "", "verified promotion manifest to install through the PostgreSQL traversal-policy path")
+		pgPolicyGen             = flag.Uint64("pg-traversal-policy-generation", 1, "nonzero generation for -pg-traversal-policy-manifest")
+		pgPolicyPreflight       = flag.String("pg-traversal-policy-preflight-manifest", "", "provisional manifest used only to derive the candidate SQL anchor")
+		pgPolicyPreflightOutput = flag.String("pg-traversal-policy-preflight-output", "", "JSON destination for the non-promotional traversal-policy preflight")
 		pgPlanMode              = flag.String("pg-plan-cache-mode", "auto", "PostgreSQL plan cache mode for shortest-path benchmark modes (auto, force_custom_plan, force_generic_plan)")
 		pgJIT                   = flag.Bool("pg-jit", true, "enable PostgreSQL JIT transaction-locally for shortest-path benchmark modes")
-		v2MinConns              = flag.Int("pg-v2-min-conns", int(pgv2.DefaultConfig().Pool.MinConnections), "pg-v2 minimum physical PostgreSQL connections")
-		v2MaxConns              = flag.Int("pg-v2-max-conns", int(pgv2.DefaultConfig().Pool.MaxConnections), "pg-v2 maximum physical PostgreSQL connections")
+		pgMinConns              = flag.Int("pg-min-conns", int(pg.DefaultRuntimeConfig().Pool.MinConnections), "minimum physical PostgreSQL connections")
+		pgMaxConns              = flag.Int("pg-max-conns", int(pg.DefaultRuntimeConfig().Pool.MaxConnections), "maximum physical PostgreSQL connections")
 		output                  = flag.String("output", "", "output file (default: stdout)")
 		format                  = flag.String("format", reportFormatMarkdown, "output format (markdown, json, benchfmt)")
 		jsonOutput              = flag.String("json-output", "", "JSON output file for baseline comparison")
@@ -84,29 +81,29 @@ func main() {
 	if !isReportFormat(*format) {
 		fatal("unsupported output format %q", *format)
 	}
-	if *v2Policy != "" || *v2PolicyPreflight != "" {
-		if *driver != pgV2BenchmarkDriver {
-			fatal("traversal-policy benchmark modes require -driver pg-v2")
+	if *pgPolicy != "" || *pgPolicyPreflight != "" {
+		if *driver != pg.DriverName {
+			fatal("traversal-policy benchmark modes require -driver pg")
 		}
-		if *v2SPExecutor != "" {
-			fatal("traversal-policy benchmark modes cannot be combined with -pg-v2-shortest-path-executor")
+		if *pgSPExecutor != "" {
+			fatal("traversal-policy benchmark modes cannot be combined with -pg-shortest-path-executor")
 		}
 		if *onlyDataset == "" {
 			fatal("traversal-policy benchmark modes require -dataset so their exact-query path is unambiguous")
 		}
-		if *v2Policy != "" && *explain {
-			fatal("-explain cannot be combined with -pg-v2-traversal-policy-manifest because the explainer does not bypass the live policy gate")
+		if *pgPolicy != "" && *explain {
+			fatal("-explain cannot be combined with -pg-traversal-policy-manifest because the explainer does not bypass the live policy gate")
 		}
 	}
-	if *v2Policy != "" && *v2PolicyPreflight != "" {
-		fatal("-pg-v2-traversal-policy-manifest cannot be combined with -pg-v2-traversal-policy-preflight-manifest")
+	if *pgPolicy != "" && *pgPolicyPreflight != "" {
+		fatal("-pg-traversal-policy-manifest cannot be combined with -pg-traversal-policy-preflight-manifest")
 	}
-	if *v2PolicyPreflight != "" && *v2PolicyPreflightOutput == "" {
-		fatal("-pg-v2-traversal-policy-preflight-manifest requires -pg-v2-traversal-policy-preflight-output")
+	if *pgPolicyPreflight != "" && *pgPolicyPreflightOutput == "" {
+		fatal("-pg-traversal-policy-preflight-manifest requires -pg-traversal-policy-preflight-output")
 	}
-	v2Config, err := benchmarkV2Config(*v2Cache, *v2SharedSP, *v2MinConns, *v2MaxConns)
+	runtimeConfig, err := benchmarkRuntimeConfig(*pgCache, *pgSharedSP, *pgMinConns, *pgMaxConns)
 	if err != nil {
-		fatal("invalid pg-v2 configuration: %v", err)
+		fatal("invalid PostgreSQL runtime configuration: %v", err)
 	}
 
 	conn := *connStr
@@ -118,7 +115,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	db, err := openBenchmarkDatabaseWithV2Config(ctx, *driver, conn, size.Gibibyte, v2Config)
+	db, err := openBenchmarkDatabaseWithRuntimeConfig(ctx, *driver, conn, size.Gibibyte, runtimeConfig)
 	if err != nil {
 		fatal("failed to open database: %v", err)
 	}
@@ -126,25 +123,25 @@ func main() {
 
 	var traversalPolicy *pg.TraversalPolicy
 	var traversalPolicyPreflight *benchmarkTraversalPromotionManifest
-	if *v2Policy != "" {
-		policy, err := loadBenchmarkTraversalPolicy(*v2Policy, *v2PolicyGen)
+	if *pgPolicy != "" {
+		policy, err := loadBenchmarkTraversalPolicy(*pgPolicy, *pgPolicyGen)
 		if err != nil {
-			fatal("load pg-v2 traversal policy manifest: %v", err)
+			fatal("load PostgreSQL traversal policy manifest: %v", err)
 		}
 		policyDriver, ok := db.(traversalPolicyBenchmarkDriver)
 		if !ok {
-			fatal("PostgreSQL v2 benchmark driver does not support traversal-policy installation")
+			fatal("PostgreSQL benchmark driver does not support traversal-policy installation")
 		}
 		if err := policyDriver.SetTraversalPolicy(policy); err != nil {
-			fatal("install pg-v2 traversal policy: %v", err)
+			fatal("install PostgreSQL traversal policy: %v", err)
 		}
 		traversalPolicy = &policy
-		fmt.Fprintf(os.Stderr, "installed pg-v2 traversal policy generation=%d candidate=%s manifest=%s\n", policy.Generation, policy.ShortestPathExecutor, policy.PromotionManifestSHA256)
+		fmt.Fprintf(os.Stderr, "installed PostgreSQL traversal policy generation=%d candidate=%s manifest=%s\n", policy.Generation, policy.ShortestPathExecutor, policy.PromotionManifestSHA256)
 	}
-	if *v2PolicyPreflight != "" {
-		_, manifest, err := loadBenchmarkTraversalPromotionManifest(*v2PolicyPreflight)
+	if *pgPolicyPreflight != "" {
+		_, manifest, err := loadBenchmarkTraversalPromotionManifest(*pgPolicyPreflight)
 		if err != nil {
-			fatal("load pg-v2 traversal policy preflight manifest: %v", err)
+			fatal("load PostgreSQL traversal policy preflight manifest: %v", err)
 		}
 		traversalPolicyPreflight = &manifest
 	}
@@ -195,28 +192,28 @@ func main() {
 	var runOptions RunOptions
 	if *explain {
 		if !isPostgresBenchmarkDriver(*driver) {
-			fmt.Fprintf(os.Stderr, "  explain capture is only supported for pg and pg-v2; continuing without plans\n")
+			fmt.Fprintf(os.Stderr, "  explain capture is only supported for pg; continuing without plans\n")
 		} else if pgDB, ok := db.(postgresBenchmarkDriver); !ok {
 			fmt.Fprintf(os.Stderr, "  explain capture unavailable for %T; continuing without plans\n", db)
 		} else if defaultGraph, hasDefaultGraph := pgDB.DefaultGraph(); !hasDefaultGraph {
 			fatal("failed to resolve default graph for explain capture")
 		} else {
-			runOptions.Explain = newPostgresExplainerWithExecutor(pgDB.KindMapper(), defaultGraph.ID, optimize.ShortestPathExecutor(*v2SPExecutor))
+			runOptions.Explain = newPostgresExplainerWithExecutor(pgDB.KindMapper(), defaultGraph.ID, optimize.ShortestPathExecutor(*pgSPExecutor))
 		}
 	}
-	if *v2SPExecutor != "" {
-		if *driver != pgV2BenchmarkDriver {
-			fatal("-pg-v2-shortest-path-executor requires -driver pg-v2")
+	if *pgSPExecutor != "" {
+		if *driver != pg.DriverName {
+			fatal("-pg-shortest-path-executor requires -driver pg")
 		}
 		pgDB, ok := db.(postgresBenchmarkDriver)
 		if !ok {
-			fatal("PostgreSQL v2 benchmark driver does not expose translation metadata")
+			fatal("PostgreSQL benchmark driver does not expose translation metadata")
 		}
 		defaultGraph, found := pgDB.DefaultGraph()
 		if !found {
 			fatal("failed to resolve default graph for shortest-path executor benchmark")
 		}
-		wrapped, err := newShortestExecutorBenchmarkDatabase(db, pgDB.KindMapper(), defaultGraph, optimize.ShortestPathExecutor(*v2SPExecutor), *pgPlanMode, *pgJIT)
+		wrapped, err := newShortestExecutorBenchmarkDatabase(db, pgDB.KindMapper(), defaultGraph, optimize.ShortestPathExecutor(*pgSPExecutor), *pgPlanMode, *pgJIT)
 		if err != nil {
 			fatal("configure shortest-path executor benchmark: %v", err)
 		}
@@ -237,7 +234,7 @@ func main() {
 		Iterations:              *iterations,
 		WarmupIterations:        *warmup,
 		Workers:                 *workers,
-		ShortestPathExecutor:    *v2SPExecutor,
+		ShortestPathExecutor:    *pgSPExecutor,
 		PostgreSQLPlanCacheMode: *pgPlanMode,
 		PostgreSQLJIT:           *pgJIT,
 	}
@@ -246,7 +243,7 @@ func main() {
 		report.ShortestPathMode = shortestPathModeProductionPolicy
 		report.TraversalPolicyGeneration = traversalPolicy.Generation
 		report.TraversalPolicyManifestSHA256 = traversalPolicy.PromotionManifestSHA256
-	} else if *v2SPExecutor != "" {
+	} else if *pgSPExecutor != "" {
 		report.ShortestPathMode = shortestPathModeForced
 	}
 
@@ -293,7 +290,7 @@ func main() {
 		if traversalPolicyPreflight != nil {
 			pgDB, ok := db.(postgresBenchmarkDriver)
 			if !ok {
-				fatal("PostgreSQL v2 benchmark driver does not expose translation metadata for policy preflight")
+				fatal("PostgreSQL benchmark driver does not expose translation metadata for policy preflight")
 			}
 			defaultGraph, found := pgDB.DefaultGraph()
 			if !found {
@@ -303,10 +300,10 @@ func main() {
 			if err != nil {
 				fatal("render traversal policy preflight: %v", err)
 			}
-			if err := writeTraversalPolicyPreflight(*v2PolicyPreflight, *v2PolicyPreflightOutput, preflight); err != nil {
+			if err := writeTraversalPolicyPreflight(*pgPolicyPreflight, *pgPolicyPreflightOutput, preflight); err != nil {
 				fatal("write traversal policy preflight: %v", err)
 			}
-			fmt.Fprintf(os.Stderr, "  wrote non-promotional traversal policy preflight %s (query=%s sql=%s)\n", *v2PolicyPreflightOutput, preflight.QuerySHA256, preflight.SQLSHA256)
+			fmt.Fprintf(os.Stderr, "  wrote non-promotional traversal policy preflight %s (query=%s sql=%s)\n", *pgPolicyPreflightOutput, preflight.QuerySHA256, preflight.SQLSHA256)
 			return
 		}
 		for _, s := range scenarios {
@@ -331,10 +328,10 @@ func main() {
 			)
 		}
 	}
-	if statsProvider, ok := db.(interface{ TranslationCacheStats() pgv2.Stats }); ok {
+	if statsProvider, ok := db.(interface{ TranslationCacheStats() pg.Stats }); ok {
 		stats := statsProvider.TranslationCacheStats()
 		report.TranslationCache = &stats
-		fmt.Fprintf(os.Stderr, "v2 connection state: cache hits=%d misses=%d bypasses=%d evictions=%d; workspaces initialized=%d reused=%d; statements prepared=%d reused=%d; live_connections=%d pool=%d-%d\n",
+		fmt.Fprintf(os.Stderr, "PostgreSQL connection state: cache hits=%d misses=%d bypasses=%d evictions=%d; workspaces initialized=%d reused=%d; statements prepared=%d reused=%d; live_connections=%d pool=%d-%d\n",
 			stats.Aggregate.Hits,
 			stats.Aggregate.Misses,
 			stats.Aggregate.Bypasses,
@@ -385,10 +382,10 @@ func main() {
 }
 
 func openBenchmarkDatabase(ctx context.Context, driverName, connection string, graphQueryMemoryLimit size.Size) (graph.Database, error) {
-	return openBenchmarkDatabaseWithV2Config(ctx, driverName, connection, graphQueryMemoryLimit, pgv2.DefaultConfig())
+	return openBenchmarkDatabaseWithRuntimeConfig(ctx, driverName, connection, graphQueryMemoryLimit, pg.DefaultRuntimeConfig())
 }
 
-func openBenchmarkDatabaseWithV2Config(ctx context.Context, driverName, connection string, graphQueryMemoryLimit size.Size, v2Config pgv2.Config) (graph.Database, error) {
+func openBenchmarkDatabaseWithRuntimeConfig(ctx context.Context, driverName, connection string, graphQueryMemoryLimit size.Size, runtimeConfig pg.RuntimeConfig) (graph.Database, error) {
 	cfg := dawgs.Config{
 		GraphQueryMemoryLimit: graphQueryMemoryLimit,
 		ConnectionString:      connection,
@@ -400,50 +397,38 @@ func openBenchmarkDatabaseWithV2Config(ctx context.Context, driverName, connecti
 		if err != nil {
 			return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
 		}
-		pool, err := pg.NewPool(poolConfig)
+		pool, err := pg.NewPoolWithRuntimeConfig(ctx, poolConfig, runtimeConfig)
 		if err != nil {
 			return nil, fmt.Errorf("create PostgreSQL pool: %w", err)
 		}
-		cfg.Pool = pool
-		return dawgs.Open(ctx, driverName, cfg)
-
-	case pgV2BenchmarkDriver:
-		poolConfig, err := pgxpool.ParseConfig(connection)
-		if err != nil {
-			return nil, fmt.Errorf("parse PostgreSQL v2 pool configuration: %w", err)
-		}
-		pool, err := pgv2.NewPool(ctx, poolConfig, v2Config)
-		if err != nil {
-			return nil, fmt.Errorf("create PostgreSQL v2 pool: %w", err)
-		}
-		return pgv2.NewDriver(graphQueryMemoryLimit, pool), nil
+		return pg.NewDriver(graphQueryMemoryLimit, pool), nil
 
 	default:
 		return dawgs.Open(ctx, driverName, cfg)
 	}
 }
 
-func benchmarkV2Config(cacheEntries, sharedShortestPathTemplateEntries, minConnections, maxConnections int) (pgv2.Config, error) {
+func benchmarkRuntimeConfig(cacheEntries, sharedShortestPathTemplateEntries, minConnections, maxConnections int) (pg.RuntimeConfig, error) {
 	const maxInt32 = int(^uint32(0) >> 1)
 	if cacheEntries < 0 {
-		return pgv2.Config{}, fmt.Errorf("translation cache entries must not be negative: %d", cacheEntries)
+		return pg.RuntimeConfig{}, fmt.Errorf("translation cache entries must not be negative: %d", cacheEntries)
 	}
 	if sharedShortestPathTemplateEntries < 0 {
-		return pgv2.Config{}, fmt.Errorf("shared shortest-path template entries must not be negative: %d", sharedShortestPathTemplateEntries)
+		return pg.RuntimeConfig{}, fmt.Errorf("shared shortest-path template entries must not be negative: %d", sharedShortestPathTemplateEntries)
 	}
 	if minConnections < 0 || minConnections > maxInt32 {
-		return pgv2.Config{}, fmt.Errorf("minimum connections must be between 0 and %d: %d", maxInt32, minConnections)
+		return pg.RuntimeConfig{}, fmt.Errorf("minimum connections must be between 0 and %d: %d", maxInt32, minConnections)
 	}
 	if maxConnections < 1 || maxConnections > maxInt32 {
-		return pgv2.Config{}, fmt.Errorf("maximum connections must be between 1 and %d: %d", maxInt32, maxConnections)
+		return pg.RuntimeConfig{}, fmt.Errorf("maximum connections must be between 1 and %d: %d", maxInt32, maxConnections)
 	}
 	if minConnections > maxConnections {
-		return pgv2.Config{}, fmt.Errorf("minimum connections %d exceeds maximum connections %d", minConnections, maxConnections)
+		return pg.RuntimeConfig{}, fmt.Errorf("minimum connections %d exceeds maximum connections %d", minConnections, maxConnections)
 	}
-	return pgv2.Config{
+	return pg.RuntimeConfig{
 		TranslationCacheEntries:           cacheEntries,
 		SharedShortestPathTemplateEntries: sharedShortestPathTemplateEntries,
-		Pool: &pgv2.PoolConfig{
+		Pool: &pg.PoolConfig{
 			MinConnections: int32(minConnections),
 			MaxConnections: int32(maxConnections),
 		},
@@ -451,7 +436,7 @@ func benchmarkV2Config(cacheEntries, sharedShortestPathTemplateEntries, minConne
 }
 
 func isPostgresBenchmarkDriver(driverName string) bool {
-	return driverName == pg.DriverName || driverName == pgV2BenchmarkDriver
+	return driverName == pg.DriverName
 }
 
 func scanKinds(datasetDir string, datasets []string) (graph.Kinds, graph.Kinds) {

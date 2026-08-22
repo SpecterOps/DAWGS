@@ -87,7 +87,7 @@ func TestBuilderPreparedQueriesShareTranslationCacheKey(t *testing.T) {
 	}
 	key := cache.Key(first.source, 1, first.parameters)
 
-	_, bindings, err := cache.GetOrBuild(key, first.parameters, cacheableBuild(
+	_, bindings, err := cache.GetOrBuild(key, first.parameters, cacheableCompilationBuild(
 		"select @p0",
 		map[string]any{
 			"p0": uint64(1),
