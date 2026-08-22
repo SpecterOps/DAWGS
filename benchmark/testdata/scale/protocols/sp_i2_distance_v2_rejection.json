@@ -1,0 +1,24 @@
+{
+  "schema": "sp-i2-terminal-rejection-v2",
+  "generation": "sp-i2-distance-v2",
+  "source_commit": "5df040c2992dd92cf0480beed887c4068c3052b2",
+  "protocol_sha256": "17cddc5100bc4f523122b0664ec63d3b4954ae2c01000f04864f10fdd00e1e89",
+  "simulation_report_sha256": "cbf4fc593a0adfa72ead23f4f391d530790a474a292a9cc47788a18048b17875",
+  "simulation_implementation": "sp-i2-power-simulation-v2/chacha8-sha256-normal-pivot",
+  "runs_per_scenario": 20000,
+  "failed_gates": [
+    {"scenario":"aa_identity","metric":"admission_power_wilson_lower","observed":0,"required":0.9},
+    {"scenario":"target_power","metric":"full_decision_power_wilson_lower","observed":0.4724809842358317,"required":0.9},
+    {"scenario":"control_power","metric":"full_decision_power_wilson_lower","observed":0.5053708806725798,"required":0.9},
+    {"scenario":"aa_order_odd_high","metric":"admission_power_wilson_lower","observed":0,"required":0.9},
+    {"scenario":"aa_order_even_high","metric":"admission_power_wilson_lower","observed":0,"required":0.9}
+  ],
+  "coverage_calibrated": true,
+  "formal_aa_started": false,
+  "capture_plan_created": false,
+  "sealed_preregistration_created": false,
+  "holdout_opened": false,
+  "production_activated": false,
+  "successor_protocol_required": true,
+  "terminal": true
+}

@@ -24,21 +24,35 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	pgv2 "github.com/specterops/dawgs/drivers/pg/v2"
 )
 
 const (
 	reportFormatBenchfmt = "benchfmt"
 	reportFormatJSON     = "json"
 	reportFormatMarkdown = "markdown"
+
+	shortestPathModeForced           = "forced"
+	shortestPathModeProductionPolicy = "production_policy"
 )
 
 // Report holds all benchmark results and metadata.
 type Report struct {
-	Driver     string   `json:"driver"`
-	GitRef     string   `json:"git_ref"`
-	Date       string   `json:"date"`
-	Iterations int      `json:"iterations"`
-	Results    []Result `json:"results"`
+	Driver                        string      `json:"driver"`
+	GitRef                        string      `json:"git_ref"`
+	Date                          string      `json:"date"`
+	Iterations                    int         `json:"iterations"`
+	WarmupIterations              int         `json:"warmup_iterations"`
+	Workers                       int         `json:"workers"`
+	ShortestPathExecutor          string      `json:"shortest_path_executor,omitempty"`
+	ShortestPathMode              string      `json:"shortest_path_mode,omitempty"`
+	TraversalPolicyGeneration     uint64      `json:"traversal_policy_generation,omitempty"`
+	TraversalPolicyManifestSHA256 string      `json:"traversal_policy_manifest_sha256,omitempty"`
+	PostgreSQLPlanCacheMode       string      `json:"postgresql_plan_cache_mode,omitempty"`
+	PostgreSQLJIT                 bool        `json:"postgresql_jit"`
+	TranslationCache              *pgv2.Stats `json:"translation_cache,omitempty"`
+	Results                       []Result    `json:"results"`
 }
 
 func writeReport(w io.Writer, r Report, format string) error {
@@ -72,7 +86,17 @@ func writeJSON(w io.Writer, r Report) error {
 }
 
 func writeMarkdown(w io.Writer, r Report) error {
-	fmt.Fprintf(w, "# Benchmarks — %s @ %s (%s, %d iterations)\n\n", r.Driver, r.GitRef, r.Date, r.Iterations)
+	fmt.Fprintf(w, "# Benchmarks — %s @ %s (%s, %d iterations × %d workers, %d warm-up iterations)\n\n", r.Driver, r.GitRef, r.Date, r.Iterations, r.Workers, r.WarmupIterations)
+	if r.ShortestPathExecutor != "" {
+		switch r.ShortestPathMode {
+		case shortestPathModeProductionPolicy:
+			fmt.Fprintf(w, "Shortest-path executor: `%s` through production traversal policy generation %d (manifest `%s`); PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.TraversalPolicyGeneration, r.TraversalPolicyManifestSHA256, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+		case shortestPathModeForced:
+			fmt.Fprintf(w, "Shortest-path executor: `%s` forced at the benchmark boundary; PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+		default:
+			fmt.Fprintf(w, "Shortest-path executor: `%s`; PostgreSQL plan cache: `%s`; JIT: `%t`.\n\n", r.ShortestPathExecutor, r.PostgreSQLPlanCacheMode, r.PostgreSQLJIT)
+		}
+	}
 	fmt.Fprintf(w, "| Query | Dataset | Rows | Distinct Rows | Duplicate Rows | Median | P95 | Max | Explain |\n")
 	fmt.Fprintf(w, "|-------|---------|-----:|--------------:|---------------:|-------:|----:|----:|:--------|\n")
 
@@ -96,6 +120,28 @@ func writeMarkdown(w io.Writer, r Report) error {
 	}
 
 	fmt.Fprintln(w)
+	if r.TranslationCache != nil {
+		cache := r.TranslationCache.Aggregate
+		workspaces := r.TranslationCache.TraversalWorkspace
+		statements := r.TranslationCache.PreparedStatements
+		fmt.Fprintf(w, "V2 connection state: cache %d hits, %d misses, %d bypasses, %d evictions; workspaces %d initialized/%d reused; statements %d prepared/%d reused across %d live connections.\n\n", cache.Hits, cache.Misses, cache.Bypasses, cache.Evictions, workspaces.Initializations, workspaces.Reuses, statements.Prepared, statements.Reuses, r.TranslationCache.LiveConnections)
+		shortest := r.TranslationCache.SQLGeneration.ShortestPath
+		if shortest.Count > 0 {
+			fmt.Fprintf(w, "V2 shortest-path generation (%d samples): parse %s, cache/bind %s, translate %s, format %s, dispatch %s total. Shared L2: %d hits, %d misses, %d entries/%d capacity.\n\n", shortest.Count, fmtDuration(shortest.Parse), fmtDuration(shortest.Cache), fmtDuration(shortest.Translate), fmtDuration(shortest.Format), fmtDuration(shortest.Dispatch), r.TranslationCache.SharedShortestPathTemplates.Hits, r.TranslationCache.SharedShortestPathTemplates.Misses, r.TranslationCache.SharedShortestPathTemplates.Entries, r.TranslationCache.SharedShortestPathTemplates.Capacity)
+		}
+		selection := r.TranslationCache.StrategySelection
+		if selection.Incumbent+selection.ExactQueryCanary+selection.StructuralAuthorized > 0 {
+			fmt.Fprintf(w, "V2 strategy selection: %d incumbent, %d exact-query canary, %d structurally authorized, %d structural-shadow, %d shape-unavailable observations.\n\n", selection.Incumbent, selection.ExactQueryCanary, selection.StructuralAuthorized, selection.StructuralShadow, selection.ShapeUnavailable)
+		}
+		shapeCache := r.TranslationCache.TraversalShapeCache
+		if shapeCache.Hits+shapeCache.Misses > 0 {
+			fmt.Fprintf(w, "V2 traversal shape cache: %d hits, %d misses, %d entries/%d capacity.\n\n", shapeCache.Hits, shapeCache.Misses, shapeCache.Entries, shapeCache.Capacity)
+		}
+		route := r.TranslationCache.TraversalRouteDecision
+		if route.Disabled+route.SynopsisUnavailable+route.ShadowMiss+route.ShadowHit+route.Capacity+route.ParametersInvalid > 0 {
+			fmt.Fprintf(w, "V2 topology routing shadow: %d misses, %d hits, %d synopsis-unavailable, %d disabled, %d capacity, %d parameter-invalid.\n\n", route.ShadowMiss, route.ShadowHit, route.SynopsisUnavailable, route.Disabled, route.Capacity, route.ParametersInvalid)
+		}
+	}
 	return nil
 }
 
