@@ -8,6 +8,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// translateRelationshipPattern validates a relationship pattern and records its binding, kinds, and range.
 func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.RelationshipPattern) error {
 	var (
 		currentQueryPart = s.query.CurrentPart()
@@ -41,6 +42,11 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 				return fmt.Errorf("failed to translate kinds: %w", err)
 			} else {
 				for _, edgeBinding := range edgeBindings {
+					for _, step := range patternPart.TraversalSteps {
+						if step.Edge == edgeBinding && step.Expansion != nil {
+							step.Expansion.RelationshipKindIDs = append([]int16(nil), kindIDs...)
+						}
+					}
 					if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(edgeBinding.Identifier), pgsql.NewBinaryExpression(
 						pgsql.CompoundIdentifier{edgeBinding.Identifier, pgsql.ColumnKindID},
 						pgsql.OperatorEquals,
@@ -56,6 +62,7 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 	return nil
 }
 
+// collectCreateEdgePattern records the endpoints, kind, properties, and binding needed to create one edge.
 func (s *Translator) collectCreateEdgePattern(relationshipPattern *cypher.RelationshipPattern, part *PatternPart, bindingResult BindingResult) error {
 	var (
 		queryPart = s.query.CurrentPart()
@@ -99,6 +106,7 @@ func (s *Translator) collectCreateEdgePattern(relationshipPattern *cypher.Relati
 	return nil
 }
 
+// exactRangeExpansionDecision returns the planned exact-range unrolling decision for target.
 func (s *Translator) exactRangeExpansionDecision(sourceTarget optimize.TraversalStepTarget, hasSourceTarget bool, relationshipPattern *cypher.RelationshipPattern) (optimize.ExactRangeExpansionDecision, bool) {
 	if !hasSourceTarget || relationshipPattern == nil {
 		return optimize.ExactRangeExpansionDecision{}, false
@@ -112,6 +120,7 @@ func (s *Translator) exactRangeExpansionDecision(sourceTarget optimize.Traversal
 	return decision, true
 }
 
+// translateExactRangeRelationshipPatternToSteps expands a fixed-depth relationship range into synthetic single-hop traversal steps.
 func (s *Translator) translateExactRangeRelationshipPatternToSteps(
 	firstEdge *BoundIdentifier,
 	part *PatternPart,
@@ -191,6 +200,7 @@ func (s *Translator) translateExactRangeRelationshipPatternToSteps(
 	return edgeBindings, nil
 }
 
+// translateRelationshipPatternToStep attaches one translated relationship pattern to the current traversal step.
 func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingResult, part *PatternPart, relationshipPattern *cypher.RelationshipPattern) ([]*BoundIdentifier, error) {
 	var (
 		expansion                     *Expansion

@@ -247,6 +247,7 @@ func variableReference(value any) (*cypher.Variable, error) {
 	}
 }
 
+// propertyLookupOrError constructs a property lookup or an error expression when its key or variable reference is invalid.
 func propertyLookupOrError(reference any, propertyName string) cypher.Expression {
 	if err := cypher.ValidatePropertyKeyName(propertyName); err != nil {
 		return invalidExpression(err)
