@@ -95,24 +95,24 @@ func newShortestPathSeedTestBuilder(leftBound, rightBound bool) (*ExpansionBuild
 func TestShortestPathSelfEndpointGuardsUseCaseErrorHelper(t *testing.T) {
 	projectionGuard, err := format.Expression(shortestPathSelfEndpointGuard(shortestPathSeedTestFrame), format.NewOutputBuilder())
 	require.NoError(t, err)
-	require.Equal(t, "case when s1.root_id != s1.next_id then true else shortest_path_self_endpoint_error(s1.root_id, s1.next_id) end", projectionGuard)
-	require.NotContains(t, projectionGuard, " / ")
+	require.Equal(t, "case when s1.root_id != s1.next_id then true else shortest_path_self_endpoint_error(s1.root_id, s1.next_id) end", projectionGuard.Statement)
+	require.NotContains(t, projectionGuard.Statement, " / ")
 
 	terminalFilterGuard, err := format.Expression(
 		shortestPathSeedSelfEndpointGuard(pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnStartID}, false),
 		format.NewOutputBuilder(),
 	)
 	require.NoError(t, err)
-	require.Contains(t, terminalFilterGuard, "case when (select count(*)::int8 from traversal_terminal_filter where traversal_terminal_filter.id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
-	require.NotContains(t, terminalFilterGuard, " / ")
+	require.Contains(t, terminalFilterGuard.Statement, "case when (select count(*)::int8 from traversal_terminal_filter where traversal_terminal_filter.id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
+	require.NotContains(t, terminalFilterGuard.Statement, " / ")
 
 	endpointPairFilterGuard, err := format.Expression(
 		shortestPathSeedSelfEndpointGuard(pgsql.CompoundIdentifier{shortestPathSeedTestEdge, pgsql.ColumnStartID}, true),
 		format.NewOutputBuilder(),
 	)
 	require.NoError(t, err)
-	require.Contains(t, endpointPairFilterGuard, "case when (select count(*)::int8 from traversal_pair_filter where traversal_pair_filter.root_id = e0.start_id and traversal_pair_filter.terminal_id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
-	require.NotContains(t, endpointPairFilterGuard, " / ")
+	require.Contains(t, endpointPairFilterGuard.Statement, "case when (select count(*)::int8 from traversal_pair_filter where traversal_pair_filter.root_id = e0.start_id and traversal_pair_filter.terminal_id = e0.start_id) = 0 then true else shortest_path_self_endpoint_error(e0.start_id, e0.start_id) end")
+	require.NotContains(t, endpointPairFilterGuard.Statement, " / ")
 }
 
 func TestBoundRootShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) {
@@ -134,8 +134,8 @@ func TestBoundRootShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) 
 
 	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
 	require.NoError(t, err)
-	require.Contains(t, formattedQuery, "n0.id = (s0.x).id")
-	require.Contains(t, formattedQuery, "(s0.n0).id = s1.root_id")
+	require.Contains(t, formattedQuery.Statement, "n0.id = (s0.x).id")
+	require.Contains(t, formattedQuery.Statement, "(s0.n0).id = s1.root_id")
 }
 
 func TestBoundTerminalShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) {
@@ -159,8 +159,8 @@ func TestBoundTerminalShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing
 
 	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
 	require.NoError(t, err)
-	require.Contains(t, formattedQuery, "n1.id = (s0.x).id")
-	require.Contains(t, formattedQuery, "(s0.n1).id = s1.next_id")
+	require.Contains(t, formattedQuery.Statement, "n1.id = (s0.x).id")
+	require.Contains(t, formattedQuery.Statement, "(s0.n1).id = s1.next_id")
 }
 
 func TestZeroDepthExpansionRejectsEdgeDependentTerminalSatisfaction(t *testing.T) {
@@ -186,8 +186,8 @@ func TestZeroDepthExpansionRejectsEdgeDependentTerminalSatisfaction(t *testing.T
 
 	formattedQuery, err := format.Statement(pgsql.Query{Body: zeroDepthSelect}, format.NewOutputBuilder())
 	require.NoError(t, err)
-	require.Contains(t, formattedQuery, "select s1_seed.root_id, s1_seed.root_id, 0, false, false")
-	require.NotContains(t, formattedQuery, "e0")
+	require.Contains(t, formattedQuery.Statement, "select s1_seed.root_id, s1_seed.root_id, 0, false, false")
+	require.NotContains(t, formattedQuery.Statement, "e0")
 }
 
 func TestZeroDepthExpansionBuildKeepsPrimerBranch(t *testing.T) {

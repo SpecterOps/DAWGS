@@ -23,8 +23,8 @@ func TestPathComponentFunctionsResolvePathAliases(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted, ".nodes")
-	require.Contains(t, formatted, ".edges")
+	require.Contains(t, formatted.Statement, ".nodes")
+	require.Contains(t, formatted.Statement, ".edges")
 }
 
 func TestNodesFunctionTranslatesBoundPathToNodeArray(t *testing.T) {
@@ -38,8 +38,8 @@ func TestNodesFunctionTranslatesBoundPathToNodeArray(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted, "nodecomposite[]")
-	require.Contains(t, formatted, ".nodes")
+	require.Contains(t, formatted.Statement, "nodecomposite[]")
+	require.Contains(t, formatted.Statement, ".nodes")
 }
 
 func TestPathComponentFunctionsTranslateNullArguments(t *testing.T) {
@@ -53,8 +53,8 @@ func TestPathComponentFunctionsTranslateNullArguments(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted, "(null)::nodecomposite[]")
-	require.Contains(t, formatted, "(null)::edgecomposite[]")
+	require.Contains(t, formatted.Statement, "(null)::nodecomposite[]")
+	require.Contains(t, formatted.Statement, "(null)::edgecomposite[]")
 }
 
 func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {
@@ -69,7 +69,7 @@ func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"), formatted)
-	require.NotContains(t, formatted, "cardinality(((case when")
+	require.NotContains(t, formatted.Statement, "cardinality(((case when")
 }
 
 func TestTailPredicateStagesPathComponentExpression(t *testing.T) {
@@ -84,8 +84,8 @@ func TestTailPredicateStagesPathComponentExpression(t *testing.T) {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"))
-	require.Contains(t, formatted, "lateral (select")
-	require.Contains(t, formatted, ".nodes")
+	require.Contains(t, formatted.Statement, "lateral (select")
+	require.Contains(t, formatted.Statement, ".nodes")
 }
 
 func TestProjectionStagesPathBeforeReadingComponents(t *testing.T) {
@@ -99,10 +99,10 @@ func TestProjectionStagesPathBeforeReadingComponents(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted, "lateral (select")
+	require.Contains(t, formatted.Statement, "lateral (select")
 	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"), formatted)
-	require.Contains(t, formatted, ".nodes")
-	require.Contains(t, formatted, ".edges")
+	require.Contains(t, formatted.Statement, ".nodes")
+	require.Contains(t, formatted.Statement, ".edges")
 }
 
 func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
@@ -116,11 +116,11 @@ func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted, "lateral (select")
+	require.Contains(t, formatted.Statement, "lateral (select")
 	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"), formatted)
 	require.Equal(t, 1, strings.Count(formatted.Statement, "from unnest"), formatted)
-	require.Contains(t, formatted, ".nodes")
-	require.Contains(t, formatted, ".edges")
+	require.Contains(t, formatted.Statement, ".nodes")
+	require.Contains(t, formatted.Statement, ".edges")
 }
 
 func TestRelationshipEndpointFunctionsUseEdgeCompositeArguments(t *testing.T) {
