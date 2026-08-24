@@ -63,7 +63,7 @@ func optimizerSafetySQL(t *testing.T, cypherQuery string) string {
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 
-	return strings.Join(strings.Fields(formattedQuery), " ")
+	return strings.Join(strings.Fields(formattedQuery.Statement), " ")
 }
 
 func optimizerSafetyTranslation(t *testing.T, cypherQuery string) Result {
@@ -210,7 +210,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesBaseNodeCount(t *testing.T) {
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	require.Empty(t, translation.Optimization.SkippedLowerings)
-	require.Equal(t, "select count(*)::int8 from node n0;", strings.Join(strings.Fields(formattedQuery), " "))
+	require.Equal(t, "select count(*)::int8 from node n0;", strings.Join(strings.Fields(formattedQuery.Statement), " "))
 }
 
 func TestOptimizerSafetyCountStoreFastPathKeepsKindConstraintAndAlias(t *testing.T) {
@@ -222,7 +222,7 @@ func TestOptimizerSafetyCountStoreFastPathKeepsKindConstraintAndAlias(t *testing
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
-	require.Equal(t, "select count(*)::int8 as total from node n0 where n0.kind_ids operator (pg_catalog.@>) array [8]::int2[];", strings.Join(strings.Fields(formattedQuery), " "))
+	require.Equal(t, "select count(*)::int8 as total from node n0 where n0.kind_ids operator (pg_catalog.@>) array [8]::int2[];", strings.Join(strings.Fields(formattedQuery.Statement), " "))
 }
 
 func TestOptimizerSafetyCountStoreFastPathSupportsNodeCountStar(t *testing.T) {
@@ -234,7 +234,7 @@ func TestOptimizerSafetyCountStoreFastPathSupportsNodeCountStar(t *testing.T) {
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
-	require.Equal(t, "select count(*)::int8 as total from node n0 where n0.kind_ids operator (pg_catalog.@>) array [8]::int2[];", strings.Join(strings.Fields(formattedQuery), " "))
+	require.Equal(t, "select count(*)::int8 as total from node n0 where n0.kind_ids operator (pg_catalog.@>) array [8]::int2[];", strings.Join(strings.Fields(formattedQuery.Statement), " "))
 }
 
 func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
@@ -247,7 +247,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesBaseEdgeCount(t *testing.T) {
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringProjectionPruning, "superseded by CountStoreFastPath")
-	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
+	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery.Statement), " "))
 }
 
 func TestOptimizerSafetyCountStoreFastPathUsesSparseEdgeKindCount(t *testing.T) {
@@ -256,7 +256,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesSparseEdgeKindCount(t *testing.T) 
 	translation := optimizerSafetyTranslation(t, `MATCH ()-[r:Enroll]->() RETURN count(r)`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
@@ -272,7 +272,7 @@ func TestOptimizerSafetyCountStoreFastPathUsesUntypedEdgeCount(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `MATCH ()-[r]->() RETURN count(r)`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
@@ -292,7 +292,7 @@ func TestOptimizerSafetyCountStoreFastPathSupportsEdgeCountStar(t *testing.T) {
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringCountStoreFastPath)
 	requireSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringProjectionPruning, "superseded by CountStoreFastPath")
-	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery), " "))
+	require.Equal(t, "select count(*)::int8 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [10]::int2[]);", strings.Join(strings.Fields(formattedQuery.Statement), " "))
 }
 
 func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
@@ -301,7 +301,7 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, optimizerADCSQuery)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
@@ -422,7 +422,7 @@ RETURN p
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "(s1.n0).id = e0.start_id")
 	require.Contains(t, normalizedQuery, "(s1.n1).id = e0.end_id")
@@ -495,7 +495,7 @@ RETURN p
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
@@ -517,7 +517,7 @@ RETURN dst
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
@@ -540,7 +540,7 @@ RETURN s
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "not exists (select 1 from edge e0")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
@@ -590,7 +590,7 @@ RETURN p
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
 	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
@@ -609,7 +609,7 @@ RETURN p
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
@@ -631,7 +631,7 @@ RETURN p
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
@@ -652,7 +652,7 @@ RETURN a
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
@@ -681,7 +681,7 @@ RETURN p
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringExactRangeExpansion)
@@ -716,7 +716,7 @@ RETURN p
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
@@ -737,7 +737,7 @@ RETURN p
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
@@ -762,7 +762,7 @@ LIMIT 100
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	var (
-		normalizedQuery = strings.Join(strings.Fields(formattedQuery), " ")
+		normalizedQuery = strings.Join(strings.Fields(formattedQuery.Statement), " ")
 		lowerQuery      = strings.ToLower(normalizedQuery)
 	)
 
@@ -848,7 +848,7 @@ LIMIT 100
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
@@ -870,7 +870,7 @@ LIMIT 100
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "where traversal.depth < 4")
@@ -891,7 +891,7 @@ LIMIT 100
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "join edge e on e.end_id = candidate_sources.root_id")
@@ -912,7 +912,7 @@ LIMIT 100
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "(source_node.id, source_node.kind_ids, source_node.properties)::nodecomposite as user")
@@ -935,7 +935,7 @@ LIMIT 100
 	`)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "terminal_nodes(id) as materialized")
@@ -961,7 +961,7 @@ LIMIT 100
 	})
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	parameterValues := make([]any, 0, len(translation.Parameters))
 	for _, value := range translation.Parameters {
@@ -992,7 +992,7 @@ LIMIT 100
 	})
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery)), " ")
+	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
@@ -1134,7 +1134,7 @@ RETURN p
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "bidirectional_asp_harness")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ShortestPathStrategySelection")
@@ -1155,7 +1155,7 @@ RETURN p
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "traversal_terminal_filter")
@@ -1175,7 +1175,7 @@ LIMIT 1000
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "traversal_terminal_filter")
@@ -1222,7 +1222,7 @@ func TestOptimizerSafetyShortestPathRootCarriesUnwindSources(t *testing.T) {
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array ['source']::text[]) as i0")
@@ -1242,7 +1242,7 @@ func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array ['target']::text[]) as i0")
@@ -1328,7 +1328,7 @@ RETURN p
 `)
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
-	normalizedQuery := strings.Join(strings.Fields(formattedQuery), " ")
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requireOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
