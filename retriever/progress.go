@@ -7,10 +7,6 @@ import (
 
 const retrieverProgressEntityInterval int64 = DefaultProgressInterval
 
-func retrieverInitialProgressAt(planned int64) int64 {
-	return retrieverInitialProgressAtInterval(planned, retrieverProgressEntityInterval)
-}
-
 func retrieverInitialProgressAtInterval(planned int64, interval int64) int64 {
 	interval = normalizedProgressInterval(interval)
 	if planned <= interval {
@@ -30,10 +26,6 @@ func retrieverBatchLimit(remaining int64, batchSize int) int {
 	}
 
 	return batchSize
-}
-
-func logRetrieverEntityProgress(message string, graphName string, phaseName Phase, processed int64, planned int64, startedAt time.Time, nextProgressAt int64, progress ProgressFunc) int64 {
-	return logRetrieverEntityProgressInterval(message, graphName, phaseName, processed, planned, startedAt, nextProgressAt, progress, retrieverProgressEntityInterval)
 }
 
 func logRetrieverEntityProgressInterval(message string, graphName string, phaseName Phase, processed int64, planned int64, startedAt time.Time, nextProgressAt int64, progress ProgressFunc, interval int64) int64 {
@@ -72,10 +64,6 @@ func logRetrieverEntityProgressInterval(message string, graphName string, phaseN
 	})
 
 	return retrieverNextProgressAtInterval(processed, planned, nextProgressAt, interval)
-}
-
-func retrieverNextProgressAt(processed int64, planned int64, nextProgressAt int64) int64 {
-	return retrieverNextProgressAtInterval(processed, planned, nextProgressAt, retrieverProgressEntityInterval)
 }
 
 func retrieverNextProgressAtInterval(processed int64, planned int64, nextProgressAt int64, interval int64) int64 {

@@ -156,11 +156,14 @@ func newDecompressionReader(reader io.Reader, codec CompressionCodec) (io.ReadCl
 }
 
 func newCompressedJSONLinesWriter(path string, codec CompressionCodec, zstdLevel int) (*compressedJSONLinesWriter, error) {
+	return newCompressedJSONLinesWriterAtPaths(path, path+".tmp", codec, zstdLevel)
+}
+
+func newCompressedJSONLinesWriterAtPaths(path, tempPath string, codec CompressionCodec, zstdLevel int) (*compressedJSONLinesWriter, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create fragment directory: %w", err)
 	}
 
-	tempPath := path + ".tmp"
 	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open fragment temp file: %w", err)
@@ -215,6 +218,21 @@ func (s *compressedJSONLinesWriter) Count() int {
 }
 
 func (s *compressedJSONLinesWriter) Close() (FileManifest, error) {
+	fileEntry, err := s.finalize()
+	if err != nil {
+		return FileManifest{}, err
+	}
+
+	if err := os.Rename(s.tempPath, s.path); err != nil {
+		_ = os.Remove(s.tempPath)
+
+		return FileManifest{}, fmt.Errorf("rename fragment: %w", err)
+	}
+
+	return fileEntry, nil
+}
+
+func (s *compressedJSONLinesWriter) finalize() (FileManifest, error) {
 	if s.closed {
 		return FileManifest{}, fmt.Errorf("close JSONL fragment more than once")
 	}
@@ -231,12 +249,6 @@ func (s *compressedJSONLinesWriter) Close() (FileManifest, error) {
 		_ = os.Remove(s.tempPath)
 
 		return FileManifest{}, fmt.Errorf("close fragment file: %w", err)
-	}
-
-	if err := os.Rename(s.tempPath, s.path); err != nil {
-		_ = os.Remove(s.tempPath)
-
-		return FileManifest{}, fmt.Errorf("rename fragment: %w", err)
 	}
 
 	return FileManifest{
