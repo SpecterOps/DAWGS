@@ -25,9 +25,16 @@ make test
 
 Run integration tests when a backend is available:
 
+Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j driver.
+
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
 make test_integration
+```
+
+```bash
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+make test_bdd_integration
 ```
 
 Use this module from another Go project:
