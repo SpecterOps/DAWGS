@@ -101,6 +101,7 @@ jobs:
           POSTGRES_USER: dawgs
           POSTGRES_PASSWORD: weneedbetterpasswords
           POSTGRES_DB: dawgs
+          POSTGRES_INITDB_ARGS: "--set=shared_preload_libraries=pg_stat_statements"
         ports:
           - 5432:5432
         options: >-

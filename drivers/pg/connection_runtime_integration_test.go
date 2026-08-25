@@ -18,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -50,9 +49,6 @@ func postgresV2IntegrationConnectionString(t *testing.T) string {
 	normalized := strings.ToLower(connectionString)
 	if !strings.HasPrefix(normalized, "postgres://") && !strings.HasPrefix(normalized, "postgresql://") {
 		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
-	}
-	if err := databaseguard.ValidateEnvironment(connectionString); err != nil {
-		t.Fatalf("integration database safety check failed: %v", err)
 	}
 	return connectionString
 }

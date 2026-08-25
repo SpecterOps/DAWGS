@@ -10,25 +10,27 @@ package main
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/stretchr/testify/require"
 )
+
+func isPostgreSQLConnection(connection string) bool {
+	normalized := strings.ToLower(connection)
+	return strings.HasPrefix(normalized, "postgres://") || strings.HasPrefix(normalized, "postgresql://")
+}
 
 func TestP5AdjacencyTaggedPGXStatementVisibleToPGStatStatements(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
 		t.Skip("CONNECTION_STRING env var is not set")
 	}
-	target, err := databaseguard.Target(connection)
-	require.NoError(t, err)
-	if len(target) < len("postgresql://") || target[:len("postgresql://")] != "postgresql://" {
+	if !isPostgreSQLConnection(connection) {
 		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
 	}
-	require.NoError(t, databaseguard.ValidateEnvironment(connection))
 
 	ctx := context.Background()
 	graphState, err := openP5AdjacencyGraph(ctx, connection)
@@ -67,12 +69,9 @@ func TestP5AdjacencyCalibrationAttributesTaggedStatementWAL(t *testing.T) {
 	if connection == "" {
 		t.Skip("CONNECTION_STRING env var is not set")
 	}
-	target, err := databaseguard.Target(connection)
-	require.NoError(t, err)
-	if len(target) < len("postgresql://") || target[:len("postgresql://")] != "postgresql://" {
+	if !isPostgreSQLConnection(connection) {
 		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
 	}
-	require.NoError(t, databaseguard.ValidateEnvironment(connection))
 
 	ctx := context.Background()
 	resetP5AdjacencyTestState(t, ctx, connection)

@@ -83,7 +83,7 @@ func TestLegacyBuilderPostgreSQL_RelationshipScans(t *testing.T) {
 				query.Not(query.KindIn(query.End(), scanLookupRegressionKinds(64, 65)...)),
 			)),
 			query.Returning(query.RelationshipID()),
-		}, "e0.properties ? 'lastseen'", "not (e0.properties -> 'lastseen')", "array [100]::int2[]", "select (s0.e0).id")
+		}, "e0.properties ? E'lastseen'", "not (e0.properties -> E'lastseen')", "array [100]::int2[]", "select (s0.e0).id")
 	})
 
 	for _, relationshipKind := range []int{70, 71} {
@@ -182,14 +182,14 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 			)),
 			query.Returning(query.Node()),
 			query.Limit(1),
-		}, "n0.properties -> 'objectid'", "select s0.n0 as n", "limit 1")
+		}, "n0.properties -> E'objectid'", "select s0.n0 as n", "limit 1")
 		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
 				query.Equals(query.NodeProperty("name"), "dc.example.test"),
 				query.Equals(query.NodeProperty("enabled"), true),
 			)),
 			query.Returning(query.NodeID()),
-		}, "n0.properties -> 'name'", "n0.properties -> 'enabled'", "select (s0.n0).id")
+		}, "n0.properties -> E'name'", "n0.properties -> E'enabled'", "select (s0.n0).id")
 	})
 
 	t.Run("LOOKUP-03 boolean two-column projection", func(t *testing.T) {
@@ -199,7 +199,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 				query.Equals(query.NodeProperty("hasura"), true),
 			)),
 			query.Returning(query.NodeID(), query.NodeProperty("hasura")),
-		}, "select (s0.n0).id as \"id(n)\", ((s0.n0).properties -> 'hasura') as \"n.hasura\"")
+		}, "select (s0.n0).id as \"id(n)\", ((s0.n0).properties -> E'hasura') as \"n.hasura\"")
 	})
 
 	t.Run("LOOKUP-04 prefix suffix and equality", func(t *testing.T) {
@@ -210,14 +210,14 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 				query.Equals(query.NodeProperty("domainsid"), "S-1-5-21"),
 			)),
 			query.Returning(query.Node()),
-		}, "cypher_starts_with", "n0.properties -> 'domainsid'")
+		}, "cypher_like_escape", "n0.properties -> E'domainsid'")
 		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.Or(
 				query.StringEndsWith(query.NodeProperty("objectid"), "-S-1"),
 				query.StringEndsWith(query.NodeProperty("objectid"), "-S-2"),
 			)),
 			query.Returning(query.NodeID()),
-		}, "cypher_ends_with", " or ")
+		}, "cypher_like_escape", " or ")
 	})
 
 	t.Run("LOOKUP-05 case-insensitive strings preserve literals", func(t *testing.T) {
@@ -226,12 +226,12 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 			query.Returning(query.NodeID()),
 		)
 		require.Contains(t, formatted, "lower")
-		require.Contains(t, formatted, "cypher_starts_with")
+		require.Contains(t, formatted, "cypher_like_escape")
 		require.Equal(t, map[string]any{"pi0": "remote desktop users%_"}, translation.Parameters)
 		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.CaseInsensitiveStringContains(query.NodeProperty("objectid"), "Approver_GUID")),
 			query.Returning(query.Node()),
-		}, "lower", "cypher_contains")
+		}, "lower", "cypher_like_escape")
 	})
 
 	t.Run("LOOKUP-06 required and excluded kind groups", func(t *testing.T) {
@@ -243,7 +243,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 				query.Equals(query.NodeProperty("domainsid"), "S-1-5-21"),
 			)),
 			query.Returning(query.Node()),
-		}, "array [117, 118]::int2[]", "array [101]::int2[]", "cypher_ends_with")
+		}, "array [117, 118]::int2[]", "array [101]::int2[]", "cypher_like_escape")
 		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.And(
 				query.Kind(query.Node(), scanLookupRegressionKinds(69)[0]),
@@ -258,7 +258,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 		assertScanLookupTranslation(t, []graph.Criteria{
 			query.Where(query.Not(query.Exists(query.NodeProperty("name")))),
 			query.Returning(query.Node()),
-		}, "n0.properties ? 'name'", "not (n0.properties -> 'name')", "not")
+		}, "n0.properties ? E'name'", "not (n0.properties -> E'name')", "not")
 	})
 
 	t.Run("LOOKUP-08 nullable approver disjunction", func(t *testing.T) {
@@ -273,7 +273,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 				),
 			)),
 			query.Returning(query.Node()),
-		}, "n0.properties ? 'userapprovers'", "n0.properties ? 'groupapprovers'", " or ")
+		}, "n0.properties ? E'userapprovers'", "n0.properties ? E'groupapprovers'", " or ")
 	})
 
 	t.Run("LOOKUP-09 duplicate ID list hydration", func(t *testing.T) {
@@ -295,7 +295,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 				query.InIDs(query.NodeID(), graph.ID(101), graph.ID(202)),
 			)),
 			query.Returning(query.Node()),
-		}, "not", "n0.properties -> 'gmsa'", "n0.properties -> 'msa'", "n0.id = any")
+		}, "not", "n0.properties -> E'gmsa'", "n0.properties -> E'msa'", "n0.id = any")
 	})
 
 	t.Run("LOOKUP-11 tenant adjacency and endpoint property list", func(t *testing.T) {
@@ -307,7 +307,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 				query.In(query.EndProperty("roletemplateid"), []string{"role-a", "role-b"}),
 			)),
 			query.Returning(query.End()),
-		}, "n0.id = @pi0", "array [127, 128]::int2[]", "n1.properties ->> 'roletemplateid'", "select s0.n1 as e")
+		}, "n0.id = @pi0", "array [127, 128]::int2[]", "n1.properties ->> E'roletemplateid'", "select s0.n1 as e")
 	})
 
 	t.Run("LOOKUP-12 exact edge key and First", func(t *testing.T) {
@@ -331,7 +331,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 					query.Equals(query.EndID(), graph.ID(202)),
 				)),
 				projection,
-			}, "cypher_ends_with", "n1.id = @pi1")
+			}, "cypher_like_escape", "n1.id = @pi1")
 		}
 	})
 
@@ -358,7 +358,7 @@ func TestLegacyBuilderPostgreSQL_NodeLookups(t *testing.T) {
 						query.Equals(query.NodeProperty("ldapsigning"), false),
 					)),
 					query.Returning(query.NodeID()),
-				}, "n0.properties -> 'domainsid'", "n0.properties -> 'isdc'", "n0.properties -> 'ldapavailable'", "n0.properties -> 'ldapsigning'", "select (s0.n0).id")
+				}, "n0.properties -> E'domainsid'", "n0.properties -> E'isdc'", "n0.properties -> E'ldapavailable'", "n0.properties -> E'ldapsigning'", "select (s0.n0).id")
 			})
 		}
 	})

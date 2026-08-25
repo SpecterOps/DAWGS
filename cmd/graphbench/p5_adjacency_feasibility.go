@@ -19,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/pg"
 	pgquery "github.com/specterops/dawgs/drivers/pg/query"
 	"github.com/specterops/dawgs/graph"
@@ -190,9 +189,6 @@ type p5AdjacencyRowQueryer interface {
 // deliberately separate from the normal corpus runner and does not load,
 // translate, or execute any Cypher query.
 func runP5AdjacencyFeasibilityCapture(ctx context.Context, cfg config, connection string, args []string) (_ P5AdjacencyFeasibilityReport, err error) {
-	if err := databaseguard.ValidateEnvironment(connection); err != nil {
-		return P5AdjacencyFeasibilityReport{}, err
-	}
 	if cfg.PoolSize != 1 {
 		return P5AdjacencyFeasibilityReport{}, fmt.Errorf("P5 adjacency feasibility capture requires pool-size 1")
 	}

@@ -43,9 +43,9 @@ func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 				"n0.kind_ids operator (pg_catalog.&&) array [72]::int2[]",
 				"n1.kind_ids operator (pg_catalog.&&) array [72]::int2[]",
 				"e0.kind_id = any (array [73]::int2[])",
-				"e0.properties -> 'lastseen'",
-				"n0.properties -> 'lastcollected'",
-				"n1.properties -> 'lastcollected'",
+				"e0.properties -> E'lastseen'",
+				"n0.properties -> E'lastcollected'",
+				"n1.properties -> E'lastcollected'",
 				"select (s0.e0).id",
 			},
 			parameters: map[string]any{},
@@ -97,7 +97,7 @@ func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 				)),
 				query.Returning(query.RelationshipID()),
 			},
-			fragments:  []string{"not (e0.kind_id = any (array [77, 78]::int2[]))", "e0.properties ->> 'lastseen'", "select (s0.e0).id"},
+			fragments:  []string{"not (e0.kind_id = any (array [77, 78]::int2[]))", "e0.properties ->> E'lastseen'", "select (s0.e0).id"},
 			parameters: map[string]any{"pi0": threshold},
 		},
 		"PRUNE-02 HasSession TTL": {
@@ -111,7 +111,7 @@ func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 				)),
 				query.Returning(query.RelationshipID()),
 			},
-			fragments:  []string{"not ((e0.properties ? 'lastseen'", " or ", "e0.kind_id = any (array [7]::int2[])"},
+			fragments:  []string{"not ((e0.properties ? E'lastseen'", " or ", "e0.kind_id = any (array [7]::int2[])"},
 			parameters: map[string]any{"pi0": threshold},
 		},
 		"PRUNE-03 node TTL": {
@@ -125,7 +125,7 @@ func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 				)),
 				query.Returning(query.NodeID()),
 			},
-			fragments:  []string{"not (n0.kind_ids operator (pg_catalog.&&) array [80, 81]::int2[])", "not ((n0.properties ? 'lastseen'", "select (s0.n0).id"},
+			fragments:  []string{"not (n0.kind_ids operator (pg_catalog.&&) array [80, 81]::int2[])", "not ((n0.properties ? E'lastseen'", "select (s0.n0).id"},
 			parameters: map[string]any{"pi0": threshold},
 		},
 		"PRUNE-04 orphan SID prefix": {
@@ -137,7 +137,7 @@ func TestLegacyBuilderPostgreSQL_TrustAndPruningForms(t *testing.T) {
 				)),
 				query.Returning(query.NodeID()),
 			},
-			fragments:  []string{"not ((n0.properties ? 'name'", "cypher_starts_with", "select (s0.n0).id"},
+			fragments:  []string{"not ((n0.properties ? E'name'", "cypher_like_escape", "select (s0.n0).id"},
 			parameters: map[string]any{"pi0": "S-1-5"},
 		},
 	}

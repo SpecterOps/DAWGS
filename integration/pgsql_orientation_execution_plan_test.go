@@ -10,6 +10,7 @@ package integration
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"testing"
 
@@ -228,6 +229,7 @@ func TestPostgreSQLShadowOrientationAttestsEmptyIncumbent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render shadow orientation query: %v", err)
 	}
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
 
 	const invocation = "shadow-orientation-empty-incumbent"
 	var (
@@ -247,7 +249,7 @@ func TestPostgreSQLShadowOrientationAttestsEmptyIncumbent(t *testing.T) {
 		}
 		arm.Close()
 
-		result := tx.Raw(sqlQuery, translation.Parameters)
+		result := tx.Raw(sqlQuery.Statement, translation.Parameters)
 		for result.Next() {
 			rowCount++
 		}
@@ -274,7 +276,7 @@ func TestPostgreSQLShadowOrientationAttestsEmptyIncumbent(t *testing.T) {
 		clear.Close()
 		return err
 	}); err != nil {
-		t.Fatalf("execute empty shadow orientation query: %v\nSQL: %s", err, sqlQuery)
+		t.Fatalf("execute empty shadow orientation query: %v\nSQL: %s", err, sqlQuery.Statement)
 	}
 	if rowCount != 0 {
 		t.Fatalf("empty shadow incumbent returned %d rows", rowCount)
@@ -381,6 +383,7 @@ func executeGuardedOrientationWithReceipt(t *testing.T, session *Session, rootKe
 	if err != nil {
 		t.Fatalf("render guarded orientation query: %v", err)
 	}
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
 
 	invocation := "guarded-" + rootKey
 	var (
@@ -400,7 +403,7 @@ func executeGuardedOrientationWithReceipt(t *testing.T, session *Session, rootKe
 		}
 		arm.Close()
 
-		result := tx.Raw(sqlQuery, translation.Parameters)
+		result := tx.Raw(sqlQuery.Statement, translation.Parameters)
 		for result.Next() {
 			rowCount++
 		}
@@ -427,7 +430,7 @@ func executeGuardedOrientationWithReceipt(t *testing.T, session *Session, rootKe
 		clear.Close()
 		return err
 	}); err != nil {
-		t.Fatalf("execute guarded orientation query: %v\nSQL: %s", err, sqlQuery)
+		t.Fatalf("execute guarded orientation query: %v\nSQL: %s", err, sqlQuery.Statement)
 	}
 	return rowCount, receipt
 }
@@ -732,10 +735,11 @@ func explainGuardedOrientationPolicy(t *testing.T, session *Session, policy opti
 	if err != nil {
 		t.Fatalf("render guarded orientation query: %v", err)
 	}
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
 
 	var plan any
 	if err := session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
-		result := tx.Raw("explain (analyze, timing off, summary off, format json) "+sqlQuery, translation.Parameters)
+		result := tx.Raw("explain (analyze, timing off, summary off, format json) "+sqlQuery.Statement, translation.Parameters)
 		defer result.Close()
 		if !result.Next() {
 			if err := result.Error(); err != nil {

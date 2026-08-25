@@ -763,6 +763,8 @@ type Result struct {
 	Statement pgsql.Statement
 	// Parameters contains SQL parameters generated during translation.
 	Parameters map[string]any
+	// LiteralParameters contains immutable string literals extracted during SQL formatting.
+	LiteralParameters map[string]string
 	// ParameterSources maps generated SQL parameter names back to Cypher parameter names.
 	ParameterSources map[string]string
 	// Optimization summarizes planned, applied, and skipped lowering decisions.

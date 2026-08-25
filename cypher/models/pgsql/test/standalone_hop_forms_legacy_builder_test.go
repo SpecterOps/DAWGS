@@ -159,7 +159,7 @@ func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 				)),
 				query.Returning(query.Relationship(), query.End()),
 			},
-			fragments:  []string{"n1.properties -> 'enabled'", "n1.properties -> 'score'", "n1.properties -> 'name'", "n1.properties -> 'isassignabletorole'", "e0.kind_id = any (array [87]::int2[])"},
+			fragments:  []string{"n1.properties -> E'enabled'", "n1.properties -> E'score'", "n1.properties -> E'name'", "n1.properties -> E'isassignabletorole'", "e0.kind_id = any (array [87]::int2[])"},
 			parameters: map[string]any{"pi0": uint64(101), "pi1": true, "pi2": 7, "pi3": "target", "pi4": "true"},
 		},
 		"HOP-07 nested production branches": {
@@ -184,7 +184,7 @@ func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 				)),
 				query.Returning(query.Relationship(), query.End()),
 			},
-			fragments:  []string{" or ", "n1.kind_ids operator (pg_catalog.&&) array [89]::int2[]", "n1.properties -> 'schemaversion'", "n1.properties -> 'authorizedsignatures'", "e0.kind_id = any (array [88]::int2[])"},
+			fragments:  []string{" or ", "n1.kind_ids operator (pg_catalog.&&) array [89]::int2[]", "n1.properties -> E'schemaversion'", "n1.properties -> E'authorizedsignatures'", "e0.kind_id = any (array [88]::int2[])"},
 			parameters: map[string]any{"pi0": uint64(101), "pi1": false, "pi2": 1, "pi3": 0, "pi4": true, "pi5": false, "pi6": 1, "pi7": true},
 		},
 		"HOP-08 collection and scalar OR": {
@@ -225,7 +225,7 @@ func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 				)),
 				query.Returning(query.Relationship(), query.End()),
 			},
-			fragments:  []string{"n1.kind_ids operator (pg_catalog.&&) array [84]::int2[]", "n1.properties -> 'active'", "select s0.e0 as r, s0.n1 as e"},
+			fragments:  []string{"n1.kind_ids operator (pg_catalog.&&) array [84]::int2[]", "n1.properties -> E'active'", "select s0.e0 as r, s0.n1 as e"},
 			parameters: map[string]any{"pi0": []uint64{101}, "pi1": true},
 		},
 		"HOP-10 inbound full direction": {
@@ -238,7 +238,7 @@ func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 				)),
 				query.Returning(query.Relationship(), query.Start()),
 			},
-			fragments:  []string{"n0.kind_ids operator (pg_catalog.&&) array [83]::int2[]", "n0.properties -> 'active'", "select s0.e0 as r, s0.n0 as s"},
+			fragments:  []string{"n0.kind_ids operator (pg_catalog.&&) array [83]::int2[]", "n0.properties -> E'active'", "select s0.e0 as r, s0.n0 as s"},
 			parameters: map[string]any{"pi0": []uint64{202}, "pi1": true},
 		},
 		"HOP-10 start node projection": {

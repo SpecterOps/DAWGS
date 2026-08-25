@@ -185,7 +185,7 @@ text, literals, parameters, or credentials.
 
 The translation cache is keyed by trimmed query text, graph ID, parameter names, the PostgreSQL data type negotiated
 for each parameter, and the exact effective traversal-policy identity. Values are rebound on every hit. This deliberately separates empty untyped lists from typed lists
-and separates different graph partitions. A translation containing generated/static fragment parameters is not cached,
+and separates different graph partitions. Formatter-extracted string literals are retained as immutable bindings alongside SQL; caller values are rebound on each hit. A translation containing other generated/static fragment parameters is not cached,
 because those values cannot be reconstructed safely from caller parameters. Concurrent cacheable misses are coalesced;
 waiters rebuild uncacheable translations rather than inheriting the first caller's values. Driver close clears both
 caches. `ParseCacheStats` and `TranslationCacheStats` expose aggregate, query-text-free counters.
@@ -388,10 +388,10 @@ rendering; it still builds the request AST, deterministically names its runtime 
 Cypher cache identity, and assembles its debug comment.
 
 Entries are partitioned by the SHA-256 digest of trimmed Cypher text, target graph ID, sorted parameter names and PostgreSQL type shapes, a
-translation-key format/policy identity, and the schema generation. Parameter values are never retained or used as key
-material, and the cache key does not retain the source text. The retained data is limited to the SQL string and generated-parameter-to-Cypher-parameter source names;
+translation-key format/policy identity, and the schema generation. Caller parameter values are never retained or used as key
+material, and the cache key does not retain the source text. The retained data is limited to the SQL string, formatter-extracted literal bindings, and generated-parameter-to-Cypher-parameter source names;
 the cache does not retain caller maps or values, ASTs, contexts, transactions, connections, rows, or connection
-strings. Structural literals remain part of the cache identity. Generated parameters that cannot be reconstructed from
+strings. Structural literals remain part of the cache identity. Generated parameters that are neither formatter-extracted literals nor reconstructible from
 request-local named sources, translation errors, disabled/closed cache state, and source text over 64 KiB bypass
 retention.
 

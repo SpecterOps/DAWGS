@@ -218,7 +218,7 @@ func renderTraversalPolicyPreflight(ctx context.Context, mapper pg.KindMapper, t
 		Candidate:       manifest.Candidate,
 		SelectorVersion: manifest.SelectorVersion,
 		QuerySHA256:     pg.TraversalPolicyQuerySHA256(scenario.Cypher),
-		SQLSHA256:       sqlFingerprint(sqlQuery),
+		SQLSHA256:       sqlFingerprint(sqlQuery.Statement),
 		GraphID:         target.ID,
 		Optimization:    translation.Optimization,
 	}, nil

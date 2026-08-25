@@ -177,7 +177,19 @@ func TestPostgreSQLSuffixReverseRetryPreservesExactRowsAndReceipts(t *testing.T)
 			require.Len(t, records, 1)
 			record := records[0]
 			require.Equal(t, StatusOK, record.Status, record.Error)
-			require.Contains(t, record.SQL, "dawgs.suffix_reverse_retry_status")
+			translation, sqlQuery, err := runner.translateCypher(ctx, record.Cypher, record.Params)
+			require.NoError(t, err)
+			require.Equal(t, record.SQL, sqlQuery)
+
+			var retryStatusParameter string
+			for name, value := range translation.Parameters {
+				if value == "dawgs.suffix_reverse_retry_status" {
+					retryStatusParameter = name
+					break
+				}
+			}
+			require.NotEmpty(t, retryStatusParameter, "retry status setting must have a literal binding")
+			require.Contains(t, record.SQL, "set_config(@"+retryStatusParameter+"::text,")
 			require.NotContains(t, record.SQL, "_suffix_guard_fallback_body")
 			for _, sample := range record.Stats.Samples {
 				if sample.RuntimeAttestation != "timed_invocation" {
