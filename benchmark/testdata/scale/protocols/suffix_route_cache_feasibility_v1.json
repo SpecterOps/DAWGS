@@ -1,0 +1,110 @@
+{
+  "schema": "suffix-route-cache-feasibility-v1",
+  "generation": "suffix-route-cache-feasibility-v1",
+  "status": "frozen_preimplementation_feasibility",
+  "production_default": "off",
+  "purpose": "define the only admissible transaction-scoped routing-decision cache feasibility study after the passed direct-component boundary closure; this is not automatic routing, a translation-cache change, result caching, a schema change, or production qualification",
+  "predecessor": {
+    "protocol": "sql-strategy-routing-component-closure-v1",
+    "source_commit": "c490f3cfcd6bbb54fb42a5c3b466979fb5080ac5",
+    "artifact_directory": ".coverage/sql-routing-component-closure-v1-c490f3c",
+    "run_uuid": "e4800916-4eee-4dcf-ae99-d68068dcf4d5",
+    "required_findings": [
+      "88 successful records with exact public rows and paths",
+      "all twelve raw-PGX prepared-state observations per record agree with the primary observation",
+      "both sparse targets remain materially improved",
+      "temporary workspace is zero and pool backend identity is stable"
+    ]
+  },
+  "scope": {
+    "backend": "postgres_sql",
+    "fixtures": "same eleven open suffix-route-component-v1 training declarations only",
+    "transaction": "caller-owned read-only repeatable_read transaction",
+    "cache_location": "application memory owned by exactly one active PostgreSQL transaction",
+    "cache_contents": "immutable routing decision only; never result rows, graph values, translated SQL, plans, or graph metadata",
+    "selector": "disabled outside explicitly named feasibility arms"
+  },
+  "cache_key": {
+    "schema_version": "suffix-route-cache-feasibility-v1",
+    "required_components": [
+      "opaque transaction-owner token minted after BEGIN",
+      "graph_id",
+      "normalized Cypher shape fingerprint",
+      "canonical parameter names, types, and values fingerprint",
+      "frozen routing-policy identity and threshold version",
+      "transaction-local invalidation generation"
+    ],
+    "snapshot_rule": "an entry is valid only while its owning transaction remains active under its original repeatable-read snapshot; no process, pool, connection, graph, query, or snapshot identifier may enable reuse after commit, rollback, release, reacquisition, retry, or a new BEGIN",
+    "missing_or_unverifiable_component": "bypass cache and execute the exact ordinary incumbent"
+  },
+  "ownership_and_invalidation": {
+    "creation": "allocate after BEGIN and destroy before the transaction object is returned to its caller",
+    "allowed_transactions": "read-only transactions with no savepoint lifecycle and no graph mutation",
+    "write_or_savepoint_boundary": "invalidate every entry, increment the transaction-local generation, and bypass cache for the remainder of that transaction",
+    "commit": "discard every entry before or during transaction completion; no entry survives commit",
+    "rollback_or_cancellation": "discard every entry before rollback completes; cancellation must not publish or retain a partially computed decision",
+    "retry": "forbidden; a replacement transaction receives a new owner token and an empty cache",
+    "pool_reacquisition": "forbidden as a reuse mechanism; a released connection cannot carry an entry into another transaction"
+  },
+  "miss_and_hit_contract": {
+    "miss": "execute the exact ordinary EXPANSION-STEPWISE-FORWARD incumbent and record cache-miss provenance; a miss must not execute the reverse component or a hidden qualifying probe",
+    "entry_publication": "publish only a complete immutable decision produced inside the owner transaction after all required safety checks; failures, cancellation, timeout, or capacity exhaustion publish nothing",
+    "hit": "may select the already-qualified direct EXPANSION-SUFFIX-SEEDED-REVERSE statement only in the same active owner transaction when every key and ownership condition matches; it remains subject to exact public-result validation and full runtime telemetry",
+    "negative_or_unknown_decision": "remain incumbent-only and may be cached only for the same owner, key, and generation",
+    "fallback": "any cache validation, decoding, telemetry, or exactness failure stops the feasibility generation rather than widening routing"
+  },
+  "resource_and_write_boundary": {
+    "maximum_entries_per_transaction": 64,
+    "maximum_total_bytes_per_transaction": 65536,
+    "maximum_entry_bytes": 4096,
+    "eviction": "none; capacity exhaustion bypasses cache and does not replace a valid entry",
+    "allocation": "hits must not allocate unboundedly or retain caller-owned mutable buffers",
+    "persistent_state": "forbidden: no table, index, extension, trigger, function, graph epoch, catalog mutation, temp relation, or translation-cache key change",
+    "read_path_wal": "zero cache-attributable WAL bytes; every feasibility read arm must prove no data-modifying cache SQL, durable write, or WAL-producing maintenance action",
+    "rollback_removal": "the cache has no database-side removal work because it is application-memory-only; transaction cleanup is mandatory even when PostgreSQL rollback itself succeeds"
+  },
+  "required_evidence": [
+    "exact public rows and paths for disabled, miss, hit, capacity-exhausted, invalidated, cancelled, and rolled-back states",
+    "transaction owner token, backend PID, snapshot/transaction provenance, key fingerprint, invalidation generation, and cache-state receipt without retaining user values",
+    "proof that every miss executed the exact incumbent and every hit used only a same-transaction qualified decision",
+    "memory entry count and byte high-water bounded by the declared limits",
+    "zero cache-attributable WAL, durable writes, temporary relations, and persistent schema changes",
+    "cancellation rollback followed by a fresh empty transaction and exact replay",
+    "pool release/reacquisition proof that no cache entry crossed a transaction boundary"
+  ],
+  "acceptance": {
+    "all_open_training_oracles_exact": true,
+    "all_misses_incumbent_only": true,
+    "all_hits_owner_snapshot_key_and_generation_bound": true,
+    "all_transaction_end_and_invalidation_boundaries_empty_cache": true,
+    "all_memory_limits_observed": true,
+    "zero_cache_attributable_wal_and_persistent_state": true,
+    "cancellation_and_rollback_replay_exact": true,
+    "no_selector_or_translation_cache_change": true
+  },
+  "stop_conditions": [
+    "any cache reuse across a transaction, snapshot, connection release, retry, graph mutation, or savepoint boundary",
+    "any miss that executes a candidate statement or hidden probe",
+    "any stale, absent, malformed, or oversized entry that changes public results or routing",
+    "any cache-attributable WAL, durable write, temporary relation, schema object, or unbounded allocation",
+    "any failure to remove entries on cancellation, rollback, commit, or capacity exhaustion",
+    "any protected declaration, automatic routing, production policy, or Neo4j release-gate claim"
+  ],
+  "next_authorization": {
+    "requires": [
+      "this frozen protocol",
+      "a separately reviewed implementation limited to this feasibility scope",
+      "all acceptance conditions satisfied by new clean-source evidence"
+    ],
+    "does_not_authorize": [
+      "production routing",
+      "process- or pool-scoped decision reuse",
+      "translation-cache key changes",
+      "result caching",
+      "persistent graph metadata or schema",
+      "transaction retry",
+      "protected holdout access",
+      "promotion or Neo4j release claims"
+    ]
+  }
+}

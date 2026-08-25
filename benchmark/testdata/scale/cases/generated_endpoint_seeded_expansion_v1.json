@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "name": "GESE-01-guard-admitted",
+      "dataset": "generated_endpoint_seeded_expansion_v1_d3_e2_q1_w2_o1_x1_m1_c0_p8",
+      "category": "generated_endpoint_seeded_expansion",
+      "cypher": "MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..64]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN count(*)",
+      "expected": {"row_count": 1, "scalar_int": 2, "result_kind": "scalar"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"qualification_split": "training", "root_predicate": "unbound", "terminal_predicate": "selective_property", "edge_kinds": ["HasSession", "MemberOf"], "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["endpoint-seeded-expansion", "guard-admitted", "scalar"]
+    },
+    {
+      "name": "GESE-02-endpoint-guard-fallback",
+      "dataset": "generated_endpoint_seeded_expansion_v1_d2_e33_q0_w33_o0_x0_m1_c0_p0",
+      "category": "generated_endpoint_seeded_expansion",
+      "cypher": "MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..64]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN count(*)",
+      "expected": {"row_count": 1, "scalar_int": 33, "result_kind": "scalar"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"qualification_split": "holdout", "root_predicate": "unbound", "terminal_predicate": "selective_property", "edge_kinds": ["HasSession", "MemberOf"], "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["endpoint-seeded-expansion", "endpoint-guard-overflow", "fallback", "scalar", "holdout"]
+    },
+    {
+      "name": "GESE-03-state-guard-fallback",
+      "dataset": "generated_endpoint_seeded_expansion_v1_d1_e1_q0_w1_o0_x4097_m1_c0_p0",
+      "category": "generated_endpoint_seeded_expansion",
+      "cypher": "MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..64]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN count(*)",
+      "expected": {"row_count": 1, "scalar_int": 1, "result_kind": "scalar"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"qualification_split": "holdout", "root_predicate": "unbound", "terminal_predicate": "selective_property", "edge_kinds": ["HasSession", "MemberOf"], "min_depth": 1, "max_depth": 64, "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["endpoint-seeded-expansion", "state-guard-overflow", "fallback", "scalar", "holdout"]
+    }
+  ]
+}

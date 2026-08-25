@@ -1,0 +1,133 @@
+{
+  "cases": [
+    {
+      "name": "TRUST-01_dense_same_forest_relationship_ids",
+      "dataset": "generated_trust_pruning",
+      "category": "trust_reconciliation",
+      "cypher": "MATCH (s:Domain)-[r:SameForestTrust]->(e:Domain) WHERE datetime(r.lastseen) < datetime(s.lastcollected) OR datetime(r.lastseen) < datetime(e.lastcollected) RETURN id(r)",
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "typed_temporal_disjunction", "edge_kinds": ["SameForestTrust"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["TRUST-01", "dense", "relationship-ids", "temporal-or"]
+    },
+    {
+      "name": "TRUST-02_dense_cross_forest_relationship_hydration",
+      "dataset": "generated_trust_pruning",
+      "category": "trust_reconciliation",
+      "cypher": "MATCH (s:Domain)-[r:CrossForestTrust]->(e:Domain) WHERE datetime(r.lastseen) < datetime(s.lastcollected) OR datetime(r.lastseen) < datetime(e.lastcollected) RETURN r",
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": false, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "typed_temporal_disjunction", "edge_kinds": ["CrossForestTrust"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["TRUST-02", "dense", "relationship-hydration", "temporal-or"]
+    },
+    {
+      "name": "TRUST-03_directional_branch_local_kinds",
+      "dataset": "generated_trust_pruning",
+      "category": "trust_reconciliation",
+      "cypher": "MATCH (s:Domain)-[r]->(e:Domain) WHERE (id(s) = $forward_start AND id(e) = $forward_end AND r:AbuseTGTDelegation) OR (id(s) = $forward_end AND id(e) = $forward_start AND r:SpoofSIDHistory) RETURN id(r)",
+      "node_params": {"forward_start": "trust-late-a", "forward_end": "trust-late-b"},
+      "expected": {"row_count": 2},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": false},
+      "shape": {"root_predicate": "directional_id_disjunction", "edge_kinds": ["AbuseTGTDelegation", "SpoofSIDHistory"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["TRUST-03", "directional", "branch-local-kind", "relationship-ids"]
+    },
+    {
+      "name": "PRUNE-01_dense_old_relationship_selection",
+      "dataset": "generated_trust_pruning",
+      "category": "pruning_selection",
+      "cypher": "MATCH ()-[r]->() WHERE NOT (r:HasSession OR r:MetaIncludes) AND datetime(r.lastseen) < datetime($threshold) RETURN id(r)",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "kind_negation_and_temporal", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["PRUNE-01", "dense", "kind-negation", "relationship-ids"]
+    },
+    {
+      "name": "PRUNE-02_dense_missing_or_old_session_selection",
+      "dataset": "generated_trust_pruning",
+      "category": "pruning_selection",
+      "cypher": "MATCH ()-[r:HasSession]->() WHERE r.lastseen IS NULL OR datetime(r.lastseen) < datetime($threshold) RETURN id(r)",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "expected": {"row_count": 256},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "missing_or_temporal", "edge_kinds": ["HasSession"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["PRUNE-02", "dense", "missing-property", "relationship-ids"]
+    },
+    {
+      "name": "PRUNE-03_dense_missing_or_old_node_selection",
+      "dataset": "generated_trust_pruning",
+      "category": "pruning_selection",
+      "cypher": "MATCH (n:PruneCandidate) WHERE NOT n:Domain AND (n.lastseen IS NULL OR datetime(n.lastseen) < datetime($threshold)) RETURN id(n)",
+      "params": {"threshold": "2026-01-03T00:00:00Z"},
+      "expected": {"row_count": 262},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "kind_negation_and_missing_or_temporal", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["PRUNE-03", "dense", "missing-property", "node-ids"]
+    },
+    {
+      "name": "PRUNE-04_dense_orphan_sid_selection",
+      "dataset": "generated_trust_pruning",
+      "category": "pruning_selection",
+      "cypher": "MATCH (n) WHERE NOT n:Domain AND n.name IS NULL AND n.objectid STARTS WITH $sid_prefix RETURN id(n)",
+      "params": {"sid_prefix": "S-1-5"},
+      "expected": {"row_count": 130},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "kind_negation_missing_name_prefix", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["PRUNE-04", "dense", "missing-property", "prefix", "node-ids"]
+    },
+    {
+      "name": "PRUNE-05_dense_relationship_batch_delete_equivalent",
+      "dataset": "generated_trust_pruning",
+      "category": "pruning_mutation",
+      "cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $flag DELETE r",
+      "params": {"flag": true},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "relationship_property", "edge_kinds": ["PruneBatch"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["PRUNE-05", "mutation", "direct-batch-equivalent"],
+      "write_scenario": {
+        "selection_cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $flag RETURN id(r)",
+        "params": {"flag": true},
+        "affected_entity": "relationship",
+        "expected_matched": 128,
+        "expected_affected": 128,
+        "post_state": [
+          {"name": "selected relationships deleted", "cypher": "MATCH ()-[r:PruneBatch]->() WHERE r.remove = $flag RETURN count(r)", "params": {"flag": true}, "expected": {"scalar_int": 0}},
+          {"name": "survivor relationship remains", "cypher": "MATCH ()-[r:PruneBatchSurvivor]->() RETURN count(r)", "expected": {"scalar_int": 1}}
+        ]
+      }
+    },
+    {
+      "name": "PRUNE-06_high_degree_node_batch_delete_equivalent",
+      "dataset": "generated_trust_pruning",
+      "category": "pruning_mutation",
+      "cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $flag DETACH DELETE n",
+      "params": {"flag": true},
+      "expected": {"result_kind": "mutation"},
+      "observes": {"paths": false, "nodes": false, "relationships": false, "properties": true},
+      "shape": {"root_predicate": "node_property_high_degree", "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["PRUNE-06", "mutation", "high-degree", "cascade", "direct-batch-equivalent"],
+      "write_scenario": {
+        "selection_cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $flag RETURN id(n)",
+        "params": {"flag": true},
+        "affected_entity": "node",
+        "expected_matched": 65,
+        "expected_affected": 65,
+        "post_state": [
+          {"name": "selected nodes deleted", "cypher": "MATCH (n:PruneBatchNode) WHERE n.remove = $flag RETURN count(n)", "params": {"flag": true}, "expected": {"scalar_int": 0}},
+          {"name": "high degree incident relationships cascaded", "cypher": "MATCH ()-[r:PruneIncident]->() RETURN count(r)", "expected": {"scalar_int": 0}},
+          {"name": "unselected batch nodes survive", "cypher": "MATCH (n:PruneBatchNode) RETURN count(n)", "expected": {"scalar_int": 65}}
+        ]
+      }
+    }
+  ]
+}

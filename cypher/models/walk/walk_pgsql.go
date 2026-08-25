@@ -6,10 +6,12 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+// pgsqlSyntaxNodeSliceTypeConvert widens a concrete PostgreSQL syntax-node slice for the generic walker without changing element order.
 func pgsqlSyntaxNodeSliceTypeConvert[F any, FS []F](fs FS) ([]pgsql.SyntaxNode, error) {
 	return ConvertSliceType[pgsql.SyntaxNode](fs)
 }
 
+// newSQLCaseWalkCursor creates a cursor that visits a CASE operand, conditions, results, and fallback in SQL order.
 func newSQLCaseWalkCursor(node pgsql.SyntaxNode, caseExpr pgsql.Case) (*Cursor[pgsql.SyntaxNode], error) {
 	if len(caseExpr.Conditions) != len(caseExpr.Then) {
 		return nil, fmt.Errorf("case expression has %d conditions and %d then expressions", len(caseExpr.Conditions), len(caseExpr.Then))
@@ -34,6 +36,7 @@ func newSQLCaseWalkCursor(node pgsql.SyntaxNode, caseExpr pgsql.Case) (*Cursor[p
 	return nextCursor, nil
 }
 
+// newSQLWalkCursor creates a structural cursor for the concrete PostgreSQL AST node type.
 func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) {
 	if isNilNode(node) {
 		return nil, fmt.Errorf("unable to negotiate sql type %T into a translation cursor", node)
@@ -210,15 +213,22 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		}, nil
 
 	case *pgsql.EdgeArrayFromPathIDs:
+		branches := []pgsql.SyntaxNode{typedNode.PathIDs}
+		if typedNode.GraphID != nil {
+			branches = append(branches, typedNode.GraphID)
+		}
 		return &Cursor[pgsql.SyntaxNode]{
 			Node:     node,
-			Branches: []pgsql.SyntaxNode{typedNode.PathIDs},
+			Branches: branches,
 		}, nil
 
 	case pgsql.FunctionCall:
 		if branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Parameters); err != nil {
 			return nil, err
 		} else {
+			for _, orderBy := range typedNode.OrderBy {
+				branches = append(branches, orderBy)
+			}
 			return &Cursor[pgsql.SyntaxNode]{
 				Node:     node,
 				Branches: branches,
@@ -229,6 +239,9 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 		if branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Parameters); err != nil {
 			return nil, err
 		} else {
+			for _, orderBy := range typedNode.OrderBy {
+				branches = append(branches, orderBy)
+			}
 			return &Cursor[pgsql.SyntaxNode]{
 				Node:     node,
 				Branches: branches,

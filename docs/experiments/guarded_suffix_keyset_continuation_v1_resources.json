@@ -1,0 +1,24 @@
+{
+  "version": 5,
+  "decision": "rejected",
+  "implementation_id": "t16_s512_r512_e1_e2_e3_boundary_keyset_v1",
+  "source_artifact_sha256": "e6aa00733de4861b9684d8f1276e922ff1e8059671e57400703a8266ca88ee25",
+  "passed": true,
+  "evaluated_records": 120,
+  "candidate_records": 40,
+  "candidate_failures": 0,
+  "candidate_cases": 4,
+  "candidate_shared_hit_blocks": {
+    "GFSE-GUARDED-S511-admitted-suffix-limit-minus-one": 6866,
+    "GFSE-GUARDED-S512-admitted-suffix-limit-exact": 6879,
+    "GFSE-GUARDED-S513-admitted-suffix-limit-plus-one": 54020,
+    "GFSE-KEYSET-S600-productive-nonempty-remainder": 55523
+  },
+  "observed": {
+    "temporary_blocks": 0,
+    "local_blocks": 0,
+    "wal_records": 0,
+    "sentinel_budget_violations": 0,
+    "inactive_branch_executions": 0
+  }
+}

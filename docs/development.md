@@ -34,6 +34,11 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 export CONNECTION_STRING="neo4j://neo4j:weneedbetterpasswords@localhost:7687"
 ```
 
+Integration and fixture-loading GraphBench runs mutate the selected database.
+GraphBench `-existing-graph` mode rejects writes and validates before/after
+cardinalities. Its PostgreSQL sessions remain read-write so temporary traversal
+workspaces retain production behavior.
+
 Use backend-specific targets when needed:
 
 ```bash
@@ -59,7 +64,17 @@ Run:
 make format
 ```
 
-The target uses `goimports`; install it locally if it is missing from your environment.
+The target uses `goimports`; install it locally if it is missing from your
+environment. Sandboxed or nonstandard installations can supply its explicit
+path without changing `PATH`:
+
+```bash
+make format GOIMPORTS_CMD=/absolute/path/to/goimports
+```
+
+`make lint` runs the standard Go vet analyzers across the repository. The unreachable-code analyzer is rerun only for
+handwritten packages because ANTLR emits intentional terminal branches in `cypher/parser`; generated parser code still
+receives every other vet analyzer.
 
 ## Quality And Metrics
 
@@ -108,7 +123,8 @@ The defaults can be adjusted with `CYCLO_TOP`, `CYCLO_OVER`, `CRAP_TOP`, `CRAP_O
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
-writes JSONL captures and markdown/JSON summaries under `.coverage/`.
+writes JSONL captures and markdown/JSON summaries under `.coverage/`. Fixture loading requires the same destructive
+acknowledgement and exact credential-free allowlist entries as integration testing.
 
 Run it when changing PostgreSQL Cypher planning, lowering, or SQL emission. The summaries rank expensive PostgreSQL
 plans and report recursive CTEs, `SubPlan`, `Function Scan on unnest`, planned/applied optimizer lowerings, and
@@ -120,13 +136,67 @@ See [Plan Corpus Capture](../cmd/plancorpus/README.md) for flags and review guid
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`.
 
-Current modes are:
+Implemented modes are:
 
 - `postgres_sql`
-- `local_traversal`
 - `neo4j`
+
+`local_traversal` emits non-gating `not_implemented` diagnostics only; it is not an implemented executor.
 
 AGE is reference-design input only and is not a direct comparison mode. The command can emit JSONL records plus
 Markdown and JSON summaries, and can compare current timings against a previous JSONL baseline.
 
+The tool-only `-postgres-expansion-suffix-reverse-retry` mode measures the
+reverse-only fixed-suffix P1 candidate with exact forward retry inside one
+Repeatable Read transaction. It requires diagnostic traversal telemetry and a
+pool size of one; see the
+[frozen development protocol](experiments/suffix_reverse_retry_v1.md) before
+selecting cases or overriding caps.
+
+The tool-only `-postgres-expansion-suffix-route-component` mode measures one
+exact suffix-seeded reverse statement for the default-off SQL-routing
+preflight. It requires Repeatable Read, diagnostic traversal telemetry, and a
+pool size of one. It forbids probes, retries, cap overrides, cache behavior,
+and production manifests; see the
+[preimplementation contract](experiments/sql_strategy_routing_preflight_v1.md).
+
+`-postgres-suffix-route-component-closure` is the separately frozen,
+measurement-only closure for that preflight. It is valid for either the
+ordinary incumbent or the explicitly forced direct component, but requires the
+same Repeatable Read/diagnostic/size-one-pool contract plus positive declared
+session and pool workspace ceilings. It records fresh prepared-miss,
+same-session prepared-hit, and release/reacquisition strata with client and
+raw-PGX waterfalls. Each raw sample records a normalized public-observation
+SHA-256 that must agree with the primary CySQL result and every closure
+stratum. It cannot be combined with reference, concurrency,
+orientation, retry, guard, force, or production-manifest modes and does not
+select an executor. The exact roster and acceptance conditions are in the
+[closure protocol](../benchmark/testdata/scale/protocols/sql_strategy_routing_component_closure_v1.json).
+
+The PostgreSQL scale-plan correctness gate shares the scale runner. It checks the
+required stable query-form IDs, declared read/write cardinalities, rollback-safe
+mutation post-state, `EXPLAIN ANALYZE` capture, and stable plan invariants. It
+runs under `make test_all` for PostgreSQL or can be selected directly:
+
+```bash
+CONNECTION_STRING="$PG_CONNECTION_STRING" \
+  go test -tags manual_integration ./cmd/graphbench \
+  -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
+  -count=1
+```
+
+Store graphbench and plan-corpus captures under `.coverage/`; they are
+environment-specific review artifacts, not committed correctness goldens.
+
 See [Graph Benchmark Capture](../cmd/graphbench/README.md) for command examples.
+
+## BloodHound Source-Parity Audits
+
+When the reviewed BHE or BHCE snapshots change, repeat the call-site inventory,
+active-entry-point trace, normalized query-form mapping, and commit recording in
+[BloodHound Regression Source Parity](regression_source_parity.md).
+
+Dormant `FUTURE-*` forms stay manifest-only until a reviewed caller is enabled.
+The unit suites reject dormant IDs from both shared plan inputs and scale cases;
+activating a form requires updating those gates together with its required
+semantic, plan, and scale coverage.

@@ -20,10 +20,12 @@ func NewExpressionListRewriter() walk.Visitor[cypher.SyntaxNode] {
 	}
 }
 
+// pushExpression records a syntax node as the current ancestor during traversal.
 func (s *ExpressionListRewriter) pushExpression(expression cypher.SyntaxNode) {
 	s.descentStack = append(s.descentStack, expression)
 }
 
+// peekExpression returns the nearest ancestor syntax node without removing it.
 func (s *ExpressionListRewriter) peekExpression() (cypher.SyntaxNode, bool) {
 	if len(s.descentStack) == 0 {
 		return nil, false
@@ -32,6 +34,7 @@ func (s *ExpressionListRewriter) peekExpression() (cypher.SyntaxNode, bool) {
 	return s.descentStack[len(s.descentStack)-1], true
 }
 
+// peekExpressionList returns the nearest ancestor when it supports list replacement operations.
 func (s *ExpressionListRewriter) peekExpressionList() (cypher.ExpressionList, bool) {
 	if ancestorNode, hasPrevious := s.peekExpression(); hasPrevious {
 		ancestorExpressionList, isExpressionList := ancestorNode.(cypher.ExpressionList)
@@ -41,6 +44,7 @@ func (s *ExpressionListRewriter) peekExpressionList() (cypher.ExpressionList, bo
 	return nil, false
 }
 
+// hasNegationAncestor reports whether traversal is currently nested beneath a negation.
 func (s *ExpressionListRewriter) hasNegationAncestor() bool {
 	for idx := len(s.descentStack) - 1; idx >= 0; idx-- {
 		if _, isNegation := s.descentStack[idx].(*cypher.Negation); isNegation {
@@ -51,10 +55,23 @@ func (s *ExpressionListRewriter) hasNegationAncestor() bool {
 	return false
 }
 
+// hasDisjunctionAncestor reports whether traversal is currently nested beneath a disjunction.
+func (s *ExpressionListRewriter) hasDisjunctionAncestor() bool {
+	for idx := len(s.descentStack) - 1; idx >= 0; idx-- {
+		if _, isDisjunction := s.descentStack[idx].(*cypher.Disjunction); isDisjunction {
+			return true
+		}
+	}
+
+	return false
+}
+
+// popExpression removes the current node from the traversal ancestry stack.
 func (s *ExpressionListRewriter) popExpression() {
 	s.descentStack = s.descentStack[:len(s.descentStack)-1]
 }
 
+// unwrapParenthetical removes nested parentheses so rewrite rules can inspect the underlying syntax node.
 func unwrapParenthetical(expression cypher.SyntaxNode) cypher.SyntaxNode {
 	cursor := expression
 
@@ -71,6 +88,7 @@ func unwrapParenthetical(expression cypher.SyntaxNode) cypher.SyntaxNode {
 	return cursor
 }
 
+// rewriteStringNegation preserves null-inclusive semantics when Neo4j evaluates negated string comparisons.
 func (s *ExpressionListRewriter) rewriteStringNegation(negation *cypher.Negation) {
 	if ancestorExpressionList, isExpressionList := s.peekExpressionList(); isExpressionList {
 		switch typedNegatedExpression := unwrapParenthetical(negation.Expression).(type) {
@@ -94,6 +112,7 @@ func (s *ExpressionListRewriter) rewriteStringNegation(negation *cypher.Negation
 	}
 }
 
+// peekLastMatch returns the nearest enclosing MATCH clause in the traversal stack.
 func (s *ExpressionListRewriter) peekLastMatch() (*cypher.Match, bool) {
 	for idx := len(s.descentStack) - 1; idx >= 0; idx-- {
 		if lastMatch, typeOK := s.descentStack[idx].(*cypher.Match); typeOK {
@@ -109,6 +128,7 @@ func (s *ExpressionListRewriter) Enter(node cypher.SyntaxNode) {
 	s.pushExpression(node)
 }
 
+// Exit removes empty expression lists, folds eligible relationship kinds into MATCH, and normalizes negated or parenthesized expressions.
 func (s *ExpressionListRewriter) Exit(node cypher.SyntaxNode) {
 	attemptSelfRemoval := func() {
 		if ancestorNode, hasPrevious := s.peekExpression(); hasPrevious {
@@ -131,7 +151,11 @@ func (s *ExpressionListRewriter) Exit(node cypher.SyntaxNode) {
 		if variable, typeOK := typedNode.Reference.(*cypher.Variable); !typeOK {
 			s.SetErrorf("expected a variable as the reference for a kind matcher but received: %T", node)
 		} else if variable.Symbol == query.EdgeSymbol {
-			if s.hasNegationAncestor() {
+			// Relationship kinds can be folded into the match pattern only when
+			// doing so preserves their logical scope. A kind nested under a NOT or
+			// OR must remain in the WHERE expression; hoisting it would either
+			// invert the predicate or merge branch-local kinds into one pattern.
+			if s.hasNegationAncestor() || s.hasDisjunctionAncestor() {
 				return
 			}
 

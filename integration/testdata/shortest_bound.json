@@ -1,0 +1,33 @@
+{
+  "graph": {
+    "nodes": [
+      {"id": "start", "kinds": ["BoundNode"], "properties": {"name": "start"}},
+      {"id": "direct", "kinds": ["BoundNode"], "properties": {"name": "direct"}},
+      {"id": "long-mid", "kinds": ["BoundNode"]},
+      {"id": "diamond-left", "kinds": ["BoundNode"]},
+      {"id": "diamond-right", "kinds": ["BoundNode"]},
+      {"id": "diamond-end", "kinds": ["BoundNode"]},
+      {"id": "cycle-a", "kinds": ["BoundNode"]},
+      {"id": "cycle-b", "kinds": ["BoundNode"]},
+      {"id": "cycle-end", "kinds": ["BoundNode"]},
+      {"id": "typed-end", "kinds": ["BoundNode"]},
+      {"id": "disconnected", "kinds": ["BoundNode"]},
+      {"id": "wrong-direction", "kinds": ["BoundNode"]}
+    ],
+    "edges": [
+      {"start_id": "start", "end_id": "direct", "kind": "BoundEdge", "properties": {"route": "direct"}},
+      {"start_id": "start", "end_id": "long-mid", "kind": "BoundEdge"},
+      {"start_id": "long-mid", "end_id": "direct", "kind": "BoundEdge"},
+      {"start_id": "start", "end_id": "diamond-left", "kind": "BoundEdge"},
+      {"start_id": "start", "end_id": "diamond-right", "kind": "BoundEdge"},
+      {"start_id": "diamond-left", "end_id": "diamond-end", "kind": "BoundEdge"},
+      {"start_id": "diamond-right", "end_id": "diamond-end", "kind": "BoundEdge"},
+      {"start_id": "start", "end_id": "cycle-a", "kind": "BoundEdge"},
+      {"start_id": "cycle-a", "end_id": "cycle-b", "kind": "BoundEdge"},
+      {"start_id": "cycle-b", "end_id": "cycle-a", "kind": "BoundEdge"},
+      {"start_id": "cycle-b", "end_id": "cycle-end", "kind": "BoundEdge"},
+      {"start_id": "start", "end_id": "typed-end", "kind": "OtherBoundEdge"},
+      {"start_id": "wrong-direction", "end_id": "start", "kind": "BoundEdge"}
+    ]
+  }
+}

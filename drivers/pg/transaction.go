@@ -3,6 +3,8 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
@@ -10,56 +12,101 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
 	"github.com/specterops/dawgs/util/size"
 )
 
+// driver is the common execution surface implemented by pooled connections and explicit pgx transactions.
 type driver interface {
+	// Exec executes a statement and returns its PostgreSQL command tag.
 	Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error)
+
+	// Query executes a statement and returns its streaming row set.
 	Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error)
+
+	// QueryRow executes a statement whose first row is consumed through pgx.Row.
 	QueryRow(ctx context.Context, sql string, arguments ...any) pgx.Row
 }
 
+// inspectingDriver records SQL and arguments before delegating execution to a connection or transaction.
 type inspectingDriver struct {
+	// upstreamDriver receives each operation after its SQL and arguments have been inspected.
 	upstreamDriver driver
 }
 
+// Exec inspects and forwards a non-row SQL statement to the wrapped executor.
 func (s inspectingDriver) Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error) {
 	inspector().Inspect(sql, arguments)
 	return s.upstreamDriver.Exec(ctx, sql, arguments...)
 }
 
+// Query inspects and forwards a row-producing SQL statement to the wrapped executor.
 func (s inspectingDriver) Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error) {
 	inspector().Inspect(sql, arguments)
 	return s.upstreamDriver.Query(ctx, sql, arguments...)
 }
 
+// QueryRow inspects and forwards a single-row SQL statement to the wrapped executor.
 func (s inspectingDriver) QueryRow(ctx context.Context, sql string, arguments ...any) pgx.Row {
 	inspector().Inspect(sql, arguments)
 	return s.upstreamDriver.QueryRow(ctx, sql, arguments...)
 }
 
+// transaction binds query execution, schema resolution, and an optional pgx transaction to one graph operation context.
 type transaction struct {
-	schemaManager      *SchemaManager
-	queryExecMode      pgx.QueryExecMode
+	// schemaManager resolves target graphs, kind identifiers, and cached Cypher translations.
+	schemaManager *SchemaManager
+
+	// translationCache is selected for the physical connection leased by this
+	// transaction. Nil deliberately bypasses translation retention.
+	translationCache CypherTranslationCache
+
+	// queryExecMode selects the pgx execution protocol supplied with each query.
+	queryExecMode pgx.QueryExecMode
+
+	// queryResultsFormat selects the pgx wire format requested for returned columns.
 	queryResultsFormat pgx.QueryResultFormats
-	ctx                context.Context
-	conn               *pgxpool.Conn
-	tx                 pgx.Tx
-	targetSchema       graph.Graph
-	targetSchemaSet    bool
+
+	// ctx scopes all work performed by the graph transaction.
+	ctx context.Context
+
+	// conn is the acquired pooled connection underlying this transaction wrapper.
+	conn *pgxpool.Conn
+
+	// tx is the optional explicit PostgreSQL transaction used for transactional operations.
+	tx pgx.Tx
+
+	// isolation is the PostgreSQL snapshot level selected for this transaction.
+	isolation pgx.TxIsoLevel
+
+	// targetSchema identifies the graph selected explicitly for subsequent operations.
+	targetSchema graph.Graph
+
+	// targetSchemaSet distinguishes an explicit target from the zero-value graph schema.
+	targetSchemaSet bool
+
+	// topologyRouteDecisions is transaction-owned shadow routing state. It is
+	// allocated only after an explicit stable-snapshot transaction begins.
+	topologyRouteDecisions *topologyRouteDecisionCache
 }
 
+// newTransactionWrapper configures a graph transaction and optionally begins an explicit PostgreSQL transaction.
 func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManager *SchemaManager, cfg *Config, allocateTransaction bool) (*transaction, error) {
+	var physicalConnection *pgx.Conn
+	if conn != nil {
+		physicalConnection = conn.Conn()
+	}
+
 	wrapper := &transaction{
 		schemaManager:      schemaManager,
+		translationCache:   schemaManager.cypherTranslationCacheForConnection(physicalConnection),
 		queryExecMode:      cfg.QueryExecMode,
 		queryResultsFormat: cfg.QueryResultFormats,
 		ctx:                ctx,
 		conn:               conn,
+		isolation:          cfg.Options.IsoLevel,
 		targetSchemaSet:    false,
 	}
 
@@ -70,10 +117,14 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 			wrapper.tx = pgxTx
 		}
 	}
+	if wrapper.tx != nil && stableSnapshotIsolation(wrapper.isolation) {
+		wrapper.topologyRouteDecisions = newTopologyRouteDecisionCache()
+	}
 
 	return wrapper, nil
 }
 
+// driver returns an inspected executor backed by the active transaction or, when absent, the pooled connection.
 func (s *transaction) driver() driver {
 	if s.tx != nil {
 		return inspectingDriver{
@@ -86,10 +137,12 @@ func (s *transaction) driver() driver {
 	}
 }
 
+// GraphQueryMemoryLimit returns the memory limit applied to graph query processing.
 func (s *transaction) GraphQueryMemoryLimit() size.Size {
 	return s.schemaManager.graphQueryMemoryLimit
 }
 
+// WithGraph selects schema as the target graph for subsequent operations.
 func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
 	s.targetSchema = schema
 	s.targetSchemaSet = true
@@ -97,13 +150,17 @@ func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
 	return s
 }
 
+// Close rolls back an active PostgreSQL transaction and invalidates its route observations.
 func (s *transaction) Close() {
+	s.invalidateTopologyRouteDecisions()
 	if s.tx != nil {
 		s.tx.Rollback(s.ctx)
 		s.tx = nil
 	}
 }
 
+// getTargetGraph resolves the explicitly selected graph or falls back to the
+// driver's default graph.
 func (s *transaction) getTargetGraph() (model.Graph, error) {
 	if !s.targetSchemaSet {
 		// Look for a default graph target
@@ -117,6 +174,7 @@ func (s *transaction) getTargetGraph() (model.Graph, error) {
 	return s.schemaManager.AssertGraph(s, s.targetSchema)
 }
 
+// targetGraphID resolves the database ID of the transaction's explicit or default graph target.
 func (s *transaction) targetGraphID() (int32, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return 0, err
@@ -125,6 +183,7 @@ func (s *transaction) targetGraphID() (int32, error) {
 	}
 }
 
+// CreateNode inserts a node with properties and kinds into the target graph.
 func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Kind) (*graph.Node, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
@@ -152,7 +211,9 @@ func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Ki
 	}
 }
 
+// UpdateNode applies a node's pending kind and property changes to the target graph.
 func (s *transaction) UpdateNode(node *graph.Node) error {
+	s.invalidateTopologyRouteDecisions()
 	var (
 		properties       = node.Properties
 		updateStatements []graph.Criteria
@@ -180,12 +241,14 @@ func (s *transaction) UpdateNode(node *graph.Node) error {
 	}, updateStatements...)
 }
 
+// Nodes creates a node query scoped to the transaction's current graph target.
 func (s *transaction) Nodes() graph.NodeQuery {
 	return &nodeQuery{
 		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
 	}
 }
 
+// CreateRelationshipByIDs inserts a relationship with the supplied endpoints, kind, and properties.
 func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) (*graph.Relationship, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
@@ -215,7 +278,9 @@ func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, k
 	}
 }
 
+// UpdateRelationship applies a relationship's pending property changes to the target graph.
 func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error {
+	s.invalidateTopologyRouteDecisions()
 	var (
 		modifiedProperties    = relationship.Properties.ModifiedProperties()
 		deletedProperties     = relationship.Properties.DeletedProperties()
@@ -258,12 +323,15 @@ func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error
 	return err
 }
 
+// Relationships creates a relationship query scoped to the transaction's current graph target.
 func (s *transaction) Relationships() graph.RelationshipQuery {
 	return &relationshipQuery{
 		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
 	}
 }
 
+// query executes SQL with the transaction's configured execution mode and
+// result format, adding named parameters when present.
 func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, error) {
 	queryArgs := []any{s.queryExecMode, s.queryResultsFormat}
 
@@ -274,21 +342,181 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 	return s.driver().Query(s.ctx, query, queryArgs...)
 }
 
+// Query parses and translates Cypher through the schema caches, returning translation failures as graph results.
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
-	if parsedQuery, err := frontend.ParseCypher(frontend.NewContext(), query); err != nil {
+	if cypherMayMutate(query) {
+		s.invalidateTopologyRouteDecisions()
+	}
+	profile := SQLGenerationProfile{QueryClass: sqlGenerationQueryClass(query)}
+	if profile.QueryClass == "shortest_path" {
+		if provider, ok := s.schemaManager.translationCacheProvider.(StableSnapshotTraversalWorkspaceProvider); ok {
+			if err := provider.EnsureStableSnapshotTraversalWorkspaces(s.ctx, s.conn); err != nil {
+				s.recordSQLGenerationProfile(profile)
+				return graph.NewErrorResult(err)
+			}
+		}
+	}
+	parseStarted := time.Now()
+	parsedQuery, _, err := s.schemaManager.parseCache.Parse(query)
+	profile.Parse = time.Since(parseStarted)
+	if err != nil {
+		s.recordSQLGenerationProfile(profile)
 		return graph.NewErrorResult(err)
-	} else if graphTarget, err := s.getTargetGraph(); err != nil {
+	}
+	graphStarted := time.Now()
+	graphTarget, err := s.getTargetGraph()
+	profile.Graph = time.Since(graphStarted)
+	if err != nil {
+		s.recordSQLGenerationProfile(profile)
 		return graph.NewErrorResult(err)
-	} else if translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID); err != nil {
-		return graph.NewErrorResult(err)
-	} else if sqlQuery, err := translate.Translated(translated); err != nil {
-		return graph.NewErrorResult(err)
+	}
+	policyStarted := time.Now()
+	shape := TraversalShape{}
+	if s.schemaManager.shouldClassifyTraversal() {
+		shape, _ = s.schemaManager.classifyTraversalShape(query, parsedQuery)
+	}
+	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
+	topologyPolicy, topologyPolicyIdentity := s.schemaManager.topologyFixedSuffixPolicyForShape(shape, s.isolation)
+	topologyEstimatorVersion := ""
+	maximumEdgeToNodeRatioPerMille := int64(0)
+	if topologyPolicy.enabled() {
+		topologyEstimatorVersion = topologyPolicy.compiledManifest.TopologyEstimatorVersion
+		maximumEdgeToNodeRatioPerMille = topologyPolicy.compiledManifest.TopologyThresholds["maximum_edge_to_node_ratio_per_mille"]
+	}
+	topologyCandidate := s.topologyRouteDecision(graphTarget.ID, shape, parameters, topologyPolicyIdentity, topologyEstimatorVersion, maximumEdgeToNodeRatioPerMille, topologyPolicy.enabled(), topologyPolicy.EnableTopologyFixedSuffixFirstUse)
+	profile.Policy = time.Since(policyStarted)
+	if topologyCandidate {
+		policy = topologyPolicy
+		policyIdentity = topologyPolicyIdentity
+	}
+	s.schemaManager.observeTraversalStrategySelection(query, shape, policy)
+	buildTranslation := func(activePolicy TraversalPolicy) func() (translate.Result, string, error) {
+		return func() (translate.Result, string, error) {
+			var translated translate.Result
+			var translateErr error
+			translateStarted := time.Now()
+			if activePolicy.enabled() {
+				if options, optionsErr := activePolicy.productionOptionsForShape(query, shape); optionsErr != nil {
+					return translate.Result{}, "", optionsErr
+				} else {
+					translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, options)
+				}
+			} else {
+				translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
+			}
+			profile.Translate += time.Since(translateStarted)
+			if translateErr != nil {
+				return translate.Result{}, "", translateErr
+			}
+			formatStarted := time.Now()
+			formatted, formatErr := translate.Translated(translated)
+			profile.Format += time.Since(formatStarted)
+			if formatErr == nil && activePolicy.enabled() && activePolicy.compiledManifest.Version == 2 {
+				if anchorErr := validateTraversalPromotionSQLAnchor(activePolicy.compiledManifest, formatted); anchorErr != nil {
+					return translate.Result{}, "", anchorErr
+				}
+			}
+			return translated, formatted, formatErr
+		}
+	}
+	translateCached := func(activePolicy TraversalPolicy, identity string) (string, map[string]any, error) {
+		builder := buildTranslation(activePolicy)
+		if s.translationCache == nil {
+			translated, formatted, err := builder()
+			if err != nil {
+				return "", nil, err
+			}
+			return formatted, translated.Parameters, nil
+		}
+		return s.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, identity, builder)
+	}
+	if topologyCandidate {
+		cacheStarted := time.Now()
+		candidateSQL, candidateParameters, candidateErr := translateCached(policy, policyIdentity)
+		if candidateErr != nil {
+			profile.Cache = time.Since(cacheStarted)
+			s.recordSQLGenerationProfile(profile)
+			return graph.NewErrorResult(candidateErr)
+		}
+		fallbackSQL, fallbackParameters, fallbackErr := translateCached(TraversalPolicy{}, policyIdentity+"-fallback")
+		profile.Cache = time.Since(cacheStarted)
+		if fallbackErr != nil {
+			s.recordSQLGenerationProfile(profile)
+			return graph.NewErrorResult(fallbackErr)
+		}
+		dispatchStarted := time.Now()
+		result := s.RawSuffixReverseRetry(candidateSQL, fallbackSQL, candidateParameters, fallbackParameters, SuffixReverseRetryLimits{
+			OutputRows:  policy.compiledManifest.Caps["output_row_limit"],
+			OutputBytes: policy.compiledManifest.Caps["output_bytes_limit"],
+		})
+		profile.Dispatch = time.Since(dispatchStarted)
+		s.recordSQLGenerationProfile(profile)
+		return result
+	}
+	buildCurrentTranslation := buildTranslation(policy)
+
+	var sqlQuery string
+	var translatedParameters map[string]any
+	cacheStarted := time.Now()
+	if s.translationCache == nil {
+		translated, translatedSQL, translateErr := buildCurrentTranslation()
+		if translateErr != nil {
+			profile.Cache = time.Since(cacheStarted)
+			s.recordSQLGenerationProfile(profile)
+			return graph.NewErrorResult(translateErr)
+		}
+		sqlQuery, translatedParameters = translatedSQL, translated.Parameters
 	} else {
-		return s.Raw(sqlQuery, translated.Parameters)
+		var translateErr error
+		sqlQuery, translatedParameters, translateErr = s.translationCache.TranslateWithPolicy(query, graphTarget.ID, parameters, policyIdentity, buildCurrentTranslation)
+		if translateErr != nil {
+			profile.Cache = time.Since(cacheStarted)
+			s.recordSQLGenerationProfile(profile)
+			return graph.NewErrorResult(translateErr)
+		}
+	}
+	profile.Cache = time.Since(cacheStarted)
+	dispatchStarted := time.Now()
+	result := s.raw(sqlQuery, translatedParameters)
+	profile.Dispatch = time.Since(dispatchStarted)
+	s.recordSQLGenerationProfile(profile)
+	return result
+}
+
+// recordSQLGenerationProfile sends generation timing to an optional connection collector.
+func (s *transaction) recordSQLGenerationProfile(profile SQLGenerationProfile) {
+	if collector, ok := s.schemaManager.translationCacheProvider.(SQLGenerationProfileCollector); ok {
+		collector.RecordSQLGenerationProfile(profile)
 	}
 }
 
+// sqlGenerationQueryClass groups a query for low-cardinality generation timing telemetry.
+func sqlGenerationQueryClass(query string) string {
+	if strings.Contains(strings.ToLower(query), "shortestpath") {
+		return "shortest_path"
+	}
+	return "other"
+}
+
+// cypherMayMutate conservatively detects mutation clauses that invalidate route observations.
+func cypherMayMutate(value string) bool {
+	lower := strings.ToLower(value)
+	for _, keyword := range []string{" create ", " merge ", " delete ", " detach delete ", " set ", " remove "} {
+		if strings.Contains(" "+lower+" ", keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+// Raw executes PostgreSQL SQL directly after invalidating topology route observations.
 func (s *transaction) Raw(query string, parameters map[string]any) graph.Result {
+	s.invalidateTopologyRouteDecisions()
+	return s.raw(query, parameters)
+}
+
+// raw executes PostgreSQL SQL without changing transaction routing state.
+func (s *transaction) raw(query string, parameters map[string]any) graph.Result {
 	if rows, err := s.query(query, parameters); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
@@ -300,7 +528,9 @@ func (s *transaction) Raw(query string, parameters map[string]any) graph.Result 
 	}
 }
 
+// Commit invalidates route observations and commits the active PostgreSQL transaction.
 func (s *transaction) Commit() error {
+	s.invalidateTopologyRouteDecisions()
 	if s.tx != nil {
 		return s.tx.Commit(s.ctx)
 	}

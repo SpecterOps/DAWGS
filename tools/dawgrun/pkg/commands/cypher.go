@@ -8,7 +8,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/kanmu/go-sqlfmt/sqlfmt"
 	cypherFormat "github.com/specterops/dawgs/cypher/models/cypher/format"
-	pgFormat "github.com/specterops/dawgs/cypher/models/pgsql/format"
+	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
@@ -19,10 +19,14 @@ import (
 )
 
 const (
+	// queryCypherOutputFormatTable selects tabular rendering for fetched rows.
 	queryCypherOutputFormatTable = "table"
-	queryCypherOutputFormatJSON  = "json"
+
+	// queryCypherOutputFormatJSON selects JSON rendering for fetched rows.
+	queryCypherOutputFormatJSON = "json"
 )
 
+// parseCmd describes the command that parses Cypher and prints its AST.
 func parseCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{"<...query>"},
@@ -40,6 +44,8 @@ func parseCmd() CommandDesc {
 	}
 }
 
+// translateToPsqlCmd describes the command that translates Cypher into
+// formatted PostgreSQL SQL.
 func translateToPsqlCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("translate-psql", flag.ContinueOnError)
 
@@ -94,12 +100,12 @@ func translateToPsqlCmd() CommandDesc {
 
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := pgFormat.NewOutputBuilder()
+			queryBuilder := format.NewOutputBuilder().WithTargetGraph(result.GraphID)
 			if result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}
 
-			sqlQuery, err := pgFormat.Statement(result.Statement, queryBuilder)
+			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
 			if err != nil {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
@@ -118,6 +124,7 @@ func translateToPsqlCmd() CommandDesc {
 	}
 }
 
+// explainAsPsqlCmd defines the interactive command that translates Cypher and asks PostgreSQL to explain the resulting SQL.
 func explainAsPsqlCmd() CommandDesc {
 	return CommandDesc{
 		args: []string{"<conn>", "<...query>"},
@@ -155,12 +162,12 @@ func explainAsPsqlCmd() CommandDesc {
 
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
-			queryBuilder := pgFormat.NewOutputBuilder()
+			queryBuilder := format.NewOutputBuilder().WithTargetGraph(result.GraphID)
 			if result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}
 
-			sqlQuery, err := pgFormat.Statement(result.Statement, queryBuilder)
+			sqlQuery, err := format.Statement(result.Statement, queryBuilder)
 			if err != nil {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
@@ -202,6 +209,8 @@ func explainAsPsqlCmd() CommandDesc {
 	}
 }
 
+// defaultGraphID returns a connection's configured default graph or the
+// translator fallback when no PostgreSQL default is available.
 func defaultGraphID(ctx *CommandContext, connName string) int32 {
 	if connName == "" {
 		return translate.DefaultGraphID
@@ -224,6 +233,8 @@ func defaultGraphID(ctx *CommandContext, connName string) int32 {
 	return translate.DefaultGraphID
 }
 
+// queryCypherCmd describes the command that executes Cypher and renders fetched
+// rows as a table or JSON.
 func queryCypherCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("query-cypher", flag.ContinueOnError)
 
@@ -313,16 +324,15 @@ func optimizeCypherCmd() CommandDesc {
 				return fmt.Errorf("could not format optimized query: %w", err)
 			}
 
-			fmt.Fprintf(ctx.output, "Original Query:\n")
+			fmt.Fprint(ctx.output, "Original Query:\n")
 			ctx.output.WriteHighlighted(originalQuery, "cypher")
-			fmt.Fprintf(ctx.output, "\n\n")
-
-			fmt.Fprintf(ctx.output, "Optimized Query:\n")
+			fmt.Fprint(ctx.output, "\n\n")
+			fmt.Fprint(ctx.output, "Optimized Query:\n")
 			ctx.output.WriteHighlighted(optimizedQuery, "cypher")
-			fmt.Fprintf(ctx.output, "\n\n")
+			fmt.Fprint(ctx.output, "\n\n")
 
 			includePredicateAttachments := false
-			fmt.Fprintf(ctx.output, "Optimization rules considered:\n")
+			fmt.Fprint(ctx.output, "Optimization rules considered:\n")
 			for _, ruleResult := range optimizationPlan.Rules {
 				isApplied := "not applied"
 				if ruleResult.Applied {
@@ -335,20 +345,20 @@ func optimizeCypherCmd() CommandDesc {
 
 				fmt.Fprintf(ctx.output, " - %s: %s\n", ruleResult.Name, isApplied)
 			}
-			fmt.Fprintf(ctx.output, "\n")
+			fmt.Fprint(ctx.output, "\n")
 
-			fmt.Fprintf(ctx.output, "Analysis:\n")
+			fmt.Fprint(ctx.output, "Analysis:\n")
 			ctx.output.WriteHighlighted(spew.Sdump(optimizationPlan.Analysis), "golang")
-			fmt.Fprintf(ctx.output, "\n")
+			fmt.Fprint(ctx.output, "\n")
 
-			fmt.Fprintf(ctx.output, "Lowering Plan:\n")
+			fmt.Fprint(ctx.output, "Lowering Plan:\n")
 			ctx.output.WriteHighlighted(spew.Sdump(optimizationPlan.LoweringPlan), "golang")
-			fmt.Fprintf(ctx.output, "\n")
+			fmt.Fprint(ctx.output, "\n")
 
 			if includePredicateAttachments {
-				fmt.Fprintf(ctx.output, "Predicate Attachments:\n")
+				fmt.Fprint(ctx.output, "Predicate Attachments:\n")
 				ctx.output.WriteHighlighted(spew.Sdump(optimizationPlan.PredicateAttachments), "golang")
-				fmt.Fprintf(ctx.output, "\n")
+				fmt.Fprint(ctx.output, "\n")
 			}
 
 			return nil

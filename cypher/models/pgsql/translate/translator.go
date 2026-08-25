@@ -12,45 +12,85 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-// DefaultGraphID is the graph_id used by callers that do not have a specific
-// graph target available (tests, tooling, and visualization passes that only
-// exercise translation output).
+// DefaultGraphID selects graph zero for tests and tooling that do not target a concrete graph.
 const DefaultGraphID int32 = 0
 
+// Translator walks an optimized Cypher AST and constructs the corresponding PostgreSQL AST.
 type Translator struct {
+	// Visitor supplies traversal control and error propagation for the Cypher walk.
 	walk.Visitor[cypher.SyntaxNode]
 
-	ctx            context.Context
-	kindMapper     *contextAwareKindMapper
-	graphID        int32
-	parameters     map[string]any
-	translation    Result
+	// ctx carries cancellation and deadlines through translation.
+	ctx context.Context
+	// kindMapper resolves graph kind names within the translation context.
+	kindMapper *contextAwareKindMapper
+	// graphID identifies the concrete graph partitions targeted by generated SQL.
+	graphID int32
+	// parameters is an isolated copy of the caller's Cypher parameter values.
+	parameters map[string]any
+	// translation accumulates the statement, generated parameters, and diagnostics.
+	translation Result
+	// treeTranslator lowers the current Cypher expression tree into PostgreSQL expressions.
 	treeTranslator *ExpressionTreeTranslator
-	query          *Query
-	scope          *Scope
-	unwindTargets  map[*cypher.Variable]struct{}
+	// query holds the PostgreSQL query model under construction.
+	query *Query
+	// scope tracks translated bindings and their materialization frames.
+	scope *Scope
+	// unwindTargets contains UNWIND variables awaiting source translation.
+	unwindTargets map[*cypher.Variable]struct{}
 
+	// collectIDMembershipAliases identifies collect projections eligible to carry scalar entity IDs.
 	collectIDMembershipAliases map[pgsql.Identifier]struct{}
-	collectIDProjectionDepth   int
+	// collectIDProjectionDepth tracks nesting within an ID-only collect projection.
+	collectIDProjectionDepth int
 
-	appliedLoweringCounts              map[string]int
-	patternTargets                     map[*cypher.PatternPart]optimize.PatternTarget
-	patternPredicateTargets            map[*cypher.PatternPredicate]optimize.PatternTarget
-	projectionPruningDecisions         map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
-	latePathDecisions                  map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
-	suffixPushdownDecisions            map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
-	predicatePlacementDecisions        map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
-	expandIntoDecisions                map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
-	traversalDirectionDecisions        map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
-	shortestPathStrategyDecisions      map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
-	shortestPathFilterDecisions        map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
-	limitPushdownDecisions             map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
-	patternPredicateDecisions          map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
-	exactRangeExpansionDecisions       map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision
+	// appliedLoweringCounts counts emitted applications of each planned lowering.
+	appliedLoweringCounts map[string]int
+	// appliedShortestPathExecutors retains the applied shortest path executors while Translator is assembled or evaluated.
+	appliedShortestPathExecutors map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor
+	// appliedExpansionSearchStrategies retains the applied expansion search strategies while Translator is assembled or evaluated.
+	appliedExpansionSearchStrategies map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy
+	// emittedExpansionSearchPolicies records runtime selection policies emitted for optimized expansions.
+	emittedExpansionSearchPolicies map[optimize.TraversalStepTarget]optimize.ExpansionSearchPolicy
+	// patternTargets maps source pattern parts to their stable optimizer coordinates.
+	patternTargets map[*cypher.PatternPart]optimize.PatternTarget
+	// patternPredicateTargets maps source pattern predicates to their stable optimizer coordinates.
+	patternPredicateTargets map[*cypher.PatternPredicate]optimize.PatternTarget
+	// projectionPruningDecisions indexes planned projection omissions by traversal target.
+	projectionPruningDecisions map[optimize.TraversalStepTarget]optimize.ProjectionPruningDecision
+	// latePathDecisions indexes deferred path-materialization decisions by traversal target.
+	latePathDecisions map[optimize.TraversalStepTarget][]optimize.LatePathMaterializationDecision
+	// suffixPushdownDecisions indexes fixed-suffix pushdown decisions by traversal target.
+	suffixPushdownDecisions map[optimize.TraversalStepTarget][]optimize.ExpansionSuffixPushdownDecision
+	// predicatePlacementDecisions indexes predicate attachment decisions by traversal target.
+	predicatePlacementDecisions map[optimize.TraversalStepTarget][]optimize.PredicatePlacementDecision
+	// expandIntoDecisions indexes bound-endpoint expansion choices by traversal target.
+	expandIntoDecisions map[optimize.TraversalStepTarget]optimize.ExpandIntoDecision
+	// traversalDirectionDecisions indexes physical traversal direction choices by traversal target.
+	traversalDirectionDecisions map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision
+	// shortestPathStrategyDecisions indexes directional shortest-path search choices by traversal target.
+	shortestPathStrategyDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision
+	// shortestPathFilterDecisions indexes shortest-path filter decisions by traversal target.
+	shortestPathFilterDecisions map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision
+	// shortestPathExecutorDecisions indexes planned shortest-path executor choices by traversal target.
+	shortestPathExecutorDecisions map[optimize.TraversalStepTarget]optimize.ShortestPathExecutorDecision
+	// expansionSearchStrategyDecisions indexes planned variable-expansion strategies by traversal target.
+	expansionSearchStrategyDecisions map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision
+	// limitPushdownDecisions indexes planned traversal limits by source target.
+	limitPushdownDecisions map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision
+	// patternPredicateDecisions indexes planned existence lowering by traversal target.
+	patternPredicateDecisions map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision
+	// exactRangeExpansionDecisions indexes fixed-depth unrolling choices by source target.
+	exactRangeExpansionDecisions map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision
+	// pathRelationshipPredicateDecisions indexes path quantifier lowering by stable quantifier target.
 	pathRelationshipPredicateDecisions map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision
-	quantifierTargets                  []optimize.QuantifierTarget
+	// fieldRequirementDecisions indexes binding representation requirements by query part and symbol.
+	fieldRequirementDecisions map[int]map[string]optimize.FieldRequirementDecision
+	// quantifierTargets records stable coordinates for visited quantified traversals.
+	quantifierTargets []optimize.QuantifierTarget
 }
 
+// NewTranslator initializes translation state for the supplied graph and copies the caller's parameter map.
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
 	if parameters == nil {
 		parameters = map[string]any{}
@@ -66,10 +106,12 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		ctxAwareKindMapper   = newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
 	)
 
-	return &Translator{
+	translator := &Translator{
 		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
 		translation: Result{
-			Parameters: translatedParameters,
+			Parameters:       translatedParameters,
+			ParameterSources: map[string]string{},
+			GraphID:          graphID,
 		},
 		ctx:            ctx,
 		kindMapper:     ctxAwareKindMapper,
@@ -80,8 +122,12 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		scope:          NewScope(),
 		unwindTargets:  map[*cypher.Variable]struct{}{},
 	}
+
+	translator.scope.SetGraphID(graphID)
+	return translator
 }
 
+// SetOptimizationPlan indexes lowering decisions by their stable targets for use during AST traversal.
 func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.patternTargets = optimize.IndexPatternTargets(plan.Query)
 	s.patternPredicateTargets = optimize.IndexPatternPredicateTargets(plan.Query)
@@ -93,10 +139,13 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	s.traversalDirectionDecisions = map[optimize.TraversalStepTarget]optimize.TraversalDirectionDecision{}
 	s.shortestPathStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathStrategyDecision{}
 	s.shortestPathFilterDecisions = map[optimize.TraversalStepTarget][]optimize.ShortestPathFilterDecision{}
+	s.shortestPathExecutorDecisions = map[optimize.TraversalStepTarget]optimize.ShortestPathExecutorDecision{}
+	s.expansionSearchStrategyDecisions = map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategyDecision{}
 	s.limitPushdownDecisions = map[optimize.TraversalStepTarget][]optimize.LimitPushdownDecision{}
 	s.patternPredicateDecisions = map[optimize.TraversalStepTarget]optimize.PatternPredicatePlacementDecision{}
 	s.exactRangeExpansionDecisions = map[optimize.TraversalStepTarget]optimize.ExactRangeExpansionDecision{}
 	s.pathRelationshipPredicateDecisions = map[optimize.QuantifierTarget]optimize.PathRelationshipPredicateDecision{}
+	s.fieldRequirementDecisions = map[int]map[string]optimize.FieldRequirementDecision{}
 
 	for _, decision := range plan.LoweringPlan.ProjectionPruning {
 		s.projectionPruningDecisions[decision.Target] = decision
@@ -130,6 +179,14 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 		s.shortestPathFilterDecisions[decision.Target] = append(s.shortestPathFilterDecisions[decision.Target], decision)
 	}
 
+	for _, decision := range plan.LoweringPlan.ShortestPathExecutor {
+		s.shortestPathExecutorDecisions[decision.Target] = decision
+	}
+
+	for _, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		s.expansionSearchStrategyDecisions[decision.Target] = decision
+	}
+
 	for _, decision := range plan.LoweringPlan.LimitPushdown {
 		s.limitPushdownDecisions[decision.Target] = append(s.limitPushdownDecisions[decision.Target], decision)
 	}
@@ -145,8 +202,18 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 	for _, decision := range plan.LoweringPlan.PathRelationshipPredicate {
 		s.pathRelationshipPredicateDecisions[decision.Target] = decision
 	}
+
+	for _, decision := range plan.LoweringPlan.FieldRequirements {
+		bySymbol := s.fieldRequirementDecisions[decision.QueryPartIndex]
+		if bySymbol == nil {
+			bySymbol = map[string]optimize.FieldRequirementDecision{}
+			s.fieldRequirementDecisions[decision.QueryPartIndex] = bySymbol
+		}
+		bySymbol[decision.Symbol] = decision
+	}
 }
 
+// Enter translates a Cypher syntax node when the walker reaches it.
 func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 	case *cypher.RegularQuery, *cypher.SingleQuery, *cypher.PatternElement,
@@ -227,6 +294,9 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 				} else {
 					// Lift the parameter value into the parameters map
 					s.translation.Parameters[parameterBinding.Identifier.String()] = negotiatedValue
+					if typedExpression.Symbol != "" {
+						s.translation.ParameterSources[parameterBinding.Identifier.String()] = typedExpression.Symbol
+					}
 					parameterBinding.Parameter = newParameter
 				}
 
@@ -238,7 +308,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		s.treeTranslator.PushOperand(binding.Parameter)
 
 	case *cypher.Variable:
-		if binding, isUnwindTarget, err := s.prepareUnwindTarget(typedExpression); err != nil {
+		if typedExpression.Symbol == cypher.TokenLiteralAsterisk {
+			// Greedy projections are expanded to their named scope bindings when
+			// the enclosing projection item is completed.
+			s.treeTranslator.PushOperand(pgsql.Identifier(cypher.TokenLiteralAsterisk))
+		} else if binding, isUnwindTarget, err := s.prepareUnwindTarget(typedExpression); err != nil {
 			s.SetError(err)
 		} else if isUnwindTarget {
 			s.treeTranslator.PushOperand(binding.Identifier)
@@ -334,6 +408,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	}
 }
 
+// resolveParameterValue returns the caller-supplied value for a Cypher parameter or reports an unknown parameter.
 func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
 	if value, hasValue := s.parameters[parameter.Symbol]; hasValue {
 		return value
@@ -342,6 +417,7 @@ func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
 	return parameter.Value
 }
 
+// coalescePropertyLookupExpression builds a coalesce call from a property lookup and translated fallback operands.
 func coalescePropertyLookupExpression(expression pgsql.Expression) pgsql.Expression {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
 		return pgsql.FunctionCall{
@@ -357,6 +433,7 @@ func coalescePropertyLookupExpression(expression pgsql.Expression) pgsql.Express
 	return expression
 }
 
+// rewriteNegatedStringPredicateExpression preserves Cypher null behavior when negating a string predicate.
 func rewriteNegatedStringPredicateExpression(expression pgsql.Expression) pgsql.Expression {
 	switch typedExpression := expression.(type) {
 	case *pgsql.Parenthetical:
@@ -387,6 +464,7 @@ func rewriteNegatedStringPredicateExpression(expression pgsql.Expression) pgsql.
 	return expression
 }
 
+// Exit builds the SQL model fragment responsible for exit.
 func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 
@@ -639,27 +717,170 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	}
 }
 
+// Result contains the translated PostgreSQL statement, parameters, graph target, and optimization diagnostics.
 type Result struct {
-	Statement    pgsql.Statement
-	Parameters   map[string]any
+	// Statement is the translated PostgreSQL AST.
+	Statement pgsql.Statement
+	// Parameters contains SQL parameters generated during translation.
+	Parameters map[string]any
+	// ParameterSources maps generated SQL parameter names back to Cypher parameter names.
+	ParameterSources map[string]string
+	// Optimization summarizes planned, applied, and skipped lowering decisions.
 	Optimization OptimizationSummary
+	// GraphID identifies the graph partitions targeted by the statement.
+	GraphID int32
 }
 
+// OptimizationSummary records which optimizer decisions were planned, applied, or skipped during translation.
 type OptimizationSummary struct {
-	Rules                []optimize.RuleResult          `json:"rules,omitempty"`
+	// Rules contains the semantic optimizer rule results in execution order.
+	Rules []optimize.RuleResult `json:"rules,omitempty"`
+	// PredicateAttachments records optimizer-selected predicate scopes.
 	PredicateAttachments []optimize.PredicateAttachment `json:"predicate_attachments,omitempty"`
-	PlannedLowerings     []optimize.LoweringDecision    `json:"planned_lowerings,omitempty"`
-	Lowerings            []optimize.LoweringDecision    `json:"lowerings,omitempty"`
-	SkippedLowerings     []SkippedLowering              `json:"skipped_lowerings,omitempty"`
-	LoweringPlan         *optimize.LoweringPlan         `json:"lowering_plan,omitempty"`
+	// PlannedLowerings summarizes lowering categories selected by the optimizer.
+	PlannedLowerings []optimize.LoweringDecision `json:"planned_lowerings,omitempty"`
+	// Lowerings summarizes lowering categories actually emitted by translation.
+	Lowerings []optimize.LoweringDecision `json:"lowerings,omitempty"`
+	// SkippedLowerings explains planned lowering applications that translation did not emit.
+	SkippedLowerings []SkippedLowering `json:"skipped_lowerings,omitempty"`
+	// TargetOutcomes reports selection and application results for each lowering target.
+	TargetOutcomes []TargetLoweringOutcome `json:"target_outcomes,omitempty"`
+	// LoweringPlan exposes the optimizer decisions used to translate the statement.
+	LoweringPlan *optimize.LoweringPlan `json:"lowering_plan,omitempty"`
 }
 
+// TargetLoweringOutcome reports how one planned lowering target was qualified, selected, and applied.
+type TargetLoweringOutcome struct {
+	// Lowering names the lowering pass that produced this outcome.
+	Lowering string `json:"lowering"`
+	// TargetKind identifies the kind of syntax or binding targeted by the lowering.
+	TargetKind string `json:"target_kind"`
+	// TraversalTarget locates a traversal-step target when the lowering applies to one.
+	TraversalTarget *optimize.TraversalStepTarget `json:"traversal_target,omitempty"`
+	// QueryPartIndex locates a query-part target when the lowering applies to one.
+	QueryPartIndex *int `json:"query_part_index,omitempty"`
+	// Symbol identifies a binding target when the lowering applies to one.
+	Symbol string `json:"symbol,omitempty"`
+	// Family names the candidate-selection family that produced this outcome.
+	Family string `json:"family,omitempty"`
+	// TraversalFamily preserves the SP/ASP family for analysis-only decisions
+	// whose outcome family must remain distinct from an executable traversal.
+	TraversalFamily string `json:"traversal_family,omitempty"`
+	// PlannedPolicy identifies the runtime policy intended for this candidate
+	// family, whether or not it was emitted.
+	PlannedPolicy string `json:"planned_policy,omitempty"`
+	// EmittedPolicy identifies a runtime policy present in translated SQL. A
+	// single incumbent or tool-forced arm has no emitted policy identity.
+	EmittedPolicy string `json:"emitted_policy,omitempty"`
+	// PlannedCandidates lists the candidates considered in preference order.
+	PlannedCandidates []string `json:"planned_candidates,omitempty"`
+	// EmittedCandidates lists the arms present in translated SQL. Runtime
+	// telemetry separately records which arm executed.
+	EmittedCandidates []string `json:"emitted_candidates,omitempty"`
+	// ProbeCaps records bounded evidence inputs for an expansion policy.
+	ProbeCaps *optimize.ExpansionSearchProbeCaps `json:"probe_caps,omitempty"`
+	// Admission supplies the admission input to the TargetLoweringOutcome contract.
+	Admission *optimize.ExpansionSearchAdmission `json:"admission,omitempty"`
+	// EndpointRoot and EndpointTerminal describe the bounded endpoint inputs
+	// considered by analysis without implying that translation emitted them.
+	EndpointRoot *optimize.EndpointResolutionInput `json:"endpoint_root,omitempty"`
+	// EndpointTerminal supplies the endpoint terminal input to the TargetLoweringOutcome contract.
+	EndpointTerminal *optimize.EndpointResolutionInput `json:"endpoint_terminal,omitempty"`
+	// EndpointPairClass records a correlation class when endpoint resolution
+	// must preserve a paired input rather than independent endpoint sets.
+	EndpointPairClass optimize.EndpointResolutionClass `json:"endpoint_pair_class,omitempty"`
+	// EndpointResolutionCaps records immutable 1/2/32/33 admission sentinels.
+	EndpointResolutionCaps *optimize.EndpointResolutionCaps `json:"endpoint_resolution_caps,omitempty"`
+	// PredicateClass and its source/index expose conservative traversal
+	// predicate placement analysis as a first-class target outcome.
+	PredicateClass optimize.TraversalPredicateClass `json:"predicate_class,omitempty"`
+	// PredicateSource supplies the predicate source input to the TargetLoweringOutcome contract.
+	PredicateSource string `json:"predicate_source,omitempty"`
+	// PredicateIndex supplies the predicate index input to the TargetLoweringOutcome contract.
+	PredicateIndex *int `json:"predicate_index,omitempty"`
+	// Scheduler identifies the selected shortest-path frontier scheduling policy.
+	Scheduler string `json:"scheduler,omitempty"`
+	// ExecutionBoundary identifies whether the selected executor is inline SQL,
+	// a stored helper, or a guarded multi-arm statement.
+	ExecutionBoundary string `json:"execution_boundary,omitempty"`
+	// Candidate is the specialized candidate proposed by analysis.
+	Candidate string `json:"candidate,omitempty"`
+	// EligibilityFacts records named qualification checks for the candidate.
+	EligibilityFacts []TargetEligibilityFact `json:"eligibility_facts,omitempty"`
+	// ObservationMode describes how downstream clauses consume the target.
+	ObservationMode string `json:"observation_mode,omitempty"`
+	// Direction selects the traversal orientation covered by the contract.
+	Direction string `json:"direction,omitempty"`
+	// PhysicalExpansion supplies the physical expansion input to the TargetLoweringOutcome contract.
+	PhysicalExpansion string `json:"physical_expansion,omitempty"`
+	// RelationshipKindCount is the number of statically resolved relationship kinds.
+	RelationshipKindCount int `json:"relationship_kind_count,omitempty"`
+	// UntypedRelationship reports whether the pattern omitted relationship kinds.
+	UntypedRelationship bool `json:"untyped_relationship,omitempty"`
+	// TopologyClassification summarizes logical direction, physical direction, and depth.
+	TopologyClassification string `json:"topology_classification,omitempty"`
+	// Eligible reports the structural qualification result when one is available.
+	Eligible *bool `json:"eligible,omitempty"`
+	// StaticallyEligible reports the literal- and kind-based qualification result when available.
+	StaticallyEligible *bool `json:"statically_eligible,omitempty"`
+	// SelectionMode records whether selection was automatic or forced by tooling.
+	SelectionMode string `json:"selection_mode,omitempty"`
+	// SelectorVersion identifies the policy version that ranked candidates.
+	SelectorVersion string `json:"selector_version,omitempty"`
+	// Fallback names the candidate used if the preferred lowering was not applied.
+	Fallback string `json:"fallback,omitempty"`
+	// MinimumDepth is the target's inclusive lower traversal-depth bound.
+	MinimumDepth *int64 `json:"minimum_depth,omitempty"`
+	// MaximumDepth is the target's inclusive upper traversal-depth bound when finite.
+	MaximumDepth *int64 `json:"maximum_depth,omitempty"`
+	// MaximumDepthSource distinguishes an explicit upper bound from the
+	// repository's existing effective cap for syntax-open shortest paths.
+	MaximumDepthSource string `json:"maximum_depth_source,omitempty"`
+	// StateLimit is the maximum intermediate-state count admitted by the candidate.
+	StateLimit int64 `json:"state_limit,omitempty"`
+	// FrontierLimit is the maximum current or queued frontier size admitted by a shortest-path candidate.
+	FrontierLimit int64 `json:"frontier_limit,omitempty"`
+	// PredecessorLimit is the maximum retained witness predecessor state admitted by a shortest-path candidate.
+	PredecessorLimit int64 `json:"predecessor_limit,omitempty"`
+	// EnumerationLimit is the maximum distinct ordered path count staged by an all-shortest-path candidate.
+	EnumerationLimit int64 `json:"enumeration_limit,omitempty"`
+	// OutputBytesLimit is the maximum staged ordered edge-array bytes admitted by an all-shortest-path candidate.
+	OutputBytesLimit int64 `json:"output_bytes_limit,omitempty"`
+	// EndpointLimit is the maximum endpoint-seed count admitted by the candidate.
+	EndpointLimit int64 `json:"endpoint_limit,omitempty"`
+	// SeedPredicateClass describes the predicate used to bound search seeds.
+	SeedPredicateClass string `json:"seed_predicate_class,omitempty"`
+	// PrefixLength is the number of fixed steps before the variable expansion.
+	PrefixLength int `json:"prefix_length,omitempty"`
+	// HasFinalLimit reports whether a final row limit influenced candidate selection.
+	HasFinalLimit bool `json:"has_final_limit,omitempty"`
+	// Selected names the candidate selected by the optimizer.
+	Selected string `json:"selected,omitempty"`
+	// Applied names the candidate actually emitted by translation.
+	Applied string `json:"applied,omitempty"`
+	// SkipReason explains why a planned candidate was not emitted.
+	SkipReason string `json:"skip_reason,omitempty"`
+}
+
+// TargetEligibilityFact reports one named qualification result in a translated target outcome.
+type TargetEligibilityFact struct {
+	// Name identifies the qualification check.
+	Name string `json:"name"`
+	// Eligible reports whether the target passed the named check.
+	Eligible bool `json:"eligible"`
+}
+
+// SkippedLowering groups SQL model state that must remain consistent while translating skipped lowering.
 type SkippedLowering struct {
-	Name   string `json:"name"`
+	// Name identifies the name.
+	Name string `json:"name"`
+	// Reason supplies the reason input to the SkippedLowering contract.
 	Reason string `json:"reason"`
-	Count  int    `json:"count,omitempty"`
+	// Count records the number of count.
+	Count int `json:"count,omitempty"`
 }
 
+// recordLowering increments the applied count for one lowering name.
 func (s *Translator) recordLowering(name string) {
 	if s.appliedLoweringCounts == nil {
 		s.appliedLoweringCounts = map[string]int{}
@@ -675,6 +896,34 @@ func (s *Translator) recordLowering(name string) {
 	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
 }
 
+// recordShortestPathExecutor builds the SQL model fragment responsible for record shortest path executor.
+func (s *Translator) recordShortestPathExecutor(target optimize.TraversalStepTarget, executor optimize.ShortestPathExecutor) {
+	if s.appliedShortestPathExecutors == nil {
+		s.appliedShortestPathExecutors = map[optimize.TraversalStepTarget]optimize.ShortestPathExecutor{}
+	}
+	s.appliedShortestPathExecutors[target] = executor
+	s.recordLowering(optimize.LoweringShortestPathExecutor)
+}
+
+// recordExpansionSearchStrategy builds the SQL model fragment responsible for record expansion search strategy.
+func (s *Translator) recordExpansionSearchStrategy(target optimize.TraversalStepTarget, strategy optimize.ExpansionSearchStrategy) {
+	if s.appliedExpansionSearchStrategies == nil {
+		s.appliedExpansionSearchStrategies = map[optimize.TraversalStepTarget]optimize.ExpansionSearchStrategy{}
+	}
+	s.appliedExpansionSearchStrategies[target] = strategy
+	s.recordLowering(optimize.LoweringExpansionSearchStrategy)
+}
+
+// recordExpansionSearchPolicy records a runtime expansion policy actually emitted for a traversal target.
+func (s *Translator) recordExpansionSearchPolicy(target optimize.TraversalStepTarget, policy optimize.ExpansionSearchPolicy) {
+	if s.emittedExpansionSearchPolicies == nil {
+		s.emittedExpansionSearchPolicies = map[optimize.TraversalStepTarget]optimize.ExpansionSearchPolicy{}
+	}
+	s.emittedExpansionSearchPolicies[target] = policy
+	s.recordLowering(optimize.LoweringExpansionSearchStrategy)
+}
+
+// appliedLoweringCountSnapshot merges optimizer-declared and translator-observed lowering counts into the snapshot used to diagnose unapplied plans.
 func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
 	applied := map[string]int{}
 
@@ -689,12 +938,14 @@ func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
 	return applied
 }
 
+// recordSkippedLowerings compares the plan with applied counts and emits aggregated skip diagnostics.
 func (s *Translator) recordSkippedLowerings() {
 	if s.translation.Optimization.LoweringPlan == nil {
 		return
 	}
 
 	applied := s.appliedLoweringCountSnapshot()
+	s.recordTargetOutcomes(*s.translation.Optimization.LoweringPlan)
 
 	for _, planned := range plannedLoweringCounts(*s.translation.Optimization.LoweringPlan) {
 		if planned.Count == 0 {
@@ -714,6 +965,271 @@ func (s *Translator) recordSkippedLowerings() {
 	}
 }
 
+// recordTargetOutcomes converts per-target plan decisions and applied choices into diagnostic outcomes.
+func (s *Translator) recordTargetOutcomes(plan optimize.LoweringPlan) {
+	if len(s.translation.Optimization.TargetOutcomes) != 0 {
+		return
+	}
+	for _, decision := range plan.ShortestPathExecutor {
+		target := decision.Target
+		eligible, staticallyEligible := decision.StructurallyEligible, decision.StaticallyEligible
+		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
+		applied := string(s.appliedShortestPathExecutors[target])
+		outcome := TargetLoweringOutcome{
+			Lowering:               optimize.LoweringShortestPathExecutor,
+			TargetKind:             "traversal",
+			TraversalTarget:        &target,
+			Family:                 decision.Family,
+			PlannedCandidates:      shortestPathCandidateNames(decision.PlannedCandidates),
+			Scheduler:              string(decision.Scheduler),
+			ExecutionBoundary:      decision.ExecutionBoundary,
+			EligibilityFacts:       shortestPathEligibilityFacts(decision.Eligibility),
+			ObservationMode:        string(decision.ObservationMode),
+			Direction:              decision.Direction.String(),
+			PhysicalExpansion:      string(decision.PhysicalExpansion),
+			RelationshipKindCount:  decision.RelationshipKindCount,
+			UntypedRelationship:    decision.UntypedRelationship,
+			TopologyClassification: string(decision.TopologyClassification),
+			Eligible:               &eligible,
+			StaticallyEligible:     &staticallyEligible,
+			SelectionMode:          decision.SelectionMode,
+			SelectorVersion:        decision.SelectorVersion,
+			Selected:               string(decision.SelectedExecutor),
+			Applied:                applied,
+			Fallback:               string(decision.FallbackExecutor),
+			SkipReason:             decision.FallbackReason,
+			MinimumDepth:           &minimumDepth,
+			MaximumDepth:           &maximumDepth,
+			MaximumDepthSource:     string(decision.MaximumDepthSource),
+			StateLimit:             decision.StateLimit,
+			FrontierLimit:          decision.FrontierLimit,
+			PredecessorLimit:       decision.PredecessorLimit,
+			EnumerationLimit:       decision.EnumerationLimit,
+			OutputBytesLimit:       decision.OutputBytesLimit,
+		}
+		if decision.SelectedExecutor == optimize.ShortestPathExecutorASPI1DAG && applied == string(optimize.ShortestPathExecutorASPI1DAG) {
+			outcome.Candidate = string(optimize.ShortestPathExecutorASPI1DAG)
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyASPI1GuardedV1
+			outcome.EmittedCandidates = []string{
+				string(optimize.ShortestPathExecutorASPI1DAG),
+				string(optimize.ShortestPathExecutorASPA1DAG),
+			}
+		}
+		if decision.SelectedExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness && applied == string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness) {
+			outcome.Candidate = string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness)
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyI1CanonicalGuardedV1
+			outcome.EmittedCandidates = []string{
+				string(optimize.ShortestPathExecutorI1CanonicalPredecessorWitness),
+				string(optimize.ShortestPathExecutorS4CanonicalWitness),
+			}
+		}
+		if decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance && applied == string(optimize.ShortestPathExecutorI2GuardedDistance) {
+			outcome.Candidate = string(optimize.ShortestPathExecutorI2GuardedDistance)
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyI2DistanceGuardedV1
+			outcome.EmittedCandidates = []string{
+				string(optimize.ShortestPathExecutorI2GuardedDistance),
+				string(optimize.ShortestPathExecutorS4CanonicalDistance),
+			}
+		}
+		if isV2GuardedDistanceExecutor(decision.SelectedExecutor) && applied == string(decision.SelectedExecutor) {
+			outcome.Candidate = string(decision.SelectedExecutor)
+			outcome.EmittedPolicy = optimize.ShortestPathPolicyI2DistanceGuardedV2
+			outcome.EmittedCandidates = []string{
+				string(decision.SelectedExecutor),
+				string(optimize.ShortestPathExecutorS4CanonicalDistance),
+			}
+		}
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, outcome)
+	}
+	for _, decision := range plan.ExpansionSearchStrategy {
+		target := decision.Target
+		eligible, staticallyEligible := decision.StructurallyEligible, decision.StaticallyEligible
+		minimumDepth, maximumDepth := decision.MinimumDepth, decision.MaximumDepth
+		applied := string(s.appliedExpansionSearchStrategies[target])
+		probeCaps, admission := decision.ProbeCaps, decision.Admission
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
+			Lowering:           optimize.LoweringExpansionSearchStrategy,
+			TargetKind:         "traversal",
+			TraversalTarget:    &target,
+			Family:             decision.Family,
+			PlannedPolicy:      string(decision.PlannedPolicy),
+			EmittedPolicy:      string(decision.EmittedPolicy),
+			PlannedCandidates:  expansionSearchCandidateNames(decision.PlannedCandidates),
+			EmittedCandidates:  expansionSearchCandidateNames(decision.EmittedCandidates),
+			ExecutionBoundary:  decision.ExecutionBoundary,
+			ProbeCaps:          &probeCaps,
+			Admission:          &admission,
+			Candidate:          string(decision.CandidateStrategy),
+			EligibilityFacts:   expansionSearchEligibilityFacts(decision.EligibilityFacts),
+			ObservationMode:    string(decision.ObservationMode),
+			Eligible:           &eligible,
+			StaticallyEligible: &staticallyEligible,
+			SelectionMode:      decision.SelectionMode,
+			SelectorVersion:    decision.SelectorVersion,
+			Selected:           string(decision.SelectedStrategy),
+			Applied:            applied,
+			Fallback:           string(decision.FallbackStrategy),
+			SkipReason:         decision.FallbackReason,
+			MinimumDepth:       &minimumDepth,
+			MaximumDepth:       &maximumDepth,
+			StateLimit:         decision.StateLimit,
+			EndpointLimit:      decision.EndpointLimit,
+			SeedPredicateClass: decision.SeedPredicateClass,
+			PrefixLength:       decision.PrefixLength,
+			HasFinalLimit:      decision.HasFinalLimit,
+		})
+	}
+	for _, decision := range plan.EndpointResolution {
+		target := decision.Target
+		eligible, staticallyEligible := decision.StructurallyEligible, decision.StaticallyEligible
+		root, terminal, caps := decision.Root, decision.Terminal, decision.Caps
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
+			Lowering:               optimize.LoweringEndpointResolution,
+			TargetKind:             "endpoint_resolution",
+			TraversalTarget:        &target,
+			Family:                 "endpoint_resolution",
+			TraversalFamily:        decision.Family,
+			PlannedCandidates:      endpointResolutionCandidateNames(decision.PlannedCandidates),
+			EndpointRoot:           &root,
+			EndpointTerminal:       &terminal,
+			EndpointPairClass:      decision.PairClass,
+			EndpointResolutionCaps: &caps,
+			Candidate:              string(decision.CandidatePlan),
+			EligibilityFacts:       endpointResolutionEligibilityFacts(decision.EligibilityFacts),
+			Eligible:               &eligible,
+			StaticallyEligible:     &staticallyEligible,
+			SelectionMode:          decision.SelectionMode,
+			SelectorVersion:        decision.SelectorVersion,
+			Selected:               string(decision.SelectedPlan),
+			Applied:                string(decision.SelectedPlan),
+			Fallback:               string(decision.FallbackPlan),
+			SkipReason:             decision.FallbackReason,
+		})
+	}
+	for _, decision := range plan.TraversalPredicate {
+		target, predicateIndex := decision.Target, decision.PredicateIndex
+		eligible, staticallyEligible := decision.StructurallyEligible, decision.StaticallyEligible
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
+			Lowering:           optimize.LoweringTraversalPredicateClassification,
+			TargetKind:         "traversal_predicate",
+			TraversalTarget:    &target,
+			Family:             "traversal_predicate",
+			PlannedCandidates:  traversalPredicateCandidateNames(decision.PlannedCandidates),
+			PredicateClass:     decision.Class,
+			PredicateSource:    decision.Source,
+			PredicateIndex:     &predicateIndex,
+			Candidate:          string(decision.CandidatePlan),
+			EligibilityFacts:   traversalPredicateEligibilityFacts(decision.EligibilityFacts),
+			Eligible:           &eligible,
+			StaticallyEligible: &staticallyEligible,
+			SelectionMode:      decision.SelectionMode,
+			SelectorVersion:    decision.ClassifierVersion,
+			Selected:           string(decision.SelectedPlan),
+			Applied:            string(decision.SelectedPlan),
+			Fallback:           string(decision.FallbackPlan),
+			SkipReason:         decision.FallbackReason,
+		})
+	}
+	for _, decision := range plan.FieldRequirements {
+		queryPartIndex := decision.QueryPartIndex
+		s.translation.Optimization.TargetOutcomes = append(s.translation.Optimization.TargetOutcomes, TargetLoweringOutcome{
+			Lowering:       optimize.LoweringFieldRequirements,
+			TargetKind:     "field_requirement",
+			QueryPartIndex: &queryPartIndex,
+			Symbol:         decision.Symbol,
+			Selected:       "analysis_only",
+			SkipReason:     "analysis_metadata_only",
+		})
+	}
+}
+
+// shortestPathCandidateNames converts executor candidates to their stable diagnostic names.
+func shortestPathCandidateNames(candidates []optimize.ShortestPathExecutor) []string {
+	names := make([]string, len(candidates))
+	for idx, candidate := range candidates {
+		names[idx] = string(candidate)
+	}
+	return names
+}
+
+// expansionSearchCandidateNames converts expansion candidates to their stable diagnostic names.
+func expansionSearchCandidateNames(candidates []optimize.ExpansionSearchStrategy) []string {
+	names := make([]string, len(candidates))
+	for idx, candidate := range candidates {
+		names[idx] = string(candidate)
+	}
+	return names
+}
+
+// endpointResolutionCandidateNames converts analysis-only endpoint plans to
+// their stable diagnostic identities.
+func endpointResolutionCandidateNames(candidates []optimize.EndpointResolutionPlan) []string {
+	names := make([]string, len(candidates))
+	for idx, candidate := range candidates {
+		names[idx] = string(candidate)
+	}
+	return names
+}
+
+// traversalPredicateCandidateNames converts predicate-placement plans to
+// their stable diagnostic identities.
+func traversalPredicateCandidateNames(candidates []optimize.TraversalPredicatePlan) []string {
+	names := make([]string, len(candidates))
+	for idx, candidate := range candidates {
+		names[idx] = string(candidate)
+	}
+	return names
+}
+
+// shortestPathEligibilityFacts converts executor qualification facts to public diagnostic records.
+func shortestPathEligibilityFacts(facts []optimize.ShortestPathEligibilityFact) []TargetEligibilityFact {
+	outcomes := make([]TargetEligibilityFact, len(facts))
+	for idx, fact := range facts {
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
+	}
+	return outcomes
+}
+
+// expansionSearchEligibilityFacts converts search-strategy qualification facts to public diagnostic records.
+func expansionSearchEligibilityFacts(facts []optimize.ExpansionSearchEligibilityFact) []TargetEligibilityFact {
+	outcomes := make([]TargetEligibilityFact, len(facts))
+	for idx, fact := range facts {
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
+	}
+	return outcomes
+}
+
+// endpointResolutionEligibilityFacts builds the SQL model fragment responsible for endpoint resolution eligibility facts.
+func endpointResolutionEligibilityFacts(facts []optimize.EndpointResolutionEligibilityFact) []TargetEligibilityFact {
+	outcomes := make([]TargetEligibilityFact, len(facts))
+	for idx, fact := range facts {
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
+	}
+	return outcomes
+}
+
+// traversalPredicateEligibilityFacts builds the SQL model fragment responsible for traversal predicate eligibility facts.
+func traversalPredicateEligibilityFacts(facts []optimize.TraversalPredicateEligibilityFact) []TargetEligibilityFact {
+	outcomes := make([]TargetEligibilityFact, len(facts))
+	for idx, fact := range facts {
+		outcomes[idx] = TargetEligibilityFact{
+			Name:     fact.Name,
+			Eligible: fact.Eligible,
+		}
+	}
+	return outcomes
+}
+
+// plannedLoweringCounts converts each lowering target collection into a named count so planned work can be reconciled with applied work.
 func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 	return []SkippedLowering{
 		{
@@ -749,6 +1265,10 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 			Count: len(plan.ExpansionSuffixPushdown),
 		},
 		{
+			Name:  optimize.LoweringExpansionSearchStrategy,
+			Count: len(plan.ExpansionSearchStrategy),
+		},
+		{
 			Name:  optimize.LoweringPredicatePlacement,
 			Count: len(plan.PredicatePlacement) + len(plan.PatternPredicate),
 		},
@@ -768,10 +1288,22 @@ func plannedLoweringCounts(plan optimize.LoweringPlan) []SkippedLowering {
 			Name:  optimize.LoweringAggregateTraversalCount,
 			Count: len(plan.AggregateTraversalCount),
 		},
+		{
+			Name:  optimize.LoweringFieldRequirements,
+			Count: len(plan.FieldRequirements),
+		},
+		{
+			Name:  optimize.LoweringShortestPathExecutor,
+			Count: len(plan.ShortestPathExecutor),
+		},
 	}
 }
 
+// skippedLoweringReason explains why planned lowering work was not observed, including metadata-only analyses and lowerings superseded by a stronger fast path.
 func skippedLoweringReason(name string, applied map[string]int, plan optimize.LoweringPlan) string {
+	if name == optimize.LoweringFieldRequirements {
+		return "analysis_metadata_only"
+	}
 	if applied[optimize.LoweringCountStoreFastPath] > 0 && name != optimize.LoweringCountStoreFastPath {
 		return "superseded by CountStoreFastPath"
 	}
@@ -786,6 +1318,18 @@ func skippedLoweringReason(name string, applied map[string]int, plan optimize.Lo
 		if reason := skippedTraversalDirectionReason(plan); reason != "" {
 			return reason
 		}
+	case optimize.LoweringExpansionSearchStrategy:
+		for _, decision := range plan.ExpansionSearchStrategy {
+			if decision.FallbackReason != "" {
+				return decision.FallbackReason
+			}
+		}
+	case optimize.LoweringShortestPathExecutor:
+		for _, decision := range plan.ShortestPathExecutor {
+			if decision.FallbackReason != "" {
+				return decision.FallbackReason
+			}
+		}
 	default:
 		return "planned lowering did not change the emitted SQL"
 	}
@@ -793,6 +1337,7 @@ func skippedLoweringReason(name string, applied map[string]int, plan optimize.Lo
 	return "planned lowering did not change the emitted SQL"
 }
 
+// skippedTraversalDirectionReason returns the first recorded reason a planned traversal direction was retained.
 func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
 	for _, decision := range plan.TraversalDirection {
 		if !decision.Flip && decision.Reason != "" {
@@ -803,11 +1348,231 @@ func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
 	return ""
 }
 
+// ToolOptions controls experimental lowering selection exposed only to repository tooling.
+type ToolOptions struct {
+	// ForceShortestPathExecutor requests a qualified shortest-path executor instead of automatic selection.
+	ForceShortestPathExecutor optimize.ShortestPathExecutor
+	// GuardedDistanceStateLimit overrides SP-I2's cap+1 state admission only for
+	// diagnostic tool forcing. It must be paired with a positive frontier limit.
+	GuardedDistanceStateLimit int64
+	// GuardedDistanceFrontierLimit overrides SP-I2's per-level frontier admission
+	// only for diagnostic tool forcing. Production caps remain immutable.
+	GuardedDistanceFrontierLimit int64
+	// ForceExpansionSearchStrategy requests a qualified variable-expansion strategy instead of automatic selection.
+	ForceExpansionSearchStrategy optimize.ExpansionSearchStrategy
+	// ExpansionOrientationPolicy selects the immutable orientation selector
+	// identity used by an enabled tournament or shadow mode. The zero value
+	// preserves orientation-probe-v1.
+	ExpansionOrientationPolicy optimize.ExpansionSearchPolicy
+	// EnableExpansionOrientationTournament emits a guarded orientation policy
+	// for one qualified fixed-suffix expansion. It defaults to
+	// orientation-probe-v1 and is intentionally tool-only while selectors are
+	// being shadow-qualified.
+	EnableExpansionOrientationTournament bool
+	// EnableExpansionOrientationShadow emits the same bounded orientation
+	// probes and SQL-visible would_select metadata while executing only the
+	// exact incumbent traversal arm.
+	EnableExpansionOrientationShadow bool
+	// EnableExpansionSuffixReverseGuard emits bounded fixed-suffix reverse
+	// execution with exact stepwise-forward fallback for one statically eligible
+	// full-path observation. It is deliberately tool-only during qualification.
+	EnableExpansionSuffixReverseGuard bool
+	// EnableExpansionSuffixReverseRetry emits only the bounded fixed-suffix
+	// reverse candidate. The PostgreSQL tool transaction owns exact forward
+	// retry; this option never installs a production selector.
+	EnableExpansionSuffixReverseRetry bool
+	// EnableExpansionSuffixRouteComponent emits one exact suffix-seeded reverse
+	// statement with a runtime receipt. It is a default-off GraphBench component
+	// arm and has no retry, probe, cache, or production policy.
+	EnableExpansionSuffixRouteComponent bool
+	// SuffixReverseGuardSuffixRowLimit overrides the tool-only fixed-suffix
+	// payload cap. Zero selects ExpansionSearchSuffixReverseGuardSuffixRowLimit.
+	SuffixReverseGuardSuffixRowLimit int64
+	// SuffixReverseGuardStateLimit overrides the tool-only reverse-state cap.
+	// Zero selects ExpansionSearchSuffixReverseGuardStateLimit.
+	SuffixReverseGuardStateLimit int64
+	// SuffixReverseRetryOutputRowLimit caps buffered candidate rows. Zero selects
+	// ExpansionSearchSuffixReverseRetryOutputRowLimit.
+	SuffixReverseRetryOutputRowLimit int64
+	// SuffixReverseRetryOutputBytesLimit caps buffered candidate bytes. Zero
+	// selects ExpansionSearchSuffixReverseRetryOutputBytesLimit.
+	SuffixReverseRetryOutputBytesLimit int64
+	// DisableEndpointSeededReverse is an emergency production rollback switch.
+	DisableEndpointSeededReverse bool
+}
+
+// ProductionOptions contains the deliberately narrow subset of experimental
+// lowerings that may be enabled by the PostgreSQL driver's versioned,
+// query-allowlisted canary policy. The zero value preserves all incumbent
+// production choices.
+type ProductionOptions struct {
+	// ShortestPathExecutor supplies the shortest path executor input to the ProductionOptions contract.
+	ShortestPathExecutor optimize.ShortestPathExecutor
+	// ShortestPathCaps supplies the shortest path caps input to the ProductionOptions contract.
+	ShortestPathCaps *ProductionShortestPathCaps
+	// AuthorizedBucket supplies the authorized bucket input to the ProductionOptions contract.
+	AuthorizedBucket *ProductionTraversalBucket
+	// EnableExpansionOrientation indicates whether enable expansion orientation applies.
+	EnableExpansionOrientation bool
+	// EnableTopologyFixedSuffix enables the separately versioned production
+	// reverse-only fixed-suffix candidate. Callers must supply immutable caps;
+	// route selection and exact fallback remain driver responsibilities.
+	EnableTopologyFixedSuffix bool
+	// TopologyFixedSuffixCaps are the immutable candidate and output limits.
+	TopologyFixedSuffixCaps *ProductionFixedSuffixCaps
+	// ExpansionOrientationPolicy identifies the manifest-authorized immutable
+	// runtime formula. Production callers must set it explicitly when enabling
+	// orientation so v2 evidence cannot silently execute the v1 selector.
+	ExpansionOrientationPolicy optimize.ExpansionSearchPolicy
+	// DisableEndpointSeededReverse indicates whether disable endpoint seeded reverse applies.
+	DisableEndpointSeededReverse bool
+	// DisableInlineASPDAG indicates whether disable inline aspdag applies.
+	DisableInlineASPDAG bool
+	// DisableInlineSPWitness indicates whether disable inline sp witness applies.
+	DisableInlineSPWitness bool
+	// DisableInlineSPDistance is the emergency rollback switch for SP-I2-C-D.
+	DisableInlineSPDistance bool
+	// SelectorVersion identifies the schema version for selector version.
+	SelectorVersion string
+}
+
+// ProductionFixedSuffixCaps bind the fixed-suffix candidate's SQL and driver
+// buffering limits to one verified policy generation.
+type ProductionFixedSuffixCaps struct {
+	SuffixRowLimit   int64 `json:"suffix_row_limit"`
+	StateLimit       int64 `json:"state_limit"`
+	OutputRowLimit   int64 `json:"output_row_limit"`
+	OutputBytesLimit int64 `json:"output_bytes_limit"`
+}
+
+// ProductionShortestPathCaps are immutable manifest-authorized limits. They
+// are copied into the lowering decision and therefore into emitted SQL.
+type ProductionShortestPathCaps struct {
+	// StateLimit supplies the state limit input to the ProductionShortestPathCaps contract.
+	StateLimit int64 `json:"state_limit"`
+	// FrontierLimit caps rows admitted at any one breadth-first level.
+	FrontierLimit int64 `json:"frontier_limit"`
+	// PredecessorLimit supplies the predecessor limit input to the ProductionShortestPathCaps contract.
+	PredecessorLimit int64 `json:"predecessor_limit"`
+	// EnumerationLimit supplies the enumeration limit input to the ProductionShortestPathCaps contract.
+	EnumerationLimit int64 `json:"enumeration_limit"`
+	// OutputBytesLimit supplies the output bytes limit input to the ProductionShortestPathCaps contract.
+	OutputBytesLimit int64 `json:"output_bytes_limit"`
+}
+
+// ProductionTraversalBucket binds an exact-query authorization to the
+// structural target characteristics independently qualified by evidence.
+type ProductionTraversalBucket struct {
+	// Direction selects the traversal orientation covered by the contract.
+	Direction string `json:"direction"`
+	// ObservationMode identifies the observation mode.
+	ObservationMode string `json:"observation_mode"`
+	// MinimumDepth sets the inclusive lower traversal-depth bound.
+	MinimumDepth int64 `json:"minimum_depth"`
+	// MaximumDepth sets the inclusive upper traversal-depth bound.
+	MaximumDepth int64 `json:"maximum_depth"`
+	// RelationshipKindCount records the number of relationship kind count.
+	RelationshipKindCount int `json:"relationship_kind_count"`
+	// UntypedRelationship indicates whether untyped relationship applies.
+	UntypedRelationship bool `json:"untyped_relationship"`
+}
+
+// Translate optimizes and translates a Cypher query for the selected graph using production lowering choices.
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
+	return translate(ctx, cypherQuery, kindMapper, parameters, graphID, ToolOptions{})
+}
+
+// TranslateWithProductionOptions applies a validated canary policy. B
+// executors remain unavailable unless the driver has independently established
+// the required transaction snapshot; this function only controls lowering.
+func TranslateWithProductionOptions(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ProductionOptions) (Result, error) {
+	if options.SelectorVersion == "" {
+		return Result{}, fmt.Errorf("production traversal policy requires a selector version")
+	}
+	if options.EnableExpansionOrientation {
+		if !supportedExpansionOrientationPolicy(options.ExpansionOrientationPolicy) {
+			return Result{}, fmt.Errorf("production expansion orientation requires a supported explicit policy")
+		}
+		if options.SelectorVersion != string(options.ExpansionOrientationPolicy) {
+			return Result{}, fmt.Errorf("production expansion orientation selector %q does not match policy %q", options.SelectorVersion, options.ExpansionOrientationPolicy)
+		}
+	}
+	if options.ShortestPathExecutor != "" && !productionShortestPathExecutor(options.ShortestPathExecutor) {
+		return Result{}, fmt.Errorf("shortest-path executor %q is not production-canary eligible", options.ShortestPathExecutor)
+	}
+	if options.EnableTopologyFixedSuffix {
+		caps := options.TopologyFixedSuffixCaps
+		if caps == nil || caps.SuffixRowLimit <= 0 || caps.StateLimit <= 0 || caps.OutputRowLimit <= 0 || caps.OutputBytesLimit <= 0 {
+			return Result{}, fmt.Errorf("production topology fixed-suffix policy requires positive immutable caps")
+		}
+		if options.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixV1) && options.SelectorVersion != string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1) {
+			return Result{}, fmt.Errorf("production topology fixed-suffix selector requires a supported versioned topology selector")
+		}
+	}
+	toolOptions := ToolOptions{
+		ForceShortestPathExecutor:            options.ShortestPathExecutor,
+		EnableExpansionOrientationTournament: options.EnableExpansionOrientation,
+		ExpansionOrientationPolicy:           options.ExpansionOrientationPolicy,
+		DisableEndpointSeededReverse:         options.DisableEndpointSeededReverse,
+	}
+	if options.EnableTopologyFixedSuffix {
+		toolOptions.EnableExpansionSuffixReverseRetry = true
+		toolOptions.SuffixReverseGuardSuffixRowLimit = options.TopologyFixedSuffixCaps.SuffixRowLimit
+		toolOptions.SuffixReverseGuardStateLimit = options.TopologyFixedSuffixCaps.StateLimit
+		toolOptions.SuffixReverseRetryOutputRowLimit = options.TopologyFixedSuffixCaps.OutputRowLimit
+		toolOptions.SuffixReverseRetryOutputBytesLimit = options.TopologyFixedSuffixCaps.OutputBytesLimit
+	}
 	optimizedPlan, err := optimize.Optimize(cypherQuery)
 	if err != nil {
 		return Result{}, err
 	}
+	if err := applyToolOptions(&optimizedPlan, toolOptions); err != nil {
+		return Result{}, err
+	}
+	if err := applyProductionTopologyFixedSuffixAuthorization(&optimizedPlan, options); err != nil {
+		return Result{}, err
+	}
+	applyProductionShortestPathRollback(&optimizedPlan, options)
+	if err := applyProductionShortestPathAuthorization(&optimizedPlan, options); err != nil {
+		return Result{}, err
+	}
+	for idx := range optimizedPlan.LoweringPlan.ShortestPathExecutor {
+		decision := &optimizedPlan.LoweringPlan.ShortestPathExecutor[idx]
+		if decision.SelectionMode == "forced_tool" {
+			decision.SelectionMode = "production_canary"
+			decision.SelectorVersion = options.SelectorVersion
+		}
+	}
+	for idx := range optimizedPlan.LoweringPlan.ExpansionSearchStrategy {
+		decision := &optimizedPlan.LoweringPlan.ExpansionSearchStrategy[idx]
+		if decision.SelectionMode == "guarded_tool" {
+			decision.SelectionMode = "production_canary"
+			decision.SelectorVersion = options.SelectorVersion
+		}
+	}
+	return translateOptimized(ctx, optimizedPlan, kindMapper, parameters, graphID, toolOptions)
+}
+
+// TranslateForTool exposes qualified experimental lowerings to repository
+// tooling without making them selectable through the production query API.
+func TranslateForTool(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ToolOptions) (Result, error) {
+	return translate(ctx, cypherQuery, kindMapper, parameters, graphID, options)
+}
+
+// translate optimizes a Cypher query, applies optional tooling overrides, emits PostgreSQL, and records diagnostics.
+func translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ToolOptions) (Result, error) {
+	optimizedPlan, err := optimize.Optimize(cypherQuery)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := applyToolOptions(&optimizedPlan, options); err != nil {
+		return Result{}, err
+	}
+	return translateOptimized(ctx, optimizedPlan, kindMapper, parameters, graphID, options)
+}
+
+// translateOptimized builds the SQL model fragment responsible for translate optimized.
+func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options ToolOptions) (Result, error) {
 
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
 	if membershipAliases, err := collectIDMembershipAliases(optimizedPlan.Query); err != nil {
@@ -841,11 +1606,768 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
 		return Result{}, err
 	}
+	if options.ForceExpansionSearchStrategy != "" && len(translator.appliedExpansionSearchStrategies) == 0 {
+		return Result{}, fmt.Errorf("forced expansion-search strategy %q was selected but not emitted", options.ForceExpansionSearchStrategy)
+	}
+	if options.EnableExpansionOrientationTournament && len(translator.emittedExpansionSearchPolicies) == 0 {
+		return Result{}, fmt.Errorf("expansion orientation tournament was selected but not emitted")
+	}
+	if options.EnableExpansionOrientationShadow && len(translator.emittedExpansionSearchPolicies) == 0 {
+		return Result{}, fmt.Errorf("expansion orientation shadow was selected but not emitted")
+	}
+	if options.EnableExpansionSuffixReverseGuard && len(translator.emittedExpansionSearchPolicies) == 0 {
+		return Result{}, fmt.Errorf("expansion suffix reverse guard was selected but not emitted")
+	}
+	if options.EnableExpansionSuffixRouteComponent && len(translator.appliedExpansionSearchStrategies) == 0 {
+		return Result{}, fmt.Errorf("suffix route component was selected but not emitted")
+	}
+	if options.ForceShortestPathExecutor != "" && len(translator.appliedShortestPathExecutors) == 0 {
+		return Result{}, fmt.Errorf("forced shortest-path executor %q was selected but not emitted", options.ForceShortestPathExecutor)
+	}
 
 	translator.recordSkippedLowerings()
 	return translator.translation, nil
 }
 
+// productionShortestPathExecutor builds the SQL model fragment responsible for production shortest path executor.
+func productionShortestPathExecutor(executor optimize.ShortestPathExecutor) bool {
+	switch executor {
+	case optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+		optimize.ShortestPathExecutorASPI1DAG,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2:
+		return true
+	default:
+		return false
+	}
+}
+
+// applyProductionTopologyFixedSuffixAuthorization promotes the already
+// structurally checked reverse-only tool lowering to its distinct production
+// identity. It intentionally does not add a second arm to emitted SQL.
+func applyProductionTopologyFixedSuffixAuthorization(plan *optimize.Plan, options ProductionOptions) error {
+	if !options.EnableTopologyFixedSuffix {
+		return nil
+	}
+	matching := 0
+	for index := range plan.LoweringPlan.ExpansionSearchStrategy {
+		decision := &plan.LoweringPlan.ExpansionSearchStrategy[index]
+		if decision.Family != "fixed_suffix_expansion" || decision.SelectedStrategy != optimize.ExpansionSearchSuffixSeededReverse || decision.EmittedPolicy != optimize.ExpansionSearchPolicySuffixReverseRetryV1 {
+			continue
+		}
+		matching++
+		decision.PlannedPolicy = optimize.ExpansionSearchPolicy(options.SelectorVersion)
+		decision.EmittedPolicy = optimize.ExpansionSearchPolicy(options.SelectorVersion)
+		decision.SelectionMode = "production_canary"
+		decision.SelectorVersion = options.SelectorVersion
+	}
+	if matching == 0 {
+		return fmt.Errorf("production topology fixed-suffix policy matched no candidates")
+	}
+	return nil
+}
+
+// applyProductionShortestPathAuthorization applies production shortest path authorization.
+func applyProductionShortestPathAuthorization(plan *optimize.Plan, options ProductionOptions) error {
+	if options.ShortestPathExecutor == "" {
+		return nil
+	}
+	if options.DisableInlineASPDAG && options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG {
+		return fmt.Errorf("inline ASP DAG is disabled by production policy")
+	}
+	if options.DisableInlineSPDistance && options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 {
+		return fmt.Errorf("inline SP distance is disabled by production policy")
+	}
+	for idx := range plan.LoweringPlan.ShortestPathExecutor {
+		decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+		if decision.SelectedExecutor != options.ShortestPathExecutor || decision.SelectionMode != "forced_tool" {
+			continue
+		}
+		if options.AuthorizedBucket != nil {
+			bucket := options.AuthorizedBucket
+			if decision.Direction.String() != bucket.Direction ||
+				string(decision.ObservationMode) != bucket.ObservationMode ||
+				decision.MinimumDepth != bucket.MinimumDepth ||
+				decision.MaximumDepth != bucket.MaximumDepth ||
+				decision.RelationshipKindCount != bucket.RelationshipKindCount ||
+				decision.UntypedRelationship != bucket.UntypedRelationship {
+				return fmt.Errorf("production traversal target does not match its authorized promotion bucket")
+			}
+		}
+		if options.ShortestPathExecutor == optimize.ShortestPathExecutorASPI1DAG || options.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 {
+			if options.AuthorizedBucket == nil {
+				return fmt.Errorf("guarded inline shortest-path production policy requires an exact authorized bucket")
+			}
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
+				bucket := options.AuthorizedBucket
+				if options.SelectorVersion != optimize.ShortestPathSelectorStaticV6 {
+					return fmt.Errorf("canonical SP-I1 production policy requires selector %q", optimize.ShortestPathSelectorStaticV6)
+				}
+				if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationOnePath) ||
+					bucket.MinimumDepth != 1 || bucket.MaximumDepth != 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
+					return fmt.Errorf("canonical SP-I1 production policy requires the qualified inbound typed single-kind one-path depth 1..64 bucket")
+				}
+			}
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 {
+				bucket := options.AuthorizedBucket
+				if options.SelectorVersion != optimize.ShortestPathSelectorStaticV9HiddenFanInTail {
+					return fmt.Errorf("guarded SP-I2 V2 distance policy requires selector %q", optimize.ShortestPathSelectorStaticV9HiddenFanInTail)
+				}
+				if bucket.Direction != "inbound" || bucket.ObservationMode != string(optimize.ShortestPathObservationDistance) ||
+					bucket.MinimumDepth != 1 || bucket.MaximumDepth < 1 || bucket.MaximumDepth > 64 || bucket.RelationshipKindCount != 1 || bucket.UntypedRelationship {
+					return fmt.Errorf("guarded SP-I2 distance policy requires an exactly authorized inbound typed single-kind distance bucket")
+				}
+			}
+			if options.ShortestPathCaps == nil {
+				return fmt.Errorf("guarded inline shortest-path production policy requires immutable caps")
+			}
+			caps := options.ShortestPathCaps
+			if caps.StateLimit <= 0 || (options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 && caps.FrontierLimit <= 0) ||
+				(options.ShortestPathExecutor != optimize.ShortestPathExecutorI2GuardedDistanceV2 && (caps.PredecessorLimit <= 0 || caps.EnumerationLimit <= 0 || caps.OutputBytesLimit <= 0)) {
+				return fmt.Errorf("guarded inline shortest-path production policy requires positive immutable caps")
+			}
+			if options.ShortestPathExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2 &&
+				(caps.StateLimit != optimize.ShortestPathI2QualifiedStateLimit ||
+					caps.FrontierLimit != optimize.ShortestPathI2QualifiedFrontierLimit ||
+					caps.PredecessorLimit != 0 || caps.EnumerationLimit != 0 || caps.OutputBytesLimit != 0) {
+				return fmt.Errorf(
+					"guarded SP-I2 distance production policy requires exactly state_limit=%d and frontier_limit=%d",
+					optimize.ShortestPathI2QualifiedStateLimit,
+					optimize.ShortestPathI2QualifiedFrontierLimit,
+				)
+			}
+			decision.StateLimit = caps.StateLimit
+			decision.FrontierLimit = caps.FrontierLimit
+			decision.PredecessorLimit = caps.PredecessorLimit
+			decision.EnumerationLimit = caps.EnumerationLimit
+			decision.OutputBytesLimit = caps.OutputBytesLimit
+			decision.ExecutionBoundary = "guarded_dual_arm"
+		}
+		return nil
+	}
+	return fmt.Errorf("production shortest-path executor %q was not selected", options.ShortestPathExecutor)
+}
+
+// applyProductionShortestPathRollback is deliberately post-optimization: an
+// emergency switch must rewrite both a policy-forced candidate and any future
+// statically preferred candidate. Returning to the exact incumbent also resets
+// candidate-only limits and boundary metadata so cached SQL cannot retain a
+// disabled guarded arm.
+func applyProductionShortestPathRollback(plan *optimize.Plan, options ProductionOptions) {
+	for idx := range plan.LoweringPlan.ShortestPathExecutor {
+		decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+		switch {
+		case options.DisableInlineASPDAG && decision.SelectedExecutor == optimize.ShortestPathExecutorASPI1DAG:
+			decision.SelectedExecutor = optimize.ShortestPathExecutorASPA1DAG
+			decision.FallbackExecutor = optimize.ShortestPathExecutorIncumbentWorkspace
+		case options.DisableInlineSPWitness && decision.SelectedExecutor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness:
+			decision.SelectedExecutor = optimize.ShortestPathExecutorS4CanonicalWitness
+			decision.FallbackExecutor = optimize.ShortestPathExecutorIncumbentWorkspace
+		case options.DisableInlineSPDistance && (decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistance || decision.SelectedExecutor == optimize.ShortestPathExecutorI2GuardedDistanceV2):
+			decision.SelectedExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
+			decision.FallbackExecutor = optimize.ShortestPathExecutorIncumbentWorkspace
+		default:
+			continue
+		}
+		decision.Scheduler = decision.SelectedExecutor.Scheduler()
+		decision.ExecutionBoundary = decision.SelectedExecutor.ExecutionBoundary()
+		decision.SelectionMode = "production_kill_switch"
+		decision.SelectorVersion = options.SelectorVersion
+		decision.FallbackReason = "disabled_by_production_policy"
+		decision.FrontierLimit = 0
+		decision.PredecessorLimit = 0
+		decision.EnumerationLimit = 0
+		decision.OutputBytesLimit = 0
+	}
+}
+
+// applyToolOptions applies supported forced executor and expansion-strategy requests to an optimized plan.
+func applyToolOptions(plan *optimize.Plan, options ToolOptions) error {
+	if options.EnableExpansionOrientationTournament && options.EnableExpansionOrientationShadow {
+		return fmt.Errorf("expansion orientation tournament and shadow modes are mutually exclusive")
+	}
+	suffixMode := options.EnableExpansionSuffixReverseGuard || options.EnableExpansionSuffixReverseRetry || options.EnableExpansionSuffixRouteComponent
+	if suffixMode && (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) {
+		return fmt.Errorf("expansion suffix reverse modes and orientation modes are mutually exclusive")
+	}
+	if (options.EnableExpansionOrientationTournament || options.EnableExpansionOrientationShadow) && options.ForceExpansionSearchStrategy != "" {
+		return fmt.Errorf("expansion orientation policy and forced expansion-search strategy are mutually exclusive")
+	}
+	if suffixMode && options.ForceExpansionSearchStrategy != "" {
+		return fmt.Errorf("expansion suffix reverse modes and forced expansion-search strategy are mutually exclusive")
+	}
+	if !suffixMode && (options.SuffixReverseGuardSuffixRowLimit != 0 || options.SuffixReverseGuardStateLimit != 0) {
+		return fmt.Errorf("expansion suffix reverse caps require a suffix mode to be enabled")
+	}
+	if !options.EnableExpansionSuffixReverseRetry && (options.SuffixReverseRetryOutputRowLimit != 0 || options.SuffixReverseRetryOutputBytesLimit != 0) {
+		return fmt.Errorf("expansion suffix reverse retry output caps require retry to be enabled")
+	}
+	if options.GuardedDistanceStateLimit != 0 || options.GuardedDistanceFrontierLimit != 0 {
+		if !isGuardedDistanceExecutor(options.ForceShortestPathExecutor) {
+			return fmt.Errorf("guarded distance cap overrides require forcing an SP-I2 distance executor")
+		}
+		if options.GuardedDistanceStateLimit <= 0 || options.GuardedDistanceFrontierLimit <= 0 {
+			return fmt.Errorf("guarded distance cap overrides require positive state and frontier limits")
+		}
+	}
+	orientationPolicy, err := requestedExpansionOrientationPolicy(options)
+	if err != nil {
+		return err
+	}
+	if err := applyForcedShortestPathExecutor(plan, options.ForceShortestPathExecutor); err != nil {
+		return err
+	}
+	if options.GuardedDistanceStateLimit > 0 {
+		for idx := range plan.LoweringPlan.ShortestPathExecutor {
+			decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+			if isGuardedDistanceExecutor(decision.SelectedExecutor) && decision.SelectionMode == "forced_tool" {
+				decision.StateLimit = options.GuardedDistanceStateLimit
+				decision.FrontierLimit = options.GuardedDistanceFrontierLimit
+			}
+		}
+	}
+	if options.DisableEndpointSeededReverse {
+		for idx := range plan.LoweringPlan.ExpansionSearchStrategy {
+			decision := &plan.LoweringPlan.ExpansionSearchStrategy[idx]
+			if decision.SelectedStrategy == optimize.ExpansionSearchEndpointSeededReverse {
+				decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+				decision.EmittedPolicy = ""
+				decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward}
+				decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
+				decision.SelectionMode = "production_kill_switch"
+				decision.SelectorVersion = "endpoint-seeded-disabled-v1"
+				decision.FallbackReason = "disabled_by_production_policy"
+			}
+		}
+	}
+	if options.EnableExpansionOrientationTournament {
+		return applyExpansionOrientationTournamentPolicy(plan, orientationPolicy)
+	}
+	if options.EnableExpansionOrientationShadow {
+		return applyExpansionOrientationShadowPolicy(plan, orientationPolicy)
+	}
+	if (options.EnableExpansionSuffixReverseGuard && options.EnableExpansionSuffixReverseRetry) ||
+		(options.EnableExpansionSuffixReverseGuard && options.EnableExpansionSuffixRouteComponent) ||
+		(options.EnableExpansionSuffixReverseRetry && options.EnableExpansionSuffixRouteComponent) {
+		return fmt.Errorf("expansion suffix reverse guard, transaction retry, and direct component modes are mutually exclusive")
+	}
+	if options.EnableExpansionSuffixReverseGuard {
+		return applyExpansionSuffixReverseGuardPolicy(plan, options.SuffixReverseGuardSuffixRowLimit, options.SuffixReverseGuardStateLimit)
+	}
+	if options.EnableExpansionSuffixReverseRetry {
+		return applyExpansionSuffixReverseRetryPolicy(
+			plan,
+			options.SuffixReverseGuardSuffixRowLimit,
+			options.SuffixReverseGuardStateLimit,
+			options.SuffixReverseRetryOutputRowLimit,
+			options.SuffixReverseRetryOutputBytesLimit,
+		)
+	}
+	if options.EnableExpansionSuffixRouteComponent {
+		return applyExpansionSuffixRouteComponentPolicy(plan)
+	}
+	return applyForcedExpansionSearchStrategy(plan, options.ForceExpansionSearchStrategy)
+}
+
+// applyExpansionSuffixRouteComponentPolicy selects one exact, reverse-only
+// fixed-suffix arm for GraphBench component measurement. It deliberately has
+// no admission caps or fallback because those belong to a later, separately
+// frozen automatic-routing experiment.
+func applyExpansionSuffixRouteComponentPolicy(plan *optimize.Plan) error {
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family == "fixed_suffix_expansion" &&
+			decision.CandidateStrategy == optimize.ExpansionSearchSuffixSeededReverse &&
+			decision.StructurallyEligible && decision.StaticallyEligible {
+			matching = append(matching, idx)
+		}
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("suffix route component matched %d statically eligible fixed-suffix targets; expected exactly one", len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.PlannedPolicy = ""
+	decision.EmittedPolicy = ""
+	decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
+	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{}
+	decision.Admission = optimize.ExpansionSearchAdmission{}
+	decision.StateLimit = 0
+	decision.FallbackStrategy = ""
+	decision.SelectionMode = "component_tool"
+	decision.SelectorVersion = optimize.ExpansionSearchSelectorSuffixRouteComponentV1
+	decision.FallbackReason = ""
+	return nil
+}
+
+// applyExpansionSuffixReverseRetryPolicy selects one reverse-only full-path
+// candidate. Exact forward fallback is deliberately absent from emitted SQL;
+// the PostgreSQL tool transaction executes it only after a complete overflow.
+func applyExpansionSuffixReverseRetryPolicy(plan *optimize.Plan, suffixRowLimit, stateLimit, outputRowLimit, outputBytesLimit int64) error {
+	if suffixRowLimit == 0 {
+		suffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
+	}
+	if stateLimit == 0 {
+		stateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
+	}
+	if outputRowLimit == 0 {
+		outputRowLimit = optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit
+	}
+	if outputBytesLimit == 0 {
+		outputBytesLimit = optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit
+	}
+	if suffixRowLimit <= 0 || stateLimit <= 0 || outputRowLimit <= 0 || outputBytesLimit <= 0 {
+		return fmt.Errorf("expansion suffix reverse retry requires positive suffix, state, output-row, and output-byte limits")
+	}
+
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family == "fixed_suffix_expansion" &&
+			decision.CandidateStrategy == optimize.ExpansionSearchSuffixSeededReverse &&
+			decision.StructurallyEligible && decision.StaticallyEligible &&
+			decision.ObservationMode == optimize.ExpansionSearchObservationFullPath {
+			matching = append(matching, idx)
+		}
+	}
+	if len(matching) == 0 {
+		return fmt.Errorf("expansion suffix reverse retry matched no statically eligible full-path fixed-suffix targets")
+	}
+	for _, index := range matching {
+		decision := &plan.LoweringPlan.ExpansionSearchStrategy[index]
+		decision.PlannedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
+		decision.EmittedPolicy = optimize.ExpansionSearchPolicySuffixReverseRetryV1
+		decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
+		decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
+		decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryTransactionRetry
+		decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
+		decision.Admission = optimize.ExpansionSearchAdmission{
+			StateLimit:             stateLimit,
+			OutputRowLimit:         outputRowLimit,
+			OutputBytesLimit:       outputBytesLimit,
+			RequiresCompleteProbes: true,
+			FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
+		}
+		decision.StateLimit = stateLimit
+		decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
+		decision.SelectionMode = "transaction_retry_tool"
+		decision.SelectorVersion = string(optimize.ExpansionSearchPolicySuffixReverseRetryV1)
+		decision.FallbackReason = ""
+	}
+	return nil
+}
+
+// applyExpansionSuffixReverseGuardPolicy selects one full-path fixed-suffix
+// target for bounded reverse execution. No endpoint-only observation or
+// topology-scored orientation decision is admitted by this tool-only policy.
+func applyExpansionSuffixReverseGuardPolicy(plan *optimize.Plan, suffixRowLimit, stateLimit int64) error {
+	if suffixRowLimit == 0 {
+		suffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
+	}
+	if stateLimit == 0 {
+		stateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
+	}
+	if suffixRowLimit <= 0 || stateLimit <= 0 {
+		return fmt.Errorf("expansion suffix reverse guard requires positive suffix-row and state limits")
+	}
+
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family != "fixed_suffix_expansion" ||
+			decision.CandidateStrategy != optimize.ExpansionSearchSuffixSeededReverse ||
+			!decision.StructurallyEligible || !decision.StaticallyEligible ||
+			decision.ObservationMode != optimize.ExpansionSearchObservationFullPath {
+			continue
+		}
+		matching = append(matching, idx)
+	}
+	if len(matching) == 0 {
+		return fmt.Errorf("expansion suffix reverse guard has no statically eligible full-path fixed-suffix target")
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("expansion suffix reverse guard matched %d statically eligible full-path fixed-suffix targets; expected exactly one", len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.PlannedPolicy = optimize.ExpansionSearchPolicySuffixReverseGuardV1
+	decision.EmittedPolicy = optimize.ExpansionSearchPolicySuffixReverseGuardV1
+	decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{
+		optimize.ExpansionSearchSuffixSeededReverse,
+		optimize.ExpansionSearchStepwiseForward,
+	}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
+	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
+	decision.Admission = optimize.ExpansionSearchAdmission{
+		StateLimit:             stateLimit,
+		RequiresCompleteProbes: true,
+		FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
+	}
+	decision.StateLimit = stateLimit
+	decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.SelectionMode = "guarded_tool"
+	decision.SelectorVersion = optimize.ExpansionSearchSelectorFixedSuffixPathV1
+	decision.FallbackReason = ""
+	decision.EligibilityFacts = append(decision.EligibilityFacts, optimize.ExpansionSearchEligibilityFact{
+		Name:     "full_path_observation",
+		Eligible: true,
+	})
+	return nil
+}
+
+// requestedExpansionOrientationPolicy builds the SQL model fragment responsible for requested expansion orientation policy.
+func requestedExpansionOrientationPolicy(options ToolOptions) (optimize.ExpansionSearchPolicy, error) {
+	policy := options.ExpansionOrientationPolicy
+	if policy == "" {
+		return optimize.ExpansionSearchPolicyOrientationProbeV1, nil
+	}
+	if !options.EnableExpansionOrientationTournament && !options.EnableExpansionOrientationShadow {
+		return "", fmt.Errorf("expansion orientation policy %q requires tournament or shadow mode", policy)
+	}
+	if !supportedExpansionOrientationPolicy(policy) {
+		return "", fmt.Errorf("unsupported expansion orientation policy %q", policy)
+	}
+	return policy, nil
+}
+
+// supportedExpansionOrientationPolicy reports whether production translation recognizes an orientation policy.
+func supportedExpansionOrientationPolicy(policy optimize.ExpansionSearchPolicy) bool {
+	switch policy {
+	case optimize.ExpansionSearchPolicyOrientationProbeV1,
+		optimize.ExpansionSearchPolicyOrientationProbeV2:
+		return true
+	default:
+		return false
+	}
+}
+
+// applyForcedShortestPathExecutor selects the requested executor only when exactly one qualified shortest-path target supports it.
+func applyForcedShortestPathExecutor(plan *optimize.Plan, executor optimize.ShortestPathExecutor) error {
+	if executor == "" {
+		return nil
+	}
+	if !supportedForcedShortestPathExecutor(executor) {
+		return fmt.Errorf("unsupported forced shortest-path executor %q", executor)
+	}
+	if executor == optimize.ShortestPathExecutorIncumbentWorkspace || executor == optimize.ShortestPathExecutorS0Direct {
+		forced := 0
+		for idx := range plan.LoweringPlan.ShortestPathExecutor {
+			decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+			if !decision.StructurallyEligible {
+				continue
+			}
+			if executor == optimize.ShortestPathExecutorS0Direct && (decision.MinimumDepth != 1 || decision.MaximumDepth < 1) {
+				continue
+			}
+			decision.SelectedExecutor = executor
+			decision.Scheduler = executor.Scheduler()
+			decision.ExecutionBoundary = executor.ExecutionBoundary()
+			decision.SelectionMode = "forced_tool"
+			decision.SelectorVersion = "sp-tool-v1"
+			decision.FallbackReason = ""
+			forced++
+		}
+		if forced == 0 {
+			if executor == optimize.ShortestPathExecutorS0Direct {
+				return fmt.Errorf("forced shortest-path executor %q has no structurally eligible depth-one target", executor)
+			}
+			return fmt.Errorf("forced shortest-path executor %q has no structurally eligible target", executor)
+		}
+		return nil
+	}
+	expectedObservation := optimize.ShortestPathObservationDistance
+	expectedDescription := "distance-only"
+	if executor == optimize.ShortestPathExecutorS3EdgeM0 || executor == optimize.ShortestPathExecutorS4CanonicalWitness || executor == optimize.ShortestPathExecutorI1CanonicalWitness || executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || executor == optimize.ShortestPathExecutorB1AlternatingNodeWitness || executor == optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness {
+		expectedObservation = optimize.ShortestPathObservationOnePath
+		expectedDescription = "one-path"
+	} else if executor == optimize.ShortestPathExecutorASPA1DAG || executor == optimize.ShortestPathExecutorASPN1NegativeExhaustion || executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorASPB1AlternatingNodeDAG || executor == optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG {
+		expectedObservation = optimize.ShortestPathObservationAllPaths
+		expectedDescription = "all-paths"
+	}
+
+	allShortestExecutor := executor == optimize.ShortestPathExecutorASPA1DAG ||
+		executor == optimize.ShortestPathExecutorASPN1NegativeExhaustion ||
+		executor == optimize.ShortestPathExecutorASPI1DAG ||
+		executor == optimize.ShortestPathExecutorASPB1AlternatingNodeDAG ||
+		executor == optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG
+	forced := 0
+	for idx := range plan.LoweringPlan.ShortestPathExecutor {
+		decision := &plan.LoweringPlan.ShortestPathExecutor[idx]
+		if !decision.StructurallyEligible {
+			continue
+		}
+		if decision.ObservationMode != expectedObservation {
+			continue
+		}
+		if spI2ScalarProjectionExecutor(executor) && !spI2ScalarProjectionRequirementsEligible(plan.LoweringPlan.FieldRequirements, decision.Target.QueryPartIndex) {
+			continue
+		}
+		// Two-sided predecessor-DAG discovery is proven only for one distinct,
+		// directed singleton endpoint pair with minimum depth exactly one. The
+		// shared structural facts enforce every condition except this narrower
+		// minimum-depth check. Tool forcing must not broaden that envelope.
+		if allShortestExecutor && (decision.Family != "ASP" || decision.MinimumDepth != 1 || decision.MaximumDepth < 1 || decision.MaximumDepth > 64) {
+			continue
+		}
+
+		decision.SelectedExecutor = executor
+		decision.ExecutionBoundary = executor.ExecutionBoundary()
+		if executor == optimize.ShortestPathExecutorASPI1DAG || executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness || isGuardedDistanceExecutor(executor) {
+			decision.ExecutionBoundary = "guarded_dual_arm"
+			if !isGuardedDistanceExecutor(executor) {
+				decision.FrontierLimit = 0
+			}
+		}
+		decision.Scheduler = executor.Scheduler()
+		decision.SelectionMode = "forced_tool"
+		decision.SelectorVersion = "sp-tool-v1"
+		decision.FallbackReason = ""
+		if allShortestExecutor {
+			decision.SelectorVersion = "asp-tool-v1"
+			if executor != optimize.ShortestPathExecutorASPA1DAG {
+				decision.FallbackExecutor = optimize.ShortestPathExecutorASPA1DAG
+			}
+		}
+		if executor == optimize.ShortestPathExecutorI1CanonicalPredecessorWitness {
+			decision.SelectorVersion = "sp-i1-canonical-tool-v1"
+			decision.FallbackExecutor = optimize.ShortestPathExecutorS4CanonicalWitness
+		}
+		if executor == optimize.ShortestPathExecutorI2GuardedDistance {
+			decision.SelectorVersion = optimize.ShortestPathSelectorStaticV8HiddenFanIn
+			decision.FallbackExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
+			decision.PredecessorLimit = 0
+			decision.EnumerationLimit = 0
+			decision.OutputBytesLimit = 0
+		}
+		if isV2GuardedDistanceExecutor(executor) {
+			decision.SelectorVersion = optimize.ShortestPathSelectorStaticV9HiddenFanInTail
+			decision.FallbackExecutor = optimize.ShortestPathExecutorS4CanonicalDistance
+			decision.PredecessorLimit = 0
+			decision.EnumerationLimit = 0
+			decision.OutputBytesLimit = 0
+		}
+		forced++
+	}
+	if forced == 0 {
+		return fmt.Errorf("forced shortest-path executor %q has no structurally eligible %s target", executor, expectedDescription)
+	}
+	return nil
+}
+
+// supportedForcedShortestPathExecutor reports whether production translation recognizes a shortest-path executor.
+func supportedForcedShortestPathExecutor(executor optimize.ShortestPathExecutor) bool {
+	switch executor {
+	case optimize.ShortestPathExecutorIncumbentWorkspace,
+		optimize.ShortestPathExecutorS0Direct,
+		optimize.ShortestPathExecutorS3Unidirectional,
+		optimize.ShortestPathExecutorS3EdgeM0,
+		optimize.ShortestPathExecutorS4CanonicalDistance,
+		optimize.ShortestPathExecutorS4CanonicalWitness,
+		optimize.ShortestPathExecutorASPA1DAG,
+		optimize.ShortestPathExecutorASPN1NegativeExhaustion,
+		optimize.ShortestPathExecutorASPI1DAG,
+		optimize.ShortestPathExecutorI1CanonicalDistance,
+		optimize.ShortestPathExecutorI2GuardedDistance,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E0,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1D,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1P,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP,
+		optimize.ShortestPathExecutorI1CanonicalWitness,
+		optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
+		optimize.ShortestPathExecutorB1AlternatingNodeDistance,
+		optimize.ShortestPathExecutorB1AlternatingNodeWitness,
+		optimize.ShortestPathExecutorB2SmallerCurrentLevelDistance,
+		optimize.ShortestPathExecutorB2SmallerCurrentLevelWitness,
+		optimize.ShortestPathExecutorASPB1AlternatingNodeDAG,
+		optimize.ShortestPathExecutorASPB2SmallerCurrentLevelDAG:
+		return true
+	default:
+		return false
+	}
+}
+
+func isV2GuardedDistanceExecutor(executor optimize.ShortestPathExecutor) bool {
+	switch executor {
+	case optimize.ShortestPathExecutorI2GuardedDistanceV2,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E0,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1D,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1P,
+		optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP:
+		return true
+	default:
+		return false
+	}
+}
+
+func isGuardedDistanceExecutor(executor optimize.ShortestPathExecutor) bool {
+	return executor == optimize.ShortestPathExecutorI2GuardedDistance || isV2GuardedDistanceExecutor(executor)
+}
+
+func spI2ScalarProjectionExecutor(executor optimize.ShortestPathExecutor) bool {
+	return executor == optimize.ShortestPathExecutorI2GuardedDistanceV2E1P ||
+		executor == optimize.ShortestPathExecutorI2GuardedDistanceV2E1DP
+}
+
+func spI2ScalarProjectionRequirementsEligible(decisions []optimize.FieldRequirementDecision, queryPartIndex int) bool {
+	for _, decision := range decisions {
+		if decision.QueryPartIndex != queryPartIndex {
+			continue
+		}
+		for _, field := range decision.Fields {
+			switch field {
+			case optimize.FieldRequirementEntityID, optimize.FieldRequirementOrderedPathEdgeIDs:
+				continue
+			default:
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// applyForcedExpansionSearchStrategy selects the requested strategy only when exactly one qualified expansion target supports it.
+func applyForcedExpansionSearchStrategy(plan *optimize.Plan, strategy optimize.ExpansionSearchStrategy) error {
+	if strategy == "" {
+		return nil
+	}
+	if strategy != optimize.ExpansionSearchSuffixSeededReverse && strategy != optimize.ExpansionSearchEndpointSeededReverse {
+		return fmt.Errorf("unsupported forced expansion-search strategy %q", strategy)
+	}
+
+	var matching []int
+	for idx := range plan.LoweringPlan.ExpansionSearchStrategy {
+		decision := plan.LoweringPlan.ExpansionSearchStrategy[idx]
+		if !decision.StructurallyEligible {
+			continue
+		}
+		if strategy == optimize.ExpansionSearchSuffixSeededReverse && decision.CandidateStrategy != optimize.ExpansionSearchSuffixSeededReverse {
+			continue
+		}
+		if strategy == optimize.ExpansionSearchEndpointSeededReverse && decision.CandidateStrategy != optimize.ExpansionSearchEndpointSeededReverse {
+			continue
+		}
+		matching = append(matching, idx)
+	}
+	if len(matching) == 0 {
+		return fmt.Errorf("forced expansion-search strategy %q has no structurally eligible target", strategy)
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("forced expansion-search strategy %q matched %d structurally eligible targets; expected exactly one", strategy, len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.SelectedStrategy = strategy
+	decision.SelectionMode = "forced_tool"
+	decision.EmittedPolicy = ""
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{strategy}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
+	if strategy == optimize.ExpansionSearchSuffixSeededReverse {
+		decision.SelectorVersion = "suffix-seeded-reverse-tool-v1"
+	} else {
+		decision.SelectorVersion = "endpoint-seeded-reverse-tool-v1"
+		decision.EmittedPolicy = optimize.ExpansionSearchPolicyEndpointGuardV1
+		decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{
+			optimize.ExpansionSearchStepwiseForward,
+			optimize.ExpansionSearchEndpointSeededReverse,
+		}
+		decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
+	}
+	decision.FallbackReason = ""
+
+	return nil
+}
+
+// applyExpansionOrientationTournament emits orientation-probe-v1 only when a
+// single already-qualified fixed-suffix target exists. It preserves the
+// compile-time incumbent identity because the runtime arm is not known during
+// translation.
+func applyExpansionOrientationTournament(plan *optimize.Plan) error {
+	return applyExpansionOrientationTournamentPolicy(plan, optimize.ExpansionSearchPolicyOrientationProbeV1)
+}
+
+// applyExpansionOrientationTournamentPolicy applies expansion orientation tournament policy.
+func applyExpansionOrientationTournamentPolicy(plan *optimize.Plan, policy optimize.ExpansionSearchPolicy) error {
+	if !supportedExpansionOrientationPolicy(policy) {
+		return fmt.Errorf("unsupported expansion orientation policy %q", policy)
+	}
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family != "fixed_suffix_expansion" ||
+			decision.CandidateStrategy != optimize.ExpansionSearchSuffixSeededReverse ||
+			!decision.StructurallyEligible || !decision.StaticallyEligible {
+			continue
+		}
+		matching = append(matching, idx)
+	}
+	if len(matching) == 0 {
+		return fmt.Errorf("expansion orientation tournament has no structurally eligible fixed-suffix target")
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("expansion orientation tournament matched %d structurally eligible fixed-suffix targets; expected exactly one", len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.PlannedPolicy = policy
+	decision.SelectionMode = "guarded_tool"
+	decision.SelectorVersion = string(policy)
+	decision.EmittedPolicy = policy
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{
+		optimize.ExpansionSearchStepwiseForward,
+		optimize.ExpansionSearchSuffixSeededReverse,
+	}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
+	decision.FallbackReason = ""
+
+	return nil
+}
+
+// applyExpansionOrientationShadow emits orientation-probe-v1 for one
+// qualified fixed-suffix target while retaining the exact incumbent as the
+// only emitted traversal arm. The generated policy CTE records which arm the
+// selector would have chosen without dispatching it.
+func applyExpansionOrientationShadow(plan *optimize.Plan) error {
+	return applyExpansionOrientationShadowPolicy(plan, optimize.ExpansionSearchPolicyOrientationProbeV1)
+}
+
+// applyExpansionOrientationShadowPolicy applies expansion orientation shadow policy.
+func applyExpansionOrientationShadowPolicy(plan *optimize.Plan, policy optimize.ExpansionSearchPolicy) error {
+	if !supportedExpansionOrientationPolicy(policy) {
+		return fmt.Errorf("unsupported expansion orientation policy %q", policy)
+	}
+	var matching []int
+	for idx, decision := range plan.LoweringPlan.ExpansionSearchStrategy {
+		if decision.Family != "fixed_suffix_expansion" ||
+			decision.CandidateStrategy != optimize.ExpansionSearchSuffixSeededReverse ||
+			!decision.StructurallyEligible || !decision.StaticallyEligible {
+			continue
+		}
+		matching = append(matching, idx)
+	}
+	if len(matching) == 0 {
+		return fmt.Errorf("expansion orientation shadow has no structurally eligible fixed-suffix target")
+	}
+	if len(matching) != 1 {
+		return fmt.Errorf("expansion orientation shadow matched %d structurally eligible fixed-suffix targets; expected exactly one", len(matching))
+	}
+
+	decision := &plan.LoweringPlan.ExpansionSearchStrategy[matching[0]]
+	decision.SelectedStrategy = optimize.ExpansionSearchStepwiseForward
+	decision.PlannedPolicy = policy
+	decision.SelectionMode = "shadow_tool"
+	decision.SelectorVersion = string(policy)
+	decision.EmittedPolicy = policy
+	decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchStepwiseForward}
+	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryInlineStatement
+	decision.FallbackReason = ""
+
+	return nil
+}
+
+// decodeCypherStringLiteral decodes Cypher escape sequences by interpreting the token as a quoted Go string.
 func decodeCypherStringLiteral(raw string) (string, error) {
 	if len(raw) < 2 {
 		return "", fmt.Errorf("invalid cypher string literal: %q", raw)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -64,7 +65,9 @@ func TestBuildNodeDeleteStatement(t *testing.T) {
 func TestResolveKindIDsDefinedFastPath(t *testing.T) {
 	ctx := context.Background()
 
-	driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+	driver := &Driver{
+		SchemaManager: NewSchemaManager(nil, 0),
+	}
 
 	var (
 		userKind  = graph.StringKind("User")
@@ -97,4 +100,33 @@ func TestDeleteRelationshipsByKindsEmptyIsNoop(t *testing.T) {
 
 	require.NoError(t, driver.DeleteRelationshipsByKinds(ctx, nil))
 	require.NoError(t, driver.DeleteRelationshipsByKinds(ctx, graph.Kinds{}))
+}
+
+// TestOptionInitializeTraversalRuntimeAttestation verifies option initialize traversal runtime attestation behavior.
+func TestOptionInitializeTraversalRuntimeAttestation(t *testing.T) {
+	cfg, err := renderConfig(defaultBatchWriteSize, readOnlyTxOptions, []graph.TransactionOption{
+		OptionInitializeTraversalRuntimeAttestation(),
+	})
+	require.NoError(t, err)
+	require.True(t, cfg.initializeTraversalRuntimeAttestation)
+}
+
+// TestStableSnapshotIsolation verifies stable snapshot isolation behavior.
+func TestStableSnapshotIsolation(t *testing.T) {
+	require.False(t, stableSnapshotIsolation(""))
+	require.False(t, stableSnapshotIsolation(pgx.ReadCommitted))
+	require.True(t, stableSnapshotIsolation(pgx.RepeatableRead))
+	require.True(t, stableSnapshotIsolation(pgx.Serializable))
+}
+
+// TestOptionSetStableSnapshotIsolationAllowsTemporaryWorkspaceWrites verifies option set stable snapshot isolation allows temporary workspace writes behavior.
+func TestOptionSetStableSnapshotIsolationAllowsTemporaryWorkspaceWrites(t *testing.T) {
+	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
+		cfg, err := renderConfig(defaultBatchWriteSize, readOnlyTxOptions, []graph.TransactionOption{
+			OptionSetTransactionIsolation(isolation),
+		})
+		require.NoError(t, err)
+		require.Equal(t, isolation, cfg.Options.IsoLevel)
+		require.Equal(t, pgx.ReadWrite, cfg.Options.AccessMode)
+	}
 }

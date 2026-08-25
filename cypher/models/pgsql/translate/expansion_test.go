@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
@@ -20,6 +21,8 @@ func translateCypher(t *testing.T, cypher string) string {
 
 	kindMapper := pgutil.NewInMemoryKindMapper()
 	kindMapper.Put(graph.StringKind("NodeKind1"))
+	kindMapper.Put(graph.StringKind("EdgeKind1"))
+	kindMapper.Put(graph.StringKind("EdgeKind2"))
 
 	query, err := frontend.ParseCypher(frontend.NewContext(), cypher)
 	require.NoError(t, err)
@@ -46,6 +49,8 @@ func TestSelfLoopExpansionInLaterFrameSeedsIndependently(t *testing.T) {
 	require.NotContains(t, formatted, "(s0.n1)")
 	// The self-loop identity constraint still ties the endpoints.
 	require.Contains(t, formatted, "s2.root_id = s2.next_id")
+	// The projection hydrates the shared endpoint alias only once.
+	require.Equal(t, 2, strings.Count(formatted, "node n1"), formatted)
 	// The carried x binding is still projected.
 	require.Contains(t, formatted, "s1.n0 as x")
 }
@@ -62,15 +67,45 @@ func TestSelfLoopExpansionCarriedNodeStaysBound(t *testing.T) {
 	require.Contains(t, formatted, "(s0.n0).id = s3.root_id")
 }
 
+func TestReversedExpansionPathRestoresLogicalSegmentOrder(t *testing.T) {
+	formatted := translateCypher(t, `MATCH p = (s:NodeKind1)-[:EdgeKind1*0..]->(g)-[:EdgeKind2]->(d:NodeKind1) WHERE d.name = 'terminal' RETURN p`)
+
+	require.Contains(t, formatted, ".ep0 || array [", formatted)
+}
+
 const (
+	// shortestPathSeedTestPreviousFrame identifies the frame that supplies bound endpoint values in seed tests.
 	shortestPathSeedTestPreviousFrame pgsql.Identifier = "s0"
-	shortestPathSeedTestFrame         pgsql.Identifier = "s1"
-	shortestPathSeedTestRoot          pgsql.Identifier = "n0"
-	shortestPathSeedTestTerminal      pgsql.Identifier = "n1"
-	shortestPathSeedTestOther         pgsql.Identifier = "x"
-	shortestPathSeedTestEdge          pgsql.Identifier = "e0"
+
+	// shortestPathSeedTestFrame identifies the generated shortest-path frame in seed tests.
+	shortestPathSeedTestFrame pgsql.Identifier = "s1"
+
+	// shortestPathSeedTestRoot identifies the root-node binding in seed tests.
+	shortestPathSeedTestRoot pgsql.Identifier = "n0"
+
+	// shortestPathSeedTestTerminal identifies the terminal-node binding in seed tests.
+	shortestPathSeedTestTerminal pgsql.Identifier = "n1"
+
+	// shortestPathSeedTestOther identifies an unrelated binding used to test locality rejection.
+	shortestPathSeedTestOther pgsql.Identifier = "x"
+
+	// shortestPathSeedTestEdge identifies the relationship binding in seed tests.
+	shortestPathSeedTestEdge pgsql.Identifier = "e0"
 )
 
+// TestShortestDistanceColumnsCompactsOnlyIDOnlyState verifies that compact state omits root ID only when endpoint identity is already carried.
+func TestShortestDistanceColumnsCompactsOnlyIDOnlyState(t *testing.T) {
+	require.Equal(t,
+		[]pgsql.Identifier{expansionNextID, expansionDepth},
+		shortestDistanceColumns(true).Columns,
+	)
+	require.Equal(t,
+		[]pgsql.Identifier{expansionRootID, expansionNextID, expansionDepth},
+		shortestDistanceColumns(false).Columns,
+	)
+}
+
+// shortestPathSeedTestBoundColumn references a composite field from the fixture's preceding frame.
 func shortestPathSeedTestBoundColumn(nodeIdentifier pgsql.Identifier, column pgsql.Identifier) pgsql.RowColumnReference {
 	return pgsql.RowColumnReference{
 		Identifier: pgsql.CompoundIdentifier{shortestPathSeedTestPreviousFrame, nodeIdentifier},
@@ -78,6 +113,7 @@ func shortestPathSeedTestBoundColumn(nodeIdentifier pgsql.Identifier, column pgs
 	}
 }
 
+// shortestPathSeedTestLocalFunctionPredicate builds a deterministic predicate that depends only on the selected node.
 func shortestPathSeedTestLocalFunctionPredicate(nodeIdentifier pgsql.Identifier, value string) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		pgsql.FunctionCall{
@@ -92,6 +128,7 @@ func shortestPathSeedTestLocalFunctionPredicate(nodeIdentifier pgsql.Identifier,
 	)
 }
 
+// shortestPathSeedTestExternalPredicate builds a predicate that deliberately depends on an unrelated binding.
 func shortestPathSeedTestExternalPredicate(nodeIdentifier pgsql.Identifier) pgsql.Expression {
 	return pgsql.NewBinaryExpression(
 		shortestPathSeedTestBoundColumn(nodeIdentifier, pgsql.ColumnID),
@@ -100,6 +137,7 @@ func shortestPathSeedTestExternalPredicate(nodeIdentifier pgsql.Identifier) pgsq
 	)
 }
 
+// newShortestPathSeedTestBuilder creates a shortest-path builder with deterministic fixture bindings and parameters.
 func newShortestPathSeedTestBuilder(leftBound, rightBound bool) (*ExpansionBuilder, *Expansion) {
 	previousFrame := &Frame{
 		Binding: &BoundIdentifier{Identifier: shortestPathSeedTestPreviousFrame},
@@ -167,6 +205,26 @@ func TestShortestPathSelfEndpointGuardsUseCaseErrorHelper(t *testing.T) {
 	require.NotContains(t, endpointPairFilterGuard, " / ")
 }
 
+// TestForwardPrimerSkipsSelfEndpointGuardWhenZeroDepthIsAllowed verifies that a zero-length path may use the same root and terminal.
+func TestForwardPrimerSkipsSelfEndpointGuardWhenZeroDepthIsAllowed(t *testing.T) {
+	builder, expansionModel := newShortestPathSeedTestBuilder(false, false)
+	expansionModel.UseMaterializedEndpointPairFilter = true
+	expansionModel.Options.MinDepth = models.OptionalValue[int64](0)
+
+	query, _, err := builder.prepareForwardFrontPrimerQuery(expansionModel)
+	require.NoError(t, err)
+	formatted, err := format.SyntaxNode(query)
+	require.NoError(t, err)
+	require.NotContains(t, formatted, "shortest_path_self_endpoint_error")
+
+	expansionModel.Options.MinDepth = models.OptionalValue[int64](1)
+	query, _, err = builder.prepareForwardFrontPrimerQuery(expansionModel)
+	require.NoError(t, err)
+	formatted, err = format.SyntaxNode(query)
+	require.NoError(t, err)
+	require.Contains(t, formatted, "shortest_path_self_endpoint_error")
+}
+
 func TestBoundRootShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) {
 	builder, expansionModel := newShortestPathSeedTestBuilder(true, false)
 	expansionModel.PrimerNodeConstraints = pgsql.NewBinaryExpression(
@@ -213,6 +271,25 @@ func TestBoundTerminalShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing
 	require.NoError(t, err)
 	require.Contains(t, formattedQuery, "n1.id = (s0.x).id")
 	require.Contains(t, formattedQuery, "(s0.n1).id = s1.next_id")
+}
+
+// TestBidirectionalAllShortestPathsSingletonEndpointsPreserveMaxDepth verifies the ASP harness receives its
+// depth argument before the endpoint arrays. Unlike the SP harness, ASP has no trailing allow-zero-depth flag.
+func TestBidirectionalAllShortestPathsSingletonEndpointsPreserveMaxDepth(t *testing.T) {
+	builder, expansionModel := newShortestPathSeedTestBuilder(true, true)
+	expansionModel.BackwardPrimerQueryParameter = &BoundIdentifier{Identifier: "pi2"}
+	expansionModel.BackwardRecursiveQueryParameter = &BoundIdentifier{Identifier: "pi3"}
+	expansionModel.Options.MaxDepth = models.OptionalValue[int64](7)
+	expansionModel.SingletonRootID = pgd.IntLiteral(101)
+	expansionModel.SingletonTerminalID = pgd.IntLiteral(202)
+
+	query, err := builder.buildBiDirectionalShortestPathsHarnessCall(pgsql.FunctionBidirectionalASPHarness)
+	require.NoError(t, err)
+
+	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
+	require.NoError(t, err)
+	require.Contains(t, formattedQuery, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, 7, array [singleton_endpoints.root_id]::int8[], array [singleton_endpoints.terminal_id]::int8[])")
+	require.NotContains(t, formattedQuery, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, array")
 }
 
 func TestZeroDepthExpansionRejectsEdgeDependentTerminalSatisfaction(t *testing.T) {
