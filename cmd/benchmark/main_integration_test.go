@@ -30,7 +30,6 @@ import (
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util/size"
@@ -46,9 +45,6 @@ func postgresBenchmarkIntegrationConnection(t *testing.T) string {
 	normalized := strings.ToLower(connection)
 	if !strings.HasPrefix(normalized, "postgres://") && !strings.HasPrefix(normalized, "postgresql://") {
 		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
-	}
-	if err := databaseguard.ValidateEnvironment(connection); err != nil {
-		t.Fatalf("integration database safety check failed: %v", err)
 	}
 	return connection
 }

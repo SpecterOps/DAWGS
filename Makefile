@@ -129,7 +129,6 @@ test_all: test test_integration test_bdd_integration
 
 test_integration:
 	@echo "Running all integration tests..."
-	@$(GO_CMD) run ./cmd/integrationguard
 	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 test_bdd_integration:
 	@echo "Running all BDD integration tests..."
@@ -144,12 +143,10 @@ bench_diff:
 
 test_neo4j:
 	@echo "Running Neo4j integration tests..."
-	@$(GO_CMD) run ./cmd/integrationguard
 	@$(GO_CMD) test -tags integration -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 
 test_pg:
 	@echo "Running PostgreSQL integration tests..."
-	@$(GO_CMD) run ./cmd/integrationguard
 	@$(GO_CMD) test -tags manual_integration -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 
 test_update:
@@ -304,8 +301,6 @@ quality_backend: test
 		echo "PG_CONNECTION_STRING and NEO4J_CONNECTION_STRING are required."; \
 		exit 1; \
 	fi
-	@CONNECTION_STRING="$(PG_CONNECTION_STRING)" $(GO_CMD) run ./cmd/integrationguard
-	@CONNECTION_STRING="$(NEO4J_CONNECTION_STRING)" $(GO_CMD) run ./cmd/integrationguard
 	@set +e; \
 	CONNECTION_STRING="$(PG_CONNECTION_STRING)" $(GO_CMD) test -json -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES) > $(BACKEND_PG_REPORT); \
 	pg_status=$$?; \

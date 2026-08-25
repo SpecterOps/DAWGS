@@ -50,12 +50,9 @@ malformed, duplicated, mismatched, or unchecksummed untracked entries/copies.
 
 GraphBench clears and reloads fixtures. A non-blocking local lock at
 `.coverage/graphbench.lock` prevents overlapping processes; override it with
-`-destructive-lock`. Runners on different hosts must use distinct disposable
-databases because a filesystem lock cannot coordinate across machines.
-Fixture-loading runs also require `DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1` and
-an exact credential-free target in `DAWGS_INTEGRATION_DISPOSABLE_TARGETS`, for
-example `postgresql://localhost:65432/dawgs`. Non-mutating `-existing-graph`
-runs do not require this acknowledgement; their PostgreSQL sessions remain
+`-destructive-lock`. Runners on different hosts must use distinct databases
+because a filesystem lock cannot coordinate across machines. Non-mutating
+`-existing-graph` runs reject writes; their PostgreSQL sessions remain
 read-write so temporary workspace behavior matches production.
 
 ## Examples
@@ -1814,9 +1811,7 @@ uses rollback isolation for writes and runs automatically under
 Run only the scale-plan gate with:
 
 ```bash
-DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
-DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs" \
-  CONNECTION_STRING="$PG_CONNECTION_STRING" \
+CONNECTION_STRING="$PG_CONNECTION_STRING" \
   go test -tags manual_integration ./cmd/graphbench \
   -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
   -count=1

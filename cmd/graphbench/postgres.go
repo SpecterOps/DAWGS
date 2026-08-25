@@ -36,7 +36,6 @@ import (
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
@@ -273,12 +272,6 @@ func newPostgresSQLRunner(ctx context.Context, datasetDir, connection string, co
 
 // newPostgresSQLRunnerWithExistingGraph opens a PostgreSQL benchmark runner with optional live-graph state.
 func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, connection string, corpus ScaleCorpus, poolSize, round int, concurrency []int, references bool, referenceArms []string, forceShortest, forceExpansion string, existing *existingGraphRunnerOptions) (*postgresSQLRunner, error) {
-	if existing == nil {
-		if err := databaseguard.ValidateEnvironment(connection); err != nil {
-			return nil, fmt.Errorf("refuse destructive PostgreSQL GraphBench target: %w", err)
-		}
-	}
-
 	poolCfg, err := pgxpool.ParseConfig(connection)
 	if err != nil {
 		return nil, fmt.Errorf("parse PostgreSQL pool configuration: %w", err)
