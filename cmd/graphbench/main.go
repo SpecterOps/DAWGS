@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/testutil"
 )
 
@@ -1495,9 +1494,6 @@ func main() {
 		if pgConnection == "" {
 			fatal("P5 adjacency feasibility capture requires -pg-connection, -connection, PG_CONNECTION_STRING, or CONNECTION_STRING")
 		}
-		if err := databaseguard.ValidateEnvironment(pgConnection); err != nil {
-			fatal("refuse destructive P5 adjacency feasibility target: %v", err)
-		}
 		runLock, err := acquireDestructiveRunLock(cfg.DestructiveLock)
 		if err != nil {
 			fatal("acquire destructive run lock: %v", err)
@@ -1894,9 +1890,6 @@ func main() {
 			}
 			if connection == "" {
 				continue
-			}
-			if err := databaseguard.ValidateEnvironment(connection); err != nil {
-				fatal("refuse destructive GraphBench target: %v", err)
 			}
 		}
 

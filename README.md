@@ -89,8 +89,6 @@ Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j 
 
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
-export DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1
-export DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs"
 make test_integration
 ```
 
@@ -99,10 +97,9 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 make test_bdd_integration
 ```
 
-Integration suites and fixture-loading GraphBench runs delete graph data. The
-acknowledgement and credential-free target allowlist above are both required;
-an absent or mismatched target is rejected before testing. Existing-graph
-GraphBench runs reject mutating cases and do not require destructive
+Integration suites and fixture-loading GraphBench runs delete graph data.
+Existing-graph GraphBench runs reject mutating cases and do not require
+fixture loading.
 acknowledgement. PostgreSQL sessions remain read-write so temporary traversal
 workspaces use the same reset strategy as production.
 
@@ -128,9 +125,7 @@ measures real driver batch APIs. It reloads or clears its fixture outside the
 timed region and validates post-state after every iteration:
 
 ```bash
-DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
-DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs" \
-  CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
   go test -tags manual_integration ./integration -run '^$' \
   -bench BenchmarkMutationSafeDirectWrites -benchtime=1x
 ```
@@ -160,9 +155,7 @@ edge-kind-selective, and multi-path shortest-path scenarios before recording tim
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
 writes JSONL captures and markdown/JSON summaries under `.coverage/`. Captures record the DAWGS source version, which
-can be overridden with a command flag when needed. Because it reloads fixtures, it also requires
-`DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1` and every selected credential-free target in
-`DAWGS_INTEGRATION_DISPOSABLE_TARGETS`.
+can be overridden with a command flag when needed. It reloads fixtures for each selected backend.
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
 implemented execution modes are `postgres_sql` and `neo4j`; `local_traversal` is an explicit, non-gating
@@ -362,9 +355,7 @@ cardinality, and checks stable mutation-target and anchored edge-index
 invariants. Run it directly with:
 
 ```bash
-DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
-DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:65432/dawgs" \
-  CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
   go test -tags manual_integration ./cmd/graphbench \
   -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
   -count=1

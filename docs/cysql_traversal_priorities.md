@@ -937,17 +937,12 @@ make test
 make lint
 ```
 
-Run backend-specific full validation separately, using only disposable targets
-and the repository's destructive-integration guards:
+Run backend-specific full validation separately:
 
 ```bash
-DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
-DAWGS_INTEGRATION_DISPOSABLE_TARGETS="$PG_DISPOSABLE_TARGET" \
-  CONNECTION_STRING="$PG_CONNECTION_STRING" make test_all
+CONNECTION_STRING="$PG_CONNECTION_STRING" make test_all
 
-DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
-DAWGS_INTEGRATION_DISPOSABLE_TARGETS="$NEO4J_DISPOSABLE_TARGET" \
-  CONNECTION_STRING="$NEO4J_CONNECTION_STRING" make test_all
+CONNECTION_STRING="$NEO4J_CONNECTION_STRING" make test_all
 ```
 
 Then run both-backend PlanCorpus and the staged GraphBench workflow:

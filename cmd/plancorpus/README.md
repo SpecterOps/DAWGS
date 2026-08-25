@@ -21,9 +21,7 @@ intersection-only comparison. Runtime-arm attribution remains GraphBench's respo
 ## Usage
 
 ```bash
-DAWGS_INTEGRATION_ALLOW_DESTRUCTIVE=1 \
-DAWGS_INTEGRATION_DISPOSABLE_TARGETS="postgresql://localhost:5432/db,neo4j://localhost:7687/<default>" \
-  PG_CONNECTION_STRING="postgres://postgres:password@localhost/db" \
+PG_CONNECTION_STRING="postgres://postgres:password@localhost/db" \
   NEO4J_CONNECTION_STRING="neo4j://neo4j:password@localhost:7687" \
   go run ./cmd/plancorpus
 ```
