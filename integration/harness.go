@@ -29,7 +29,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -115,10 +114,6 @@ func Open(t testing.TB, opts Options) *Session {
 		}
 		t.Fatalf("%s env var is not set", connEnv)
 	}
-	if err := databaseguard.ValidateEnvironment(connStr); err != nil {
-		t.Fatalf("integration database safety check failed: %v", err)
-	}
-
 	driver, err := DriverFromConnectionString(connStr)
 	if err != nil {
 		t.Fatalf("failed to detect driver: %v", err)

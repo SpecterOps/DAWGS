@@ -80,9 +80,9 @@ func TestLegacyBuilderPostgreSQL_LogicalForms(t *testing.T) {
 			query.Returning(query.RelationshipID()),
 		)
 
-		require.Contains(t, formatted, "e0.properties -> 'lastseen'")
-		require.Contains(t, formatted, "n0.properties -> 'lastcollected'")
-		require.Contains(t, formatted, "n1.properties -> 'lastcollected'")
+		require.Contains(t, formatted, "e0.properties -> E'lastseen'")
+		require.Contains(t, formatted, "n0.properties -> E'lastcollected'")
+		require.Contains(t, formatted, "n1.properties -> E'lastcollected'")
 		require.Contains(t, formatted, " or ")
 	})
 
@@ -101,7 +101,7 @@ func TestLegacyBuilderPostgreSQL_LogicalForms(t *testing.T) {
 
 		require.Contains(t, formatted, "not")
 		require.Contains(t, formatted, " or ")
-		require.Contains(t, formatted, "n0.properties -> 'lastseen'")
+		require.Contains(t, formatted, "n0.properties -> E'lastseen'")
 		require.Contains(t, formatted, "@pi0")
 		require.Equal(t, map[string]any{"pi0": threshold}, translation.Parameters)
 	})

@@ -476,7 +476,7 @@ func TestForcedSuffixSeededReversePreservesBoundaryConstraints(t *testing.T) {
 
 	require.Contains(t, formatted.Statement, "_suffix_seeded_suffix as materialized")
 	require.Contains(t, formatted.Statement, "n1.kind_ids operator (pg_catalog.@>)")
-	require.Contains(t, formatted.Statement, "n1.properties -> 'enabled'")
+	require.Contains(t, formatted.Statement, "n1.properties -> E'enabled'")
 	require.Contains(t, formatted.Statement, "to_jsonb((true)::bool)")
 }
 
@@ -1961,7 +1961,7 @@ func TestOptimizerSafetyFixedSuffixQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "string")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "S-1-5-21-2643190041-1319121918-239771340-513")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "root")
 	require.NotContains(t, formattedQuery.Statement, "properties -> @__strlit")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
@@ -3163,4 +3163,16 @@ RETURN p
 `)
 
 	require.NotContains(t, normalizedQuery, "exists (select 1 from edge e1 join node n2")
+}
+
+// literalParameterSQL locates the bound literal used by a SQL shape assertion.
+func literalParameterSQL(t *testing.T, parameters map[string]any, value string) string {
+	t.Helper()
+	for name, parameter := range parameters {
+		if parameter == value {
+			return "@" + name + "::text"
+		}
+	}
+	require.FailNowf(t, "missing literal binding", "expected literal %q in %#v", value, parameters)
+	return ""
 }

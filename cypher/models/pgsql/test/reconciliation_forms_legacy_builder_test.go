@@ -60,7 +60,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 
 			assertRelationshipDelete(t, formatted)
 			require.Contains(t, formatted, "n1.id = e0.end_id")
-			require.Contains(t, formatted, "n1.properties -> 'objectid'")
+			require.Contains(t, formatted, "n1.properties -> E'objectid'")
 			require.Contains(t, formatted, fmt.Sprintf("array [%s]::int2[]", sequentialKindIDs(33, count)))
 			require.Equal(t, map[string]any{"pi0": "target-id"}, translation.Parameters)
 		})
@@ -77,7 +77,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 
 			assertRelationshipDelete(t, formatted)
 			require.Contains(t, formatted, "n0.id = e0.start_id")
-			require.Contains(t, formatted, "n0.properties -> 'objectid'")
+			require.Contains(t, formatted, "n0.properties -> E'objectid'")
 			require.Contains(t, formatted, fmt.Sprintf("array [%s]::int2[]", sequentialKindIDs(33, count)))
 			require.Equal(t, map[string]any{"pi0": "target-id"}, translation.Parameters)
 		})
@@ -103,7 +103,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 				)),
 				query.Delete(query.Relationship()),
 			},
-			fragments:  []string{"n1.id = e0.end_id", "e0.properties -> 'isprimarygroup'", "delete from edge e1 using s0"},
+			fragments:  []string{"n1.id = e0.end_id", "e0.properties -> E'isprimarygroup'", "delete from edge e1 using s0"},
 			parameters: map[string]any{"pi0": "group-id", "pi1": false},
 		},
 		"REC-03 outbound primary group": {
@@ -116,7 +116,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 				)),
 				query.Delete(query.Relationship()),
 			},
-			fragments:  []string{"n0.id = e0.start_id", "e0.properties -> 'isprimarygroup'", "delete from edge e1 using s0"},
+			fragments:  []string{"n0.id = e0.start_id", "e0.properties -> E'isprimarygroup'", "delete from edge e1 using s0"},
 			parameters: map[string]any{"pi0": "computer-id", "pi1": true},
 		},
 		"REC-04 object ID list relationship delete": {
@@ -128,7 +128,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 				)),
 				query.Delete(query.Relationship()),
 			},
-			fragments:  []string{"n1.id = e0.end_id", "n1.properties ->> 'objectid'", "delete from edge e1 using s0"},
+			fragments:  []string{"n1.id = e0.end_id", "n1.properties ->> E'objectid'", "delete from edge e1 using s0"},
 			parameters: map[string]any{"pi0": []string{"target-1", "target-2"}},
 		},
 		"REC-05 delegated enrollment discovery": {
@@ -140,7 +140,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 				)),
 				query.Returning(query.Relationship(), query.Start()),
 			},
-			fragments:  []string{"select s0.e0 as r, s0.n0 as s", "n1.properties ->> 'objectid'"},
+			fragments:  []string{"select s0.e0 as r, s0.n0 as s", "n1.properties ->> E'objectid'"},
 			parameters: map[string]any{"pi0": []string{"ca-1", "ca-2"}},
 			read:       true,
 		},
@@ -176,7 +176,7 @@ func TestLegacyBuilderPostgreSQL_ReconciliationForms(t *testing.T) {
 				)),
 				query.Delete(query.Node()),
 			},
-			fragments:  []string{"n0.properties ->> 'objectid'", "delete from node n1 using s0", "where (s0.n0).id = n1.id"},
+			fragments:  []string{"n0.properties ->> E'objectid'", "delete from node n1 using s0", "where (s0.n0).id = n1.id"},
 			parameters: map[string]any{"pi0": []string{"target-1", "target-2"}},
 		},
 	}

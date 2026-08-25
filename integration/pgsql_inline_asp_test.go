@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"testing"
@@ -499,7 +500,7 @@ func inlineProductionSQLSHA256(t *testing.T, pgDriver *pg.Driver, graphID int32,
 	if err != nil {
 		t.Fatalf("render production candidate query: %v", err)
 	}
-	digest := sha256.Sum256([]byte(sqlQuery))
+	digest := sha256.Sum256([]byte(sqlQuery.Statement))
 	return hex.EncodeToString(digest[:])
 }
 
@@ -510,9 +511,11 @@ func explainInlineASPTranslation(t *testing.T, session *Session, translation tra
 	if err != nil {
 		t.Fatalf("render translated query: %v", err)
 	}
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+
 	var plan any
 	if err := session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
-		result := tx.Raw("explain (analyze, timing off, summary off, format json) "+sqlQuery, translation.Parameters)
+		result := tx.Raw("explain (analyze, timing off, summary off, format json) "+sqlQuery.Statement, translation.Parameters)
 		defer result.Close()
 		if !result.Next() {
 			if err := result.Error(); err != nil {
@@ -547,6 +550,8 @@ func executeInlineASPTranslationWithReceipt(t *testing.T, session *Session, tran
 	if err != nil {
 		t.Fatalf("render translated query: %v", err)
 	}
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+
 	var rows []string
 	var receipt string
 	if err := session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
@@ -561,7 +566,7 @@ func executeInlineASPTranslationWithReceipt(t *testing.T, session *Session, tran
 		}
 		arm.Close()
 
-		result := tx.Raw(sqlQuery, translation.Parameters)
+		result := tx.Raw(sqlQuery.Statement, translation.Parameters)
 		for result.Next() {
 			rows = append(rows, fmt.Sprint(result.Values()))
 		}
@@ -593,7 +598,7 @@ func executeInlineASPTranslationWithReceipt(t *testing.T, session *Session, tran
 		clear.Close()
 		return err
 	}); err != nil {
-		t.Fatalf("execute translated query with receipt: %v\nSQL: %s", err, sqlQuery)
+		t.Fatalf("execute translated query with receipt: %v\nSQL: %s", err, sqlQuery.Statement)
 	}
 	sort.Strings(rows)
 	return rows, receipt
@@ -669,9 +674,11 @@ func executeInlineASPTranslation(t *testing.T, session *Session, translation tra
 	if err != nil {
 		t.Fatalf("render translated query: %v", err)
 	}
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+
 	var rows []string
 	if err := session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
-		result := tx.Raw(sqlQuery, translation.Parameters)
+		result := tx.Raw(sqlQuery.Statement, translation.Parameters)
 		defer result.Close()
 		for result.Next() {
 			rows = append(rows, fmt.Sprint(result.Values()))
