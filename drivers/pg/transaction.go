@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -412,11 +413,13 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 			formatted, formatErr := translate.Translated(translated)
 			profile.Format += time.Since(formatStarted)
 			if formatErr == nil && activePolicy.enabled() && activePolicy.compiledManifest.Version == 2 {
-				if anchorErr := validateTraversalPromotionSQLAnchor(activePolicy.compiledManifest, formatted); anchorErr != nil {
+				if anchorErr := validateTraversalPromotionSQLAnchor(activePolicy.compiledManifest, formatted.Statement); anchorErr != nil {
 					return translate.Result{}, "", anchorErr
 				}
 			}
-			return translated, formatted, formatErr
+			maps.Copy(translated.Parameters, formatted.Parameters)
+			translated.LiteralParameters = formatted.LiteralParameters
+			return translated, formatted.Statement, formatErr
 		}
 	}
 	translateCached := func(activePolicy TraversalPolicy, identity string) (string, map[string]any, error) {

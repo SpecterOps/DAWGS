@@ -1644,7 +1644,10 @@ func assertAnchorPlanIndex(t *testing.T, id, plan string) {
 		require.Regexp(t, `(Bitmap Index Scan on|Index Scan using) edge_[0-9]+_(start_id|kind_id)`, plan)
 		require.Contains(t, plan, "start_id =")
 	case "HOP-02":
-		require.Regexp(t, `(Bitmap Index Scan on|Index Scan using) edge_[0-9]+_end_id`, plan)
+		// The inbound anchor has the same selective kind-index alternative as
+		// outbound anchors, with end_id retained as the endpoint predicate.
+		require.Regexp(t, `(Bitmap Index Scan on|Index Scan using) edge_[0-9]+_(end_id|kind_id)`, plan)
+		require.Contains(t, plan, "end_id =")
 	case "HOP-07":
 		// The selective terminal predicate can legitimately reverse the join
 		// order, but either endpoint orientation must stay indexed.

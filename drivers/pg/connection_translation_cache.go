@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -23,6 +24,9 @@ type translationEntry struct {
 
 	// parameterSources maps generated parameters to caller-provided Cypher values.
 	parameterSources map[string]string
+
+	// literalParameters stores formatter-extracted literals independently of caller values.
+	literalParameters map[string]string
 }
 
 // bind negotiates current caller values for the immutable cached parameter mapping.
@@ -30,10 +34,13 @@ func (s translationEntry) bind(parameters map[string]any) (map[string]any, error
 	// pgx.NamedArgs accepts nil for statements with no placeholders. Returning
 	// nil avoids allocating an empty map for the common parameter-free cached
 	// shortest-path shape while preserving its execution semantics.
-	if len(s.parameterSources) == 0 {
+	if len(s.parameterSources) == 0 && len(s.literalParameters) == 0 {
 		return nil, nil
 	}
-	bound := make(map[string]any, len(s.parameterSources))
+	bound := make(map[string]any, len(s.parameterSources)+len(s.literalParameters))
+	for name, value := range s.literalParameters {
+		bound[name] = value
+	}
 	for identifier, source := range s.parameterSources {
 		value, found := parameters[source]
 		if !found {
@@ -149,8 +156,9 @@ func (s *connectionTranslationCache) TranslateWithPolicy(query string, graphID i
 	}
 
 	entry := translationEntry{
-		sql:              strings.Clone(sql),
-		parameterSources: cloneParameterSources(result.ParameterSources),
+		sql:               strings.Clone(sql),
+		parameterSources:  cloneParameterSources(result.ParameterSources),
+		literalParameters: maps.Clone(result.LiteralParameters),
 	}
 	key.query = strings.Clone(key.query)
 

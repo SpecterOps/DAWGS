@@ -461,3 +461,30 @@ func BenchmarkConnectionTranslationCacheParameterlessHit(b *testing.B) {
 		}
 	}
 }
+
+// TestConnectionTranslationCachePreservesExtractedLiterals verifies that cache
+// hits retain fixed literals and rebind caller values without sharing maps.
+func TestConnectionTranslationCachePreservesExtractedLiterals(t *testing.T) {
+	_, cache, _ := newTestCache(t, 2)
+	builds := 0
+	build := func() (translate.Result, string, error) {
+		builds++
+		return translate.Result{
+			Parameters:        map[string]any{"pi0": "first", "__strlit0": "string"},
+			ParameterSources:  map[string]string{"pi0": "name"},
+			LiteralParameters: map[string]string{"__strlit0": "string"},
+		}, "select @pi0, @__strlit0", nil
+	}
+	_, first, err := cache.TranslateWithPolicy("RETURN $name, 'string'", 1, map[string]any{"name": "first"}, "incumbent", build)
+	require.NoError(t, err)
+	first["__strlit0"] = "changed"
+	sql, second, err := cache.TranslateWithPolicy("RETURN $name, 'string'", 1, map[string]any{"name": "second"}, "incumbent", build)
+	require.NoError(t, err)
+	require.Equal(t, "select @pi0, @__strlit0", sql)
+	require.Equal(t, map[string]any{"pi0": "second", "__strlit0": "string"}, second)
+	second["__strlit0"] = "changed again"
+	_, third, err := cache.TranslateWithPolicy("RETURN $name, 'string'", 1, map[string]any{"name": "third"}, "incumbent", build)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"pi0": "third", "__strlit0": "string"}, third)
+	require.Equal(t, 1, builds)
+}

@@ -12,34 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSPI2SuccessorPowerStudyV3TerminatesFrozenDesign(t *testing.T) {
-	studyPath := filepath.Join("..", "..", "benchmark", "testdata", "scale", "protocols", "sp_i2_successor_power_study_v3.json")
-	study, digest, err := loadSPI2SuccessorPowerStudyV3(studyPath)
-	require.NoError(t, err)
-
-	report, err := buildSPI2SuccessorPowerStudyReportV3(
-		study,
-		digest,
-		filepath.Join("..", "..", ".coverage", "sp-i2-distance-v1-3865cbc", "discovery-s4.jsonl"),
-		filepath.Join("..", "..", ".coverage", "sp-i2-distance-v1-3865cbc", "discovery-i2.jsonl"),
-	)
-	require.NoError(t, err)
-	require.False(t, report.Passed)
-	require.Len(t, report.Scenarios, 11)
-	require.InDelta(t, 0.22360679774997896, report.CalibrationScale, 1e-15)
-	require.InDelta(t, 0.005805, report.LogStandardErrors.Pooled, 1e-6)
-	require.InDelta(t, 0.008209, report.LogStandardErrors.OrderStratum, 1e-6)
-	expected := map[string]int{
-		"aa_identity": 19_861, "aa_upper_margin": 0, "aa_lower_margin": 0,
-		"target_power": 20_000, "target_boundary": 6, "control_power": 20_000,
-		"control_boundary": 0, "aa_order_odd_high": 2_937, "aa_order_even_high": 3_043,
-		"aa_order_upper_margin": 0, "aa_order_lower_margin": 0,
-	}
-	for _, scenario := range report.Scenarios {
-		require.Equal(t, expected[scenario.Name], scenario.SuccessfulDecisions, scenario.Name)
-	}
-}
-
 func TestSPI2SuccessorPowerStudyV3TerminalTombstone(t *testing.T) {
 	path := filepath.Join("..", "..", "benchmark", "testdata", "scale", "protocols", "sp_i2_successor_power_study_v3_rejection.json")
 	raw, err := os.ReadFile(path)

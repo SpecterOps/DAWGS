@@ -60,7 +60,7 @@ func TestGuardedDistanceV2ConsolidatesAdmissionAndDominatesEqualFrontierCap(t *t
 	require.NotContains(t, formatted.Statement, "group by sp_i2_distance_bounded.depth")
 	require.Contains(t, formatted.Statement, "true as frontier_guard_dominated")
 	require.Less(t, strings.Index(formatted.Statement, "sp_i2_admission as materialized"), strings.Index(formatted.Statement, "sp_i2_target(depth) as materialized"))
-	require.Contains(t, formatted.Statement, "else 'SP-I2-C-D-V2' end")
+	require.Contains(t, formatted.Statement, "else "+literalParameterSQL(t, formatted.Parameters, "SP-I2-C-D-V2")+" end")
 }
 
 func TestGuardedDistanceV2RetainsOneIndependentFrontierCheckForUnequalCaps(t *testing.T) {
@@ -80,7 +80,7 @@ func TestGuardedDistanceV2RetainsOneIndependentFrontierCheckForUnequalCaps(t *te
 	require.Contains(t, formatted.Statement, "false as frontier_guard_dominated")
 	require.Contains(t, formatted.Statement, "limit 21")
 	require.Contains(t, formatted.Statement, "having count(*)::int8 > 10")
-	require.Contains(t, formatted.Statement, "else 'SP-I2-C-D-V2-E1' end")
+	require.Contains(t, formatted.Statement, "else "+literalParameterSQL(t, formatted.Parameters, "SP-I2-C-D-V2-E1")+" end")
 }
 
 func TestGuardedDistanceV2DevelopmentComponentArms(t *testing.T) {
@@ -110,10 +110,10 @@ func TestGuardedDistanceV2DevelopmentComponentArms(t *testing.T) {
 			require.NoError(t, err)
 			formatted, err := Translated(translation)
 			require.NoError(t, err)
-			require.Contains(t, formatted.Statement, "else '"+testCase.expectedIdentity+"' end")
+			require.Contains(t, formatted.Statement, "else "+literalParameterSQL(t, formatted.Parameters, testCase.expectedIdentity)+" end")
 			if testCase.directFloor {
 				require.Contains(t, formatted.Statement, testCase.expectedDirectName)
-				require.Contains(t, formatted.Statement, "'inline_direct_distance'")
+				require.Contains(t, formatted.Statement, ""+literalParameterSQL(t, formatted.Parameters, "inline_direct_distance")+"")
 				require.Contains(t, formatted.Statement, "where not exists (select 1 from sp_i2_v2_direct limit 1)")
 				require.Contains(t, formatted.Statement, "sp_i2_selected_distance(depth) as materialized")
 			} else {

@@ -56,7 +56,7 @@ func TestPostgreSQLFetchStartNodesUsesBuilderCompilationCache(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		firstNodes, err := ops.FetchStartNodes(tx.Relationships().Filter(query.InIDs(query.Start(), first.ID)))
 		if err != nil {
@@ -75,7 +75,7 @@ func TestPostgreSQLFetchStartNodesUsesBuilderCompilationCache(t *testing.T) {
 		return nil
 	}))
 
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 }
@@ -123,7 +123,7 @@ func TestPostgreSQLFetchStartNodesUnoptimizedBypassesCache(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		if _, err := ops.FetchStartNodes(tx.Relationships().Filter(query.InIDs(query.Start(), first.ID))); err != nil {
 			return err
@@ -132,7 +132,7 @@ func TestPostgreSQLFetchStartNodesUnoptimizedBypassesCache(t *testing.T) {
 		return err
 	}))
 
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Hits, after.Hits)
 	require.Equal(t, before.Misses, after.Misses)
 	require.Equal(t, before.Insertions, after.Insertions)
@@ -170,7 +170,7 @@ func TestPostgreSQLRawCypherQueryRebindsCachedParameters(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.TranslationCacheStats().Aggregate
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		firstID, err := rawCypherNodeID(tx, "first")
 		if err != nil {
@@ -186,12 +186,12 @@ func TestPostgreSQLRawCypherQueryRebindsCachedParameters(t *testing.T) {
 		return nil
 	}))
 
-	after := driver.TranslationCacheStats()
+	after := driver.TranslationCacheStats().Aggregate
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 }
 
-func TestPostgreSQLRawCypherQueryUnoptimizedBypassesCache(t *testing.T) {
+func TestPostgreSQLRawCypherQueryUsesConnectionCacheWhenCompilerOptimizationDisabled(t *testing.T) {
 	previous := pg.SetOptimizedTranslation(false)
 	t.Cleanup(func() {
 		pg.SetOptimizedTranslation(previous)
@@ -208,7 +208,7 @@ func TestPostgreSQLRawCypherQueryUnoptimizedBypassesCache(t *testing.T) {
 	driver, ok := session.DB.(*pg.Driver)
 	require.True(t, ok)
 
-	before := driver.TranslationCacheStats()
+	before := driver.TranslationCacheStats().Aggregate
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		for _, name := range []string{"first", "second"} {
 			result := tx.Query("RETURN $name", map[string]any{"name": name})
@@ -221,11 +221,10 @@ func TestPostgreSQLRawCypherQueryUnoptimizedBypassesCache(t *testing.T) {
 		return nil
 	}))
 
-	after := driver.TranslationCacheStats()
-	require.Equal(t, before.Hits, after.Hits)
-	require.Equal(t, before.Misses, after.Misses)
-	require.Equal(t, before.Bypasses+2, after.Bypasses)
-	require.Equal(t, before.UnoptimizedCompilations+2, after.UnoptimizedCompilations)
+	after := driver.TranslationCacheStats().Aggregate
+	require.Equal(t, before.Misses+1, after.Misses)
+	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
+	require.Equal(t, before.Insertions+1, after.Insertions)
 }
 
 func rawCypherNodeID(tx graph.Transaction, name string) (graph.ID, error) {
@@ -272,7 +271,7 @@ func TestPostgreSQLNodeUpdateRebindsCachedBuilderParameters(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
 		firstProperties := graph.NewProperties().Set("name", "after-first")
 		if err := tx.Nodes().Filter(query.InIDs(query.Node(), first.ID)).Update(firstProperties); err != nil {
@@ -282,7 +281,7 @@ func TestPostgreSQLNodeUpdateRebindsCachedBuilderParameters(t *testing.T) {
 		secondProperties := graph.NewProperties().Set("name", "after-second")
 		return tx.Nodes().Filter(query.InIDs(query.Node(), second.ID)).Update(secondProperties)
 	}))
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 
@@ -353,14 +352,14 @@ func TestPostgreSQLRelationshipUpdateRebindsCachedBuilderParameters(t *testing.T
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
 		if err := tx.Relationships().Filter(query.InIDs(query.Relationship(), first.ID)).Update(graph.NewProperties().Set("name", "after-first")); err != nil {
 			return err
 		}
 		return tx.Relationships().Filter(query.InIDs(query.Relationship(), second.ID)).Update(graph.NewProperties().Set("name", "after-second"))
 	}))
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 
