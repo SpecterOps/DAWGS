@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -98,7 +99,8 @@ func (s *shortestExecutorBenchmarkTransaction) Query(cypherQuery string, paramet
 	if err != nil {
 		return graph.NewErrorResult(err)
 	}
-	return s.Transaction.Raw(sqlQuery, translation.Parameters)
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+	return s.Transaction.Raw(sqlQuery.Statement, translation.Parameters)
 }
 
 // traversalPolicyBenchmarkDatabase changes only the transaction boundary used

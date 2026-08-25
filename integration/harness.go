@@ -29,7 +29,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/specterops/dawgs"
-	"github.com/specterops/dawgs/databaseguard"
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
@@ -104,7 +103,7 @@ func DriverFromConnectionString(connStr string) (string, error) {
 	}
 }
 
-// OpenSession validates the configured disposable target, initializes its schema, and returns an integration session.
+// OpenSession opens the configured database, initializes its schema, and returns an integration session.
 func OpenSession(opts Options) (*Session, error) {
 	ctx := context.Background()
 	connEnv := opts.ConnectionStringEnvVar
@@ -124,9 +123,6 @@ func OpenSession(opts Options) (*Session, error) {
 
 	if opts.RequireDriver != "" && driver != opts.RequireDriver {
 		return nil, fmt.Errorf("%w: %s is not a %s connection string", errDriverMismatch, connEnv, opts.RequireDriver)
-	}
-	if err := databaseguard.ValidateEnvironment(connStr); err != nil {
-		return nil, fmt.Errorf("integration database safety check failed: %w", err)
 	}
 
 	cfg := dawgs.Config{

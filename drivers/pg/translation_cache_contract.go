@@ -63,10 +63,19 @@ func translationParameterTypeKey(parameters map[string]any) string {
 }
 
 func cacheableTranslation(result translate.Result, parameters map[string]any) bool {
-	if len(result.Parameters) != len(result.ParameterSources) {
+	if len(result.Parameters) != len(result.ParameterSources)+len(result.LiteralParameters) {
 		return false
 	}
-	for identifier := range result.Parameters {
+	for identifier, value := range result.Parameters {
+		if literal, found := result.LiteralParameters[identifier]; found {
+			if literal != value {
+				return false
+			}
+			if _, overlaps := result.ParameterSources[identifier]; overlaps {
+				return false
+			}
+			continue
+		}
 		source, found := result.ParameterSources[identifier]
 		if !found || source == "" {
 			return false

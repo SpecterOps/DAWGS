@@ -5,6 +5,7 @@ package translate
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"testing"
 
@@ -24,6 +25,7 @@ func translateSuffixReverseGuard(t *testing.T, query string, options ToolOptions
 	require.NoError(t, err)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
+	maps.Copy(translation.Parameters, formatted.Parameters)
 	return translation, formatted.Statement
 }
 
@@ -83,9 +85,9 @@ func TestSuffixReverseGuardEmitsStaticFullPathDualArm(t *testing.T) {
 		require.Contains(t, formatted, cte)
 	}
 	require.Equal(t, 1, strings.Count(formatted, "record_requested_traversal_runtime_attestation_v1("))
-	require.Contains(t, formatted, "EXPANSION-STEPWISE-FORWARD")
-	require.Contains(t, formatted, "EXPANSION-SUFFIX-SEEDED-REVERSE")
-	require.Contains(t, formatted, "suffix_seeded_reverse")
+	require.Contains(t, formatted, literalParameterSQL(t, translation.Parameters, "EXPANSION-STEPWISE-FORWARD"))
+	require.Contains(t, formatted, literalParameterSQL(t, translation.Parameters, "EXPANSION-SUFFIX-SEEDED-REVERSE"))
+	require.Contains(t, formatted, literalParameterSQL(t, translation.Parameters, "suffix_seeded_reverse"))
 	require.Contains(t, formatted, "exists (select 1")
 	require.Contains(t, formatted, "generate_subscripts")
 	require.Contains(t, formatted, "union all")
@@ -133,10 +135,10 @@ func TestSuffixReverseRetryEmitsOnlyBoundedCandidate(t *testing.T) {
 		RequiresCompleteProbes: true,
 		FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
 	}, decision.Admission)
-	require.Contains(t, formatted, "set_config('dawgs.suffix_reverse_retry_status'")
-	require.Contains(t, formatted, "forward_retry_suffix_overflow")
-	require.Contains(t, formatted, "forward_retry_state_overflow")
-	require.Contains(t, formatted, "reverse_complete")
+	require.Contains(t, formatted, "set_config("+literalParameterSQL(t, translation.Parameters, "dawgs.suffix_reverse_retry_status"))
+	require.Contains(t, formatted, literalParameterSQL(t, translation.Parameters, "forward_retry_suffix_overflow"))
+	require.Contains(t, formatted, literalParameterSQL(t, translation.Parameters, "forward_retry_state_overflow"))
+	require.Contains(t, formatted, literalParameterSQL(t, translation.Parameters, "reverse_complete"))
 	require.Contains(t, formatted, "limit 4097")
 	require.Contains(t, formatted, "_suffix_guard_candidate_body")
 	require.NotContains(t, formatted, "_suffix_guard_fallback_body")
@@ -164,7 +166,7 @@ func TestProductionTopologyFixedSuffixEmitsOneGuardedCandidate(t *testing.T) {
 	require.Equal(t, "production_canary", decision.SelectionMode)
 	require.Equal(t, optimize.ExpansionSearchExecutionBoundaryTransactionRetry, decision.ExecutionBoundary)
 	require.Equal(t, []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}, decision.EmittedCandidates)
-	require.Contains(t, formatted.Statement, "set_config('dawgs.suffix_reverse_retry_status'")
+	require.Contains(t, formatted.Statement, "set_config("+literalParameterSQL(t, formatted.Parameters, "dawgs.suffix_reverse_retry_status"))
 	require.NotContains(t, formatted.Statement, "_suffix_guard_fallback_body")
 }
 
@@ -187,8 +189,8 @@ func TestProductionTopologyFixedSuffixFirstUseEmitsRetryCandidate(t *testing.T) 
 	require.Equal(t, optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1, decision.PlannedPolicy)
 	require.Equal(t, optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1, decision.EmittedPolicy)
 	require.Equal(t, optimize.ExpansionSearchExecutionBoundaryTransactionRetry, decision.ExecutionBoundary)
-	require.Contains(t, formatted, "set_config('dawgs.suffix_reverse_retry_status'")
-	require.NotContains(t, formatted, "_suffix_guard_fallback_body")
+	require.Contains(t, formatted.Statement, "set_config("+literalParameterSQL(t, formatted.Parameters, "dawgs.suffix_reverse_retry_status"))
+	require.NotContains(t, formatted.Statement, "_suffix_guard_fallback_body")
 }
 
 func TestSuffixReverseRetryLowersEveryIndependentFixedSuffixTarget(t *testing.T) {
@@ -231,8 +233,8 @@ func TestSuffixRouteComponentEmitsOneExactReverseStatement(t *testing.T) {
 	require.Empty(t, outcome.EmittedPolicy)
 
 	require.Contains(t, formatted, "_suffix_seeded_component_receipt")
-	require.Contains(t, formatted, "record_requested_traversal_runtime_attestation_v1('suffix_route_component', false, 'EXPANSION-SUFFIX-SEEDED-REVERSE')")
-	require.Contains(t, formatted, "EXPANSION-SUFFIX-SEEDED-REVERSE")
+	require.Contains(t, formatted, "record_requested_traversal_runtime_attestation_v1("+literalParameterSQL(t, translation.Parameters, "suffix_route_component")+", false, "+literalParameterSQL(t, translation.Parameters, "EXPANSION-SUFFIX-SEEDED-REVERSE")+")")
+	require.Contains(t, formatted, literalParameterSQL(t, translation.Parameters, "EXPANSION-SUFFIX-SEEDED-REVERSE"))
 	require.NotContains(t, formatted, "_suffix_guard_")
 	require.NotContains(t, formatted, "_orientation_")
 	require.NotContains(t, formatted, "EXPANSION-STEPWISE-FORWARD")

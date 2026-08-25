@@ -289,8 +289,8 @@ func TestBidirectionalAllShortestPathsSingletonEndpointsPreserveMaxDepth(t *test
 
 	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
 	require.NoError(t, err)
-	require.Contains(t, formattedQuery, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, 7, array [singleton_endpoints.root_id]::int8[], array [singleton_endpoints.terminal_id]::int8[])")
-	require.NotContains(t, formattedQuery, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, array")
+	require.Contains(t, formattedQuery.Statement, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, 7, array [singleton_endpoints.root_id]::int8[], array [singleton_endpoints.terminal_id]::int8[])")
+	require.NotContains(t, formattedQuery.Statement, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, array")
 }
 
 func TestZeroDepthExpansionRejectsEdgeDependentTerminalSatisfaction(t *testing.T) {
