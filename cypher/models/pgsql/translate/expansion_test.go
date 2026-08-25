@@ -273,6 +273,25 @@ func TestBoundTerminalShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing
 	require.Contains(t, formattedQuery, "(s0.n1).id = s1.next_id")
 }
 
+// TestBidirectionalAllShortestPathsSingletonEndpointsPreserveMaxDepth verifies the ASP harness receives its
+// depth argument before the endpoint arrays. Unlike the SP harness, ASP has no trailing allow-zero-depth flag.
+func TestBidirectionalAllShortestPathsSingletonEndpointsPreserveMaxDepth(t *testing.T) {
+	builder, expansionModel := newShortestPathSeedTestBuilder(true, true)
+	expansionModel.BackwardPrimerQueryParameter = &BoundIdentifier{Identifier: "pi2"}
+	expansionModel.BackwardRecursiveQueryParameter = &BoundIdentifier{Identifier: "pi3"}
+	expansionModel.Options.MaxDepth = models.OptionalValue[int64](7)
+	expansionModel.SingletonRootID = pgd.IntLiteral(101)
+	expansionModel.SingletonTerminalID = pgd.IntLiteral(202)
+
+	query, err := builder.buildBiDirectionalShortestPathsHarnessCall(pgsql.FunctionBidirectionalASPHarness)
+	require.NoError(t, err)
+
+	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
+	require.NoError(t, err)
+	require.Contains(t, formattedQuery, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, 7, array [singleton_endpoints.root_id]::int8[], array [singleton_endpoints.terminal_id]::int8[])")
+	require.NotContains(t, formattedQuery, "bidirectional_asp_harness(@pi0::text, @pi1::text, @pi2::text, @pi3::text, array")
+}
+
 func TestZeroDepthExpansionRejectsEdgeDependentTerminalSatisfaction(t *testing.T) {
 	builder, expansionModel := newShortestPathSeedTestBuilder(false, false)
 	seed := newExpansionNodeSeed(expansionSeedIdentifier(shortestPathSeedTestFrame), shortestPathSeedTestRoot, nil)

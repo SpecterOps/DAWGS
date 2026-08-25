@@ -1638,8 +1638,7 @@ func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Ex
 
 	if expansionModel.UsesSingletonEndpointPair() {
 		harnessParameters = append([]pgsql.Expression(nil), harnessParameters...)
-		rootArrayIndex := len(harnessParameters) - 3
-		terminalArrayIndex := len(harnessParameters) - 2
+		rootArrayIndex, terminalArrayIndex := bidirectionalHarnessEndpointArrayParameterIndexes(functionName, len(harnessParameters))
 		harnessParameters[rootArrayIndex] = pgsql.ArrayLiteral{
 			Values: []pgsql.Expression{
 				pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
@@ -1686,6 +1685,19 @@ func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Ex
 			Shape: expansionColumns(),
 		},
 		Query: innerQuery,
+	}
+}
+
+// bidirectionalHarnessEndpointArrayParameterIndexes returns the root and terminal array positions for a harness.
+// The SP harness has a trailing allow_zero_depth parameter; the ASP harness does not.
+func bidirectionalHarnessEndpointArrayParameterIndexes(functionName pgsql.Identifier, parameterCount int) (int, int) {
+	switch functionName {
+	case pgsql.FunctionBidirectionalSPHarness:
+		return parameterCount - 3, parameterCount - 2
+	case pgsql.FunctionBidirectionalASPHarness:
+		return parameterCount - 2, parameterCount - 1
+	default:
+		panic(fmt.Sprintf("unsupported bidirectional shortest-path harness %q", functionName))
 	}
 }
 
