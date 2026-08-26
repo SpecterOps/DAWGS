@@ -52,6 +52,116 @@ func assertRelationshipIDs(t *testing.T, actual []graph.ID, expected ...graph.ID
 	}
 }
 
+func assertFetchedNodeIDs(t *testing.T, actual []graph.ID, expected ...graph.ID) {
+	t.Helper()
+
+	if len(actual) != len(expected) {
+		t.Fatalf("node IDs: got %v, want %v", actual, expected)
+	}
+
+	remaining := make(map[graph.ID]int, len(expected))
+	for _, id := range expected {
+		remaining[id]++
+	}
+
+	for _, id := range actual {
+		if remaining[id] == 0 {
+			t.Fatalf("node IDs: got %v, want %v", actual, expected)
+		}
+		remaining[id]--
+	}
+}
+
+func TestPostgreSQLIndexableCaseInsensitiveStringPredicates(t *testing.T) {
+	connStr := os.Getenv("CONNECTION_STRING")
+	if connStr == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+
+	driver, err := DriverFromConnectionString(connStr)
+	if err != nil {
+		t.Fatalf("failed to detect driver: %v", err)
+	}
+	if driver != pg.DriverName {
+		t.Skipf("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	var (
+		userKind = graph.StringKind("User")
+		db, ctx  = SetupDBWithKinds(t, CleanupGraph, graph.Kinds{userKind}, nil)
+		matching *graph.Node
+		prefix   *graph.Node
+		other    *graph.Node
+		missing  *graph.Node
+	)
+
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		var err error
+		if matching, err = tx.CreateNode(graph.AsProperties(map[string]any{"name": "Prefix-NeEdLe%_\\-Suffix"}), userKind); err != nil {
+			return err
+		}
+		if prefix, err = tx.CreateNode(graph.AsProperties(map[string]any{"name": "PrEfIx-Other"}), userKind); err != nil {
+			return err
+		}
+		if other, err = tx.CreateNode(graph.AsProperties(map[string]any{"name": "Other Value"}), userKind); err != nil {
+			return err
+		}
+		if missing, err = tx.CreateNode(graph.NewProperties(), userKind); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatalf("failed to create fixture: %v", err)
+	}
+
+	testCases := []struct {
+		name     string
+		criteria graph.Criteria
+		expected []graph.ID
+	}{
+		{
+			name:     "contains is case insensitive and treats LIKE wildcards literally",
+			criteria: query.IndexableCaseInsensitiveStringContains(query.NodeProperty("name"), `nEeDlE%_\`),
+			expected: []graph.ID{matching.ID},
+		},
+		{
+			name:     "starts with is case insensitive",
+			criteria: query.IndexableCaseInsensitiveStringStartsWith(query.NodeProperty("name"), "pReFiX-"),
+			expected: []graph.ID{matching.ID, prefix.ID},
+		},
+		{
+			name:     "negated contains includes missing properties",
+			criteria: query.Not(query.IndexableCaseInsensitiveStringContains(query.NodeProperty("name"), `nEeDlE%_\`)),
+			expected: []graph.ID{prefix.ID, other.ID, missing.ID},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var actual []graph.ID
+
+			err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+				return tx.Nodes().Filter(query.And(
+					query.Kind(query.Node(), userKind),
+					testCase.criteria,
+				)).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
+					for id := range cursor.Chan() {
+						actual = append(actual, id)
+					}
+
+					return cursor.Error()
+				})
+			})
+			if err != nil {
+				t.Fatalf("query failed: %v", err)
+			}
+
+			assertFetchedNodeIDs(t, actual, testCase.expected...)
+		})
+	}
+}
+
 func TestPostgreSQLPropertyTextEqualityCompatibility(t *testing.T) {
 	connStr := os.Getenv("CONNECTION_STRING")
 	if connStr == "" {

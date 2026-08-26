@@ -102,6 +102,62 @@ func TestBuilderRendersRawPropertyKeys(t *testing.T) {
 	}
 }
 
+func TestIndexableCaseInsensitiveStringPredicatesTranslateToILike(t *testing.T) {
+	for _, testCase := range []struct {
+		name     string
+		property string
+		criteria graph.Criteria
+	}{
+		{
+			name:     "contains",
+			property: "name",
+			criteria: query.IndexableCaseInsensitiveStringContains(query.NodeProperty("name"), `Needle%_\\`),
+		},
+		{
+			name:     "starts with",
+			property: "objectid",
+			criteria: query.IndexableCaseInsensitiveStringStartsWith(query.NodeProperty("objectid"), `Needle%_\\`),
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			builder := query.NewBuilder(nil)
+			builder.Apply(query.Where(testCase.criteria), query.Returning(query.Node()))
+
+			regularQuery, err := builder.Build(false)
+			if err != nil {
+				t.Fatalf("build query: %v", err)
+			}
+
+			translated, err := translate.FromCypher(context.Background(), regularQuery, nil, false, 1)
+			if err != nil {
+				t.Fatalf("translate PostgreSQL query: %v", err)
+			}
+
+			sql := strings.ToLower(translated.Statement)
+			for _, expected := range []string{
+				" ilike ",
+				"replace(",
+				"->> '" + testCase.property + "'",
+			} {
+				if !strings.Contains(sql, expected) {
+					t.Errorf("PostgreSQL query missing %q:\n%s", expected, translated.Statement)
+				}
+			}
+
+			for _, unexpected := range []string{
+				"lower((n0.properties",
+				"cypher_contains(",
+				"cypher_starts_with(",
+				"__dawgs_",
+			} {
+				if strings.Contains(sql, unexpected) {
+					t.Errorf("PostgreSQL query unexpectedly contains %q:\n%s", unexpected, translated.Statement)
+				}
+			}
+		})
+	}
+}
+
 func assertRetrieverProjection(t *testing.T, rendered string) {
 	t.Helper()
 

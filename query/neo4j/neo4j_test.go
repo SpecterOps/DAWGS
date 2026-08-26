@@ -716,6 +716,36 @@ func TestQueryBuilder_Render(t *testing.T) {
 		),
 	), "match (n) where toLower(n.tags) starts with $p0 return n"))
 
+	t.Run("Node String Item Indexable Case Insensitive Contains With Uppercase Parameter", assertQueryResult(query.SinglePartQuery(
+		query.Where(
+			cypher.NewIndexableCaseInsensitiveStringPredicate(query.NodeProperty("tags"), cypher.OperatorContains, query.Parameter("TAG_1")),
+		),
+
+		query.Returning(
+			query.Node(),
+		),
+	), "match (n) where toLower(n.tags) contains toLower($p0) return n"))
+
+	t.Run("Node String Item Indexable Case Insensitive Contains", assertQueryResult(query.SinglePartQuery(
+		query.Where(
+			query.IndexableCaseInsensitiveStringContains(query.NodeProperty("tags"), "tag_1"),
+		),
+
+		query.Returning(
+			query.Node(),
+		),
+	), "match (n) where toLower(n.tags) contains toLower($p0) return n"))
+
+	t.Run("Node String Item Indexable Case Insensitive Starts With", assertQueryResult(query.SinglePartQuery(
+		query.Where(
+			query.IndexableCaseInsensitiveStringStartsWith(query.NodeProperty("tags"), "tag_1"),
+		),
+
+		query.Returning(
+			query.Node(),
+		),
+	), "match (n) where toLower(n.tags) starts with toLower($p0) return n"))
+
 	t.Run("Node String Item Case Insensitive Ends With", assertQueryResult(query.SinglePartQuery(
 		query.Where(
 			query.CaseInsensitiveStringEndsWith(query.NodeProperty("tags"), "tag_1"),
@@ -1071,6 +1101,30 @@ func TestQueryBuilder_Render(t *testing.T) {
 			query.Count(query.Node()),
 		),
 	), "match (n) where (not (n.system_tags contains $p0) or n.system_tags is null) return count(n)"))
+
+	t.Run("Not Indexable Case Insensitive String Contains Operator Rewrite", assertQueryResult(query.SinglePartQuery(
+		query.Where(
+			query.Not(
+				query.IndexableCaseInsensitiveStringContains(query.Property(query.Node(), SystemTags), "admin_tier_0"),
+			),
+		),
+
+		query.Returning(
+			query.Count(query.Node()),
+		),
+	), "match (n) where (not (toLower(n.system_tags) contains toLower($p0)) or n.system_tags is null) return count(n)"))
+
+	t.Run("Not Indexable Case Insensitive String Starts With Operator Rewrite", assertQueryResult(query.SinglePartQuery(
+		query.Where(
+			query.Not(
+				query.IndexableCaseInsensitiveStringStartsWith(query.Property(query.Node(), SystemTags), "admin"),
+			),
+		),
+
+		query.Returning(
+			query.Count(query.Node()),
+		),
+	), "match (n) where (not (toLower(n.system_tags) starts with toLower($p0)) or n.system_tags is null) return count(n)"))
 
 	t.Run("Is Not Null", assertQueryResult(query.SinglePartQuery(
 		query.Where(

@@ -73,6 +73,11 @@ func TestCopy(t *testing.T) {
 	})
 	validateCopy(t, &model2.Parenthetical{})
 	validateCopy(t, &model2.Comparison{})
+	validateCopy(t, model2.NewIndexableCaseInsensitiveStringPredicate(
+		model2.NewPropertyLookup("n", "name"),
+		model2.OperatorContains,
+		&model2.Parameter{Value: "needle"},
+	))
 	validateCopy(t, &model2.PartialComparison{
 		Operator: model2.OperatorAdd,
 	})
@@ -167,6 +172,21 @@ func TestCopy(t *testing.T) {
 	// External types
 	validateCopy(t, []string{})
 	validateCopy(t, graph.Kinds{})
+}
+
+func TestCopyIndexableCaseInsensitiveStringPredicateIsIndependent(t *testing.T) {
+	original := model2.NewIndexableCaseInsensitiveStringPredicate(
+		model2.NewPropertyLookup("n", "name"),
+		model2.OperatorContains,
+		&model2.Parameter{Value: "needle"},
+	)
+	copied := model2.Copy(original)
+
+	copied.Reference.(*model2.PropertyLookup).Atom.(*model2.Variable).Symbol = "copied"
+	copied.Value.Value = "copied needle"
+
+	require.Equal(t, "n", original.Reference.(*model2.PropertyLookup).Atom.(*model2.Variable).Symbol)
+	require.Equal(t, "needle", original.Value.Value)
 }
 
 func TestCopyPatternVariablesAreIndependent(t *testing.T) {

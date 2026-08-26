@@ -150,7 +150,7 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 func (s *Translator) Enter(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
 	case *cypher.RegularQuery, *cypher.SingleQuery, *cypher.PatternElement,
-		*cypher.Comparison, *cypher.Skip, *cypher.Limit, cypher.Operator, *cypher.ArithmeticExpression,
+		*cypher.Comparison, *cypher.IndexableCaseInsensitiveStringPredicate, *cypher.Skip, *cypher.Limit, cypher.Operator, *cypher.ArithmeticExpression,
 		*cypher.NodePattern, *cypher.RelationshipPattern, *cypher.Remove, *cypher.Set,
 		*cypher.ReadingClause, *cypher.UnaryAddOrSubtractExpression, *cypher.PropertyLookup,
 		*cypher.Negation, *cypher.Where, *cypher.ListLiteral,
@@ -532,6 +532,39 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 
 	case *cypher.FunctionInvocation:
 		s.translateFunction(typedExpression)
+
+	case *cypher.IndexableCaseInsensitiveStringPredicate:
+		if value, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else if reference, err := s.treeTranslator.PopOperand(); err != nil {
+			s.SetError(err)
+		} else if textReference, err := cypherStringPredicateTextOperand(reference); err != nil {
+			s.SetError(err)
+		} else {
+			var (
+				prefix bool
+				suffix bool
+			)
+
+			switch typedExpression.Operator {
+			case cypher.OperatorContains:
+				prefix = true
+				suffix = true
+
+			case cypher.OperatorStartsWith:
+				suffix = true
+
+			default:
+				s.SetErrorf("unsupported indexable case-insensitive string predicate operator: %s", typedExpression.Operator)
+				return
+			}
+
+			if pattern, err := escapedLikePattern(value, prefix, suffix); err != nil {
+				s.SetError(err)
+			} else {
+				s.treeTranslator.PushOperand(pgsql.NewBinaryExpression(textReference, pgsql.OperatorILike, pattern))
+			}
+		}
 
 	case *cypher.UnaryAddOrSubtractExpression:
 		if operand, err := s.treeTranslator.PopOperand(); err != nil {

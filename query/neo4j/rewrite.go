@@ -73,23 +73,35 @@ func unwrapParenthetical(expression cypher.SyntaxNode) cypher.SyntaxNode {
 
 func (s *ExpressionListRewriter) rewriteStringNegation(negation *cypher.Negation) {
 	if ancestorExpressionList, isExpressionList := s.peekExpressionList(); isExpressionList {
+		var (
+			reference cypher.Expression
+			operator  cypher.Operator
+		)
+
 		switch typedNegatedExpression := unwrapParenthetical(negation.Expression).(type) {
 		case *cypher.Comparison:
 			firstPartial := typedNegatedExpression.FirstPartial()
-
-			// If the negated expression is a comparison check to see if it's a string comparison. This is done since
-			// Neo4j comparison semantics for strings regarding `null` has edge cases that must be accounted for
-			switch firstPartial.Operator {
-			case cypher.OperatorStartsWith, cypher.OperatorEndsWith, cypher.OperatorContains:
-				// Rewrite this comparison is a disjunction of the negation and a follow-on comparison to handle null
-				// checks
-				ancestorExpressionList.Replace(ancestorExpressionList.IndexOf(negation), &cypher.Parenthetical{
-					Expression: cypher.NewDisjunction(
-						negation,
-						cypher.NewComparison(typedNegatedExpression.Left, cypher.OperatorIs, query.Literal(nil)),
-					),
-				})
+			if firstPartial == nil {
+				return
 			}
+
+			reference = typedNegatedExpression.Left
+			operator = firstPartial.Operator
+
+		case *cypher.IndexableCaseInsensitiveStringPredicate:
+			reference = typedNegatedExpression.Reference
+			operator = typedNegatedExpression.Operator
+		}
+
+		// Neo4j comparison semantics for strings regarding `null` has edge cases that must be accounted for.
+		switch operator {
+		case cypher.OperatorStartsWith, cypher.OperatorEndsWith, cypher.OperatorContains:
+			ancestorExpressionList.Replace(ancestorExpressionList.IndexOf(negation), &cypher.Parenthetical{
+				Expression: cypher.NewDisjunction(
+					negation,
+					cypher.NewComparison(reference, cypher.OperatorIs, query.Literal(nil)),
+				),
+			})
 		}
 	}
 }

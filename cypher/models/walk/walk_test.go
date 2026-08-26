@@ -912,6 +912,14 @@ func TestCypherWalkSemanticTraversalSequences(t *testing.T) {
 			},
 			expected: []string{"variable:left", "variable:right"},
 		},
+		"indexable case-insensitive predicate walks reference then value": {
+			node: cypher.NewIndexableCaseInsensitiveStringPredicate(
+				cypher.NewPropertyLookup("node", "name"),
+				cypher.OperatorContains,
+				&cypher.Parameter{Symbol: "value"},
+			),
+			expected: []string{"variable:node", "parameter:value"},
+		},
 		"arithmetic walks left operator then right": {
 			node: &cypher.ArithmeticExpression{
 				Left: cypher.NewVariableWithSymbol("left"),

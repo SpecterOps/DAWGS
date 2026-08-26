@@ -457,6 +457,10 @@ regression coverage is limited to literal `CONTAINS`, `STARTS WITH`, and `ENDS W
 `LIKE` over `properties ->> key`. Dynamic parameter/property forms that lower to helper functions remain outside the
 index-match contract until their lowering changes.
 
+Programmatic callers can opt into `query.IndexableCaseInsensitiveStringContains` and
+`query.IndexableCaseInsensitiveStringStartsWith` for PostgreSQL-backed application search. These helpers are not raw
+Cypher syntax and lower to escaped raw-property `ILIKE` predicates that can use a matching `TextSearchIndex`.
+
 ### null Behavior
 
 Behavior around `null` in SQL differs from how Neo4j executes Cypher. Certain expression operators in Neo4j's

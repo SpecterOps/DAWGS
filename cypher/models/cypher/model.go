@@ -1231,6 +1231,34 @@ func (s *Comparison) LastPartial() *PartialComparison {
 	return nil
 }
 
+// IndexableCaseInsensitiveStringPredicate represents a programmatic case-insensitive
+// string predicate that drivers may lower to an index-friendly expression.
+type IndexableCaseInsensitiveStringPredicate struct {
+	Reference Expression
+	Operator  Operator
+	Value     *Parameter
+}
+
+func NewIndexableCaseInsensitiveStringPredicate(reference Expression, operator Operator, value *Parameter) *IndexableCaseInsensitiveStringPredicate {
+	return &IndexableCaseInsensitiveStringPredicate{
+		Reference: reference,
+		Operator:  operator,
+		Value:     value,
+	}
+}
+
+func (s *IndexableCaseInsensitiveStringPredicate) copy() *IndexableCaseInsensitiveStringPredicate {
+	if s == nil {
+		return nil
+	}
+
+	return &IndexableCaseInsensitiveStringPredicate{
+		Reference: Copy(s.Reference),
+		Operator:  s.Operator,
+		Value:     Copy(s.Value),
+	}
+}
+
 type PartialComparison struct {
 	Operator Operator
 	Right    Expression

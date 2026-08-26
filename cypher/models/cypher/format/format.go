@@ -584,6 +584,31 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 			}
 		}
 
+	case *cypher.IndexableCaseInsensitiveStringPredicate:
+		if _, err := io.WriteString(output, "toLower("); err != nil {
+			return err
+		}
+
+		if err := s.WriteExpression(output, typedExpression.Reference); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, ") "+typedExpression.Operator.String()+" "); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, "toLower("); err != nil {
+			return err
+		}
+
+		if err := s.WriteExpression(output, typedExpression.Value); err != nil {
+			return err
+		}
+
+		if _, err := io.WriteString(output, ")"); err != nil {
+			return err
+		}
+
 	case *cypher.PartialComparison:
 		if _, err := io.WriteString(output, " "); err != nil {
 			return err

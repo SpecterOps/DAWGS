@@ -59,6 +59,12 @@ Substring and suffix predicates are not promoted to blanket schema indexes. Post
 parameter/property forms that lower to helper functions remain outside the hard index-match contract until their
 lowering changes.
 
+The programmatic `query.IndexableCaseInsensitiveStringContains` and
+`query.IndexableCaseInsensitiveStringStartsWith` helpers are an explicit exception for PostgreSQL-backed application
+search. They lower to escaped raw-property `ILIKE` predicates and can use a matching `TextSearchIndex`. They are not
+raw Cypher syntax: formatting and reparsing them as ordinary `toLower(...) CONTAINS` or `STARTS WITH` Cypher uses the
+normal dynamic helper-function lowering instead.
+
 ## Validation Workflow
 
 Optimizer changes should include focused optimizer/lowering tests, SQL-shape translation tests, and backend-equivalent

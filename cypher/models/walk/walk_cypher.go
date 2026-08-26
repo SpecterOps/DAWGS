@@ -400,6 +400,16 @@ func newCypherOperatorWalkCursor(node cypher.SyntaxNode) (*Cursor[cypher.SyntaxN
 	case *cypher.Comparison:
 		return newCypherWalkCursorWithBranchPrefix(node, typedNode.Left, typedNode.Partials), true
 
+	case *cypher.IndexableCaseInsensitiveStringPredicate:
+		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
+		if typedNode.Reference != nil {
+			nextCursor.AddBranches(typedNode.Reference)
+		}
+		if typedNode.Value != nil {
+			nextCursor.AddBranches(typedNode.Value)
+		}
+		return nextCursor, true
+
 	case *cypher.UnaryAddOrSubtractExpression:
 		nextCursor := &Cursor[cypher.SyntaxNode]{Node: node}
 		if typedNode.Right != nil {

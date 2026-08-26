@@ -83,6 +83,9 @@ func Copy[T any](value T, extensions ...CopyExtension[T]) T {
 	case *Comparison:
 		return any(typedValue.copy()).(T)
 
+	case *IndexableCaseInsensitiveStringPredicate:
+		return any(typedValue.copy()).(T)
+
 	case *ArithmeticExpression:
 		return any(typedValue.copy()).(T)
 

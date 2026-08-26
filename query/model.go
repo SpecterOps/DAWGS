@@ -283,6 +283,24 @@ func CaseInsensitiveStringEndsWith(reference graph.Criteria, value string) *cyph
 	)
 }
 
+// IndexableCaseInsensitiveStringContains builds a case-insensitive contains predicate that PostgreSQL can render with a matching text-search index.
+func IndexableCaseInsensitiveStringContains(reference graph.Criteria, value string) *cypherModel.IndexableCaseInsensitiveStringPredicate {
+	return cypherModel.NewIndexableCaseInsensitiveStringPredicate(
+		reference,
+		cypherModel.OperatorContains,
+		Parameter(strings.ToLower(value)),
+	)
+}
+
+// IndexableCaseInsensitiveStringStartsWith builds a case-insensitive prefix predicate that PostgreSQL can render with a matching text-search index.
+func IndexableCaseInsensitiveStringStartsWith(reference graph.Criteria, value string) *cypherModel.IndexableCaseInsensitiveStringPredicate {
+	return cypherModel.NewIndexableCaseInsensitiveStringPredicate(
+		reference,
+		cypherModel.OperatorStartsWith,
+		Parameter(strings.ToLower(value)),
+	)
+}
+
 func Equals(reference graph.Criteria, value any) *cypherModel.Comparison {
 	return cypherModel.NewComparison(reference, cypherModel.OperatorEquals, Parameter(value))
 }

@@ -1063,6 +1063,42 @@ func cypherStringPredicateFunction(function pgsql.Identifier, lOperand, rOperand
 	}, nil
 }
 
+func escapedLikePattern(value pgsql.Expression, prefix, suffix bool) (pgsql.Expression, error) {
+	escapedValue, err := cypherStringPredicateTextOperand(value)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, replacement := range []struct {
+		old string
+		new string
+	}{
+		{old: "\\", new: "\\\\"},
+		{old: "%", new: "\\%"},
+		{old: "_", new: "\\_"},
+	} {
+		escapedValue = pgsql.FunctionCall{
+			Function: pgsql.FunctionReplace,
+			Parameters: []pgsql.Expression{
+				escapedValue,
+				pgsql.NewLiteral(replacement.old, pgsql.Text),
+				pgsql.NewLiteral(replacement.new, pgsql.Text),
+			},
+			CastType: pgsql.Text,
+		}
+	}
+
+	var pattern pgsql.Expression = escapedValue
+	if prefix {
+		pattern = pgsql.NewBinaryExpression(pgsql.NewLiteral("%", pgsql.Text), pgsql.OperatorConcatenate, pattern)
+	}
+	if suffix {
+		pattern = pgsql.NewBinaryExpression(pattern, pgsql.OperatorConcatenate, pgsql.NewLiteral("%", pgsql.Text))
+	}
+
+	return pattern, nil
+}
+
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:
