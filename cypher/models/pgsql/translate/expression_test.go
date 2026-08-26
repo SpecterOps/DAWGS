@@ -511,5 +511,5 @@ func validateConstraints(t *testing.T, constraintTracker *translate.ExpressionTr
 	formattedConstraint, err := format.Expression(constraint.Expression, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, expectedTranslation, formattedConstraint)
+	require.Equal(t, expectedTranslation, formattedConstraint.Statement)
 }
