@@ -29,12 +29,12 @@ RETURN p`)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	require.Contains(t, formatted, "as p from s0 where")
-	require.Contains(t, formatted, "exists (select 1 from edge")
-	require.Contains(t, formatted, "kind_id = any (array [3, 4]::int2[])")
-	require.Contains(t, formatted, "start_id = (s0.n0).id")
-	require.Contains(t, formatted, "end_id = (s0.n1).id")
-	require.NotContains(t, formatted, "with s1 as")
+	require.Contains(t, formatted.Statement, "as p from s0 where")
+	require.Contains(t, formatted.Statement, "exists (select 1 from edge")
+	require.Contains(t, formatted.Statement, "kind_id = any (array [3, 4]::int2[])")
+	require.Contains(t, formatted.Statement, "start_id = (s0.n0).id")
+	require.Contains(t, formatted.Statement, "end_id = (s0.n1).id")
+	require.NotContains(t, formatted.Statement, "with s1 as")
 }
 
 func TestOptimizedPatternPredicatesContinueAfterFirstPlacement(t *testing.T) {
@@ -57,8 +57,8 @@ func TestOptimizedPatternPredicatesContinueAfterFirstPlacement(t *testing.T) {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	require.Contains(t, formatted, "array [2]::int2[]")
-	require.Contains(t, formatted, "array [3]::int2[]")
+	require.Contains(t, formatted.Statement, "array [2]::int2[]")
+	require.Contains(t, formatted.Statement, "array [3]::int2[]")
 }
 
 func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[string]any) string {
@@ -300,7 +300,7 @@ RETURN n`)
 	require.NotContains(t, s2Body, "array [2]::int2[]")
 
 	// The existence check reads from the terminal set.
-	require.Contains(t, formatted, "count(*) > 0 from s2")
+	require.Contains(t, formatted.Statement, "count(*) > 0 from s2")
 }
 
 // extractCTEBody returns the parenthesised body of the named common table

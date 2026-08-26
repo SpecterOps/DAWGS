@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -382,7 +383,8 @@ func translateIndexedCypher(t *testing.T, indexedDB indexedPostgresDB, cypherQue
 		t.Fatalf("failed to render translated SQL: %v", err)
 	}
 
-	return sqlQuery, translation.Parameters
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+	return sqlQuery.Statement, translation.Parameters
 }
 
 // explainWithSeqScanDisabled captures a JSON EXPLAIN plan with sequential scans
