@@ -52,11 +52,11 @@ func (s *relationshipQuery) Update(properties *graph.Properties) error {
 		var updateStatements []graph.Criteria
 
 		if modifiedProperties := properties.ModifiedProperties(); len(modifiedProperties) > 0 {
-			updateStatements = append(updateStatements, query.SetProperties(query.Node(), modifiedProperties))
+			updateStatements = append(updateStatements, query.SetProperties(query.Relationship(), modifiedProperties))
 		}
 
 		if deletedProperties := properties.DeletedProperties(); len(deletedProperties) > 0 {
-			updateStatements = append(updateStatements, query.DeleteProperties(query.Node(), deletedProperties...))
+			updateStatements = append(updateStatements, query.DeleteProperties(query.Relationship(), deletedProperties...))
 		}
 
 		return updateStatements
