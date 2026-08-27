@@ -41,7 +41,7 @@ func (s testBindingLookup) LookupDataType(identifier pgsql.Identifier) (pgsql.Da
 	return dataType, found
 }
 
-func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
+func TestOptimizePreservesUnchangedQueryAndAnalyzesIt(t *testing.T) {
 	t.Parallel()
 
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), adcsQuery)
@@ -59,6 +59,34 @@ func TestOptimizeCopiesAndAnalyzesQuery(t *testing.T) {
 		{Name: "PredicateAttachment", Applied: true},
 	}, plan.Rules)
 	require.Len(t, plan.PredicateAttachments, 2)
+}
+
+func TestOptimizeBorrowedPreservesUnchangedQuery(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), adcsQuery)
+	require.NoError(t, err)
+
+	plan, err := OptimizeBorrowed(regularQuery)
+	require.NoError(t, err)
+	require.Same(t, regularQuery, plan.Query)
+}
+
+func TestOptimizeCopiesOnlyWhenDefaultRuleMutates(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
+		MATCH p = (s:User)-[:MemberOf*0..]->(g:Group)-[:AdminTo]->(d:Computer)
+		WHERE s.samaccountname =~ '(?i).*[ge]$' AND d.operatingsystem CONTAINS 'WINDOWS SERVER'
+		RETURN p
+	`)
+	require.NoError(t, err)
+
+	plan, err := OptimizeBorrowed(regularQuery)
+	require.NoError(t, err)
+	require.NotSame(t, regularQuery, plan.Query)
+	require.False(t, regularQuery.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0].PathDirectionReversed)
+	require.True(t, plan.Query.SingleQuery.SinglePartQuery.ReadingClauses[0].Match.Pattern[0].PathDirectionReversed)
 }
 
 func TestOptimizePlansADCSFanoutRewrite(t *testing.T) {
@@ -154,7 +182,9 @@ func TestOptimizerRunsRulesAndRefreshesAnalysis(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n) RETURN n`)
 	require.NoError(t, err)
 
-	plan, err := NewOptimizer(testRule{name: "test"}).Optimize(regularQuery)
+	plan, err := NewOptimizer(testRule{
+		name: "test",
+	}).Optimize(regularQuery)
 	require.NoError(t, err)
 	require.Equal(t, []RuleResult{{Name: "test", Applied: false}}, plan.Rules)
 	require.Len(t, plan.Analysis.QueryParts, 1)
@@ -181,7 +211,9 @@ func TestRulePreservesAnalysis(t *testing.T) {
 	t.Parallel()
 
 	require.True(t, rulePreservesAnalysis(PredicateAttachmentRule{}))
-	require.False(t, rulePreservesAnalysis(testRule{name: "test"}))
+	require.False(t, rulePreservesAnalysis(testRule{
+		name: "test",
+	}))
 }
 
 func TestExpressionReferencesAnySource(t *testing.T) {
@@ -2304,10 +2336,13 @@ func TestInboundTraversalReversalRejectsMultiPartQueryWithoutTerminalSinglePartQ
 	require.NotEmpty(t, control.SingleQuery.MultiPartQuery.Parts)
 	require.NotNil(t, control.SingleQuery.MultiPartQuery.SinglePartQuery)
 
-	applied, err := InboundTraversalReversalRule{}.Apply(&Plan{Query: control})
+	plan := Plan{
+		Query: control,
+	}
+	applied, err := InboundTraversalReversalRule{}.Apply(&plan)
 	require.NoError(t, err)
 	require.True(t, applied)
-	require.True(t, control.SingleQuery.MultiPartQuery.Parts[0].ReadingClauses[0].Match.Pattern[0].PathDirectionReversed)
+	require.True(t, plan.Query.SingleQuery.MultiPartQuery.Parts[0].ReadingClauses[0].Match.Pattern[0].PathDirectionReversed)
 
 	// Removing the terminal single-part query models an unsupported multi-part representation, which
 	// is rejected up front so the preceding part is left untouched.
@@ -2318,7 +2353,9 @@ func TestInboundTraversalReversalRejectsMultiPartQueryWithoutTerminalSinglePartQ
 	require.NotEmpty(t, multiPartQuery.Parts)
 	multiPartQuery.SinglePartQuery = nil
 
-	applied, err = InboundTraversalReversalRule{}.Apply(&Plan{Query: regularQuery})
+	applied, err = InboundTraversalReversalRule{}.Apply(&Plan{
+		Query: regularQuery,
+	})
 	require.NoError(t, err)
 	require.False(t, applied)
 

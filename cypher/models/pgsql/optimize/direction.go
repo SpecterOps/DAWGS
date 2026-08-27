@@ -25,10 +25,19 @@ func (s InboundTraversalReversalRule) Name() string {
 	return "InboundTraversalReversal"
 }
 
+func (s InboundTraversalReversalRule) usesLazyCopy() bool {
+	return true
+}
+
 func (s InboundTraversalReversalRule) Apply(plan *Plan) (bool, error) {
 	if plan == nil || plan.Query == nil || plan.Query.SingleQuery == nil {
 		return false, nil
 	}
+	if !queryWouldReverseInboundTraversal(plan.Query) {
+		return false, nil
+	}
+
+	plan.EnsureMutable()
 
 	singleQuery := plan.Query.SingleQuery
 
@@ -44,6 +53,72 @@ func (s InboundTraversalReversalRule) Apply(plan *Plan) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+func queryWouldReverseInboundTraversal(query *cypher.RegularQuery) bool {
+	if query == nil || query.SingleQuery == nil {
+		return false
+	}
+
+	singleQuery := query.SingleQuery
+	switch {
+	case singleQuery.SinglePartQuery != nil && singleQuery.MultiPartQuery != nil:
+		return false
+	case singleQuery.SinglePartQuery != nil:
+		return readingClausesWouldReverseInboundTraversal(singleQuery.SinglePartQuery.ReadingClauses, map[string]struct{}{})
+	case singleQuery.MultiPartQuery != nil:
+		return multiPartQueryWouldReverseInboundTraversal(singleQuery.MultiPartQuery)
+	default:
+		return false
+	}
+}
+
+func multiPartQueryWouldReverseInboundTraversal(query *cypher.MultiPartQuery) bool {
+	if query == nil || query.SinglePartQuery == nil {
+		return false
+	}
+
+	declaredSymbols := map[string]struct{}{}
+	for _, part := range query.Parts {
+		if part == nil {
+			continue
+		}
+
+		if readingClausesWouldReverseInboundTraversal(part.ReadingClauses, declaredSymbols) {
+			return true
+		}
+		if part.With != nil {
+			declaredSymbols, _ = carryProjectionSelectivity(part.With.Projection, declaredSymbols, map[string]boundSourceSelectivity{})
+		}
+	}
+
+	return readingClausesWouldReverseInboundTraversal(query.SinglePartQuery.ReadingClauses, declaredSymbols)
+}
+
+func readingClausesWouldReverseInboundTraversal(readingClauses []*cypher.ReadingClause, declaredSymbols map[string]struct{}) bool {
+	for _, readingClause := range readingClauses {
+		if readingClause == nil {
+			continue
+		}
+
+		if match := readingClause.Match; match != nil {
+			if !match.Optional {
+				searchSymbols := whereSearchPredicateSymbols(match)
+				for _, patternPart := range match.Pattern {
+					if inboundTraversalReversalCandidate(patternPart, declaredSymbols, searchSymbols) {
+						return true
+					}
+				}
+			}
+			declareMatchSymbols(declaredSymbols, match)
+		}
+
+		if unwind := readingClause.Unwind; unwind != nil {
+			addSymbol(declaredSymbols, variableSymbol(unwind.Variable))
+		}
+	}
+
+	return false
 }
 
 // reverseInboundTraversalMultiPartQuery processes each single-part segment of a multi-part query,
