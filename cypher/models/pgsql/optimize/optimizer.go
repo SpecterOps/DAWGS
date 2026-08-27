@@ -7,6 +7,10 @@ type Rule interface {
 	Apply(*Plan) (bool, error)
 }
 
+type analysisPreservingRule interface {
+	preservesAnalysis() bool
+}
+
 type RuleResult struct {
 	Name    string `json:"name"`
 	Applied bool   `json:"applied"`
@@ -79,7 +83,10 @@ func (s Optimizer) Optimize(query *cypher.RegularQuery) (Plan, error) {
 			Name:    rule.Name(),
 			Applied: applied,
 		})
-		plan.Analysis = Analyze(plan.Query)
+
+		if applied && !rulePreservesAnalysis(rule) {
+			plan.Analysis = Analyze(plan.Query)
+		}
 	}
 
 	if loweringPlan, err := BuildLoweringPlan(plan.Query, plan.PredicateAttachments); err != nil {
@@ -91,10 +98,19 @@ func (s Optimizer) Optimize(query *cypher.RegularQuery) (Plan, error) {
 	return plan, nil
 }
 
+func rulePreservesAnalysis(rule Rule) bool {
+	preservingRule, preserves := rule.(analysisPreservingRule)
+	return preserves && preservingRule.preservesAnalysis()
+}
+
 type PredicateAttachmentRule struct{}
 
 func (s PredicateAttachmentRule) Name() string {
 	return "PredicateAttachment"
+}
+
+func (s PredicateAttachmentRule) preservesAnalysis() bool {
+	return true
 }
 
 func (s PredicateAttachmentRule) Apply(plan *Plan) (bool, error) {

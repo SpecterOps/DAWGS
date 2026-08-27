@@ -23,6 +23,17 @@ func (s testRule) Apply(plan *Plan) (bool, error) {
 	return false, nil
 }
 
+type analysisMutatingTestRule struct{}
+
+func (s analysisMutatingTestRule) Name() string {
+	return "analysis_mutating"
+}
+
+func (s analysisMutatingTestRule) Apply(plan *Plan) (bool, error) {
+	plan.Query.SingleQuery.SinglePartQuery.ReadingClauses = nil
+	return true, nil
+}
+
 type testBindingLookup map[pgsql.Identifier]pgsql.DataType
 
 func (s testBindingLookup) LookupDataType(identifier pgsql.Identifier) (pgsql.DataType, bool) {
@@ -148,6 +159,79 @@ func TestOptimizerRunsRulesAndRefreshesAnalysis(t *testing.T) {
 	require.Equal(t, []RuleResult{{Name: "test", Applied: false}}, plan.Rules)
 	require.Len(t, plan.Analysis.QueryParts, 1)
 	require.Len(t, plan.Analysis.QueryParts[0].Regions, 1)
+}
+
+func TestOptimizerRefreshesAnalysisAfterAppliedMutatingRule(t *testing.T) {
+	t.Parallel()
+
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n) RETURN n`)
+	require.NoError(t, err)
+
+	plan, err := NewOptimizer(analysisMutatingTestRule{}).Optimize(regularQuery)
+	require.NoError(t, err)
+	require.Equal(t, []RuleResult{{
+		Name:    "analysis_mutating",
+		Applied: true,
+	}}, plan.Rules)
+	require.Len(t, plan.Analysis.QueryParts, 1)
+	require.Empty(t, plan.Analysis.QueryParts[0].Regions)
+}
+
+func TestRulePreservesAnalysis(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, rulePreservesAnalysis(PredicateAttachmentRule{}))
+	require.False(t, rulePreservesAnalysis(testRule{name: "test"}))
+}
+
+func TestExpressionReferencesAnySource(t *testing.T) {
+	t.Parallel()
+
+	variableList := cypher.NewListLiteral()
+	*variableList = append(*variableList, cypher.NewVariableWithSymbol("n"))
+
+	literalList := cypher.NewListLiteral()
+	*literalList = append(*literalList, cypher.NewLiteral(1, false))
+
+	testCases := []struct {
+		name       string
+		expression cypher.Expression
+		expected   bool
+	}{
+		{
+			name: "nil",
+		},
+		{
+			name:       "literal",
+			expression: cypher.NewLiteral(1, false),
+		},
+		{
+			name:       "parameter",
+			expression: cypher.NewParameter("id", nil),
+		},
+		{
+			name:       "variable",
+			expression: cypher.NewVariableWithSymbol("n"),
+			expected:   true,
+		},
+		{
+			name:       "literal list",
+			expression: literalList,
+		},
+		{
+			name:       "variable list",
+			expression: variableList,
+			expected:   true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, testCase.expected, expressionReferencesAnySource(testCase.expression))
+		})
+	}
 }
 
 func TestDefaultPredicateAttachmentRuleReportsSkippedWhenNoPredicatesExist(t *testing.T) {
