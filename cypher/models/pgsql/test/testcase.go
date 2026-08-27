@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +127,7 @@ func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMap
 		} else if formattedQuery, err := translate.Translated(translation); err != nil {
 			return err
 		} else {
+			maps.Copy(translation.Parameters, formattedQuery.Parameters)
 			if len(translation.Parameters) > 0 {
 				if encodedJSON, err := json.Marshal(translation.Parameters); err != nil {
 					return err
@@ -138,7 +140,7 @@ func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMap
 				}
 			}
 
-			if err := writeStrings(output, formattedQuery, "\n\n"); err != nil {
+			if err := writeStrings(output, formattedQuery.Statement, "\n\n"); err != nil {
 				return err
 			}
 		}
@@ -170,13 +172,14 @@ func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMappe
 			t.Fatalf("Failed to format SQL translatedQuery: %v", err)
 		} else {
 			// Apply same whitespace normalization as expected SQL (from file parsing)
-			normalizedActual, err := regexp.ReplaceAll("\\s+", strings.TrimSpace(formattedQuery), " ")
+			normalizedActual, err := regexp.ReplaceAll("\\s+", strings.TrimSpace(formattedQuery.Statement), " ")
 			if err != nil {
 				t.Fatalf("error while attempting to collapse whitespace in actual query: %v", err)
 			}
 			require.Equalf(t, expectedSQL, normalizedActual, "Test case for cypher query: '%s' failed to match.", s.Cypher)
 
 			if s.PgSQLParams != nil {
+				maps.Copy(translation.Parameters, formattedQuery.Parameters)
 				require.Equal(t, s.PgSQLParams, translation.Parameters)
 			}
 		}
@@ -210,7 +213,8 @@ func (s *TranslationTestCase) AssertLive(ctx context.Context, t *testing.T, driv
 		} else if formattedQuery, err := translate.Translated(translation); err != nil {
 			t.Fatalf("Failed to format SQL translatedQuery: %v", err)
 		} else {
-			require.NoError(t, driver.Run(ctx, "explain "+formattedQuery, translation.Parameters))
+			maps.Copy(translation.Parameters, formattedQuery.Parameters)
+			require.NoError(t, driver.Run(ctx, "explain "+formattedQuery.Statement, translation.Parameters))
 		}
 	}
 }

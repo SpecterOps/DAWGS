@@ -2,57 +2,10 @@ package translate
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
-
-// IdentifierGenerator is a map that creates a unique identifier for each call with a given
-// data type. This ensures that renamed identifiers in queries do not conflict with each other.
-type IdentifierGenerator map[pgsql.DataType]int
-
-func (s IdentifierGenerator) NewIdentifier(dataType pgsql.DataType) (pgsql.Identifier, error) {
-	var prefixStr string
-
-	switch dataType {
-	case pgsql.ExpansionPattern:
-		prefixStr = "ex"
-	case pgsql.ExpansionPath:
-		prefixStr = "ep"
-	case pgsql.PathComposite:
-		prefixStr = "pc"
-	case pgsql.NodeComposite:
-		prefixStr = "n"
-	case pgsql.EdgeComposite:
-		prefixStr = "e"
-	case pgsql.PathEdge:
-		dataType = pgsql.EdgeComposite
-		prefixStr = "e"
-	case pgsql.Scope:
-		prefixStr = "s"
-	case pgsql.ParameterIdentifier:
-		prefixStr = "pi"
-	default:
-		// Make this data type the unknown generic
-		dataType = pgsql.UnknownDataType
-		prefixStr = "i"
-	}
-
-	var (
-		nextID    = s[dataType]
-		nextIDStr = strconv.Itoa(nextID)
-	)
-
-	// Increment the ID
-	s[dataType] = nextID + 1
-
-	return pgsql.Identifier(prefixStr + nextIDStr), nil
-}
-
-func NewIdentifierGenerator() IdentifierGenerator {
-	return IdentifierGenerator{}
-}
 
 // Frame represents a snapshot of all identifiers defined and visible in a given scope
 type Frame struct {
@@ -111,7 +64,7 @@ func (s *Frame) Reveal(identifier pgsql.Identifier) {
 type Scope struct {
 	nextFrameID int
 	stack       []*Frame
-	generator   IdentifierGenerator
+	generator   pgsql.IdentifierGenerator
 	aliases     map[pgsql.Identifier]pgsql.Identifier
 	definitions map[pgsql.Identifier]*BoundIdentifier
 }
@@ -119,7 +72,7 @@ type Scope struct {
 func NewScope() *Scope {
 	return &Scope{
 		nextFrameID: 0,
-		generator:   NewIdentifierGenerator(),
+		generator:   pgsql.NewIdentifierGenerator(),
 		aliases:     map[pgsql.Identifier]pgsql.Identifier{},
 		definitions: map[pgsql.Identifier]*BoundIdentifier{},
 	}

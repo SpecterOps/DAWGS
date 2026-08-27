@@ -141,7 +141,7 @@ func TestInferExpressionType(t *testing.T) {
 		if testName, err := format.Expression(nextCase.Expression, format.NewOutputBuilder()); err != nil {
 			t.Fatalf("unable to format test case expression: %v", err)
 		} else {
-			t.Run(testName, func(t *testing.T) {
+			t.Run(testName.Statement, func(t *testing.T) {
 				inferredType, err := translate.InferExpressionType(nextCase.Expression)
 
 				require.Nil(t, err)
@@ -315,7 +315,8 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			formatted, err := format.Expression(treeTranslator.PeekOperand(), format.NewOutputBuilder())
 			require.NoError(t, err)
 
-			return formatted
+			// TODO: does this need to handle Properties?
+			return formatted.Statement
 		}
 		testCases = []struct {
 			Name     string
@@ -510,5 +511,5 @@ func validateConstraints(t *testing.T, constraintTracker *translate.ExpressionTr
 	formattedConstraint, err := format.Expression(constraint.Expression, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, expectedTranslation, formattedConstraint)
+	require.Equal(t, expectedTranslation, formattedConstraint.Statement)
 }

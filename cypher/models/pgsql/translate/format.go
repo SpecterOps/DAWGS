@@ -3,6 +3,7 @@ package translate
 import (
 	"bytes"
 	"context"
+	"maps"
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
@@ -11,7 +12,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 )
 
-func Translated(translation Result) (string, error) {
+func Translated(translation Result) (format.Formatted, error) {
 	return format.Statement(translation.Statement, format.NewOutputBuilder())
 }
 
@@ -56,8 +57,9 @@ func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapp
 	} else if sqlQuery, err := format.Statement(translation.Statement, format.NewOutputBuilder()); err != nil {
 		return format.Formatted{}, err
 	} else {
-		output.WriteString(sqlQuery)
+		output.WriteString(sqlQuery.Statement)
 
+		maps.Copy(translation.Parameters, sqlQuery.Parameters)
 		return format.Formatted{
 			Statement:  output.String(),
 			Parameters: translation.Parameters,

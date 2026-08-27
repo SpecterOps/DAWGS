@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 	"strings"
@@ -127,7 +128,8 @@ func TestPostgreSQLLiveAggregateTraversalCountPlanShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to render live aggregate traversal SQL: %v", err)
 	}
-	normalizedSQL := strings.Join(strings.Fields(strings.ToLower(sqlQuery)), " ")
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+	normalizedSQL := strings.Join(strings.Fields(strings.ToLower(sqlQuery.Statement)), " ")
 
 	for _, expected := range []string{
 		"with recursive candidate_sources(root_id)",
@@ -141,14 +143,14 @@ func TestPostgreSQLLiveAggregateTraversalCountPlanShape(t *testing.T) {
 		"from ranked join node source_node on source_node.id = ranked.root_id",
 	} {
 		if !strings.Contains(normalizedSQL, expected) {
-			t.Fatalf("expected translated SQL to contain %q, got:\n%s", expected, sqlQuery)
+			t.Fatalf("expected translated SQL to contain %q, got:\n%s", expected, sqlQuery.Statement)
 		}
 	}
 	if strings.Contains(normalizedSQL, "group by (") {
-		t.Fatalf("expected aggregate traversal SQL to avoid grouping by composites, got:\n%s", sqlQuery)
+		t.Fatalf("expected aggregate traversal SQL to avoid grouping by composites, got:\n%s", sqlQuery.Statement)
 	}
 
-	plan := explainAggregateTraversalPlan(ctx, t, pool, sqlQuery, translation.Parameters)
+	plan := explainAggregateTraversalPlan(ctx, t, pool, sqlQuery.Statement, translation.Parameters)
 	for _, expected := range []string{
 		"CTE traversal",
 		"Recursive Union",
