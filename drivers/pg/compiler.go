@@ -69,12 +69,21 @@ func (s *SchemaManager) compileRegularQuery(ctx context.Context, prepared prepar
 }
 
 func (s *SchemaManager) compile(ctx context.Context, source string, parameters map[string]any, graphID int32, parse func() (*cypher.RegularQuery, error)) (string, map[string]any, error) {
-	translationCache := s.translationCacheProvider.TranslationCache()
+	var (
+		translationCache   = s.translationCacheProvider.TranslationCache()
+		optimized          = OptimizedTranslationEnabled()
+		translationOptions = translate.Options{
+			OptimizerMode: translate.OptimizerDisabled,
+		}
+	)
+	if optimized {
+		translationOptions.OptimizerMode = translate.OptimizerEnabled
+	}
 
 	build := func() (string, translationCacheBuildResult, error) {
 		if regularQuery, err := parse(); err != nil {
 			return "", translationCacheBuildResult{}, err
-		} else if translated, parameterSources, err := translate.TranslateWithOptionsAndParameterSources(ctx, regularQuery, s, parameters, graphID, translate.DefaultOptions()); err != nil {
+		} else if translated, parameterSources, err := translate.TranslateWithOptionsAndParameterSources(ctx, regularQuery, s, parameters, graphID, translationOptions); err != nil {
 			return "", translationCacheBuildResult{}, err
 		} else if sqlQuery, err := translate.Translated(translated); err != nil {
 			return "", translationCacheBuildResult{}, err
@@ -84,6 +93,10 @@ func (s *SchemaManager) compile(ctx context.Context, source string, parameters m
 				parameterSources: parameterSources,
 			}, nil
 		}
+	}
+
+	if !optimized {
+		return translationCache.BuildUnoptimized(build)
 	}
 
 	key := translationCache.Key(source, graphID, parameters)
