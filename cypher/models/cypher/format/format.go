@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/walk"
 
 	"github.com/specterops/dawgs/graph"
 )
@@ -1217,9 +1218,51 @@ func (s Emitter) Write(regularQuery *cypher.RegularQuery, writer io.Writer) erro
 }
 
 func RegularQuery(query *cypher.RegularQuery, stripLiterals bool) (string, error) {
+	return regularQuery(query, NewCypherEmitter(stripLiterals))
+}
+
+// RegularQueryWithParameterSequence formats a regular query with deterministic
+// parameter names by structural occurrence while leaving the source tree
+// unchanged.
+func RegularQueryWithParameterSequence(query *cypher.RegularQuery, stripLiterals bool, parameterSequence []string) (string, error) {
+	owned := cypher.Copy(query)
+	rewriter := parameterSequenceRewriter{
+		Visitor: walk.NewVisitor[cypher.SyntaxNode](),
+		symbols: parameterSequence,
+	}
+	if err := walk.Cypher(owned, &rewriter); err != nil {
+		return "", err
+	} else if rewriter.index != len(rewriter.symbols) {
+		return "", fmt.Errorf("parameter sequence has more symbols than query parameters")
+	}
+
+	return RegularQuery(owned, stripLiterals)
+}
+
+type parameterSequenceRewriter struct {
+	walk.Visitor[cypher.SyntaxNode]
+	symbols []string
+	index   int
+}
+
+func (s *parameterSequenceRewriter) Enter(node cypher.SyntaxNode) {
+	parameter, isParameter := node.(*cypher.Parameter)
+	if !isParameter {
+		return
+	}
+	if s.index == len(s.symbols) {
+		s.SetErrorf("parameter sequence has fewer symbols than query parameters")
+		return
+	}
+
+	parameter.Symbol = s.symbols[s.index]
+	s.index++
+}
+
+func regularQuery(query *cypher.RegularQuery, emitter Emitter) (string, error) {
 	buffer := &bytes.Buffer{}
 
-	if err := NewCypherEmitter(stripLiterals).Write(query, buffer); err != nil {
+	if err := emitter.Write(query, buffer); err != nil {
 		return "", err
 	} else {
 		return buffer.String(), nil
