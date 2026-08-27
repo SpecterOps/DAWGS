@@ -107,6 +107,62 @@
       "assert": {"row_count": 1, "path_lengths": [3], "path_node_ids": [["src", "good-mid", "bridge", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2", "EdgeKind1"]]}
     },
     {
+      "name": "BP-2755 mixed prior match and terminal predicates after zero-hop expansion",
+      "cypher": "MATCH (n:Base {objectid: 'bp-2755-user'})-[:ADCSESC3]->(d:Domain {objectid: 'bp-2755-domain'}) MATCH p1 = (p1Principal:Base)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct1:CertTemplate)-[:PublishedTo]->(eca1:EnterpriseCA) WHERE (p1Principal = n OR p1Principal.objectid ENDS WITH '-S-1-5-11' OR p1Principal.objectid ENDS WITH '-S-1-1-0') AND ct1.requiresmanagerapproval = false AND (ct1.schemaversion = 1 OR (ct1.schemaversion > 1 AND ct1.authorizedsignatures = 0)) AND (n:Group OR n:Computer OR (n:User AND (n.gmsa = true OR n.msa = true OR (ct1.subjectaltrequiredns = false AND ct1.subjectaltrequiredomaindns = false)))) RETURN p1",
+      "fixture": {
+        "nodes": [
+          {"id": "n", "kinds": ["Base", "User"], "properties": {"objectid": "bp-2755-user", "gmsa": false, "msa": false}},
+          {"id": "domain", "kinds": ["Domain"], "properties": {"objectid": "bp-2755-domain"}},
+          {"id": "zero-template", "kinds": ["CertTemplate"], "properties": {"requiresmanagerapproval": false, "schemaversion": 2, "authorizedsignatures": 0, "subjectaltrequiredns": false, "subjectaltrequiredomaindns": false}},
+          {"id": "zero-ca", "kinds": ["EnterpriseCA"]},
+          {"id": "everyone", "kinds": ["Base"], "properties": {"objectid": "principal-S-1-1-0"}},
+          {"id": "everyone-group", "kinds": ["Group"]},
+          {"id": "one-hop-template", "kinds": ["CertTemplate"], "properties": {"requiresmanagerapproval": false, "schemaversion": 1, "authorizedsignatures": 7, "subjectaltrequiredns": false, "subjectaltrequiredomaindns": false}},
+          {"id": "one-hop-ca", "kinds": ["EnterpriseCA"]},
+          {"id": "authenticated", "kinds": ["Base"], "properties": {"objectid": "principal-S-1-5-11"}},
+          {"id": "authenticated-hop", "kinds": ["Group"]},
+          {"id": "authenticated-group", "kinds": ["Group"]},
+          {"id": "two-hop-template", "kinds": ["CertTemplate"], "properties": {"requiresmanagerapproval": false, "schemaversion": 3, "authorizedsignatures": 0, "subjectaltrequiredns": false, "subjectaltrequiredomaindns": false}},
+          {"id": "two-hop-ca", "kinds": ["EnterpriseCA"]},
+          {"id": "bad-dns-template", "kinds": ["CertTemplate"], "properties": {"requiresmanagerapproval": false, "schemaversion": 1, "authorizedsignatures": 0, "subjectaltrequiredns": true, "subjectaltrequiredomaindns": false}},
+          {"id": "bad-dns-ca", "kinds": ["EnterpriseCA"]},
+          {"id": "other-principal", "kinds": ["Base"], "properties": {"objectid": "principal-no-match"}},
+          {"id": "other-group", "kinds": ["Group"]}
+        ],
+        "edges": [
+          {"start_id": "n", "end_id": "domain", "kind": "ADCSESC3"},
+          {"start_id": "n", "end_id": "zero-template", "kind": "GenericAll"},
+          {"start_id": "zero-template", "end_id": "zero-ca", "kind": "PublishedTo"},
+          {"start_id": "everyone", "end_id": "everyone-group", "kind": "MemberOf"},
+          {"start_id": "everyone-group", "end_id": "one-hop-template", "kind": "Enroll"},
+          {"start_id": "one-hop-template", "end_id": "one-hop-ca", "kind": "PublishedTo"},
+          {"start_id": "authenticated", "end_id": "authenticated-hop", "kind": "MemberOf"},
+          {"start_id": "authenticated-hop", "end_id": "authenticated-group", "kind": "MemberOf"},
+          {"start_id": "authenticated-group", "end_id": "two-hop-template", "kind": "AllExtendedRights"},
+          {"start_id": "two-hop-template", "end_id": "two-hop-ca", "kind": "PublishedTo"},
+          {"start_id": "n", "end_id": "bad-dns-template", "kind": "GenericAll"},
+          {"start_id": "bad-dns-template", "end_id": "bad-dns-ca", "kind": "PublishedTo"},
+          {"start_id": "other-principal", "end_id": "other-group", "kind": "MemberOf"},
+          {"start_id": "other-group", "end_id": "zero-template", "kind": "Enroll"}
+        ]
+      },
+      "assert": {
+        "keys": ["p1"],
+        "row_count": 3,
+        "path_lengths": [2, 3, 4],
+        "path_node_ids": [
+          ["n", "zero-template", "zero-ca"],
+          ["everyone", "everyone-group", "one-hop-template", "one-hop-ca"],
+          ["authenticated", "authenticated-hop", "authenticated-group", "two-hop-template", "two-hop-ca"]
+        ],
+        "path_edge_kinds": [
+          ["GenericAll", "PublishedTo"],
+          ["MemberOf", "Enroll", "PublishedTo"],
+          ["MemberOf", "MemberOf", "AllExtendedRights", "PublishedTo"]
+        ]
+      }
+    },
+    {
       "name": "relationships of optimized expansion path preserve suffix order",
       "cypher": "match p = (src:NodeKind1)-[:EdgeKind1*1..]->(mid)-[:EdgeKind2]->(dst:NodeKind2) where src.name = 'terminal-pushdown-src' return relationships(p)",
       "fixture": {
