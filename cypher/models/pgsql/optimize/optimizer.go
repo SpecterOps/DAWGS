@@ -11,6 +11,14 @@ type analysisPreservingRule interface {
 	preservesAnalysis() bool
 }
 
+// lazyCopyRule promises that Apply does not mutate the input query unless it
+// first calls Plan.EnsureMutable. Built-in rules use this to avoid copying a
+// query when no rewrite applies. Third-party rules retain the historical safe
+// behavior: the optimizer copies before invoking them.
+type lazyCopyRule interface {
+	usesLazyCopy() bool
+}
+
 type RuleResult struct {
 	Name    string `json:"name"`
 	Applied bool   `json:"applied"`
@@ -39,6 +47,18 @@ type Plan struct {
 	LoweringPlan         LoweringPlan
 	Rules                []RuleResult
 	PredicateAttachments []PredicateAttachment
+	queryCopied          bool
+}
+
+// EnsureMutable gives a rule an owned query before it changes the AST. It is
+// intentionally idempotent so multiple applied rules share one copy.
+func (s *Plan) EnsureMutable() *cypher.RegularQuery {
+	if s != nil && !s.queryCopied && s.Query != nil {
+		s.Query = cypher.Copy(s.Query)
+		s.queryCopied = true
+	}
+
+	return s.Query
 }
 
 type Optimizer struct {
@@ -63,17 +83,46 @@ func Optimize(query *cypher.RegularQuery) (Plan, error) {
 	return NewOptimizer(DefaultRules()...).Optimize(query)
 }
 
+// OptimizeBorrowed optimizes query without copying it up front. The returned
+// plan aliases query when no rewrite applies; rules must call EnsureMutable
+// before modifying the tree. It is intended for callers that already own the
+// input tree and can treat the returned plan as read-only.
+func OptimizeBorrowed(query *cypher.RegularQuery) (Plan, error) {
+	return NewOptimizer(DefaultRules()...).OptimizeBorrowed(query)
+}
+
+// Optimize preserves the historical ownership contract: the returned plan
+// always owns its query independently of the caller's input.
 func (s Optimizer) Optimize(query *cypher.RegularQuery) (Plan, error) {
 	if query == nil {
 		return Plan{}, nil
 	}
 
+	return s.optimize(cypher.Copy(query), true)
+}
+
+// OptimizeBorrowed applies the optimizer without copying query until a rule
+// needs to mutate it. See OptimizeBorrowed for ownership details.
+func (s Optimizer) OptimizeBorrowed(query *cypher.RegularQuery) (Plan, error) {
+	return s.optimize(query, false)
+}
+
+func (s Optimizer) optimize(query *cypher.RegularQuery, queryCopied bool) (Plan, error) {
+	if query == nil {
+		return Plan{}, nil
+	}
+
 	plan := Plan{
-		Query: cypher.Copy(query),
+		Query:       query,
+		queryCopied: queryCopied,
 	}
 	plan.Analysis = Analyze(plan.Query)
 
 	for _, rule := range s.rules {
+		if lazyRule, usesLazyCopy := rule.(lazyCopyRule); !usesLazyCopy || !lazyRule.usesLazyCopy() {
+			plan.EnsureMutable()
+		}
+
 		applied, err := rule.Apply(&plan)
 		if err != nil {
 			return Plan{}, err
@@ -110,6 +159,10 @@ func (s PredicateAttachmentRule) Name() string {
 }
 
 func (s PredicateAttachmentRule) preservesAnalysis() bool {
+	return true
+}
+
+func (s PredicateAttachmentRule) usesLazyCopy() bool {
 	return true
 }
 
