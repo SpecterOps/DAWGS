@@ -180,7 +180,7 @@ func (s *transaction) UpdateNode(node *graph.Node) error {
 
 func (s *transaction) Nodes() graph.NodeQuery {
 	return &nodeQuery{
-		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
+		liveQuery: newLiveQuery(s.ctx, s, s.targetGraphID),
 	}
 }
 
@@ -258,7 +258,7 @@ func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error
 
 func (s *transaction) Relationships() graph.RelationshipQuery {
 	return &relationshipQuery{
-		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
+		liveQuery: newLiveQuery(s.ctx, s, s.targetGraphID),
 	}
 }
 
