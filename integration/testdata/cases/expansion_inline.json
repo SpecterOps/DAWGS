@@ -107,7 +107,7 @@
       "assert": {"row_count": 1, "path_lengths": [3], "path_node_ids": [["src", "good-mid", "bridge", "dst"]], "path_edge_kinds": [["EdgeKind1", "EdgeKind2", "EdgeKind1"]]}
     },
     {
-      "name": "BP-2755 mixed prior match and terminal predicates after zero-hop expansion",
+      "name": "BED-9488 mixed prior match and terminal predicates after zero-hop expansion",
       "cypher": "MATCH (n:Base {objectid: 'bp-2755-user'})-[:ADCSESC3]->(d:Domain {objectid: 'bp-2755-domain'}) MATCH p1 = (p1Principal:Base)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct1:CertTemplate)-[:PublishedTo]->(eca1:EnterpriseCA) WHERE (p1Principal = n OR p1Principal.objectid ENDS WITH '-S-1-5-11' OR p1Principal.objectid ENDS WITH '-S-1-1-0') AND ct1.requiresmanagerapproval = false AND (ct1.schemaversion = 1 OR (ct1.schemaversion > 1 AND ct1.authorizedsignatures = 0)) AND (n:Group OR n:Computer OR (n:User AND (n.gmsa = true OR n.msa = true OR (ct1.subjectaltrequiredns = false AND ct1.subjectaltrequiredomaindns = false)))) RETURN p1",
       "fixture": {
         "nodes": [
