@@ -349,6 +349,23 @@ func TestRewriteCurrentFrameProjectionReferencesCopiesHandledExpressions(t *test
 			Else:       expression,
 		}
 	}
+	newFunctionCall := func(expression pgsql.Expression) *pgsql.FunctionCall {
+		return &pgsql.FunctionCall{
+			Function:   pgsql.FunctionToLower,
+			Parameters: []pgsql.Expression{expression},
+			Over: &pgsql.Window{
+				PartitionBy: []pgsql.Expression{expression},
+				OrderBy:     []pgsql.OrderBy{{Expression: expression, Ascending: false}},
+				WindowFrame: &pgsql.WindowFrame{
+					Unit:          pgsql.WindowFrameUnitRows,
+					StartBoundary: pgsql.WindowFrameBoundary{BoundaryType: pgsql.WindowFrameBoundaryTypePreceding, BoundaryLiteral: &pgsql.Literal{Value: 1, CastType: pgsql.Int4}},
+					EndBoundary:   &pgsql.WindowFrameBoundary{BoundaryType: pgsql.WindowFrameBoundaryTypeCurrentRow},
+				},
+			},
+			Distinct: true,
+			CastType: pgsql.Text,
+		}
+	}
 	newSelect := func(expression pgsql.Expression) pgsql.Select {
 		return pgsql.Select{
 			Projection: pgsql.Projection{
@@ -419,9 +436,9 @@ func TestRewriteCurrentFrameProjectionReferencesCopiesHandledExpressions(t *test
 		},
 		{
 			name:     "function call pointer",
-			actual:   &pgsql.FunctionCall{Function: pgsql.FunctionToLower, Parameters: []pgsql.Expression{ref()}, Distinct: true, CastType: pgsql.Text},
-			original: &pgsql.FunctionCall{Function: pgsql.FunctionToLower, Parameters: []pgsql.Expression{ref()}, Distinct: true, CastType: pgsql.Text},
-			expected: &pgsql.FunctionCall{Function: pgsql.FunctionToLower, Parameters: []pgsql.Expression{replacement()}, Distinct: true, CastType: pgsql.Text},
+			actual:   newFunctionCall(ref()),
+			original: newFunctionCall(ref()),
+			expected: newFunctionCall(replacement()),
 		},
 		{
 			name:     "type cast pointer",

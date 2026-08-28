@@ -2171,6 +2171,25 @@ func rewriteCurrentFrameProjectionExpressions(expressions []pgsql.Expression, fr
 	return rewritten
 }
 
+func rewriteCurrentFrameProjectionWindow(window *pgsql.Window, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) *pgsql.Window {
+	if window == nil {
+		return nil
+	}
+
+	rewritten := *window
+	rewritten.PartitionBy = rewriteCurrentFrameProjectionExpressions(window.PartitionBy, frameID, aliases)
+
+	if window.OrderBy != nil {
+		rewritten.OrderBy = make([]pgsql.OrderBy, len(window.OrderBy))
+		for idx, orderBy := range window.OrderBy {
+			rewritten.OrderBy[idx] = orderBy
+			rewritten.OrderBy[idx].Expression = rewriteCurrentFrameProjectionReferences(orderBy.Expression, frameID, aliases)
+		}
+	}
+
+	return &rewritten
+}
+
 func rewriteCurrentFrameProjectionItems(projection pgsql.Projection, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Projection {
 	if projection == nil {
 		return nil
@@ -2328,6 +2347,7 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 
 	case pgsql.FunctionCall:
 		typedExpression.Parameters = rewriteCurrentFrameProjectionExpressions(typedExpression.Parameters, frameID, aliases)
+		typedExpression.Over = rewriteCurrentFrameProjectionWindow(typedExpression.Over, frameID, aliases)
 		return typedExpression
 
 	case *pgsql.FunctionCall:
@@ -2337,6 +2357,7 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 
 		rewritten := *typedExpression
 		rewritten.Parameters = rewriteCurrentFrameProjectionExpressions(typedExpression.Parameters, frameID, aliases)
+		rewritten.Over = rewriteCurrentFrameProjectionWindow(typedExpression.Over, frameID, aliases)
 		return &rewritten
 
 	case pgsql.TypeCast:
