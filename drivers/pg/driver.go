@@ -42,11 +42,38 @@ type Driver struct {
 	*SchemaManager
 }
 
+// DriverOptions configures driver-wide behavior. TranslationCacheEntries is a
+// count, not a per-connection setting; zero disables translation caching.
+type DriverOptions struct {
+	TranslationCacheEntries int
+}
+
+// DefaultDriverOptions returns the driver-wide PostgreSQL settings used by
+// NewDriver.
+func DefaultDriverOptions() DriverOptions {
+	return DriverOptions{
+		TranslationCacheEntries: translationCacheCapacity,
+	}
+}
+
 func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
+	return NewDriverWithOptions(graphQueryMemoryLimit, pool, DefaultDriverOptions())
+}
+
+// NewDriverWithOptions constructs a PostgreSQL driver with driver-wide options.
+func NewDriverWithOptions(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, options DriverOptions) *Driver {
+	options = normalizeDriverOptions(options)
 	return &Driver{
 		pool:          pool,
-		SchemaManager: NewSchemaManager(pool, graphQueryMemoryLimit),
+		SchemaManager: NewSchemaManagerWithOptions(pool, graphQueryMemoryLimit, options),
 	}
+}
+
+func normalizeDriverOptions(options DriverOptions) DriverOptions {
+	if options.TranslationCacheEntries < 0 {
+		options.TranslationCacheEntries = 0
+	}
+	return options
 }
 
 func (s *Driver) SetDefaultGraph(ctx context.Context, graphSchema graph.Graph) error {
@@ -96,8 +123,15 @@ func (s *Driver) BatchOperation(ctx context.Context, batchDelegate graph.BatchDe
 }
 
 func (s *Driver) Close(ctx context.Context) error {
+	s.translationCache.Close()
 	s.pool.Close()
 	return nil
+}
+
+// TranslationCacheStats returns aggregate PostgreSQL translation-cache
+// counters. It never exposes cached query text, SQL, or parameter data.
+func (s *Driver) TranslationCacheStats() TranslationCacheStats {
+	return s.translationCache.Stats()
 }
 
 func renderConfig(batchWriteSize int, pgxOptions pgx.TxOptions, userOptions []graph.TransactionOption) (*Config, error) {
@@ -175,7 +209,12 @@ func (s *Driver) RefreshKinds(ctx context.Context) error {
 
 	// Wipe this map to be rebuilt in the fetch call below
 	s.SchemaManager.kindIDsByKind = map[int16]graph.Kind{}
-	return s.SchemaManager.Fetch(ctx)
+	if err := s.SchemaManager.Fetch(ctx); err != nil {
+		return err
+	}
+
+	s.translationCache.Invalidate()
+	return nil
 }
 
 func (s *Driver) OptimizeStorage(ctx context.Context) error {

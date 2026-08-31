@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/cucumber/godog"
-	"github.com/cucumber/messages/go/v34"
+	messages "github.com/cucumber/messages/go/v34"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
