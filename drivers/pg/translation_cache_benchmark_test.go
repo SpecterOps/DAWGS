@@ -8,7 +8,6 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/query"
 )
 
 func benchmarkTranslationBuild(query string, parameters map[string]any) func() (string, translationCacheBuildResult, error) {
@@ -90,85 +89,6 @@ func BenchmarkTranslationCacheParameterlessHit(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		if _, _, err := translationCache.GetOrBuild(key, nil, build); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func benchmarkPreparedFetchStartNodes(b *testing.B, id graph.ID) preparedRegularQuery {
-	b.Helper()
-	builder := query.NewBuilder(nil)
-	builder.Apply(
-		query.Where(query.Equals(query.StartProperty("objectid"), id)),
-		query.Returning(query.Relationship(), query.Start()),
-	)
-	regularQuery, err := builder.Build(false)
-	if err != nil {
-		b.Fatal(err)
-	}
-	prepared, err := prepareRegularQuery(regularQuery)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	return prepared
-}
-
-func BenchmarkBuilderFetchStartNodesOptimizedCacheDisabled(b *testing.B) {
-	setOptimizedTranslationForTest(b, true)
-	manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{
-		TranslationCacheEntries: 0,
-	})
-	b.ReportAllocs()
-	b.ResetTimer()
-	for index := range b.N {
-		if _, _, err := manager.compileRegularQuery(context.Background(), benchmarkPreparedFetchStartNodes(b, graph.ID(index+1)), translate.DefaultGraphID); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkBuilderFetchStartNodesColdPopulation(b *testing.B) {
-	setOptimizedTranslationForTest(b, true)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for index := range b.N {
-		manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{
-			TranslationCacheEntries: 1,
-		})
-		if _, _, err := manager.compileRegularQuery(context.Background(), benchmarkPreparedFetchStartNodes(b, graph.ID(index+1)), translate.DefaultGraphID); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkBuilderFetchStartNodesWarmHit(b *testing.B) {
-	setOptimizedTranslationForTest(b, true)
-	manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{
-		TranslationCacheEntries: 1,
-	})
-	if _, _, err := manager.compileRegularQuery(context.Background(), benchmarkPreparedFetchStartNodes(b, graph.ID(1)), translate.DefaultGraphID); err != nil {
-		b.Fatal(err)
-	}
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for index := range b.N {
-		if _, _, err := manager.compileRegularQuery(context.Background(), benchmarkPreparedFetchStartNodes(b, graph.ID(index+2)), translate.DefaultGraphID); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkBuilderFetchStartNodesUnoptimized(b *testing.B) {
-	setOptimizedTranslationForTest(b, false)
-	manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{
-		TranslationCacheEntries: 1,
-	})
-	b.ReportAllocs()
-	b.ResetTimer()
-	for index := range b.N {
-		if _, _, err := manager.compileRegularQuery(context.Background(), benchmarkPreparedFetchStartNodes(b, graph.ID(index+1)), translate.DefaultGraphID); err != nil {
 			b.Fatal(err)
 		}
 	}
