@@ -109,14 +109,15 @@ func appendQueryPartLowerings(
 	if err != nil {
 		return err
 	}
+	indexedPatternPredicates := indexedPatternPredicatesInQueryPart(queryPart)
 
 	appendExactRangeExpansionDecisions(plan, queryPartIndex, readingClauses)
-	appendPatternPredicateExactRangeExpansionDecisions(plan, queryPartIndex, queryPart)
+	appendPatternPredicateExactRangeExpansionDecisions(plan, queryPartIndex, indexedPatternPredicates)
 	appendPathRelationshipPredicateDecisions(plan, queryPartIndex, queryPart)
 	appendProjectionPruningDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
 	appendLatePathMaterializationDecisions(plan, queryPartIndex, readingClauses, sourceReferences)
-	appendPatternPredicateProjectionLowerings(plan, queryPartIndex, queryPart, sourceReferences)
-	appendPatternPredicatePlacementDecisions(plan, queryPartIndex, queryPart)
+	appendPatternPredicateProjectionLowerings(plan, queryPartIndex, indexedPatternPredicates, sourceReferences)
+	appendPatternPredicatePlacementDecisions(plan, queryPartIndex, indexedPatternPredicates)
 	appendExpandIntoDecisions(plan, queryPartIndex, readingClauses)
 	appendTraversalDirectionDecisions(plan, queryPartIndex, readingClauses, bindingPredicateSymbols(predicateAttachments, queryPartIndex), initialDeclaredSymbols, initialSelectivity)
 	shortestPathSearchSymbols := shortestPathSearchPredicateSymbols(readingClauses)
@@ -143,8 +144,8 @@ func appendExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, 
 	}
 }
 
-func appendPatternPredicateExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
-	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
+func appendPatternPredicateExactRangeExpansionDecisions(plan *LoweringPlan, queryPartIndex int, indexedPredicates []indexedPatternPredicate) {
+	for _, indexedPredicate := range indexedPredicates {
 		patternPart := patternPartForPredicate(indexedPredicate.Predicate)
 		appendPatternExactRangeExpansionDecisions(plan, PatternTarget{
 			QueryPartIndex: queryPartIndex,
@@ -397,8 +398,8 @@ func appendPatternProjectionPruningDecisions(plan *LoweringPlan, target PatternT
 	}
 }
 
-func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode, sourceReferences map[string]struct{}) {
-	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
+func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartIndex int, indexedPredicates []indexedPatternPredicate, sourceReferences map[string]struct{}) {
+	for _, indexedPredicate := range indexedPredicates {
 		var (
 			predicate   = indexedPredicate.Predicate
 			patternPart = patternPartForPredicate(predicate)
@@ -422,8 +423,8 @@ func appendPatternPredicateProjectionLowerings(plan *LoweringPlan, queryPartInde
 	}
 }
 
-func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex int, queryPart cypher.SyntaxNode) {
-	for _, indexedPredicate := range indexedPatternPredicatesInQueryPart(queryPart) {
+func appendPatternPredicatePlacementDecisions(plan *LoweringPlan, queryPartIndex int, indexedPredicates []indexedPatternPredicate) {
+	for _, indexedPredicate := range indexedPredicates {
 		var (
 			predicate   = indexedPredicate.Predicate
 			patternPart = patternPartForPredicate(predicate)
@@ -1060,6 +1061,11 @@ func propertyLookupVariableSymbol(expression cypher.Expression) (string, bool) {
 }
 
 func expressionReferencesAnySource(expression cypher.Expression) bool {
+	switch expression.(type) {
+	case nil, *cypher.Literal, *cypher.Parameter:
+		return false
+	}
+
 	references, err := collectReferencedSourceIdentifiers(expression)
 	return err != nil || len(references) > 0
 }
