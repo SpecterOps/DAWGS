@@ -44,6 +44,30 @@ func TestCypherEmitter_FormatsMapLiteralInKeyOrder(t *testing.T) {
 	require.Equal(t, "{a: 1, b: 2}", buffer.String())
 }
 
+func TestRegularQueryWithParameterSequenceFormatsWithoutMutatingInput(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "match (n) where n.first = $value and n.second = $value return n")
+	require.NoError(t, err)
+
+	formatted, err := format.RegularQueryWithParameterSequence(regularQuery, false, []string{"first", "second"})
+	require.NoError(t, err)
+	require.Equal(t, "match (n) where n.first = $first and n.second = $second return n", formatted)
+
+	original, err := format.RegularQuery(regularQuery, false)
+	require.NoError(t, err)
+	require.Equal(t, "match (n) where n.first = $value and n.second = $value return n", original)
+}
+
+func TestRegularQueryWithParameterSequenceRejectsMismatchedSymbols(t *testing.T) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), "return $value")
+	require.NoError(t, err)
+
+	_, err = format.RegularQueryWithParameterSequence(regularQuery, false, nil)
+	require.ErrorContains(t, err, "fewer symbols")
+
+	_, err = format.RegularQueryWithParameterSequence(regularQuery, false, []string{"first", "second"})
+	require.ErrorContains(t, err, "more symbols")
+}
+
 func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
 	var (
 		buffer  = &bytes.Buffer{}
