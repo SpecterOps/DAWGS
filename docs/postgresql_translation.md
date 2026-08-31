@@ -59,6 +59,51 @@ Substring and suffix predicates are not promoted to blanket schema indexes. Post
 parameter/property forms that lower to helper functions remain outside the hard index-match contract until their
 lowering changes.
 
+## Translation Cache
+
+The PostgreSQL driver keeps one bounded, driver-wide compilation cache with a default capacity of 256 rendered SQL
+statements. It serves both `Transaction.Query` and the legacy programmatic query builder used by relationship and node
+queries. A warm builder hit avoids optimization, lowering-plan construction, PostgreSQL AST construction, and SQL
+rendering; it still builds the request AST, deterministically names its runtime parameters, renders the canonical
+Cypher cache identity, and assembles its debug comment.
+
+Entries are partitioned by the SHA-256 digest of trimmed Cypher text, target graph ID, sorted parameter names and PostgreSQL type shapes, a
+translation-key format/policy identity, and the schema generation. Parameter values are never retained or used as key
+material, and the cache key does not retain the source text. The retained data is limited to the SQL string and generated-parameter-to-Cypher-parameter source names;
+the cache does not retain caller maps or values, ASTs, contexts, transactions, connections, rows, or connection
+strings. Structural literals remain part of the cache identity. Generated parameters that cannot be reconstructed from
+request-local named sources, translation errors, disabled/closed cache state, and source text over 64 KiB bypass
+retention.
+
+Configure the bounded cache through the PostgreSQL driver constructor:
+
+```go
+database := pg.NewDriverWithOptions(0, pool, pg.DriverOptions{
+	TranslationCacheEntries: 0, // disables cache lookup and retention
+})
+```
+
+For a process-wide rollback, disable optimized translation directly and restore the prior state when appropriate:
+
+```go
+previous := pg.SetOptimizedTranslation(false)
+defer pg.SetOptimizedTranslation(previous)
+```
+
+When disabled, newly started PostgreSQL compilations bypass cache lookup and retention and translate the original AST
+with no PostgreSQL rewrite rules or lowering decisions. The setting is atomic and applies to every PostgreSQL driver in
+the process; each compilation snapshots it at entry, so already-running compilations continue with their selected path.
+Cached optimized entries remain dormant and are reusable after re-enabling. A zero cache capacity still runs optimized
+translation without retaining entries. The default remains optimized translation with a 256-entry cache.
+
+Concurrent cacheable misses for the same key share one translation. Waiters behind a failed, canceled, or non-cacheable
+build continue independently rather than serializing behind repeated failed work. Statistics are available through
+`(*pg.Driver).TranslationCacheStats()` and expose aggregate hits, build-leader misses, coalesced requests, bypasses,
+unoptimized compilations, insertions, evictions, binding/build failures, live size, capacity, and generation; they never
+expose query or value data. Successful schema assertions and kind refreshes advance the schema generation and discard completed entries.
+External schema or type changes cannot be detected automatically; recreate the driver/pool after those changes. Driver
+close retires the cache before the PostgreSQL pool closes.
+
 ## Validation Workflow
 
 Optimizer changes should include focused optimizer/lowering tests, SQL-shape translation tests, and backend-equivalent

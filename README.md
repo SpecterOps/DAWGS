@@ -54,6 +54,12 @@ Run the package benchmark suite with:
 make test_bench
 ```
 
+The PostgreSQL driver has a bounded, driver-wide Cypher compilation cache for both text Cypher and programmatic graph
+queries. Its default capacity is 256 entries; callers that need a different capacity can use
+`pg.NewDriverWithOptions`. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
+newly started compilations across every PostgreSQL driver in the process. See
+[PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
+
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
 
 ```bash
