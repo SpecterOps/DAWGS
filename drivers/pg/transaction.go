@@ -3,7 +3,6 @@ package pg
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 
