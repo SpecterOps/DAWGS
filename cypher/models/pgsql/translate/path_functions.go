@@ -33,6 +33,11 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 		}
 	}
 
+	// Restore original logical edge order when the originating pattern was reversed by the optimizer.
+	if pathBinding.PathDirectionReversed {
+		reversePathCompositeExpressions(edgeArrayReferences)
+	}
+
 	if edgeArrayExpression := concatenatePathCompositeParts(edgeArrayReferences); edgeArrayExpression != nil {
 		return edgeArrayExpression, nil
 	}
@@ -67,6 +72,11 @@ func pathCompositeEdgeIDArrayExpression(scope *Scope, pathBinding *BoundIdentifi
 		default:
 			// Path bindings also depend on their node endpoints. Those are not part of relationships(p).
 		}
+	}
+
+	// Restore original logical edge order when the originating pattern was reversed by the optimizer.
+	if pathBinding.PathDirectionReversed {
+		reversePathCompositeExpressions(edgeIDArrayReferences)
 	}
 
 	if edgeIDArrayExpression := concatenatePathCompositeParts(edgeIDArrayReferences); edgeIDArrayExpression != nil {

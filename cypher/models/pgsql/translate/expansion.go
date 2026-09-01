@@ -2165,15 +2165,109 @@ func projectionAliasExpressions(projection pgsql.Projection) map[pgsql.Identifie
 	return aliases
 }
 
+func rewriteCurrentFrameProjectionExpressions(expressions []pgsql.Expression, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) []pgsql.Expression {
+	if expressions == nil {
+		return nil
+	}
+
+	rewritten := make([]pgsql.Expression, len(expressions))
+	for idx, expression := range expressions {
+		rewritten[idx] = rewriteCurrentFrameProjectionReferences(expression, frameID, aliases)
+	}
+
+	return rewritten
+}
+
+func rewriteCurrentFrameProjectionWindow(window *pgsql.Window, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) *pgsql.Window {
+	if window == nil {
+		return nil
+	}
+
+	rewritten := *window
+	rewritten.PartitionBy = rewriteCurrentFrameProjectionExpressions(window.PartitionBy, frameID, aliases)
+
+	if window.OrderBy != nil {
+		rewritten.OrderBy = make([]pgsql.OrderBy, len(window.OrderBy))
+		for idx, orderBy := range window.OrderBy {
+			rewritten.OrderBy[idx] = orderBy
+			rewritten.OrderBy[idx].Expression = rewriteCurrentFrameProjectionReferences(orderBy.Expression, frameID, aliases)
+		}
+	}
+
+	return &rewritten
+}
+
+func rewriteCurrentFrameProjectionItems(projection pgsql.Projection, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Projection {
+	if projection == nil {
+		return nil
+	}
+
+	rewritten := make(pgsql.Projection, len(projection))
+	for idx, selectItem := range projection {
+		if rewrittenSelectItem, isSelectItem := rewriteCurrentFrameProjectionReferences(selectItem, frameID, aliases).(pgsql.SelectItem); isSelectItem {
+			rewritten[idx] = rewrittenSelectItem
+		} else {
+			rewritten[idx] = selectItem
+		}
+	}
+
+	return rewritten
+}
+
+func rewriteCurrentFrameProjectionFromClauses(fromClauses []pgsql.FromClause, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) []pgsql.FromClause {
+	if fromClauses == nil {
+		return nil
+	}
+
+	rewritten := make([]pgsql.FromClause, len(fromClauses))
+	for idx, fromClause := range fromClauses {
+		rewritten[idx] = fromClause
+		rewritten[idx].Source = rewriteCurrentFrameProjectionReferences(fromClause.Source, frameID, aliases)
+
+		if fromClause.Joins != nil {
+			rewritten[idx].Joins = make([]pgsql.Join, len(fromClause.Joins))
+			for joinIdx, join := range fromClause.Joins {
+				rewritten[idx].Joins[joinIdx] = join
+				rewritten[idx].Joins[joinIdx].Table = rewriteCurrentFrameProjectionReferences(join.Table, frameID, aliases)
+				rewritten[idx].Joins[joinIdx].JoinOperator.Constraint = rewriteCurrentFrameProjectionReferences(join.JoinOperator.Constraint, frameID, aliases)
+			}
+		}
+	}
+
+	return rewritten
+}
+
 func rewriteCurrentFrameProjectionSetExpression(setExpression pgsql.SetExpression, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.SetExpression {
+	if setExpression == nil {
+		return nil
+	}
+
 	switch typedSetExpression := setExpression.(type) {
 	case pgsql.Select:
 		return rewriteCurrentFrameProjectionSelect(typedSetExpression, frameID, aliases)
+
+	case *pgsql.Select:
+		if typedSetExpression == nil {
+			return nil
+		}
+
+		rewritten := rewriteCurrentFrameProjectionSelect(*typedSetExpression, frameID, aliases)
+		return &rewritten
 
 	case pgsql.SetOperation:
 		typedSetExpression.LOperand = rewriteCurrentFrameProjectionSetExpression(typedSetExpression.LOperand, frameID, aliases)
 		typedSetExpression.ROperand = rewriteCurrentFrameProjectionSetExpression(typedSetExpression.ROperand, frameID, aliases)
 		return typedSetExpression
+
+	case *pgsql.SetOperation:
+		if typedSetExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedSetExpression
+		rewritten.LOperand = rewriteCurrentFrameProjectionSetExpression(typedSetExpression.LOperand, frameID, aliases)
+		rewritten.ROperand = rewriteCurrentFrameProjectionSetExpression(typedSetExpression.ROperand, frameID, aliases)
+		return &rewritten
 
 	default:
 		return setExpression
@@ -2183,10 +2277,16 @@ func rewriteCurrentFrameProjectionSetExpression(setExpression pgsql.SetExpressio
 func rewriteCurrentFrameProjectionQuery(query pgsql.Query, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Query {
 	query.Body = rewriteCurrentFrameProjectionSetExpression(query.Body, frameID, aliases)
 
-	for idx, orderBy := range query.OrderBy {
-		if orderBy != nil {
-			query.OrderBy[idx].Expression = rewriteCurrentFrameProjectionReferences(orderBy.Expression, frameID, aliases)
+	if query.OrderBy != nil {
+		rewrittenOrderBy := make([]*pgsql.OrderBy, len(query.OrderBy))
+		for idx, orderBy := range query.OrderBy {
+			if orderBy != nil {
+				rewritten := *orderBy
+				rewritten.Expression = rewriteCurrentFrameProjectionReferences(orderBy.Expression, frameID, aliases)
+				rewrittenOrderBy[idx] = &rewritten
+			}
 		}
+		query.OrderBy = rewrittenOrderBy
 	}
 
 	query.Offset = rewriteCurrentFrameProjectionReferences(query.Offset, frameID, aliases)
@@ -2196,27 +2296,10 @@ func rewriteCurrentFrameProjectionQuery(query pgsql.Query, frameID pgsql.Identif
 }
 
 func rewriteCurrentFrameProjectionSelect(selectBody pgsql.Select, frameID pgsql.Identifier, aliases map[pgsql.Identifier]pgsql.Expression) pgsql.Select {
-	for idx, selectItem := range selectBody.Projection {
-		if rewritten, isSelectItem := rewriteCurrentFrameProjectionReferences(selectItem, frameID, aliases).(pgsql.SelectItem); isSelectItem {
-			selectBody.Projection[idx] = rewritten
-		}
-	}
-
-	for idx := range selectBody.From {
-		selectBody.From[idx].Source = rewriteCurrentFrameProjectionReferences(selectBody.From[idx].Source, frameID, aliases)
-
-		for joinIdx := range selectBody.From[idx].Joins {
-			selectBody.From[idx].Joins[joinIdx].Table = rewriteCurrentFrameProjectionReferences(selectBody.From[idx].Joins[joinIdx].Table, frameID, aliases)
-			selectBody.From[idx].Joins[joinIdx].JoinOperator.Constraint = rewriteCurrentFrameProjectionReferences(selectBody.From[idx].Joins[joinIdx].JoinOperator.Constraint, frameID, aliases)
-		}
-	}
-
+	selectBody.Projection = rewriteCurrentFrameProjectionItems(selectBody.Projection, frameID, aliases)
+	selectBody.From = rewriteCurrentFrameProjectionFromClauses(selectBody.From, frameID, aliases)
 	selectBody.Where = rewriteCurrentFrameProjectionReferences(selectBody.Where, frameID, aliases)
-
-	for idx, groupByExpression := range selectBody.GroupBy {
-		selectBody.GroupBy[idx] = rewriteCurrentFrameProjectionReferences(groupByExpression, frameID, aliases)
-	}
-
+	selectBody.GroupBy = rewriteCurrentFrameProjectionExpressions(selectBody.GroupBy, frameID, aliases)
 	selectBody.Having = rewriteCurrentFrameProjectionReferences(selectBody.Having, frameID, aliases)
 
 	return selectBody
@@ -2235,7 +2318,7 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 			}
 		}
 
-		return typedExpression
+		return typedExpression.Copy()
 
 	case pgsql.RowColumnReference:
 		typedExpression.Identifier = rewriteCurrentFrameProjectionReferences(typedExpression.Identifier, frameID, aliases)
@@ -2246,8 +2329,13 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 		return typedExpression
 
 	case *pgsql.UnaryExpression:
-		typedExpression.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
+		return &rewritten
 
 	case pgsql.BinaryExpression:
 		typedExpression.LOperand = rewriteCurrentFrameProjectionReferences(typedExpression.LOperand, frameID, aliases)
@@ -2255,63 +2343,112 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 		return typedExpression
 
 	case *pgsql.BinaryExpression:
-		typedExpression.LOperand = rewriteCurrentFrameProjectionReferences(typedExpression.LOperand, frameID, aliases)
-		typedExpression.ROperand = rewriteCurrentFrameProjectionReferences(typedExpression.ROperand, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.LOperand = rewriteCurrentFrameProjectionReferences(typedExpression.LOperand, frameID, aliases)
+		rewritten.ROperand = rewriteCurrentFrameProjectionReferences(typedExpression.ROperand, frameID, aliases)
+		return &rewritten
 
 	case pgsql.FunctionCall:
-		for idx, parameter := range typedExpression.Parameters {
-			typedExpression.Parameters[idx] = rewriteCurrentFrameProjectionReferences(parameter, frameID, aliases)
-		}
+		typedExpression.Parameters = rewriteCurrentFrameProjectionExpressions(typedExpression.Parameters, frameID, aliases)
+		typedExpression.Over = rewriteCurrentFrameProjectionWindow(typedExpression.Over, frameID, aliases)
 		return typedExpression
 
 	case *pgsql.FunctionCall:
-		for idx, parameter := range typedExpression.Parameters {
-			typedExpression.Parameters[idx] = rewriteCurrentFrameProjectionReferences(parameter, frameID, aliases)
+		if typedExpression == nil {
+			return nil
 		}
-		return typedExpression
+
+		rewritten := *typedExpression
+		rewritten.Parameters = rewriteCurrentFrameProjectionExpressions(typedExpression.Parameters, frameID, aliases)
+		rewritten.Over = rewriteCurrentFrameProjectionWindow(typedExpression.Over, frameID, aliases)
+		return &rewritten
 
 	case pgsql.TypeCast:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
 		return typedExpression
 
-	case pgsql.CompositeValue:
-		for idx, value := range typedExpression.Values {
-			typedExpression.Values[idx] = rewriteCurrentFrameProjectionReferences(value, frameID, aliases)
+	case *pgsql.TypeCast:
+		if typedExpression == nil {
+			return nil
 		}
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return &rewritten
+
+	case pgsql.CompositeValue:
+		typedExpression.Values = rewriteCurrentFrameProjectionExpressions(typedExpression.Values, frameID, aliases)
 		return typedExpression
+
+	case *pgsql.CompositeValue:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Values = rewriteCurrentFrameProjectionExpressions(typedExpression.Values, frameID, aliases)
+		return &rewritten
 
 	case *pgsql.Parenthetical:
-		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		return pgsql.NewParenthetical(rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases))
 
 	case *pgsql.EdgeArrayFromPathIDs:
-		typedExpression.PathIDs = rewriteCurrentFrameProjectionReferences(typedExpression.PathIDs, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		return &pgsql.EdgeArrayFromPathIDs{
+			PathIDs: rewriteCurrentFrameProjectionReferences(typedExpression.PathIDs, frameID, aliases),
+		}
 
 	case pgsql.ArrayLiteral:
-		for idx, value := range typedExpression.Values {
-			typedExpression.Values[idx] = rewriteCurrentFrameProjectionReferences(value, frameID, aliases)
-		}
+		typedExpression.Values = rewriteCurrentFrameProjectionExpressions(typedExpression.Values, frameID, aliases)
 		return typedExpression
+
+	case *pgsql.ArrayLiteral:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Values = rewriteCurrentFrameProjectionExpressions(typedExpression.Values, frameID, aliases)
+		return &rewritten
 
 	case pgsql.ArrayExpression:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
 		return typedExpression
 
+	case *pgsql.ArrayExpression:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return &rewritten
+
 	case pgsql.ArrayIndex:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
-		for idx, index := range typedExpression.Indexes {
-			typedExpression.Indexes[idx] = rewriteCurrentFrameProjectionReferences(index, frameID, aliases)
-		}
+		typedExpression.Indexes = rewriteCurrentFrameProjectionExpressions(typedExpression.Indexes, frameID, aliases)
 		return typedExpression
 
 	case *pgsql.ArrayIndex:
-		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
-		for idx, index := range typedExpression.Indexes {
-			typedExpression.Indexes[idx] = rewriteCurrentFrameProjectionReferences(index, frameID, aliases)
+		if typedExpression == nil {
+			return nil
 		}
-		return typedExpression
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		rewritten.Indexes = rewriteCurrentFrameProjectionExpressions(typedExpression.Indexes, frameID, aliases)
+		return &rewritten
 
 	case pgsql.ArraySlice:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
@@ -2320,101 +2457,255 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 		return typedExpression
 
 	case *pgsql.ArraySlice:
-		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
-		typedExpression.Lower = rewriteCurrentFrameProjectionReferences(typedExpression.Lower, frameID, aliases)
-		typedExpression.Upper = rewriteCurrentFrameProjectionReferences(typedExpression.Upper, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		rewritten.Lower = rewriteCurrentFrameProjectionReferences(typedExpression.Lower, frameID, aliases)
+		rewritten.Upper = rewriteCurrentFrameProjectionReferences(typedExpression.Upper, frameID, aliases)
+		return &rewritten
 
 	case pgsql.AllExpression:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
 		return typedExpression
 
 	case *pgsql.AllExpression:
-		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return &rewritten
 
 	case pgsql.AnyExpression:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
 		return typedExpression
 
 	case *pgsql.AnyExpression:
-		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return &rewritten
 
 	case pgsql.Case:
 		typedExpression.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
-		for idx, condition := range typedExpression.Conditions {
-			typedExpression.Conditions[idx] = rewriteCurrentFrameProjectionReferences(condition, frameID, aliases)
-		}
-		for idx, then := range typedExpression.Then {
-			typedExpression.Then[idx] = rewriteCurrentFrameProjectionReferences(then, frameID, aliases)
-		}
+		typedExpression.Conditions = rewriteCurrentFrameProjectionExpressions(typedExpression.Conditions, frameID, aliases)
+		typedExpression.Then = rewriteCurrentFrameProjectionExpressions(typedExpression.Then, frameID, aliases)
 		typedExpression.Else = rewriteCurrentFrameProjectionReferences(typedExpression.Else, frameID, aliases)
 		return typedExpression
 
 	case *pgsql.Case:
-		typedExpression.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
-		for idx, condition := range typedExpression.Conditions {
-			typedExpression.Conditions[idx] = rewriteCurrentFrameProjectionReferences(condition, frameID, aliases)
+		if typedExpression == nil {
+			return nil
 		}
-		for idx, then := range typedExpression.Then {
-			typedExpression.Then[idx] = rewriteCurrentFrameProjectionReferences(then, frameID, aliases)
-		}
-		typedExpression.Else = rewriteCurrentFrameProjectionReferences(typedExpression.Else, frameID, aliases)
-		return typedExpression
+
+		rewritten := *typedExpression
+		rewritten.Operand = rewriteCurrentFrameProjectionReferences(typedExpression.Operand, frameID, aliases)
+		rewritten.Conditions = rewriteCurrentFrameProjectionExpressions(typedExpression.Conditions, frameID, aliases)
+		rewritten.Then = rewriteCurrentFrameProjectionExpressions(typedExpression.Then, frameID, aliases)
+		rewritten.Else = rewriteCurrentFrameProjectionReferences(typedExpression.Else, frameID, aliases)
+		return &rewritten
 
 	case pgsql.ExistsExpression:
 		typedExpression.Subquery.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Subquery.Query, frameID, aliases)
 		return typedExpression
 
+	case *pgsql.ExistsExpression:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Subquery.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Subquery.Query, frameID, aliases)
+		return &rewritten
+
 	case pgsql.Subquery:
 		typedExpression.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Query, frameID, aliases)
 		return typedExpression
 
+	case *pgsql.Subquery:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Query, frameID, aliases)
+		return &rewritten
+
 	case pgsql.Query:
 		return rewriteCurrentFrameProjectionQuery(typedExpression, frameID, aliases)
 
+	case *pgsql.Query:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := rewriteCurrentFrameProjectionQuery(*typedExpression, frameID, aliases)
+		return &rewritten
+
 	case pgsql.Select:
 		return rewriteCurrentFrameProjectionSelect(typedExpression, frameID, aliases)
+
+	case *pgsql.Select:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := rewriteCurrentFrameProjectionSelect(*typedExpression, frameID, aliases)
+		return &rewritten
 
 	case pgsql.SetOperation:
 		typedExpression.LOperand = rewriteCurrentFrameProjectionSetExpression(typedExpression.LOperand, frameID, aliases)
 		typedExpression.ROperand = rewriteCurrentFrameProjectionSetExpression(typedExpression.ROperand, frameID, aliases)
 		return typedExpression
 
+	case *pgsql.SetOperation:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.LOperand = rewriteCurrentFrameProjectionSetExpression(typedExpression.LOperand, frameID, aliases)
+		rewritten.ROperand = rewriteCurrentFrameProjectionSetExpression(typedExpression.ROperand, frameID, aliases)
+		return &rewritten
+
+	case pgsql.Projection:
+		return rewriteCurrentFrameProjectionItems(typedExpression, frameID, aliases)
+
 	case pgsql.ProjectionFrom:
-		for idx, selectItem := range typedExpression.Projection {
-			if rewritten, isSelectItem := rewriteCurrentFrameProjectionReferences(selectItem, frameID, aliases).(pgsql.SelectItem); isSelectItem {
-				typedExpression.Projection[idx] = rewritten
-			}
-		}
-		for idx := range typedExpression.From {
-			typedExpression.From[idx].Source = rewriteCurrentFrameProjectionReferences(typedExpression.From[idx].Source, frameID, aliases)
-			for joinIdx := range typedExpression.From[idx].Joins {
-				typedExpression.From[idx].Joins[joinIdx].JoinOperator.Constraint = rewriteCurrentFrameProjectionReferences(typedExpression.From[idx].Joins[joinIdx].JoinOperator.Constraint, frameID, aliases)
-			}
-		}
+		typedExpression.Projection = rewriteCurrentFrameProjectionItems(typedExpression.Projection, frameID, aliases)
+		typedExpression.From = rewriteCurrentFrameProjectionFromClauses(typedExpression.From, frameID, aliases)
 		return typedExpression
+
+	case *pgsql.ProjectionFrom:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Projection = rewriteCurrentFrameProjectionItems(typedExpression.Projection, frameID, aliases)
+		rewritten.From = rewriteCurrentFrameProjectionFromClauses(typedExpression.From, frameID, aliases)
+		return &rewritten
 
 	case pgsql.AliasedExpression:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
 		return typedExpression
 
 	case *pgsql.AliasedExpression:
-		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
-		return typedExpression
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return &rewritten
 
 	case pgsql.Variadic:
 		typedExpression.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
 		return typedExpression
 
+	case *pgsql.Variadic:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Expression = rewriteCurrentFrameProjectionReferences(typedExpression.Expression, frameID, aliases)
+		return &rewritten
+
 	case pgsql.LateralSubquery:
 		typedExpression.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Query, frameID, aliases)
 		return typedExpression
 
+	case *pgsql.LateralSubquery:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Query = rewriteCurrentFrameProjectionQuery(typedExpression.Query, frameID, aliases)
+		return &rewritten
+
+	case pgsql.Values:
+		typedExpression.Values = rewriteCurrentFrameProjectionExpressions(typedExpression.Values, frameID, aliases)
+		return typedExpression
+
+	case *pgsql.Values:
+		if typedExpression == nil {
+			return nil
+		}
+
+		rewritten := *typedExpression
+		rewritten.Values = rewriteCurrentFrameProjectionExpressions(typedExpression.Values, frameID, aliases)
+		return &rewritten
+
 	default:
 		return expression
 	}
+}
+
+// isSelfLoopEndpoints reports whether a traversal step's left and right nodes are the same Cypher
+// variable. For a self-loop such as (n)-[*..]->(n) the translator reuses a single BoundIdentifier for
+// both endpoints.
+func isSelfLoopEndpoints(traversalStep *TraversalStep) bool {
+	return traversalStep.LeftNode.Identifier == traversalStep.RightNode.Identifier
+}
+
+// isUnboundSelfLoop reports whether a traversal step is a self-loop whose node is not genuinely carried
+// by the previous frame. A self-loop marks the node as bound because both endpoints share a binding, but
+// in MATCH (x) MATCH (n)-[*..]->(n) the node n is not exported by the previous frame and must be seeded
+// independently. In MATCH (n) WITH n MATCH (n)-[*..]->(n) the node is exported, so it stays tied to the
+// previous frame and this returns false.
+func isUnboundSelfLoop(traversalStep *TraversalStep) bool {
+	if !isSelfLoopEndpoints(traversalStep) {
+		return false
+	}
+
+	if traversalStep.Frame == nil || traversalStep.Frame.Previous == nil {
+		return true
+	}
+
+	return !traversalStep.Frame.Previous.Exported.Contains(traversalStep.LeftNode.Identifier)
+}
+
+// expansionProjectionNodeJoins builds the projection node-lookup joins for an expansion frame. When the
+// endpoints are the same variable a single join on root_id is emitted to avoid a duplicate table alias;
+// otherwise the usual root_id/next_id pair is returned.
+func expansionProjectionNodeJoins(traversalStep *TraversalStep, frameID pgsql.Identifier) []pgsql.Join {
+	rootJoin := expansionNodeLookupJoin(
+		traversalStep.LeftNode.Identifier,
+		pgsql.CompoundIdentifier{frameID, expansionRootID},
+	)
+
+	if isSelfLoopEndpoints(traversalStep) {
+		return []pgsql.Join{rootJoin}
+	}
+
+	nextJoin := expansionNodeLookupJoin(
+		traversalStep.RightNode.Identifier,
+		pgsql.CompoundIdentifier{frameID, expansionNextID},
+	)
+
+	return []pgsql.Join{rootJoin, nextJoin}
+}
+
+// selfLoopIdentityConstraint returns a root_id = next_id predicate for self-loop endpoints, restricting
+// the projection to walks that returned to their origin. It returns nil for non-self-loops.
+func selfLoopIdentityConstraint(traversalStep *TraversalStep, frameID pgsql.Identifier) pgsql.Expression {
+	if !isSelfLoopEndpoints(traversalStep) {
+		return nil
+	}
+
+	return pgd.Equals(
+		pgsql.CompoundIdentifier{frameID, expansionRootID},
+		pgsql.CompoundIdentifier{frameID, expansionNextID},
+	)
 }
 
 func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalStepContext, expansion *ExpansionBuilder) (pgsql.Query, error) {
@@ -2441,7 +2732,9 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		seed            *expansionSeed
 	)
 
-	if traversalStep.LeftNodeBound {
+	// A self-loop marks LeftNodeBound even when its node is new, so seed an unbound self-loop from all
+	// nodes rather than the previous frame. A self-loop carried in (e.g. via WITH) stays bound.
+	if traversalStep.LeftNodeBound && !isUnboundSelfLoop(traversalStep) {
 		if traversalStep.Frame.Previous == nil {
 			return pgsql.Query{}, fmt.Errorf("left node is marked as bound but there is no previous frame to reference")
 		}
@@ -2449,7 +2742,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 		boundSeed := newExpansionBoundNodeSeed(seedIdentifier, traversalStep.Frame.Previous, traversalStep.LeftNode.Identifier, seedConstraints)
 		seed = &boundSeed
 		expansion.UseUnionAll = true
-	} else if seedConstraints != nil {
+	} else if seedConstraints != nil || isUnboundSelfLoop(traversalStep) {
 		nodeSeed := newExpansionNodeSeed(seedIdentifier, traversalStep.LeftNode.Identifier, seedConstraints)
 		seed = &nodeSeed
 		expansion.UseUnionAll = primerExternal == nil
@@ -2572,22 +2865,20 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 			Name:    pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
 			Binding: models.EmptyOptional[pgsql.Identifier](),
 		},
-		Joins: []pgsql.Join{
-			expansionNodeLookupJoin(
-				traversalStep.LeftNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-			),
-			expansionNodeLookupJoin(
-				traversalStep.RightNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-			),
-		},
+		Joins: expansionProjectionNodeJoins(traversalStep, expansionModel.Frame.Binding.Identifier),
 	})
 
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
-		if previousProjectionFrameID != "" && traversalStep.LeftNodeBound {
+		projectionConstraints = pgsql.OptionalAnd(
+			projectionConstraints,
+			selfLoopIdentityConstraint(traversalStep, expansionModel.Frame.Binding.Identifier),
+		)
+		// Skip these gates for an unbound self-loop: its node is not a column of the previous frame, so the
+		// gates would emit an invalid (prevFrame.n) reference, and selfLoopIdentityConstraint already ties
+		// the endpoints. A carried self-loop keeps the gates.
+		if previousProjectionFrameID != "" && traversalStep.LeftNodeBound && !isUnboundSelfLoop(traversalStep) {
 			projectionConstraints = pgsql.OptionalAnd(
 				projectionConstraints,
 				boundEndpointProjectionConstraint(
@@ -2598,7 +2889,7 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 				),
 			)
 		}
-		if previousProjectionFrameID != "" && traversalStep.RightNodeBound {
+		if previousProjectionFrameID != "" && traversalStep.RightNodeBound && !isUnboundSelfLoop(traversalStep) {
 			projectionConstraints = pgsql.OptionalAnd(
 				projectionConstraints,
 				boundEndpointProjectionConstraint(
@@ -2714,21 +3005,16 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 			Name:    pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
 			Binding: models.EmptyOptional[pgsql.Identifier](),
 		},
-		Joins: []pgsql.Join{
-			expansionNodeLookupJoin(
-				traversalStep.LeftNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-			),
-			expansionNodeLookupJoin(
-				traversalStep.RightNode.Identifier,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-			),
-		},
+		Joins: expansionProjectionNodeJoins(traversalStep, expansionModel.Frame.Binding.Identifier),
 	})
 
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
+		projectionConstraints = pgsql.OptionalAnd(
+			projectionConstraints,
+			selfLoopIdentityConstraint(traversalStep, expansionModel.Frame.Binding.Identifier),
+		)
 		projectionConstraints = rewriteCurrentFrameProjectionReferences(
 			projectionConstraints,
 			traversalStep.Frame.Binding.Identifier,
@@ -3115,6 +3401,11 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 		)
 	}
 
+	// Exclude expansion paths that reuse a relationship consumed by a preceding fixed step.
+	if expansionModel.PreviousRelationshipUniqueness != nil {
+		projectionConstraints = pgsql.OptionalAnd(projectionConstraints, expansionModel.PreviousRelationshipUniqueness)
+	}
+
 	return projectionConstraints, nil
 }
 
@@ -3147,6 +3438,11 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	} else {
 		expansionModel.Frame = expansionFrame
 	}
+
+	// Enforce relationship uniqueness against any preceding fixed steps. The expansion's own path
+	// array already excludes edges reused within the recursion; this additionally excludes edges
+	// consumed by fixed steps that precede the expansion (e.g. after a pattern reversal).
+	expansionModel.PreviousRelationshipUniqueness = expansionPreviousRelationshipUniquenessConstraint(s.scope, part, stepIndex, traversalStep)
 
 	if expansionModel.TerminalNodeConstraints != nil {
 		if terminalCriteriaProjection, err := pgsql.As[pgsql.SelectItem](expansionModel.TerminalNodeConstraints); err != nil {

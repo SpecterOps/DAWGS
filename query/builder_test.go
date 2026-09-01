@@ -78,6 +78,30 @@ func TestBuilderProjectionModifiersAreOrderIndependent(t *testing.T) {
 	}
 }
 
+func TestBuilderRendersRawPropertyKeys(t *testing.T) {
+	builder := query.NewBuilder(nil)
+	builder.Apply(query.Returning(
+		query.NodeProperty("a-aaa"),
+		query.Property(query.Node(), "has`tick"),
+		query.Property(query.Node(), "   "),
+	))
+
+	regularQuery, err := builder.Build(false)
+	if err != nil {
+		t.Fatalf("build query: %v", err)
+	}
+
+	var cypher bytes.Buffer
+	if err := cypherFormat.NewCypherEmitter(false).Write(regularQuery, &cypher); err != nil {
+		t.Fatalf("render Cypher: %v", err)
+	}
+
+	expected := "match (n) return n.`a-aaa`, n.`has``tick`, n.`   `"
+	if cypher.String() != expected {
+		t.Fatalf("expected %q, got %q", expected, cypher.String())
+	}
+}
+
 func assertRetrieverProjection(t *testing.T, rendered string) {
 	t.Helper()
 

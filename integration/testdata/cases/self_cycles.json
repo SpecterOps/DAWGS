@@ -1,0 +1,175 @@
+{
+  "dataset": "self_cycles",
+  "cases": [
+    {
+      "name": "untyped variable-length self-loop returns exactly the 24 nodes that lie on a cycle and excludes the 2 acyclic decoy nodes",
+      "cypher": "match (n)-[*..]->(n) return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 24,
+        "node_id_set": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
+      }
+    },
+    {
+      "name": "untyped variable-length self-loop filtered to the acyclic decoy nodes (p, q, reachable from a but never returning) yields no rows",
+      "cypher": "match (n)-[*..]->(n) where n.cycle = 'acyclic' return n",
+      "assert": "empty"
+    },
+    {
+      "name": "untyped self-loop for node a returns exactly its 1-hop self-edge path a->a and not the a->p decoy branch",
+      "cypher": "match p = (n)-[*..]->(n) where n.name = 'a' return p",
+      "assert": {
+        "keys": ["p"],
+        "row_count": 1,
+        "path_node_ids": [["a", "a"]],
+        "path_lengths": [1],
+        "path_edge_kinds": [["EdgeKind1"]]
+      }
+    },
+    {
+      "name": "untyped self-loop for node b returns exactly one 2-hop cycle path b->c->b over two EdgeKind1 edges",
+      "cypher": "match p = (n)-[*..]->(n) where n.name = 'b' return p",
+      "assert": {
+        "keys": ["p"],
+        "row_count": 1,
+        "path_node_ids": [["b", "c", "b"]],
+        "path_lengths": [2],
+        "path_edge_kinds": [["EdgeKind1", "EdgeKind1"]]
+      }
+    },
+    {
+      "name": "untyped self-loop for node d returns exactly one 3-hop cycle path d->e->f->d over three EdgeKind1 edges",
+      "cypher": "match p = (n)-[*..]->(n) where n.name = 'd' return p",
+      "assert": {
+        "keys": ["p"],
+        "row_count": 1,
+        "path_node_ids": [["d", "e", "f", "d"]],
+        "path_lengths": [3],
+        "path_edge_kinds": [["EdgeKind1", "EdgeKind1", "EdgeKind1"]]
+      }
+    },
+    {
+      "name": "untyped self-loop filtered to the self4 group returns exactly its 4 member nodes g, h, i, j",
+      "cypher": "match (n)-[*..]->(n) where n.cycle = 'self4' return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 4,
+        "node_id_set": ["g", "h", "i", "j"]
+      }
+    },
+    {
+      "name": "untyped self-loop filtered to the mixed-kind self3mix group returns all 3 members r, s, t (the cycle closes only by crossing edge kinds)",
+      "cypher": "match (n)-[*..]->(n) where n.cycle = 'self3mix' return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 3,
+        "node_id_set": ["r", "s", "t"]
+      }
+    },
+    {
+      "name": "untyped self-loop for node r returns exactly one 3-hop path r->s->t->r whose edges span EdgeKind1, EdgeKind2, EdgeKind1",
+      "cypher": "match p = (n)-[*..]->(n) where n.name = 'r' return p",
+      "assert": {
+        "keys": ["p"],
+        "row_count": 1,
+        "path_node_ids": [["r", "s", "t", "r"]],
+        "path_lengths": [3],
+        "path_edge_kinds": [["EdgeKind1", "EdgeKind2", "EdgeKind1"]]
+      }
+    },
+    {
+      "name": "EdgeKind1-typed self-loop returns exactly the 19 nodes on all-EdgeKind1 cycles, excluding the mixed-kind and EdgeKind2-only cycles",
+      "cypher": "match (n)-[:EdgeKind1*..]->(n) return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 19,
+        "node_id_set": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "w", "x", "y", "z"]
+      }
+    },
+    {
+      "name": "EdgeKind1-typed self-loop filtered to the mixed-kind self3mix group yields no rows (the cycle cannot close using EdgeKind1 alone)",
+      "cypher": "match (n)-[:EdgeKind1*..]->(n) where n.cycle = 'self3mix' return n",
+      "assert": "empty"
+    },
+    {
+      "name": "EdgeKind1-typed self-loop filtered to the EdgeKind2-only self2k2 group yields no rows",
+      "cypher": "match (n)-[:EdgeKind1*..]->(n) where n.cycle = 'self2k2' return n",
+      "assert": "empty"
+    },
+    {
+      "name": "EdgeKind2-typed self-loop returns exactly the 2 nodes u, v of the only EdgeKind2-only cycle",
+      "cypher": "match (n)-[:EdgeKind2*..]->(n) return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 2,
+        "node_id_set": ["u", "v"]
+      }
+    },
+    {
+      "name": "EdgeKind2-typed self-loop for node u returns exactly one 2-hop path u->v->u over two EdgeKind2 edges",
+      "cypher": "match p = (n)-[:EdgeKind2*..]->(n) where n.name = 'u' return p",
+      "assert": {
+        "keys": ["p"],
+        "row_count": 1,
+        "path_node_ids": [["u", "v", "u"]],
+        "path_lengths": [2],
+        "path_edge_kinds": [["EdgeKind2", "EdgeKind2"]]
+      }
+    },
+    {
+      "name": "fixed-length (a)-[:EdgeKind1]->(b)-[:EdgeKind1]->(a) with limit 100 returns all 6 two-hop EdgeKind1 round-trip paths",
+      "cypher": "match p = (a)-[:EdgeKind1]->(b)-[:EdgeKind1]->(a) return p limit 100",
+      "assert": {
+        "keys": ["p"],
+        "row_count": 6,
+        "path_lengths": [2, 2, 2, 2, 2, 2],
+        "path_edge_kinds": [
+          ["EdgeKind1", "EdgeKind1"],
+          ["EdgeKind1", "EdgeKind1"],
+          ["EdgeKind1", "EdgeKind1"],
+          ["EdgeKind1", "EdgeKind1"],
+          ["EdgeKind1", "EdgeKind1"],
+          ["EdgeKind1", "EdgeKind1"]
+        ]
+      }
+    },
+    {
+      "name": "fixed-length untyped (a)-[]->(b)-[]->(a) with limit 100 returns all 8 two-hop round-trip endpoint pairs",
+      "cypher": "match (a)-[]->(b)-[]->(a) return a, b limit 100",
+      "assert": {
+        "keys": ["a", "b"],
+        "row_count": 8
+      }
+    },
+    {
+      "name": "self-loop in a later match part seeds n independently of the prior variable and returns the 24 cycle nodes once per each of the 26 x nodes",
+      "cypher": "match (x) match (n)-[*..]->(n) return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 624
+      }
+    },
+    {
+      "name": "self-loop in a later match part returns the full cartesian product of x and the 24 cycle nodes",
+      "cypher": "match (x) match (n)-[*..]->(n) return x, n",
+      "assert": {
+        "keys": ["x", "n"],
+        "row_count": 624
+      }
+    },
+    {
+      "name": "self-loop whose node is carried by WITH stays bound to that node and returns only the carried cycle node a",
+      "cypher": "match (n) where n.name = 'a' with n match (n)-[*..]->(n) return n",
+      "assert": {
+        "keys": ["n"],
+        "row_count": 1,
+        "node_id_set": ["a"]
+      }
+    },
+    {
+      "name": "self-loop whose node is carried by WITH but is an acyclic decoy returns no rows",
+      "cypher": "match (n) where n.name = 'p' with n match (n)-[*..]->(n) return n",
+      "assert": "empty"
+    }
+  ]
+}

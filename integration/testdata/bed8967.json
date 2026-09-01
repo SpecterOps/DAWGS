@@ -1,0 +1,39 @@
+{
+  "graph": {
+    "nodes": [
+      {
+        "id": "alpha",
+        "kinds": ["BacktickNode"],
+        "properties": {
+          "name": "alpha",
+          "a-aaa": "alpha-hyphen",
+          "has`tick": "alpha-backtick",
+          "   ": "alpha-whitespace",
+          "a\u20dd": "alpha-enclosing"
+        }
+      },
+      {
+        "id": "beta",
+        "kinds": ["BacktickNode"],
+        "properties": {
+          "name": "beta",
+          "a-aaa": "beta-hyphen",
+          "has`tick": "beta-backtick",
+          "   ": "beta-whitespace",
+          "a\u20dd": "beta-enclosing"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "start_id": "alpha",
+        "end_id": "beta",
+        "kind": "BacktickEdge",
+        "properties": {
+          "edge-key": "edge-hyphen",
+          "has`tick": "edge-backtick"
+        }
+      }
+    ]
+  }
+}

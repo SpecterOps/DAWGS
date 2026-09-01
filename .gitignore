@@ -13,3 +13,6 @@ integration/testdata/local/
 
 # Local benchmark comparison output
 .bench/
+
+# Augment
+.augment/

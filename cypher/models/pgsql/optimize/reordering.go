@@ -2,16 +2,30 @@ package optimize
 
 import "github.com/specterops/dawgs/cypher/models/cypher"
 
+// ConservativePatternReorderingRule reorders reading clauses within a dependency-safe region so
+// that more selective anchors are scheduled earlier, driving traversals from the endpoints
+// expected to prune the search soonest. It reorders whole clauses relative to one another without
+// mutating the internals of any pattern; a clause is only moved when its dependencies remain
+// satisfied by the clauses that precede it in the new order.
 type ConservativePatternReorderingRule struct{}
 
 func (s ConservativePatternReorderingRule) Name() string {
 	return "ConservativePatternReordering"
 }
 
+func (s ConservativePatternReorderingRule) usesLazyCopy() bool {
+	return true
+}
+
 func (s ConservativePatternReorderingRule) Apply(plan *Plan) (bool, error) {
 	if plan == nil || plan.Query == nil || plan.Query.SingleQuery == nil {
 		return false, nil
 	}
+	if !queryWouldReorder(plan.Query, plan.Analysis) {
+		return false, nil
+	}
+
+	plan.EnsureMutable()
 
 	if plan.Query.SingleQuery.MultiPartQuery != nil {
 		return reorderMultiPartQuery(plan.Query.SingleQuery.MultiPartQuery, plan.Analysis), nil
@@ -22,6 +36,39 @@ func (s ConservativePatternReorderingRule) Apply(plan *Plan) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func queryWouldReorder(query *cypher.RegularQuery, analysis Analysis) bool {
+	if query == nil || query.SingleQuery == nil {
+		return false
+	}
+
+	if multiPart := query.SingleQuery.MultiPartQuery; multiPart != nil {
+		for partIndex, part := range multiPart.Parts {
+			if part == nil {
+				continue
+			}
+			if queryPart, ok := analysisQueryPart(analysis, partIndex); ok && readingClausesWouldReorder(part.ReadingClauses, queryPart.Regions) {
+				return true
+			}
+		}
+
+		if finalPart := multiPart.SinglePartQuery; finalPart != nil {
+			if queryPart, ok := analysisQueryPart(analysis, len(multiPart.Parts)); ok {
+				return readingClausesWouldReorder(finalPart.ReadingClauses, queryPart.Regions)
+			}
+		}
+
+		return false
+	}
+
+	if singlePart := query.SingleQuery.SinglePartQuery; singlePart != nil {
+		if queryPart, ok := analysisQueryPart(analysis, 0); ok {
+			return readingClausesWouldReorder(singlePart.ReadingClauses, queryPart.Regions)
+		}
+	}
+
+	return false
 }
 
 type reorderCandidate struct {
@@ -87,9 +134,22 @@ func reorderReadingClauses(readingClauses []*cypher.ReadingClause, regions []Reg
 	return applied
 }
 
+func readingClausesWouldReorder(readingClauses []*cypher.ReadingClause, regions []Region) bool {
+	for _, region := range regions {
+		if region.StartClause < 0 || region.EndClause >= len(readingClauses) || region.StartClause >= region.EndClause {
+			continue
+		}
+
+		if reorderRegionWouldApply(readingClauses[region.StartClause:region.EndClause+1], declaredBeforeClause(readingClauses, region.StartClause)) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func reorderRegion(regionClauses []*cypher.ReadingClause, declaredBeforeRegion map[string]struct{}) bool {
 	candidates := reorderCandidates(regionClauses, declaredBeforeRegion)
-
 	reordered := reorderCandidateSegments(candidates, declaredBeforeRegion)
 
 	var applied bool
@@ -101,6 +161,19 @@ func reorderRegion(regionClauses []*cypher.ReadingClause, declaredBeforeRegion m
 	}
 
 	return applied
+}
+
+func reorderRegionWouldApply(regionClauses []*cypher.ReadingClause, declaredBeforeRegion map[string]struct{}) bool {
+	candidates := reorderCandidates(regionClauses, declaredBeforeRegion)
+	reordered := reorderCandidateSegments(candidates, declaredBeforeRegion)
+
+	for idx, candidate := range reordered {
+		if regionClauses[idx] != candidate.clause {
+			return true
+		}
+	}
+
+	return false
 }
 
 func declaredBeforeClause(readingClauses []*cypher.ReadingClause, clauseIndex int) map[string]struct{} {

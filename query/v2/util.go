@@ -248,6 +248,10 @@ func variableReference(value any) (*cypher.Variable, error) {
 }
 
 func propertyLookupOrError(reference any, propertyName string) cypher.Expression {
+	if err := cypher.ValidatePropertyKeyName(propertyName); err != nil {
+		return invalidExpression(err)
+	}
+
 	if variable, err := variableReference(reference); err != nil {
 		return invalidExpression(err)
 	} else {

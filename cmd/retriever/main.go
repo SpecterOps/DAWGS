@@ -91,6 +91,7 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	flags.StringVar(&cfg.OutputDir, "out", "", "Output collection directory.")
 	flags.BoolVar(&cfg.Force, "force", false, "Replace an existing non-empty output directory.")
 	flags.BoolVar(&cfg.Resume, "resume", false, "Resume an interrupted dump from its validated checkpoint.")
+	flags.BoolVar(&cfg.Parquet, "parquet", false, "Also write Parquet sidecars for each JSONL fragment.")
 	flags.StringVar(&archiveOut, "archive-out", "", "Optional encrypted archive output path.")
 	flags.StringVar(&recipientPath, "recipient", "", "Recipient public key for -archive-out.")
 	flags.StringVar(&scrubValue, "scrub", string(cfg.Scrub), "Scrub mode: none or full.")

@@ -341,10 +341,6 @@ func UnpackEncryptedCollectionArchiveWithOptions(reader io.Reader, outputDir str
 	return nil
 }
 
-func unpackEncryptedCollectionArchiveToDirectory(reader io.Reader, outputDir string, identity hpke.PrivateKey) error {
-	return UnpackEncryptedCollectionArchive(reader, outputDir, identity)
-}
-
 func createUnpackStagingDirectory(outputDir string, force bool) (string, error) {
 	outputDir = strings.TrimSpace(outputDir)
 	if outputDir == "" {

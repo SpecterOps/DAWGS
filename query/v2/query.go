@@ -653,6 +653,14 @@ func (s *entity[T]) ID() IdentityContinuation {
 }
 
 func (s *entity[T]) Property(propertyName string) PropertyContinuation {
+	if err := cypher.ValidatePropertyKeyName(propertyName); err != nil {
+		return &propertyContinuation{
+			comparisonContinuation: comparisonContinuation{
+				qualifierExpression: invalidExpression(err),
+			},
+		}
+	}
+
 	return &propertyContinuation{
 		comparisonContinuation: comparisonContinuation{
 			qualifierExpression: cypher.NewPropertyLookup(s.identifier.Symbol, propertyName),

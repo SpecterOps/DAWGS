@@ -1,11 +1,66 @@
 package translate
 
 import (
+	"context"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTranslationRecordsNamedParameterSources(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("NodeKind1"))
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n:NodeKind1) WHERE n.name = $needle RETURN n`)
+	require.NoError(t, err)
+
+	translation, sources, err := TranslateWithOptionsAndParameterSources(context.Background(), query, kindMapper, map[string]any{"needle": "first"}, DefaultGraphID, DefaultOptions())
+	require.NoError(t, err)
+	require.Len(t, translation.Parameters, 1)
+	require.Len(t, sources, 1)
+	for generated := range translation.Parameters {
+		require.Equal(t, "needle", sources[generated])
+	}
+}
+
+func TestTranslateWithDisabledOptimizerUsesGenericPlan(t *testing.T) {
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n) RETURN n`)
+	require.NoError(t, err)
+
+	translation, err := TranslateWithOptions(
+		context.Background(),
+		query,
+		pgutil.NewInMemoryKindMapper(),
+		nil,
+		DefaultGraphID,
+		Options{
+			OptimizerMode: OptimizerDisabled,
+		},
+	)
+	require.NoError(t, err)
+	require.Empty(t, translation.Optimization.Rules)
+	require.Nil(t, translation.Optimization.LoweringPlan)
+}
+
+func TestTranslateWithOptionsRejectsUnknownOptimizerMode(t *testing.T) {
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n) RETURN n`)
+	require.NoError(t, err)
+
+	_, err = TranslateWithOptions(
+		context.Background(),
+		query,
+		pgutil.NewInMemoryKindMapper(),
+		nil,
+		DefaultGraphID,
+		Options{
+			OptimizerMode: "unknown",
+		},
+	)
+	require.ErrorContains(t, err, "unsupported PostgreSQL optimizer mode")
+}
 
 func TestDecodeCypherStringLiteral(t *testing.T) {
 	t.Parallel()

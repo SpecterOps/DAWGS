@@ -1,10 +1,12 @@
 package util_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/util"
@@ -36,6 +38,27 @@ func TestIsNeoTimeoutError(t *testing.T) {
 	notDriverTimeOutErr := graph.NewError(notDriverTimeOutQuery, notDriverError)
 
 	require.False(t, util.IsNeoTimeoutError(notDriverTimeOutErr))
+}
+
+func TestIsPostgresTimeoutError(t *testing.T) {
+	statementTimeoutErr := &pgconn.PgError{
+		Code:    "57014",
+		Message: "canceling statement due to statement timeout",
+	}
+
+	require.False(t, util.IsPostgresTimeoutError(nil))
+	require.True(t, util.IsPostgresTimeoutError(statementTimeoutErr))
+	require.True(t, util.IsPostgresTimeoutError(fmt.Errorf("wrapped: %w", statementTimeoutErr)))
+	require.False(t, util.IsPostgresTimeoutError(context.DeadlineExceeded))
+	require.False(t, util.IsPostgresTimeoutError(&pgconn.PgError{
+		Code:    "57014",
+		Message: "canceling statement due to user request",
+	}))
+	require.False(t, util.IsPostgresTimeoutError(&pgconn.PgError{
+		Code:    "55P03",
+		Message: "canceling statement due to lock timeout",
+	}))
+	require.False(t, util.IsPostgresTimeoutError(errors.New("statement timeout")))
 }
 
 func TestNewErrorCollector(t *testing.T) {

@@ -750,10 +750,6 @@ func readNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry Fil
 	return decodeNodeFragmentFile(inputDir, codec, fileEntry, false, handle)
 }
 
-func verifyNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest) (int, error) {
-	return decodeNodeFragmentFile(inputDir, codec, fileEntry, true, nil)
-}
-
 func decodeNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest, verifyIntegrity bool, handle func(FragmentNode) error) (int, error) {
 	if fileEntry.Phase != PhaseNodes {
 		return 0, fmt.Errorf("fragment %s has phase %q, expected nodes", fileEntry.Path, fileEntry.Phase)
@@ -792,10 +788,6 @@ func decodeNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 
 func readEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest, handle func(FragmentEdge) error) (int, error) {
 	return decodeEdgeFragmentFile(inputDir, codec, fileEntry, false, handle)
-}
-
-func verifyEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest) (int, error) {
-	return decodeEdgeFragmentFile(inputDir, codec, fileEntry, true, nil)
 }
 
 func decodeEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry FileManifest, verifyIntegrity bool, handle func(FragmentEdge) error) (int, error) {

@@ -1,0 +1,78 @@
+{
+  "graph": {
+    "nodes": [
+      { "id": "a", "kinds": ["NodeKind1"], "properties": { "name": "a", "cycle": "self1", "hops": 1 } },
+
+      { "id": "b", "kinds": ["NodeKind1"], "properties": { "name": "b", "cycle": "self2", "hops": 2 } },
+      { "id": "c", "kinds": ["NodeKind1"], "properties": { "name": "c", "cycle": "self2", "hops": 2 } },
+
+      { "id": "d", "kinds": ["NodeKind1"], "properties": { "name": "d", "cycle": "self3", "hops": 3 } },
+      { "id": "e", "kinds": ["NodeKind1"], "properties": { "name": "e", "cycle": "self3", "hops": 3 } },
+      { "id": "f", "kinds": ["NodeKind1"], "properties": { "name": "f", "cycle": "self3", "hops": 3 } },
+
+      { "id": "g", "kinds": ["NodeKind1"], "properties": { "name": "g", "cycle": "self4", "hops": 4 } },
+      { "id": "h", "kinds": ["NodeKind1"], "properties": { "name": "h", "cycle": "self4", "hops": 4 } },
+      { "id": "i", "kinds": ["NodeKind1"], "properties": { "name": "i", "cycle": "self4", "hops": 4 } },
+      { "id": "j", "kinds": ["NodeKind1"], "properties": { "name": "j", "cycle": "self4", "hops": 4 } },
+
+      { "id": "k", "kinds": ["NodeKind1"], "properties": { "name": "k", "cycle": "self5", "hops": 5 } },
+      { "id": "l", "kinds": ["NodeKind1"], "properties": { "name": "l", "cycle": "self5", "hops": 5 } },
+      { "id": "m", "kinds": ["NodeKind1"], "properties": { "name": "m", "cycle": "self5", "hops": 5 } },
+      { "id": "n", "kinds": ["NodeKind1"], "properties": { "name": "n", "cycle": "self5", "hops": 5 } },
+      { "id": "o", "kinds": ["NodeKind1"], "properties": { "name": "o", "cycle": "self5", "hops": 5 } },
+
+      { "id": "p", "kinds": ["NodeKind1"], "properties": { "name": "p", "cycle": "acyclic" } },
+      { "id": "q", "kinds": ["NodeKind1"], "properties": { "name": "q", "cycle": "acyclic" } },
+
+      { "id": "r", "kinds": ["NodeKind1"], "properties": { "name": "r", "cycle": "self3mix", "hops": 3 } },
+      { "id": "s", "kinds": ["NodeKind1"], "properties": { "name": "s", "cycle": "self3mix", "hops": 3 } },
+      { "id": "t", "kinds": ["NodeKind1"], "properties": { "name": "t", "cycle": "self3mix", "hops": 3 } },
+
+      { "id": "u", "kinds": ["NodeKind1"], "properties": { "name": "u", "cycle": "self2k2", "hops": 2 } },
+      { "id": "v", "kinds": ["NodeKind1"], "properties": { "name": "v", "cycle": "self2k2", "hops": 2 } },
+
+      { "id": "w", "kinds": ["NodeKind1"], "properties": { "name": "w", "cycle": "self2b", "hops": 2 } },
+      { "id": "x", "kinds": ["NodeKind1"], "properties": { "name": "x", "cycle": "self2b", "hops": 2 } },
+
+      { "id": "y", "kinds": ["NodeKind1"], "properties": { "name": "y", "cycle": "self2c", "hops": 2 } },
+      { "id": "z", "kinds": ["NodeKind1"], "properties": { "name": "z", "cycle": "self2c", "hops": 2 } }
+    ],
+    "edges": [
+      { "start_id": "a", "end_id": "a", "kind": "EdgeKind1", "properties": { "hops": 1 } },
+
+      { "start_id": "b", "end_id": "c", "kind": "EdgeKind1", "properties": { "hops": 2 } },
+      { "start_id": "c", "end_id": "b", "kind": "EdgeKind1", "properties": { "hops": 2 } },
+
+      { "start_id": "d", "end_id": "e", "kind": "EdgeKind1", "properties": { "hops": 3 } },
+      { "start_id": "e", "end_id": "f", "kind": "EdgeKind1", "properties": { "hops": 3 } },
+      { "start_id": "f", "end_id": "d", "kind": "EdgeKind1", "properties": { "hops": 3 } },
+
+      { "start_id": "g", "end_id": "h", "kind": "EdgeKind1", "properties": { "hops": 4 } },
+      { "start_id": "h", "end_id": "i", "kind": "EdgeKind1", "properties": { "hops": 4 } },
+      { "start_id": "i", "end_id": "j", "kind": "EdgeKind1", "properties": { "hops": 4 } },
+      { "start_id": "j", "end_id": "g", "kind": "EdgeKind1", "properties": { "hops": 4 } },
+
+      { "start_id": "k", "end_id": "l", "kind": "EdgeKind1", "properties": { "hops": 5 } },
+      { "start_id": "l", "end_id": "m", "kind": "EdgeKind1", "properties": { "hops": 5 } },
+      { "start_id": "m", "end_id": "n", "kind": "EdgeKind1", "properties": { "hops": 5 } },
+      { "start_id": "n", "end_id": "o", "kind": "EdgeKind1", "properties": { "hops": 5 } },
+      { "start_id": "o", "end_id": "k", "kind": "EdgeKind1", "properties": { "hops": 5 } },
+
+      { "start_id": "a", "end_id": "p", "kind": "EdgeKind1", "properties": { "hops": 0 } },
+      { "start_id": "p", "end_id": "q", "kind": "EdgeKind1", "properties": { "hops": 0 } },
+
+      { "start_id": "r", "end_id": "s", "kind": "EdgeKind1", "properties": { "hops": 3 } },
+      { "start_id": "s", "end_id": "t", "kind": "EdgeKind2", "properties": { "hops": 3 } },
+      { "start_id": "t", "end_id": "r", "kind": "EdgeKind1", "properties": { "hops": 3 } },
+
+      { "start_id": "u", "end_id": "v", "kind": "EdgeKind2", "properties": { "hops": 2 } },
+      { "start_id": "v", "end_id": "u", "kind": "EdgeKind2", "properties": { "hops": 2 } },
+
+      { "start_id": "w", "end_id": "x", "kind": "EdgeKind1", "properties": { "hops": 2 } },
+      { "start_id": "x", "end_id": "w", "kind": "EdgeKind1", "properties": { "hops": 2 } },
+
+      { "start_id": "y", "end_id": "z", "kind": "EdgeKind1", "properties": { "hops": 2 } },
+      { "start_id": "z", "end_id": "y", "kind": "EdgeKind1", "properties": { "hops": 2 } }
+    ]
+  }
+}

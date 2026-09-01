@@ -1307,7 +1307,10 @@ func (s *ProjectionItem) copy() *ProjectionItem {
 }
 
 type PropertyLookup struct {
-	Atom   Expression
+	Atom Expression
+
+	// Symbol is the raw property key, not an already-rendered Cypher token.
+	// Callers should not pre-wrap names in backticks; formatting handles that.
 	Symbol string
 }
 
@@ -1563,6 +1566,12 @@ type PatternPart struct {
 	ShortestPathPattern     bool
 	AllShortestPathsPattern bool
 	PatternElements         []*PatternElement
+
+	// PathDirectionReversed indicates the optimizer reversed this pattern's element order and
+	// relationship directions so the traversal can be driven from the more selective terminal
+	// endpoint. Downstream translation compensates for this when materializing a bound path so
+	// that the path renders in its original left-to-right logical order.
+	PathDirectionReversed bool
 }
 
 func NewPatternPart() *PatternPart {
@@ -1579,6 +1588,7 @@ func (s *PatternPart) copy() *PatternPart {
 		ShortestPathPattern:     s.ShortestPathPattern,
 		AllShortestPathsPattern: s.AllShortestPathsPattern,
 		PatternElements:         Copy(s.PatternElements),
+		PathDirectionReversed:   s.PathDirectionReversed,
 	}
 }
 

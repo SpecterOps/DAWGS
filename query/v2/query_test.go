@@ -117,6 +117,24 @@ func TestCreateRelationshipWithExplicitEndpoints(t *testing.T) {
 	}, preparedQuery.Parameters)
 }
 
+func TestRawPropertyKeysRenderEscaped(t *testing.T) {
+	preparedQuery, err := v2.New().Return(
+		v2.Node().Property("a-aaa"),
+		v2.Node().Property("has`tick"),
+		v2.Node().Property("   "),
+	).Build()
+	require.NoError(t, err)
+
+	require.Equal(t, "match (n) return n.`a-aaa`, n.`has``tick`, n.`   `", renderPrepared(t, preparedQuery))
+}
+
+func TestEmptyPropertyKeyReturnsBuildError(t *testing.T) {
+	_, err := v2.New().Return(
+		v2.Node().Property(""),
+	).Build()
+	require.ErrorIs(t, err, cypher.ErrEmptyPropertyKeyName)
+}
+
 func TestCreateSplitsDisjointNodePatterns(t *testing.T) {
 	preparedQuery, err := v2.New().Create(
 		v2.NodePattern(graph.Kinds{graph.StringKind("A")}, nil),

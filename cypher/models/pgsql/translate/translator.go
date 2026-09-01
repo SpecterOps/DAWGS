@@ -17,18 +17,55 @@ import (
 // exercise translation output).
 const DefaultGraphID int32 = 0
 
+// OptimizerMode controls whether PostgreSQL-specific rewrites and lowering
+// decisions are applied during translation. Disabled mode remains a semantic
+// fallback: it translates the original AST with an empty lowering plan.
+type OptimizerMode string
+
+const (
+	OptimizerEnabled  OptimizerMode = "enabled"
+	OptimizerDisabled OptimizerMode = "disabled"
+)
+
+func (s OptimizerMode) Valid() bool {
+	return s == OptimizerEnabled || s == OptimizerDisabled
+}
+
+// Options configures a translation without changing the default Translate API.
+type Options struct {
+	OptimizerMode OptimizerMode
+}
+
+func DefaultOptions() Options {
+	return Options{
+		OptimizerMode: OptimizerEnabled,
+	}
+}
+
+func (s Options) normalized() (Options, error) {
+	if s.OptimizerMode == "" {
+		s.OptimizerMode = OptimizerEnabled
+	}
+	if !s.OptimizerMode.Valid() {
+		return Options{}, fmt.Errorf("unsupported PostgreSQL optimizer mode %q", s.OptimizerMode)
+	}
+
+	return s, nil
+}
+
 type Translator struct {
 	walk.Visitor[cypher.SyntaxNode]
 
-	ctx            context.Context
-	kindMapper     *contextAwareKindMapper
-	graphID        int32
-	parameters     map[string]any
-	translation    Result
-	treeTranslator *ExpressionTreeTranslator
-	query          *Query
-	scope          *Scope
-	unwindTargets  map[*cypher.Variable]struct{}
+	ctx              context.Context
+	kindMapper       *contextAwareKindMapper
+	graphID          int32
+	parameters       map[string]any
+	translation      Result
+	parameterSources map[string]string
+	treeTranslator   *ExpressionTreeTranslator
+	query            *Query
+	scope            *Scope
+	unwindTargets    map[*cypher.Variable]struct{}
 
 	collectIDMembershipAliases map[pgsql.Identifier]struct{}
 	collectIDProjectionDepth   int
@@ -63,6 +100,7 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 
 	var (
 		translatedParameters = map[string]any{}
+		parameterSources     = map[string]string{}
 		ctxAwareKindMapper   = newContextAwareKindMapper(ctx, kindMapper, translatedParameters)
 	)
 
@@ -71,14 +109,15 @@ func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters 
 		translation: Result{
 			Parameters: translatedParameters,
 		},
-		ctx:            ctx,
-		kindMapper:     ctxAwareKindMapper,
-		graphID:        graphID,
-		parameters:     inputParameters,
-		treeTranslator: NewExpressionTreeTranslator(ctxAwareKindMapper),
-		query:          &Query{},
-		scope:          NewScope(),
-		unwindTargets:  map[*cypher.Variable]struct{}{},
+		ctx:              ctx,
+		kindMapper:       ctxAwareKindMapper,
+		graphID:          graphID,
+		parameters:       inputParameters,
+		parameterSources: parameterSources,
+		treeTranslator:   NewExpressionTreeTranslator(ctxAwareKindMapper),
+		query:            &Query{},
+		scope:            NewScope(),
+		unwindTargets:    map[*cypher.Variable]struct{}{},
 	}
 }
 
@@ -227,6 +266,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 				} else {
 					// Lift the parameter value into the parameters map
 					s.translation.Parameters[parameterBinding.Identifier.String()] = negotiatedValue
+					s.parameterSources[parameterBinding.Identifier.String()] = typedExpression.Symbol
 					parameterBinding.Parameter = newParameter
 				}
 
@@ -672,7 +712,9 @@ func (s *Translator) recordLowering(name string) {
 		}
 	}
 
-	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{Name: name})
+	s.translation.Optimization.Lowerings = append(s.translation.Optimization.Lowerings, optimize.LoweringDecision{
+		Name: name,
+	})
 }
 
 func (s *Translator) appliedLoweringCountSnapshot() map[string]int {
@@ -804,14 +846,46 @@ func skippedTraversalDirectionReason(plan optimize.LoweringPlan) string {
 }
 
 func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) (Result, error) {
-	optimizedPlan, err := optimize.Optimize(cypherQuery)
+	return TranslateWithOptions(ctx, cypherQuery, kindMapper, parameters, graphID, DefaultOptions())
+}
+
+// TranslateWithOptions translates Cypher with an explicit optimizer policy.
+func TranslateWithOptions(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options Options) (Result, error) {
+	translation, _, err := translateWithOptions(ctx, cypherQuery, kindMapper, parameters, graphID, options, false)
+	return translation, err
+}
+
+// TranslateWithOptionsAndParameterSources translates Cypher and returns the
+// generated-parameter provenance required to safely rebind a cached result.
+// The input tree is borrowed: it is copied only if an optimizer rule mutates
+// it. This is intended for compilation code that owns the input tree.
+func TranslateWithOptionsAndParameterSources(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options Options) (Result, map[string]string, error) {
+	return translateWithOptions(ctx, cypherQuery, kindMapper, parameters, graphID, options, true)
+}
+
+func translateWithOptions(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options Options, borrowQuery bool) (Result, map[string]string, error) {
+	options, err := options.normalized()
 	if err != nil {
-		return Result{}, err
+		return Result{}, nil, err
+	}
+
+	var optimizedPlan optimize.Plan
+	if options.OptimizerMode == OptimizerEnabled {
+		if borrowQuery {
+			optimizedPlan, err = optimize.OptimizeBorrowed(cypherQuery)
+		} else {
+			optimizedPlan, err = optimize.Optimize(cypherQuery)
+		}
+		if err != nil {
+			return Result{}, nil, err
+		}
+	} else {
+		optimizedPlan.Query = cypherQuery
 	}
 
 	translator := NewTranslator(ctx, kindMapper, parameters, graphID)
 	if membershipAliases, err := collectIDMembershipAliases(optimizedPlan.Query); err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	} else {
 		translator.collectIDMembershipAliases = membershipAliases
 	}
@@ -825,25 +899,25 @@ func Translate(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper
 	}
 
 	if translated, err := translator.translateCountStoreFastPath(optimizedPlan.Query, optimizedPlan.LoweringPlan); err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	} else if translated {
 		translator.recordSkippedLowerings()
-		return translator.translation, nil
+		return translator.translation, translator.parameterSources, nil
 	}
 
 	if translated, err := translator.translateAggregateTraversalCount(optimizedPlan.Query, optimizedPlan.LoweringPlan); err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	} else if translated {
 		translator.recordSkippedLowerings()
-		return translator.translation, nil
+		return translator.translation, translator.parameterSources, nil
 	}
 
 	if err := walk.Cypher(optimizedPlan.Query, translator); err != nil {
-		return Result{}, err
+		return Result{}, nil, err
 	}
 
 	translator.recordSkippedLowerings()
-	return translator.translation, nil
+	return translator.translation, translator.parameterSources, nil
 }
 
 func decodeCypherStringLiteral(raw string) (string, error) {

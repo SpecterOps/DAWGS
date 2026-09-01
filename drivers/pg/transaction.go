@@ -6,12 +6,10 @@ import (
 	"maps"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
-	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
@@ -183,7 +181,7 @@ func (s *transaction) UpdateNode(node *graph.Node) error {
 
 func (s *transaction) Nodes() graph.NodeQuery {
 	return &nodeQuery{
-		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
+		liveQuery: newLiveQuery(s.ctx, s, s.targetGraphID),
 	}
 }
 
@@ -261,7 +259,7 @@ func (s *transaction) UpdateRelationship(relationship *graph.Relationship) error
 
 func (s *transaction) Relationships() graph.RelationshipQuery {
 	return &relationshipQuery{
-		liveQuery: newLiveQuery(s.ctx, s, s.schemaManager, s.targetGraphID),
+		liveQuery: newLiveQuery(s.ctx, s, s.targetGraphID),
 	}
 }
 
@@ -276,17 +274,15 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 }
 
 func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
-	if parsedQuery, err := frontend.ParseCypher(frontend.NewContext(), query); err != nil {
-		return graph.NewErrorResult(err)
-	} else if graphTarget, err := s.getTargetGraph(); err != nil {
-		return graph.NewErrorResult(err)
-	} else if translated, err := translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID); err != nil {
-		return graph.NewErrorResult(err)
-	} else if sqlQuery, err := translate.Translated(translated); err != nil {
+	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
-		maps.Copy(translated.Parameters, sqlQuery.Parameters)
-		return s.Raw(sqlQuery.Statement, translated.Parameters)
+		sqlQuery, bindings, err := s.schemaManager.compileText(s.ctx, query, parameters, graphTarget.ID)
+		if err != nil {
+			return graph.NewErrorResult(err)
+		}
+
+		return s.Raw(sqlQuery, bindings)
 	}
 }
 

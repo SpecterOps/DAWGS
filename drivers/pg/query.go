@@ -3,24 +3,21 @@ package pg
 import (
 	"context"
 
-	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
 )
 
 type liveQuery struct {
 	ctx             context.Context
-	tx              graph.Transaction
-	kindMapper      KindMapper
+	tx              *transaction
 	graphIDResolver func() (int32, error)
 	queryBuilder    *query.Builder
 }
 
-func newLiveQuery(ctx context.Context, tx graph.Transaction, kindMapper KindMapper, graphIDResolver func() (int32, error)) liveQuery {
+func newLiveQuery(ctx context.Context, tx *transaction, graphIDResolver func() (int32, error)) liveQuery {
 	return liveQuery{
 		ctx:             ctx,
 		tx:              tx,
-		kindMapper:      kindMapper,
 		graphIDResolver: graphIDResolver,
 		queryBuilder:    query.NewBuilder(nil),
 	}
@@ -29,12 +26,14 @@ func newLiveQuery(ctx context.Context, tx graph.Transaction, kindMapper KindMapp
 func (s *liveQuery) runRegularQuery(allShortestPaths bool) graph.Result {
 	if regularQuery, err := s.queryBuilder.Build(allShortestPaths); err != nil {
 		return graph.NewErrorResult(err)
+	} else if prepared, err := prepareRegularQuery(regularQuery); err != nil {
+		return graph.NewErrorResult(err)
 	} else if graphID, err := s.graphIDResolver(); err != nil {
 		return graph.NewErrorResult(err)
-	} else if translation, err := translate.FromCypher(s.ctx, regularQuery, s.kindMapper, false, graphID); err != nil {
+	} else if sqlQuery, bindings, err := s.tx.schemaManager.compileRegularQuery(s.ctx, prepared, graphID); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
-		return s.tx.Raw(translation.Statement, translation.Parameters)
+		return s.tx.Raw(commentRegularQuery(prepared.commentSource, sqlQuery), bindings)
 	}
 }
 

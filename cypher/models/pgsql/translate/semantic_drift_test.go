@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
@@ -39,4 +41,21 @@ func TestTranslatorRejectsUnsupportedPropertyLookupSourcesDirectly(t *testing.T)
 	_, err = Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported property lookup prop on expression type int8[]")
+}
+
+func TestTranslatorRejectsEmptyPropertyLookupKeys(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n) RETURN n.name`)
+	require.NoError(t, err)
+
+	err = walk.CypherStructural(query, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+		if propertyLookup, typeOK := node.(*cypher.PropertyLookup); typeOK {
+			propertyLookup.Symbol = ""
+		}
+	}))
+	require.NoError(t, err)
+
+	_, err = Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.ErrorIs(t, err, cypher.ErrEmptyPropertyKeyName)
 }

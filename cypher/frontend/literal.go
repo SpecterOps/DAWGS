@@ -45,7 +45,7 @@ func (s *MapLiteralVisitor) EnterOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNa
 }
 
 func (s *MapLiteralVisitor) ExitOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNameContext) {
-	s.nextPropertyKey = s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name
+	s.nextPropertyKey = cypher.UnescapePropertyKeyName(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name)
 }
 
 func (s *MapLiteralVisitor) EnterOC_Expression(ctx *parser.OC_ExpressionContext) {

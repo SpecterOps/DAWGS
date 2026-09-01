@@ -7,6 +7,7 @@ import (
 )
 
 var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
+	"connect-local":    connectLocalCmd(),
 	"copy-opengraph":   copyOpenGraphCmd(),
 	"exit":             quitCmd(),
 	"explain-psql":     explainAsPsqlCmd(),
@@ -25,6 +26,7 @@ var cmdRegistry map[string]CommandDesc = map[string]CommandDesc{
 	"save-opengraph":   saveOpenGraphCmd(),
 	"translate-psql":   translateToPsqlCmd(),
 	"optimize-storage": optimizeStorageCmd(),
+	"optimize-cypher":  optimizeCypherCmd(),
 }
 
 func init() {

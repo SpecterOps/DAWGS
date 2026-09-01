@@ -25,9 +25,16 @@ make test
 
 Run integration tests when a backend is available:
 
+Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j driver.
+
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
 make test_integration
+```
+
+```bash
+export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
+make test_bdd_integration
 ```
 
 Use this module from another Go project:
@@ -46,6 +53,12 @@ Run the package benchmark suite with:
 ```bash
 make test_bench
 ```
+
+The PostgreSQL driver has a bounded, driver-wide Cypher compilation cache for both text Cypher and programmatic graph
+queries. Its default capacity is 256 entries; callers that need a different capacity can use
+`pg.NewDriverWithOptions`. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
+newly started compilations across every PostgreSQL driver in the process. See
+[PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
 
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
 
@@ -81,10 +94,12 @@ against a previous JSONL baseline.
 manifest-based collections of compressed JSONL fragments. It supports
 PostgreSQL and Neo4j, uncompressed, gzip, and zstd fragments, bounded keyset
 scans, resumable dump checkpoints, checksum validation before load, optional
-deterministic property scrubbing, and a read-throughput benchmark mode. It can
-also package dumps as single HPKE/ML-KEM encrypted TAR archives.
-See [cmd/retriever/README.md](cmd/retriever/README.md) for dump, encrypted
-archive, load, scrubbed dump, metrics verification, and benchmark examples.
+deterministic property scrubbing, optional write-only Parquet sidecars for
+analytical readers, and a read-throughput benchmark mode. It can also package
+dumps as single HPKE/ML-KEM encrypted TAR archives. See
+[cmd/retriever/README.md](cmd/retriever/README.md) for dump, Parquet sidecar,
+encrypted archive, load, scrubbed dump, metrics verification, and benchmark
+examples.
 The same import/export functionality is available to library consumers from
 `github.com/specterops/dawgs/retriever`; callers provide an already-open
 `graph.Database`, and archive helpers support both path-based and stream-based

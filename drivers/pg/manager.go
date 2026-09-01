@@ -33,17 +33,37 @@ func KindMapperFromGraphDatabase(graphDB graph.Database) (KindMapper, error) {
 }
 
 type SchemaManager struct {
-	defaultGraph          model.Graph
-	pool                  *pgxpool.Pool
-	hasDefaultGraph       bool
-	graphs                map[string]model.Graph
-	kindsByID             map[graph.Kind]int16
-	kindIDsByKind         map[int16]graph.Kind
-	lock                  *sync.RWMutex
-	graphQueryMemoryLimit size.Size
+	defaultGraph             model.Graph
+	pool                     *pgxpool.Pool
+	hasDefaultGraph          bool
+	graphs                   map[string]model.Graph
+	kindsByID                map[graph.Kind]int16
+	kindIDsByKind            map[int16]graph.Kind
+	lock                     *sync.RWMutex
+	graphQueryMemoryLimit    size.Size
+	translationCache         *translationCache
+	translationCacheProvider translationCacheProvider
 }
 
 func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *SchemaManager {
+	return NewSchemaManagerWithOptions(pool, graphQueryMemoryLimit, DefaultDriverOptions())
+}
+
+// NewSchemaManagerWithTranslationCache permits an application to disable the
+// compilation cache (zero), or to choose a bounded driver-wide entry capacity.
+// Negative values disable the cache.
+func NewSchemaManagerWithTranslationCache(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, translationCacheEntries int) *SchemaManager {
+	return NewSchemaManagerWithOptions(pool, graphQueryMemoryLimit, DriverOptions{
+		TranslationCacheEntries: translationCacheEntries,
+	})
+}
+
+// NewSchemaManagerWithOptions constructs the shared compilation service with
+// a bounded translation cache.
+func NewSchemaManagerWithOptions(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, options DriverOptions) *SchemaManager {
+	options = normalizeDriverOptions(options)
+	translationCache := newTranslationCache(options.TranslationCacheEntries)
+
 	return &SchemaManager{
 		pool:                  pool,
 		hasDefaultGraph:       false,
@@ -52,6 +72,10 @@ func NewSchemaManager(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size) *Sche
 		kindIDsByKind:         map[int16]graph.Kind{},
 		lock:                  &sync.RWMutex{},
 		graphQueryMemoryLimit: graphQueryMemoryLimit,
+		translationCache:      translationCache,
+		translationCacheProvider: sharedTranslationCacheProvider{
+			cache: translationCache,
+		},
 	}
 }
 
@@ -406,7 +430,12 @@ func (s *SchemaManager) AssertSchema(ctx context.Context, schema graph.Schema) e
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.WriteTransaction(ctx, func(tx graph.Transaction) error {
+	if err := s.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		return s.assertSchema(tx, schema)
-	}, OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol))
+	}, OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol)); err != nil {
+		return err
+	}
+
+	s.translationCache.Invalidate()
+	return nil
 }

@@ -37,6 +37,34 @@ Use repeated `-graph` flags to dump multiple named graphs. For PostgreSQL,
 validates that expected node and edge partitions exist. For Neo4j, `-all-graphs`
 means the selected Neo4j database only.
 
+Pass `-parquet` to write optional Parquet sidecars alongside the JSONL
+fragments:
+
+```bash
+retriever dump \
+  -connection "$CONNECTION_STRING" \
+  -out ./dumpdir \
+  -graph default \
+  -scrub none \
+  -parquet
+```
+
+For example, `graphs/default/nodes-000001.jsonl.zst` is paired with
+`graphs/default/nodes-000001.parquet`, and
+`graphs/default/edges-000001.jsonl.zst` with
+`graphs/default/edges-000001.parquet`. Node sidecar rows contain `id` (string),
+`kinds` (list of strings), and `properties` (`VARIANT`). Edge sidecar rows
+contain `start_id`, `end_id`, and `kind` (strings), plus `properties`
+(`VARIANT`). The `VARIANT` property preserves JSON-like scalar, object, array,
+and null values for analytical readers.
+
+Parquet sidecars are optional output and are not part of the production
+collection path: loading, collection verification, manifest checksums and
+accounting, and encrypted archives remain JSONL-only. Interrupted Parquet
+dumps resume from committed JSONL/Parquet shard pairs. For each checkpointed
+JSONL fragment, resume requires the Parquet partner to be present as a regular
+file; it does not reopen or validate the sidecar's Parquet contents.
+
 Existing non-empty output directories are refused unless `-force` is supplied.
 The manifest is written last as `manifest.json`; if a dump fails before that
 point, the directory is intentionally left for inspection without a success
