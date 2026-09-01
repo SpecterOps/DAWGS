@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"maps"
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -88,7 +89,8 @@ func (s *SchemaManager) compile(ctx context.Context, source string, parameters m
 		} else if sqlQuery, err := translate.Translated(translated); err != nil {
 			return "", translationCacheBuildResult{}, err
 		} else {
-			return sqlQuery, translationCacheBuildResult{
+			maps.Copy(translated.Parameters, sqlQuery.Parameters)
+			return sqlQuery.Statement, translationCacheBuildResult{
 				parameters:       translated.Parameters,
 				parameterSources: parameterSources,
 			}, nil

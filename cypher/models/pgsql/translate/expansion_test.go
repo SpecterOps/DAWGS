@@ -32,7 +32,7 @@ func translateCypher(t *testing.T, cypher string) string {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	return formatted
+	return formatted.Statement
 }
 
 // TestSelfLoopExpansionInLaterFrameSeedsIndependently covers a variable-length self-loop introduced in a
