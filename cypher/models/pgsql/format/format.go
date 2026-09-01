@@ -13,11 +13,14 @@ type OutputBuilder struct {
 	materializeParameters bool
 	materializedParams    map[string]any
 	builder               *strings.Builder
+	// TODO: figure out how to use a shared generator
+	generator pgsql.IdentifierGenerator
 }
 
 func NewOutputBuilder() *OutputBuilder {
 	return &OutputBuilder{
-		builder: &strings.Builder{},
+		builder:   &strings.Builder{},
+		generator: pgsql.NewIdentifierGenerator(),
 	}
 }
 
@@ -69,6 +72,72 @@ func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql
 
 	builder.Write("]::", dataType.String())
 	return nil
+}
+
+func formatParameterWithBinding(builder *OutputBuilder, value any) error {
+	switch value.(type) {
+	case int64, uint64, string, bool, float64:
+	default:
+		return fmt.Errorf("unsupported parameter type: %T", value)
+	}
+
+	if ident, err := builder.generator.NewIdentifier(pgsql.ParameterIdentifier); err != nil {
+		return fmt.Errorf("error creating bound parameter identifier: %w", err)
+	} else {
+		builder.params[ident.String()] = value
+		builder.Write("@", ident.String())
+	}
+
+	return nil
+}
+
+func formatAsParameter(builder *OutputBuilder, value any) error {
+	switch typedValue := value.(type) {
+	case uint:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint8:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint16:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint32:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint64:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case int:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int8:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int16:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int32:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int64:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case string:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case bool:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case float32:
+		return formatParameterWithBinding(builder, float64(typedValue))
+
+	case float64:
+		return formatParameterWithBinding(builder, typedValue)
+
+	default:
+		return fmt.Errorf("unsupported parameter type: %T", value)
+	}
 }
 
 func formatValue(builder *OutputBuilder, value any) error {
