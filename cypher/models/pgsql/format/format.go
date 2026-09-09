@@ -21,6 +21,7 @@ func NewOutputBuilder() *OutputBuilder {
 	return &OutputBuilder{
 		builder:   &strings.Builder{},
 		generator: pgsql.NewIdentifierGenerator(),
+		params:    make(map[string]any),
 	}
 }
 
@@ -60,12 +61,22 @@ func (s *OutputBuilder) Build() Formatted {
 func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql.DataType) error {
 	builder.Write("array [")
 
+	var (
+		tval    T
+		fmtFunc func(builder *OutputBuilder, value any) error
+	)
+	if _, ok := any(tval).(string); ok {
+		fmtFunc = formatAsParameter
+	} else {
+		fmtFunc = formatValue
+	}
+
 	for idx, value := range slice {
 		if idx > 0 {
 			builder.Write(", ")
 		}
 
-		if err := formatValue(builder, value); err != nil {
+		if err := fmtFunc(builder, value); err != nil {
 			return err
 		}
 	}
@@ -86,6 +97,10 @@ func formatParameterWithBinding(builder *OutputBuilder, value any) error {
 	} else {
 		builder.params[ident.String()] = value
 		builder.Write("@", ident.String())
+	}
+
+	if _, ok := value.(string); ok {
+		builder.Write("::text")
 	}
 
 	return nil
@@ -217,7 +232,12 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 		builder.Write("interval ")
 	}
 
-	return formatValue(builder, literal.Value)
+	switch literal.Value.(type) {
+	case string:
+		return formatAsParameter(builder, literal.Value)
+	default:
+		return formatValue(builder, literal.Value)
+	}
 }
 
 func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
