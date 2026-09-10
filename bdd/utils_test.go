@@ -58,11 +58,16 @@ func (s *stubDatabase) WriteTransaction(ctx context.Context, delegate graph.Tran
 type stubTransaction struct {
 	graph.Transaction
 
-	nodeQuery       graph.NodeQuery
-	result          graph.Result
-	queryCalled     bool
-	query           string
-	queryParameters map[string]any
+	nodeQuery         graph.NodeQuery
+	relationshipQuery graph.RelationshipQuery
+	result            graph.Result
+	queryCalled       bool
+	query             string
+	queryParameters   map[string]any
+}
+
+func (s *stubTransaction) Relationships() graph.RelationshipQuery {
+	return s.relationshipQuery
 }
 
 func (s *stubTransaction) Nodes() graph.NodeQuery {
@@ -101,14 +106,21 @@ func (s *stubResult) Values() []any {
 
 func (s *stubResult) Mapper() graph.ValueMapper {
 	return graph.NewValueMapper(func(value, target any) bool {
-		node, valueIsNode := value.(graph.Node)
-		targetNode, targetIsNode := target.(*graph.Node)
-		if !valueIsNode || !targetIsNode {
-			return false
+		switch target := target.(type) {
+		case *graph.Node:
+			node, ok := value.(graph.Node)
+			if ok {
+				*target = node
+			}
+			return ok
+		case *graph.Relationship:
+			relationship, ok := value.(graph.Relationship)
+			if ok {
+				*target = relationship
+			}
+			return ok
 		}
-
-		*targetNode = node
-		return true
+		return false
 	})
 }
 
@@ -125,11 +137,27 @@ type stubNodeQuery struct {
 
 	deleteErr    error
 	deleteCalled bool
+	count        int64
+	countErr     error
 }
 
 func (s *stubNodeQuery) Delete() error {
 	s.deleteCalled = true
 	return s.deleteErr
+}
+
+func (s *stubNodeQuery) Count() (int64, error) {
+	return s.count, s.countErr
+}
+
+type stubRelationshipQuery struct {
+	graph.RelationshipQuery
+	count    int64
+	countErr error
+}
+
+func (s *stubRelationshipQuery) Count() (int64, error) {
+	return s.count, s.countErr
 }
 
 func TestDBContextAnEmptyGraph(t *testing.T) {
@@ -184,6 +212,51 @@ func TestDBContextAnEmptyGraph(t *testing.T) {
 	}
 }
 
+func TestDBContextResetBeforeScenario(t *testing.T) {
+	testContext := context.WithValue(context.Background(), struct{}{}, "scenario")
+	nodeQuery := &stubNodeQuery{}
+	database := &stubDatabase{
+		transaction: &stubTransaction{nodeQuery: nodeQuery},
+	}
+	databaseContext := &dbContext{
+		db: database,
+		beforeExecution: graphSnapshot{
+			NodesCount:         2,
+			RelationshipsCount: 1,
+		},
+		actualResult: &stubResult{},
+		rowCount:     2,
+		actualRows:   [][]string{{"stale"}},
+	}
+
+	returnedContext, err := databaseContext.resetBeforeScenario(testContext, nil)
+
+	require.NoError(t, err)
+	require.Equal(t, testContext, returnedContext)
+	require.True(t, database.writeTransactionCalled)
+	require.Equal(t, testContext, database.writeTransactionContext)
+	require.True(t, nodeQuery.deleteCalled)
+	require.Equal(t, graphSnapshot{}, databaseContext.beforeExecution)
+	require.Nil(t, databaseContext.actualResult)
+	require.Zero(t, databaseContext.rowCount)
+	require.Nil(t, databaseContext.actualRows)
+}
+
+func TestDBContextResetBeforeScenarioReturnsCleanupError(t *testing.T) {
+	deleteErr := errors.New("failed to delete nodes")
+	database := &stubDatabase{
+		transaction: &stubTransaction{
+			nodeQuery: &stubNodeQuery{deleteErr: deleteErr},
+		},
+	}
+	databaseContext := &dbContext{db: database}
+
+	_, err := databaseContext.resetBeforeScenario(context.Background(), nil)
+
+	require.ErrorIs(t, err, deleteErr)
+	require.ErrorContains(t, err, "reset graph before scenario")
+}
+
 func TestDBContextExecutingQuery(t *testing.T) {
 	nodeA := *graph.NewNode(1, graph.NewProperties(), graph.StringKind("A"))
 	nodeB := *graph.NewNode(2, graph.NewProperties(), graph.StringKind("B"))
@@ -192,12 +265,16 @@ func TestDBContextExecutingQuery(t *testing.T) {
 		rows:       [][]any{{nodeA, nodeB}, {nodeC}},
 		currentRow: -1,
 	}
-	transaction := &stubTransaction{result: result}
+	transaction := &stubTransaction{
+		result:            result,
+		nodeQuery:         &stubNodeQuery{count: 3},
+		relationshipQuery: &stubRelationshipQuery{count: 0},
+	}
 	database := &stubDatabase{transaction: transaction}
 	databaseContext := &dbContext{
 		db:         database,
 		rowCount:   99,
-		actualRows: []string{"stale result"},
+		actualRows: [][]string{{"stale result"}},
 	}
 	testContext := context.Background()
 	query := "MATCH (n) RETURN n"
@@ -212,7 +289,22 @@ func TestDBContextExecutingQuery(t *testing.T) {
 	require.Nil(t, transaction.queryParameters)
 	require.True(t, result.closed)
 	require.Equal(t, 2, databaseContext.rowCount)
-	require.Equal(t, []string{"(:A)", "(:B)", "(:C)"}, databaseContext.actualRows)
+	require.Equal(t, [][]string{{"(:A)", "(:B)"}, {"(:C)"}}, databaseContext.actualRows)
+}
+
+func TestFormatGraphValueRelationship(t *testing.T) {
+	relationship := *graph.NewRelationship(1, 2, 3, graph.NewProperties(), graph.StringKind("T1"))
+
+	formatted, err := formatGraphValue((&stubResult{}).Mapper(), relationship)
+
+	require.NoError(t, err)
+	require.Equal(t, "[:T1]", formatted)
+}
+
+func TestFormatGraphValueRejectsUnsupportedValue(t *testing.T) {
+	_, err := formatGraphValue((&stubResult{}).Mapper(), "not a graph value")
+
+	require.EqualError(t, err, "unsupported returned value of type string")
 }
 
 func TestDBContextHavingExecuted(t *testing.T) {
@@ -278,7 +370,7 @@ func TestDBContextHavingExecuted(t *testing.T) {
 	}
 }
 
-func TestDBContextTheResultShouldBe(t *testing.T) {
+func TestDBContexttheResultShouldBeInAnyOrder(t *testing.T) {
 	tests := []struct {
 		name          string
 		context       dbContext
@@ -289,7 +381,7 @@ func TestDBContextTheResultShouldBe(t *testing.T) {
 			name: "matches normalized rows",
 			context: dbContext{
 				rowCount:   2,
-				actualRows: []string{"(:A{name:'a'})", "(:B)"},
+				actualRows: [][]string{{"(:A{name:'a'})"}, {"(:B)"}},
 			},
 			expectedTable: newResultTable(`(:A {name: "a"})`, "(:B)"),
 		},
@@ -301,7 +393,7 @@ func TestDBContextTheResultShouldBe(t *testing.T) {
 			name: "returns row count mismatch",
 			context: dbContext{
 				rowCount:   1,
-				actualRows: []string{"(:A)"},
+				actualRows: [][]string{{"(:A)"}},
 			},
 			expectedTable: newResultTable("(:A)", "(:B)"),
 			expectedError: "Invalid row count expected 2 actual 1",
@@ -310,7 +402,7 @@ func TestDBContextTheResultShouldBe(t *testing.T) {
 			name: "returns row content drift",
 			context: dbContext{
 				rowCount:   1,
-				actualRows: []string{"(:B)"},
+				actualRows: [][]string{{"(:B)"}},
 			},
 			expectedTable: newResultTable("(:A)"),
 			expectedError: "Detected a drift expected (:A), actual (:B)",
@@ -319,7 +411,65 @@ func TestDBContextTheResultShouldBe(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := test.context.theResultShouldBe(test.expectedTable)
+			err := test.context.theResultShouldBeInAnyOrder(test.expectedTable)
+
+			if test.expectedError == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, test.expectedError)
+			}
+		})
+	}
+}
+
+func TestDBContextResultComparisonPreservesColumns(t *testing.T) {
+	context := dbContext{
+		rowCount:   2,
+		actualRows: [][]string{{"(:A)", "(:B)"}, {"(:C)", "(:D)"}},
+	}
+	expected := &godog.Table{Rows: []*messages.PickleTableRow{
+		{Cells: []*messages.PickleTableCell{{Value: "left"}, {Value: "right"}}},
+		{Cells: []*messages.PickleTableCell{{Value: "(:C)"}, {Value: "(:D)"}}},
+		{Cells: []*messages.PickleTableCell{{Value: "(:A)"}, {Value: "(:B)"}}},
+	}}
+
+	require.NoError(t, context.theResultShouldBeInAnyOrder(expected))
+}
+
+func TestDBContextNoSideEffects(t *testing.T) {
+	tests := []struct {
+		name          string
+		before        graphSnapshot
+		after         graphSnapshot
+		expectedError string
+	}{
+		{
+			name:   "accepts unchanged graph",
+			before: graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
+			after:  graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
+		},
+		{
+			name:          "detects graph drift",
+			before:        graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
+			after:         graphSnapshot{NodesCount: 3, RelationshipsCount: 1},
+			expectedError: "Graph state drift detected",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			database := &stubDatabase{
+				transaction: &stubTransaction{
+					nodeQuery:         &stubNodeQuery{count: test.after.NodesCount},
+					relationshipQuery: &stubRelationshipQuery{count: test.after.RelationshipsCount},
+				},
+			}
+			databaseContext := &dbContext{
+				db:              database,
+				beforeExecution: test.before,
+			}
+
+			err := databaseContext.noSideEffects(context.Background())
 
 			if test.expectedError == "" {
 				require.NoError(t, err)
@@ -370,10 +520,10 @@ func TestFormatGraphResults(t *testing.T) {
 	actualList, err := formatGraphResults(nodes)
 	require.Nil(t, err)
 
-	expectedList := []string{"(:A{name: 'a'})", "(:B{name: 'b'})", "({name: 'c'})"}
+	expectedList := []string{"(:A{name:'a'})", "(:B{name:'b'})", "({name:'c'})"}
 
 	for i := range len(expectedList) {
-		require.Equal(t, actualList[i], expectedList[i])
+		require.Equal(t, expectedList[i], actualList[i])
 	}
 }
 
