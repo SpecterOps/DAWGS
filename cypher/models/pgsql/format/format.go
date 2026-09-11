@@ -8,11 +8,38 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+// OutputBuilder accumulates PostgreSQL text with graph targeting and optional parameter materialization.
 type OutputBuilder struct {
+	// MaterializeParameters substitutes configured values for parameter references during rendering.
 	MaterializeParameters bool
-	StripLiterals         bool
-	parameters            map[string]any
-	builder               *strings.Builder
+	// StripLiterals records the requested literal-redaction mode for formatter configuration.
+	StripLiterals bool
+	// TargetGraphID selects the concrete graph partitions used to render persistent node and edge references.
+	TargetGraphID int32
+	// parameters contains values substituted when MaterializeParameters is enabled.
+	parameters map[string]any
+	// builder accumulates the rendered PostgreSQL text.
+	builder *strings.Builder
+}
+
+// formatIdentifier preserves the wildcard and quotes names containing characters outside the formatter's unquoted ASCII subset.
+func formatIdentifier(identifier pgsql.Identifier) string {
+	value := identifier.String()
+	if value == pgsql.WildcardIdentifier.String() {
+		return value
+	}
+
+	for idx, character := range value {
+		valid := character == '_' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
+		if idx > 0 {
+			valid = valid || character >= '0' && character <= '9' || character == '$'
+		}
+		if !valid {
+			return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+		}
+	}
+
+	return value
 }
 
 func NewOutputBuilder() *OutputBuilder {
@@ -25,6 +52,14 @@ func (s *OutputBuilder) WithMaterializedParameters(parameters map[string]any) *O
 	s.MaterializeParameters = true
 	s.parameters = parameters
 
+	return s
+}
+
+// WithTargetGraph renders persistent node and edge references against the
+// concrete target partitions. Graph-local IDs are not globally unique, and a
+// concrete relation also lets PostgreSQL avoid planning unrelated partitions.
+func (s *OutputBuilder) WithTargetGraph(graphID int32) *OutputBuilder {
+	s.TargetGraphID = graphID
 	return s
 }
 
@@ -51,6 +86,7 @@ func (s *OutputBuilder) Build() string {
 	return s.builder.String()
 }
 
+// formatSlice writes a typed PostgreSQL array literal from a Go slice.
 func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql.DataType) error {
 	builder.Write("array [")
 
@@ -68,6 +104,7 @@ func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql
 	return nil
 }
 
+// formatValue writes a supported scalar or slice value as a PostgreSQL literal.
 func formatValue(builder *OutputBuilder, value any) error {
 	switch typedValue := value.(type) {
 	case uint:
@@ -134,6 +171,7 @@ func formatValue(builder *OutputBuilder, value any) error {
 	return nil
 }
 
+// formatLiteral writes a literal value and its explicit PostgreSQL cast when required.
 func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 	if literal.Null {
 		builder.Write("null")
@@ -148,6 +186,7 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 	return formatValue(builder, literal.Value)
 }
 
+// formatCase validates paired conditions and results before writing a CASE expression in clause order.
 func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
 	if len(caseExpr.Conditions) != len(caseExpr.Then) {
 		return fmt.Errorf("case expression has %d conditions and %d then expressions", len(caseExpr.Conditions), len(caseExpr.Then))
@@ -190,6 +229,7 @@ func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
 	return nil
 }
 
+// formatNode dispatches a PostgreSQL syntax node to the formatter for its concrete AST type.
 func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 	exprStack := []pgsql.SyntaxNode{
 		rootExpr,
@@ -254,6 +294,15 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			if !typedNextExpr.Bare {
 				exprStack = append(exprStack, pgsql.FormattingLiteral(")"))
 			}
+			if len(typedNextExpr.OrderBy) > 0 {
+				for idx := len(typedNextExpr.OrderBy) - 1; idx >= 0; idx-- {
+					exprStack = append(exprStack, typedNextExpr.OrderBy[idx])
+					if idx > 0 {
+						exprStack = append(exprStack, pgsql.FormattingLiteral(", "))
+					}
+				}
+				exprStack = append(exprStack, pgsql.FormattingLiteral(" order by "))
+			}
 
 			for idx := len(typedNextExpr.Parameters) - 1; idx >= 0; idx-- {
 				exprStack = append(exprStack, typedNextExpr.Parameters[idx])
@@ -277,7 +326,7 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			builder.Write(typedNextExpr.String())
 
 		case pgsql.Identifier:
-			builder.Write(typedNextExpr)
+			builder.Write(formatIdentifier(typedNextExpr))
 
 		case pgsql.CompoundIdentifier:
 			for idx := len(typedNextExpr) - 1; idx >= 0; idx-- {
@@ -329,7 +378,13 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 				exprStack = append(exprStack, typedNextExpr.Binding.Value, pgsql.FormattingLiteral(" "))
 			}
 
-			exprStack = append(exprStack, typedNextExpr.Name)
+			tableName := typedNextExpr.Name
+			if builder.TargetGraphID != 0 && len(tableName) == 1 &&
+				(tableName[0] == pgsql.TableNode || tableName[0] == pgsql.TableEdge) {
+				tableName = pgsql.CompoundIdentifier{pgsql.Identifier(fmt.Sprintf("%s_%d", tableName[0], builder.TargetGraphID))}
+			}
+
+			exprStack = append(exprStack, tableName)
 
 		case pgsql.LateralSubquery:
 			if typedNextExpr.Binding.Set {
@@ -438,7 +493,7 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 					return fmt.Errorf("conflict target has both columns and an 'on constraint' expression set")
 				}
 
-				exprStack = append(exprStack, typedNextExpr.Constraint, pgsql.FormattingLiteral("on constraint "))
+				exprStack = append(exprStack, pgsql.FormattingLiteral(typedNextExpr.Constraint.String()), pgsql.FormattingLiteral("on constraint "))
 			}
 
 		case *pgsql.AliasedExpression:
@@ -538,12 +593,23 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 				return fmt.Errorf("edge array from path IDs has no path expression")
 			}
 
-			exprStack = append(
-				exprStack,
-				pgsql.FormattingLiteral(") with ordinality as _path(id, ordinality) join edge _edge on _edge.id = _path.id)"),
-				typedNextExpr.PathIDs,
-				pgsql.FormattingLiteral("(select coalesce(array_agg((_edge.id, _edge.start_id, _edge.end_id, _edge.kind_id, _edge.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest("),
-			)
+			if typedNextExpr.GraphID == nil {
+				exprStack = append(
+					exprStack,
+					pgsql.FormattingLiteral(") with ordinality as _path(id, ordinality) join edge _edge on _edge.id = _path.id)"),
+					typedNextExpr.PathIDs,
+					pgsql.FormattingLiteral("(select coalesce(array_agg((_edge.id, _edge.start_id, _edge.end_id, _edge.kind_id, _edge.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest("),
+				)
+			} else {
+				exprStack = append(
+					exprStack,
+					pgsql.FormattingLiteral(")"),
+					typedNextExpr.GraphID,
+					pgsql.FormattingLiteral(") with ordinality as _path(id, ordinality) join edge _edge on _edge.id = _path.id and _edge.graph_id = "),
+					typedNextExpr.PathIDs,
+					pgsql.FormattingLiteral("(select coalesce(array_agg((_edge.id, _edge.start_id, _edge.end_id, _edge.kind_id, _edge.properties)::edgecomposite order by _path.ordinality), array []::edgecomposite[]) from unnest("),
+				)
+			}
 
 		case pgsql.Parameter:
 			if builder.MaterializeParameters {
@@ -619,6 +685,7 @@ func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (string, er
 	return builder.Build(), nil
 }
 
+// formatSelect writes a SELECT expression with its projection, sources, predicates, grouping, and ordering.
 func formatSelect(builder *OutputBuilder, selectStmt pgsql.Select) error {
 	builder.Write("select ")
 
@@ -660,9 +727,18 @@ func formatSelect(builder *OutputBuilder, selectStmt pgsql.Select) error {
 		}
 	}
 
+	if selectStmt.Having != nil {
+		builder.Write(" having ")
+
+		if err := formatNode(builder, selectStmt.Having); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
+// formatGroupBy writes comma-separated GROUP BY expressions when grouping is present.
 func formatGroupBy(builder *OutputBuilder, groupByExpressions []pgsql.Expression) error {
 	for idx, groupByExpression := range groupByExpressions {
 		if idx > 0 {
@@ -677,6 +753,7 @@ func formatGroupBy(builder *OutputBuilder, groupByExpressions []pgsql.Expression
 	return nil
 }
 
+// formatFromClauses writes comma-separated FROM sources and their joins.
 func formatFromClauses(builder *OutputBuilder, fromClauses []pgsql.FromClause) error {
 	for idx, fromClause := range fromClauses {
 		if idx > 0 {
@@ -726,6 +803,7 @@ func formatFromClauses(builder *OutputBuilder, fromClauses []pgsql.FromClause) e
 	return nil
 }
 
+// formatTableAlias writes an alias and its optional record-shape column list.
 func formatTableAlias(builder *OutputBuilder, tableAlias pgsql.TableAlias) error {
 	builder.Write(tableAlias.Name)
 
@@ -748,6 +826,7 @@ func formatTableAlias(builder *OutputBuilder, tableAlias pgsql.TableAlias) error
 	return nil
 }
 
+// formatCommonTableExpressions writes a WITH clause and each materialization-qualified CTE.
 func formatCommonTableExpressions(builder *OutputBuilder, commonTableExpressions pgsql.With) error {
 	// Only write "with" if there are actually expressions
 	if len(commonTableExpressions.Expressions) == 0 {
@@ -794,6 +873,7 @@ func formatCommonTableExpressions(builder *OutputBuilder, commonTableExpressions
 	return nil
 }
 
+// formatSetExpression dispatches rendering for SELECT, nested query, values, and set-operation operands.
 func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression) error {
 	switch typedSetExpression := expression.(type) {
 	case pgsql.Query:
@@ -850,7 +930,7 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 			return fmt.Errorf("set operation for query may not be both ALL and DISTINCT")
 		}
 
-		if err := formatSetExpression(builder, typedSetExpression.LOperand); err != nil {
+		if err := formatSetOperationOperand(builder, typedSetExpression.LOperand); err != nil {
 			return err
 		}
 
@@ -870,7 +950,7 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 			builder.Write("distinct ")
 		}
 
-		if err := formatSetExpression(builder, typedSetExpression.ROperand); err != nil {
+		if err := formatSetOperationOperand(builder, typedSetExpression.ROperand); err != nil {
 			return err
 		}
 
@@ -890,6 +970,20 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 	return nil
 }
 
+// formatSetOperationOperand parenthesizes query operands so their WITH, ORDER BY, and limits remain scoped to the operand.
+func formatSetOperationOperand(builder *OutputBuilder, operand pgsql.SetExpression) error {
+	if _, isQuery := operand.(pgsql.Query); !isQuery {
+		return formatSetExpression(builder, operand)
+	}
+	builder.Write("(")
+	if err := formatSetExpression(builder, operand); err != nil {
+		return err
+	}
+	builder.Write(")")
+	return nil
+}
+
+// formatMergeStatement writes a MERGE statement with matched and unmatched actions.
 func formatMergeStatement(builder *OutputBuilder, merge pgsql.Merge) error {
 	builder.Write("merge ")
 
@@ -999,6 +1093,7 @@ func formatMergeStatement(builder *OutputBuilder, merge pgsql.Merge) error {
 	return nil
 }
 
+// formatInsertStatement writes an INSERT source, conflict action, and optional RETURNING projection.
 func formatInsertStatement(builder *OutputBuilder, insert pgsql.Insert) error {
 	builder.Write("insert into ")
 
@@ -1061,6 +1156,7 @@ func formatInsertStatement(builder *OutputBuilder, insert pgsql.Insert) error {
 	return nil
 }
 
+// formatUpdateStatement writes an UPDATE target, assignments, sources, predicate, and optional RETURNING projection.
 func formatUpdateStatement(builder *OutputBuilder, update pgsql.Update) error {
 	builder.Write("update ")
 
@@ -1113,6 +1209,7 @@ func formatUpdateStatement(builder *OutputBuilder, update pgsql.Update) error {
 	return nil
 }
 
+// formatDeleteStatement writes a DELETE target, USING sources, predicate, and optional RETURNING projection.
 func formatDeleteStatement(builder *OutputBuilder, sqlDelete pgsql.Delete) error {
 	builder.Write("delete from ")
 

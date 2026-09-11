@@ -1306,7 +1306,9 @@ func (s *ProjectionItem) copy() *ProjectionItem {
 	}
 }
 
+// PropertyLookup represents access to a named property on an expression.
 type PropertyLookup struct {
+	// Atom is the expression whose property is accessed.
 	Atom Expression
 
 	// Symbol is the raw property key, not an already-rendered Cypher token.

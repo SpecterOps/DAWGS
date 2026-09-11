@@ -25,6 +25,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestShortestPathScenariosUseStableParameterizedCypher verifies that fixture
+// reloads vary only bindings, not the exact Cypher identity authorized by a
+// traversal policy manifest.
+func TestShortestPathScenariosUseStableParameterizedCypher(t *testing.T) {
+	first := traversalShapesScenarios(opengraph.IDMap{
+		"d0": graph.ID(1), "d4": graph.ID(2), "x0": graph.ID(3), "x1": graph.ID(4),
+	})
+	second := traversalShapesScenarios(opengraph.IDMap{
+		"d0": graph.ID(101), "d4": graph.ID(102), "x0": graph.ID(103), "x1": graph.ID(104),
+	})
+
+	firstShortest := shortestPathScenarios(first)
+	secondShortest := shortestPathScenarios(second)
+	require.Len(t, firstShortest, 2)
+	require.Len(t, secondShortest, 2)
+	for index := range firstShortest {
+		require.Equal(t, firstShortest[index].Cypher, secondShortest[index].Cypher)
+		require.NotEmpty(t, firstShortest[index].Parameters)
+		require.NotEqual(t, firstShortest[index].Parameters, secondShortest[index].Parameters)
+	}
+	require.NotEqual(t, firstShortest[0].Cypher, firstShortest[1].Cypher, "one manifest query digest must select exactly one scenario")
+}
+
+// TestBaseScenariosDeclareExpectedRows verifies the canonical row-count contract for every query family in the base fixture.
 func TestBaseScenariosDeclareExpectedRows(t *testing.T) {
 	scenarios := baseScenarios(opengraph.IDMap{
 		"n1": graph.ID(1),
@@ -41,6 +65,7 @@ func TestBaseScenariosDeclareExpectedRows(t *testing.T) {
 	requireExpectedRows(t, scenarios, "Filter By Kind", "NodeKind2", 2)
 }
 
+// TestTraversalShapesDatasetIsValid verifies that the checked-in traversal fixture parses and retains its expected 45-node, 41-edge topology.
 func TestTraversalShapesDatasetIsValid(t *testing.T) {
 	file, err := os.Open("../../integration/testdata/traversal_shapes.json")
 	require.NoError(t, err)
@@ -52,6 +77,7 @@ func TestTraversalShapesDatasetIsValid(t *testing.T) {
 	require.Len(t, doc.Graph.Edges, 41)
 }
 
+// TestTraversalShapesScenariosDeclareExpectedRows verifies the expected cardinalities for depth, fanout, cycle, dead-end, kind-filtered, and shortest-path fixture cases.
 func TestTraversalShapesScenariosDeclareExpectedRows(t *testing.T) {
 	scenarios := traversalShapesScenarios(traversalShapesIDMap())
 
@@ -71,11 +97,13 @@ func TestTraversalShapesScenariosDeclareExpectedRows(t *testing.T) {
 	requireExpectedRows(t, scenarios, "Shortest Paths", "disconnected", 0)
 }
 
+// TestDefaultDatasetsIncludeTraversalShapes verifies that ordinary benchmark runs include both traversal-shape and fixed-suffix fanout coverage.
 func TestDefaultDatasetsIncludeTraversalShapes(t *testing.T) {
 	require.Contains(t, defaultDatasets, traversalShapesDataset)
-	require.Contains(t, defaultDatasets, "adcs_fanout")
+	require.Contains(t, defaultDatasets, "fixed_suffix_expansion_fanout")
 }
 
+// TestValidateScenarioRows verifies that observed cardinality must match the scenario contract and that failures identify the scenario and both counts.
 func TestValidateScenarioRows(t *testing.T) {
 	scenario := Scenario{
 		Section:      "Traversal",
@@ -88,6 +116,7 @@ func TestValidateScenarioRows(t *testing.T) {
 	require.ErrorContains(t, validateScenarioRows(scenario, 1), "Traversal/n1 on base expected 2 rows, got 1")
 }
 
+// traversalShapesIDMap resolves traversal-shape fixture node keys to database identifiers.
 func traversalShapesIDMap() opengraph.IDMap {
 	ids := []string{
 		"c0", "c10",
@@ -106,6 +135,7 @@ func traversalShapesIDMap() opengraph.IDMap {
 	return idMap
 }
 
+// requireExpectedRows locates a scenario by section and label and asserts its declared cardinality.
 func requireExpectedRows(t *testing.T, scenarios []Scenario, section, label string, expectedRows int64) {
 	t.Helper()
 
@@ -118,4 +148,14 @@ func requireExpectedRows(t *testing.T, scenarios []Scenario, section, label stri
 	}
 
 	require.Failf(t, "scenario not found", "%s/%s", section, label)
+}
+
+func shortestPathScenarios(scenarios []Scenario) []Scenario {
+	shortest := make([]Scenario, 0)
+	for _, scenario := range scenarios {
+		if scenario.Section == "Shortest Paths" {
+			shortest = append(shortest, scenario)
+		}
+	}
+	return shortest
 }

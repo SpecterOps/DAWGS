@@ -1,0 +1,311 @@
+{
+  "cases": [
+    {
+      "name": "GFSE-BOUNDARY-S511-endpoint",
+      "dataset": "generated_fixed_suffix_expansion_v2_d16_f129_r0_x510_i0_m1_z1_p0",
+      "category": "generated_fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)",
+      "params": {
+        "root_key": "generated-fse-root"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "id_rows",
+        "id_rows": [
+          [
+            "fse-head-root-00",
+            "fse-terminal"
+          ]
+        ]
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": true
+      },
+      "shape": {
+        "qualification_split": "holdout",
+        "fixture_tier": "normal",
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": [
+          "Expand",
+          "EnterSuffix",
+          "ContinueSuffix",
+          "CompleteSuffix"
+        ],
+        "min_depth": 0,
+        "max_depth": 16,
+        "path_materialization_required": false
+      },
+      "candidate_modes": [
+        "postgres_sql",
+        "neo4j"
+      ],
+      "tags": [
+        "generated",
+        "normal-tier",
+        "fixed-suffix-expansion-boundary",
+        "suffix-cardinality-511",
+        "holdout"
+      ]
+    },
+    {
+      "name": "GFSE-BOUNDARY-S512-endpoint",
+      "dataset": "generated_fixed_suffix_expansion_v2_d16_f129_r0_x511_i0_m1_z1_p0",
+      "category": "generated_fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)",
+      "params": {
+        "root_key": "generated-fse-root"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "id_rows",
+        "id_rows": [
+          [
+            "fse-head-root-00",
+            "fse-terminal"
+          ]
+        ]
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": true
+      },
+      "shape": {
+        "qualification_split": "holdout",
+        "fixture_tier": "normal",
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": [
+          "Expand",
+          "EnterSuffix",
+          "ContinueSuffix",
+          "CompleteSuffix"
+        ],
+        "min_depth": 0,
+        "max_depth": 16,
+        "path_materialization_required": false
+      },
+      "candidate_modes": [
+        "postgres_sql",
+        "neo4j"
+      ],
+      "tags": [
+        "generated",
+        "normal-tier",
+        "fixed-suffix-expansion-boundary",
+        "suffix-cardinality-512",
+        "holdout"
+      ]
+    },
+    {
+      "name": "GFSE-BOUNDARY-S513-endpoint",
+      "dataset": "generated_fixed_suffix_expansion_v2_d16_f129_r0_x512_i0_m1_z1_p0",
+      "category": "generated_fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)",
+      "params": {
+        "root_key": "generated-fse-root"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "id_rows",
+        "id_rows": [
+          [
+            "fse-head-root-00",
+            "fse-terminal"
+          ]
+        ]
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": true
+      },
+      "shape": {
+        "qualification_split": "holdout",
+        "fixture_tier": "normal",
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": [
+          "Expand",
+          "EnterSuffix",
+          "ContinueSuffix",
+          "CompleteSuffix"
+        ],
+        "min_depth": 0,
+        "max_depth": 16,
+        "path_materialization_required": false
+      },
+      "candidate_modes": [
+        "postgres_sql",
+        "neo4j"
+      ],
+      "tags": [
+        "generated",
+        "normal-tier",
+        "fixed-suffix-expansion-boundary",
+        "suffix-cardinality-513",
+        "holdout"
+      ]
+    },
+    {
+      "name": "GFSE-BOUNDARY-S600-productive-endpoint",
+      "dataset": "generated_fixed_suffix_expansion_v2_d16_f129_r0_x599_i0_m1_z1_p0",
+      "category": "generated_fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)",
+      "params": {
+        "root_key": "generated-fse-root"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "id_rows",
+        "id_rows": [
+          [
+            "fse-head-root-00",
+            "fse-terminal"
+          ]
+        ]
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": true
+      },
+      "shape": {
+        "qualification_split": "holdout",
+        "fixture_tier": "normal",
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": [
+          "Expand",
+          "EnterSuffix",
+          "ContinueSuffix",
+          "CompleteSuffix"
+        ],
+        "min_depth": 0,
+        "max_depth": 16,
+        "path_materialization_required": false
+      },
+      "candidate_modes": [
+        "postgres_sql",
+        "neo4j"
+      ],
+      "tags": [
+        "generated",
+        "normal-tier",
+        "fixed-suffix-expansion-boundary",
+        "suffix-cardinality-600",
+        "nonempty-remainder",
+        "holdout"
+      ]
+    },
+    {
+      "name": "GFSE-BOUNDARY-S513-productive-path",
+      "dataset": "generated_fixed_suffix_expansion_v2_d16_f129_r0_x512_i0_m1_z1_p0",
+      "category": "generated_fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH p = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN p",
+      "params": {
+        "root_key": "generated-fse-root"
+      },
+      "expected": {
+        "row_count": 1,
+        "result_kind": "path_set"
+      },
+      "observes": {
+        "paths": true,
+        "nodes": true,
+        "relationships": true,
+        "properties": true
+      },
+      "shape": {
+        "qualification_split": "holdout",
+        "fixture_tier": "normal",
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": [
+          "Expand",
+          "EnterSuffix",
+          "ContinueSuffix",
+          "CompleteSuffix"
+        ],
+        "min_depth": 0,
+        "max_depth": 16,
+        "path_materialization_required": true
+      },
+      "candidate_modes": [
+        "postgres_sql",
+        "neo4j"
+      ],
+      "tags": [
+        "generated",
+        "normal-tier",
+        "fixed-suffix-expansion-boundary",
+        "suffix-cardinality-513",
+        "path",
+        "holdout"
+      ]
+    },
+    {
+      "name": "GFSE-BOUNDARY-S512-physical-bag-multiplicity",
+      "dataset": "generated_fixed_suffix_expansion_v2_d16_f129_r0_x255_i0_m2_z1_p0",
+      "category": "generated_fixed_suffix_expansion",
+      "cypher": "MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key MATCH (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN id(head), id(terminal)",
+      "params": {
+        "root_key": "generated-fse-root"
+      },
+      "expected": {
+        "row_count": 2,
+        "result_kind": "id_rows",
+        "id_rows": [
+          [
+            "fse-head-root-00",
+            "fse-terminal"
+          ],
+          [
+            "fse-head-root-01",
+            "fse-terminal"
+          ]
+        ]
+      },
+      "observes": {
+        "paths": false,
+        "nodes": false,
+        "relationships": false,
+        "properties": true
+      },
+      "shape": {
+        "qualification_split": "holdout",
+        "fixture_tier": "normal",
+        "root_predicate": "selective_property",
+        "terminal_predicate": "fixed_suffix",
+        "edge_kinds": [
+          "Expand",
+          "EnterSuffix",
+          "ContinueSuffix",
+          "CompleteSuffix"
+        ],
+        "min_depth": 0,
+        "max_depth": 16,
+        "path_materialization_required": false
+      },
+      "candidate_modes": [
+        "postgres_sql",
+        "neo4j"
+      ],
+      "tags": [
+        "generated",
+        "normal-tier",
+        "fixed-suffix-expansion-boundary",
+        "suffix-cardinality-512",
+        "physical-bag-multiplicity",
+        "holdout"
+      ]
+    }
+  ]
+}

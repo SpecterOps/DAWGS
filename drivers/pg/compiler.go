@@ -70,7 +70,7 @@ func (s *SchemaManager) compileRegularQuery(ctx context.Context, prepared prepar
 
 func (s *SchemaManager) compile(ctx context.Context, source string, parameters map[string]any, graphID int32, parse func() (*cypher.RegularQuery, error)) (string, map[string]any, error) {
 	var (
-		translationCache   = s.translationCacheProvider.TranslationCache()
+		translationCache   = s.compilationCacheProvider.TranslationCache()
 		optimized          = OptimizedTranslationEnabled()
 		translationOptions = translate.Options{
 			OptimizerMode: translate.OptimizerDisabled,

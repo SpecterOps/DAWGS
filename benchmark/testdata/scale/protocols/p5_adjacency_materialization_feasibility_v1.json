@@ -1,0 +1,99 @@
+{
+  "schema": "p5-adjacency-materialization-feasibility-v1",
+  "generation": "p5-adjacency-materialization-feasibility-v1",
+  "status": "implemented_validated_pending_clean_capture",
+  "purpose": "prospective shadow-only feasibility measurement for a graph-scoped directed adjacency materialization; not a Cypher executor, selector, read-performance qualification, or production schema change",
+  "predecessor": {
+    "source_commit": "6a0a252bad44f1a73b3fdace9de8d84d7fed11f5",
+    "inventory": ".coverage/p5-feasibility-4db030c/inventory.json",
+    "inventory_sha256": "6913d46209601b5bd8bd955b28738f1040dc6c14a514d95aeae081d2977ffb92",
+    "selection_basis": "The base edge layout already has outgoing/incoming covering indexes, while a topology synopsis lacks a mutation-epoch/cache contract. The locally testable shadow materialization was selected only for its feasibility inventory."
+  },
+  "architecture": {
+    "name": "P5-ADJACENCY-MATERIALIZATION-V1",
+    "relation": "public.p5_adjacency_v1",
+    "layout": "one graph-partitioned relation with exactly two rows per base edge: outbound anchor=start_id/neighbor=end_id and inbound anchor=end_id/neighbor=start_id",
+    "columns": ["graph_id", "direction", "anchor_id", "neighbor_id", "edge_id", "kind_id"],
+    "lookup_index": "(graph_id, direction, anchor_id, kind_id, edge_id) include (neighbor_id)",
+    "maintenance": "same-transaction edge insert/delete maintenance; edge property-only updates do not rewrite adjacency; node-delete cascade and graph drop must remove corresponding rows",
+    "read_boundary": "no Cypher translator, executor, policy, cache key, or production selector may read this relation"
+  },
+  "baseline": {
+    "relation": "base edge partitions",
+    "outbound_index": "(start_id, kind_id) include (id, end_id)",
+    "inbound_index": "(end_id, kind_id) include (id, start_id)",
+    "comparison": "matched clean fixture reloads with and without the shadow materialization; alternate condition order at the block level"
+  },
+  "design": {
+    "database": "postgresql_disposable_only",
+    "source_state": "clean committed tree",
+    "rounds": 4,
+    "warmup_iterations": 1,
+    "timed_iterations": 5,
+    "isolation": "repeatable_read_for_read_probes",
+    "write_measurement": "each warm-up and timed mutation runs in a transaction that validates state and rolls back",
+    "wal_measurement": "record pg_current_wal_lsn before and after each committed setup/mutation calibration only while autovacuum is quiescent; record EXPLAIN (ANALYZE, WAL) statement-local mutation bytes as the attributed mutation value and retain the LSN delta as a cross-check outside timed Cypher observations",
+    "read_measurement": "raw parameterized adjacency lookup only after exact shadow-state validation; no public Cypher result may use the relation",
+    "cap_overrides_permitted": false,
+    "protected_case_access_permitted": false
+  },
+  "mutation_roster": {
+    "fixture": "testutil.NewDirectWriteScaleFixture",
+    "sizes": [1, 1000, 2000],
+    "operations": [
+      "batch relationship create",
+      "relationship upsert/conflict property merge",
+      "relationship property-only update",
+      "batched relationship delete",
+      "batched node delete with incident-edge cascade",
+      "graph clear/reload and graph drop"
+    ],
+    "state_oracles": [
+      "every base edge has exactly one outbound and one inbound shadow row",
+      "every shadow row maps to exactly one base edge with matching graph, kind, anchor, neighbor, and direction",
+      "property-only edge updates preserve the same shadow-row identity",
+      "rollback, cancellation, pool reuse, reload, and graph drop leave no committed stale rows"
+    ]
+  },
+  "resource_roster": [
+    "per-operation elapsed time and p50/p95 distribution",
+    "WAL bytes from LSN deltas",
+    "shadow heap and index bytes",
+    "base edge heap and index bytes",
+    "read-probe elapsed time, plan, buffers, and result cardinality",
+    "trigger/maintenance execution count and rollback outcome"
+  ],
+  "required_outcome": {
+    "exact_shadow_state": true,
+    "no_committed_stale_rows": true,
+    "separate_write_wal_storage_and_read_measurements": true,
+    "same_connection_cancellation_and_pool_reuse": true,
+    "checksummed_clean_source_artifacts": true,
+    "no_automatic_budget_or_candidate_pass": true
+  },
+  "implementation": {
+    "status": "opt_in_shadow_only",
+    "install": "query.On(tx).InstallP5AdjacencyShadow",
+    "remove": "query.On(tx).DropP5AdjacencyShadow",
+    "capture_runner": "graphbench -p5-adjacency-feasibility-output <report.json>; fixed four counterbalanced blocks, one warm-up, five rollback-only timed samples, autovacuum-quiescent setup LSN calibration plus statement-local EXPLAIN WAL mutation calibration, and raw SQL read probes only",
+    "normal_schema_change": "none; schema_up.sql and normal driver startup do not install or read p5_adjacency_v1",
+    "validation": [
+      "unit SQL boundary test",
+      "PostgreSQL lifecycle test for backfill, insert, endpoint update, property-only update, node cascade, rollback, cancellation, pool reuse, graph deletion, and removal"
+    ]
+  },
+  "next_authorization": {
+    "requires": [
+      "all frozen shadow-state and lifecycle oracles pass",
+      "a complete resource report that separately reports base and shadow write, WAL, storage, and raw read values",
+      "a separately frozen budget decision before any Cypher candidate or selector experiment"
+    ],
+    "does_not_authorize": [
+      "Cypher translation or executor reads from p5_adjacency_v1",
+      "production schema deployment",
+      "automatic policy or cache-key changes",
+      "protected corpus timing",
+      "a performance or promotion claim"
+    ]
+  }
+}
