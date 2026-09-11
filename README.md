@@ -110,8 +110,16 @@ count mismatches.
 
 PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective
-anchors without matching JSON booleans or numbers. Simple relationship count fast paths depend on the schema's
-`kind_id`-first edge index for efficient typed counts.
+anchors without matching JSON booleans or numbers. The PostgreSQL edge schema uses four baseline B-tree indexes per
+partition: the primary key, a unique `(start_id, kind_id, end_id, graph_id) INCLUDE (id)` index that also covers outbound
+traversal, an `(end_id, kind_id) INCLUDE (id, start_id)` inbound traversal index, and a narrow `(kind_id)` index for typed
+counts and deletes. Avoiding heap reads during traversal requires topology-only reads and all-visible heap pages;
+Cypher relationship counts that validate endpoint existence may still fetch edge rows for endpoint IDs.
+
+Schema assertion replaces the historical edge uniqueness constraints and removes the superseded covering indexes on
+existing partitions. This first upgrade takes table locks and rebuilds the affected indexes; schedule it for a suitable
+maintenance window on large databases. Subsequent assertions preserve the replacement indexes. See
+[indexing notes](docs/postgresql_translation.md#indexing-notes) for the layout and regression coverage.
 
 PostgreSQL property index regression coverage is hard-failing under the `manual_integration` tag. The synthetic plan
 test translates Cypher to PgSQL, disables sequential scans for the `EXPLAIN`, and requires explicit node property

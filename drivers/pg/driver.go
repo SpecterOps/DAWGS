@@ -335,7 +335,7 @@ func buildNodeDeleteStatement(includeRequested bool, includeIDs []int16, exclude
 }
 
 // DeleteRelationshipsByKinds performs a server-side, set-based delete of relationships whose kind_id matches any of
-// the given kinds, using the edge_kind_id_id_start_id_end_id_index covering index instead of streaming relationship
+// the given kinds, using the edge_kind_index for kind filtering instead of streaming relationship
 // IDs through the application.
 //
 // kinds are mapped to kind IDs tolerantly: kinds that are not defined in the database map to no IDs. An empty kinds

@@ -143,8 +143,40 @@ create table if not exists edge
   primary key (id, graph_id),
   foreign key (graph_id) references graph (id) on delete cascade,
 
-  unique (start_id, end_id, kind_id, graph_id)
+  constraint edge_start_id_kind_id_end_id_graph_id_key
+    unique (start_id, kind_id, end_id, graph_id) include (id)
 ) partition by list (graph_id);
+
+-- Remove old indexes before building their replacements. Dropping each parent index also removes its attached
+-- partition indexes. The existing narrow edge_kind_index already has the desired definition and is retained.
+drop index if exists edge_graph_id_index;
+drop index if exists edge_start_id_index;
+drop index if exists edge_end_id_index;
+drop index if exists edge_start_kind_index;
+drop index if exists edge_end_kind_index;
+drop index if exists edge_start_id_kind_id_id_end_id_index;
+drop index if exists edge_end_id_kind_id_id_start_id_index;
+drop index if exists edge_kind_id_id_start_id_end_id_index;
+
+-- CREATE TABLE IF NOT EXISTS does not update constraints on existing installations. Replace both historical
+-- uniqueness definitions, including their partition indexes, in one statement so concurrent writes cannot observe
+-- a gap in uniqueness enforcement. Keep the new constraint on subsequent schema assertions to avoid rebuilding it.
+do
+$$
+  begin
+    alter table edge drop constraint if exists edge_graph_id_start_id_end_id_kind_id_key;
+    alter table edge drop constraint if exists edge_start_id_end_id_kind_id_graph_id_key;
+
+    if not exists (
+      select 1 from pg_constraint
+      where conrelid = 'edge'::regclass
+        and conname = 'edge_start_id_kind_id_end_id_graph_id_key'
+    ) then
+      alter table edge add constraint edge_start_id_kind_id_end_id_graph_id_key
+        unique (start_id, kind_id, end_id, graph_id) include (id);
+    end if;
+  end
+$$;
 
 -- delete_node_edges is a trigger and associated plpgsql function to cascade delete edges when attached nodes are
 -- deleted. While this could be done with a foreign key relationship, it would scope the cascade delete to individual
@@ -180,22 +212,12 @@ execute procedure delete_node_edges();
 alter table edge
   alter column properties set storage main;
 
--- Remove old indexes that are now redundant or superseded.
-drop index if exists edge_graph_id_index;
-drop index if exists edge_start_id_index;
-drop index if exists edge_end_id_index;
-drop index if exists edge_kind_index;
-drop index if exists edge_start_kind_index;
-drop index if exists edge_end_kind_index;
-
--- Covering indexes for traversal joins and relationship counts. The INCLUDE columns allow index-only scans for
--- the common case where the join needs (id, start_id, end_id, kind_id) without fetching from the heap. The standalone
--- start_id and end_id indexes are intentionally omitted: the composite indexes satisfy left-prefix lookups on start_id
--- or end_id alone. Relationship count fast paths query kind_id without an endpoint anchor, so keep a kind_id-first
--- covering index for those shapes.
-create index if not exists edge_start_id_kind_id_id_end_id_index on edge using btree (start_id, kind_id) include (id, end_id);
-create index if not exists edge_end_id_kind_id_id_start_id_index on edge using btree (end_id, kind_id) include (id, start_id);
-create index if not exists edge_kind_id_id_start_id_end_id_index on edge using btree (kind_id) include (id, start_id, end_id);
+-- The unique constraint also covers outbound traversal. Only inbound traversal needs a separate covering index.
+-- Both indexes provide (id, start_id, end_id, kind_id) for topology-only expansion and support endpoint-only lookups.
+-- Keep a narrow kind index for edge-type filtering and counts without duplicating the endpoints and edge ID again.
+-- Avoiding heap fetches also requires all-visible heap pages; property predicates and endpoint joins may need heap reads.
+create index if not exists edge_inbound_traversal_index on edge using btree (end_id, kind_id) include (id, start_id);
+create index if not exists edge_kind_index on edge using btree (kind_id);
 
 -- Path composite type
 do
