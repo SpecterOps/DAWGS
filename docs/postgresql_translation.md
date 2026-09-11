@@ -32,7 +32,7 @@ Current PostgreSQL optimization coverage includes:
 - Strict string property equality lowering through `jsonb_typeof(properties -> key) = 'string'` plus
   `properties ->> key = value`, preserving JSON scalar semantics while allowing existing text expression indexes on
   selective fields such as `objectid` and `name`.
-- Typed relationship count plans that can use the `kind_id`-first covering edge index.
+- Typed relationship count plans that can use the narrow `kind_id` edge index for filtering.
 - Correlated relationship `EXISTS` lowering for typed pattern predicates when relationship types and endpoint
   correlations are sufficient.
 - Membership-only `collect(entity)` ID-array lowering with `id = any(...)` membership predicates.
@@ -52,7 +52,27 @@ Exact string property equality is emitted with a JSON string type guard and `pro
 indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` to accelerate selective
 anchors without matching JSON booleans or numbers.
 
-Simple relationship count fast paths depend on the schema's `kind_id`-first edge index for efficient typed counts.
+The baseline edge indexes are:
+
+| Purpose | Key columns | Included columns |
+| --- | --- | --- |
+| Primary key and edge lookup | `(id, graph_id)` | None |
+| Edge uniqueness and outbound traversal | `(start_id, kind_id, end_id, graph_id)` | `(id)` |
+| Inbound traversal | `(end_id, kind_id)` | `(id, start_id)` |
+| Edge-type counts and deletes | `(kind_id)` | None |
+
+The unique and inbound indexes cover topology-only recursive expansion, including the edge IDs used for path
+construction and edge-reuse checks. They also support endpoint lookups without a kind restriction. Index-only scans
+can avoid heap access when vacuum has marked the relevant pages all-visible. Edge property predicates still need
+property access. The narrow kind index accelerates typed filtering and can cover direct edge-type counts, but Cypher
+relationship counts that join both endpoint nodes may need heap reads to obtain endpoint IDs.
+
+`schema_up.sql` replaces both historical edge uniqueness constraints and drops the three superseded covering indexes,
+including their attached partition indexes. The replacement retains the same uniqueness columns, so existing
+column-based `ON CONFLICT` clauses remain valid. The first upgrade locks the affected tables and rebuilds indexes;
+allow a maintenance window for large installations. Reapplying the schema preserves the new indexes rather than
+rebuilding them. The PostgreSQL schema index integration tests cover fresh creation, populated upgrades from both
+historical constraint orders, repeated application, upserts, and recursive index-only plan eligibility.
 
 Substring and suffix predicates are not promoted to blanket schema indexes. PostgreSQL deployments can request explicit
 `TextSearchIndex`/trigram property indexes for fields that need `CONTAINS`, `STARTS WITH`, or `ENDS WITH`. Dynamic
