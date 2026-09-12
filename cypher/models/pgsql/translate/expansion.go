@@ -1936,13 +1936,15 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 		if formattedFilter, err := format.Statement(pairFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
-			pairFilter = formattedFilter
+			// TODO: handle parameters
+			pairFilter = formattedFilter.Statement
 		}
 	} else if hasRootFilter {
 		if formattedFilter, err := format.Statement(rootFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
-			rootFilter = formattedFilter
+			// TODO: handle parameters
+			rootFilter = formattedFilter.Statement
 		}
 	}
 
@@ -1950,7 +1952,8 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 		if formattedFilter, err := format.Statement(terminalFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
-			terminalFilter = formattedFilter
+			// TODO: handle parameters
+			terminalFilter = formattedFilter.Statement
 		}
 	}
 
@@ -1970,9 +1973,11 @@ func (s *ExpansionBuilder) shortestPathsParameters(expansionModel *Expansion, fo
 	var (
 		harnessParameters []pgsql.Expression
 		formatFragment    = func(query pgsql.SetExpression) (string, error) {
-			return format.Statement(
+			// TODO: handle parameters
+			stmt, err := format.Statement(
 				nextFrontInsert(query),
 				format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters))
+			return stmt.Statement, err
 		}
 	)
 
@@ -2014,9 +2019,11 @@ func (s *ExpansionBuilder) bidirectionalAllShortestPathsParameters(expansionMode
 	var (
 		harnessParameters []pgsql.Expression
 		formatFragment    = func(query pgsql.SetExpression) (string, error) {
-			return format.Statement(
+			// TODO: handle parameters
+			stmt, err := format.Statement(
 				nextFrontInsert(query),
 				format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters))
+			return stmt.Statement, err
 		}
 	)
 

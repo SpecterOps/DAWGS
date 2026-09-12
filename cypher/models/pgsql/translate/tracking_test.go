@@ -44,7 +44,7 @@ func TestScopeLookupDataTypeResolvesAliases(t *testing.T) {
 }
 
 func TestIdentifierGeneratorSharesEdgeNamespaceForPathEdges(t *testing.T) {
-	generator := NewIdentifierGenerator()
+	generator := pgsql.NewIdentifierGenerator()
 
 	edgeIdentifier, err := generator.NewIdentifier(pgsql.EdgeComposite)
 	require.NoError(t, err)

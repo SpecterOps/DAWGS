@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -280,9 +281,11 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 		return
 	}
 
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+
 	var plan []string
 	if err := s.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		result := tx.Raw("EXPLAIN "+sqlQuery, translation.Parameters)
+		result := tx.Raw("EXPLAIN "+sqlQuery.Statement, translation.Parameters)
 		defer result.Close()
 
 		for result.Next() {
@@ -298,7 +301,8 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 		record.Error = err.Error()
 	}
 
-	record.SQL = sqlQuery
+	// TODO: should this get the parameters as well?
+	record.SQL = sqlQuery.Statement
 	record.PGPlan = plan
 	record.PGOperators = postgresOperators(plan)
 	record.PlannedLowerings = loweringNames(translation.Optimization.PlannedLowerings)

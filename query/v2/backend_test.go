@@ -2,6 +2,7 @@ package v2_test
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"testing"
 
@@ -222,7 +223,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, expected := range testCase.expectedSQLContains {
-				require.Contains(t, sql, expected)
+				require.Contains(t, sql.Statement, expected)
 			}
 		})
 	}
@@ -300,7 +301,8 @@ func TestBackendParityPGTranslate(t *testing.T) {
 
 			sql, err := translate.Translated(translation)
 			require.NoError(t, err)
-			require.Equal(t, testCase.expectedSQL, sql)
+			maps.Copy(translation.Parameters, sql.Parameters)
+			require.Equal(t, testCase.expectedSQL, sql.Statement)
 			require.Equal(t, testCase.expectedParams, translation.Parameters)
 		})
 	}
@@ -346,10 +348,10 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 
 			sql, err := translate.Translated(translation)
 			require.NoError(t, err)
-			require.Contains(t, sql, testCase.expectedHarness)
-			require.Contains(t, sql, "ordered_edges_to_path")
-			require.Contains(t, sql, "n0.id = 1")
-			require.Contains(t, sql, "n1.id = 2")
+			require.Contains(t, sql.Statement, testCase.expectedHarness)
+			require.Contains(t, sql.Statement, "ordered_edges_to_path")
+			require.Contains(t, sql.Statement, "n0.id = 1")
+			require.Contains(t, sql.Statement, "n1.id = 2")
 
 			serializedHarnessQueryHasKindConstraint := false
 			for _, parameterValue := range translation.Parameters {
@@ -382,7 +384,7 @@ func TestBackendParityPGCreate(t *testing.T) {
 
 	sql, err := translate.Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, sql, "insert into edge")
-	require.Contains(t, sql, "graph_id")
-	require.Contains(t, sql, "kind_id")
+	require.Contains(t, sql.Statement, "insert into edge")
+	require.Contains(t, sql.Statement, "graph_id")
+	require.Contains(t, sql.Statement, "kind_id")
 }

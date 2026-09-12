@@ -23,7 +23,7 @@ func TestFormat_TypeCastedParenthetical(t *testing.T) {
 	formattedQuery, err := format.Expression(typeCastedParenthetical, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "('str')::text", formattedQuery)
+	require.Equal(t, "('str')::text", formattedQuery.Statement)
 }
 
 func TestFormat_Case(t *testing.T) {
@@ -48,7 +48,7 @@ func TestFormat_Case(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.NoError(t, err)
-	require.Equal(t, "case when s0.root_id != s0.next_id then true else shortest_path_self_endpoint_error(s0.root_id, s0.next_id) end", formattedQuery)
+	require.Equal(t, "case when s0.root_id != s0.next_id then true else shortest_path_self_endpoint_error(s0.root_id, s0.next_id) end", formattedQuery.Statement)
 }
 
 func TestFormat_SelectDistinct(t *testing.T) {
@@ -67,7 +67,7 @@ func TestFormat_SelectDistinct(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "select distinct id from node;", formattedQuery)
+	require.Equal(t, "select distinct id from node;", formattedQuery.Statement)
 }
 
 func TestFormat_LateralSubqueryJoin(t *testing.T) {
@@ -115,7 +115,7 @@ func TestFormat_LateralSubqueryJoin(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "select n.id, e.id from node n join lateral (select e.id from edge e where e.start_id = n.id offset 0) e on true;", formattedQuery)
+	require.Equal(t, "select n.id, e.id from node n join lateral (select e.id from edge e where e.start_id = n.id offset 0) e on true;", formattedQuery.Statement)
 }
 
 func TestFormat_Delete(t *testing.T) {
@@ -132,7 +132,7 @@ func TestFormat_Delete(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "delete from table t where t.col1 < 4;", formattedQuery)
+	require.Equal(t, "delete from table t where t.col1 < 4;", formattedQuery.Statement)
 }
 
 func TestFormat_Update(t *testing.T) {
@@ -158,7 +158,7 @@ func TestFormat_Update(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "update table t set col1 = 1, col2 = '12345' where t.col1 < 4;", formattedQuery)
+	require.Equal(t, "update table t set col1 = 1, col2 = '12345' where t.col1 < 4;", formattedQuery.Statement)
 }
 
 func TestFormat_Insert(t *testing.T) {
@@ -177,7 +177,7 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) values ('1', 1, false);", formattedQuery)
+	require.Equal(t, "insert into table (col1, col2, col3) values ('1', 1, false);", formattedQuery.Statement)
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -206,7 +206,7 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234';", formattedQuery)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234';", formattedQuery.Statement)
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -238,7 +238,7 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' returning id;", formattedQuery)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' returning id;", formattedQuery.Statement)
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -289,7 +289,7 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' on conflict on constraint other.hash_constraint do update set hit_count = hit_count + 1 where hit_count < 9999 returning id, hit_count;", formattedQuery)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' on conflict on constraint other.hash_constraint do update set hit_count = hit_count + 1 where hit_count < 9999 returning id, hit_count;", formattedQuery.Statement)
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -339,7 +339,7 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' on conflict (hash) do update set hit_count = hit_count + 1 where hit_count < 9999;", formattedQuery)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' on conflict (hash) do update set hit_count = hit_count + 1 where hit_count < 9999;", formattedQuery.Statement)
 }
 
 func TestFormat_Query(t *testing.T) {
@@ -367,7 +367,7 @@ func TestFormat_Query(t *testing.T) {
 
 	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
 	require.Nil(t, err)
-	require.Equal(t, "select * from table t where t.col1 > 1;", formattedQuery)
+	require.Equal(t, "select * from table t where t.col1 > 1;", formattedQuery.Statement)
 }
 
 func TestFormat_Merge(t *testing.T) {
@@ -441,7 +441,7 @@ func TestFormat_Merge(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "merge into table t using source s on t.source_id = s.id when matched and t.value > s.value then update set updated_at = now() when matched and t.value <= s.value then update set value = s.value, t.updated_at = now() when matched and t.value = s.value then delete when not matched and t.value = 0 then insert (hit_count) values (0);", formattedQuery)
+	require.Equal(t, "merge into table t using source s on t.source_id = s.id when matched and t.value > s.value then update set updated_at = now() when matched and t.value <= s.value then update set value = s.value, t.updated_at = now() when matched and t.value = s.value then delete when not matched and t.value = 0 then insert (hit_count) values (0);", formattedQuery.Statement)
 }
 
 func TestFormat_CTEs(t *testing.T) {
@@ -661,7 +661,7 @@ func TestFormat_CTEs(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "with recursive expansion_1(root_id, next_id, depth, stop, is_cycle, path) as materialized (select r.start_id, r.end_id, 1, false, r.start_id = r.end_id, array [r.id] from edge r join node a on a.id = r.start_id where a.kind_ids operator (pg_catalog.&&) array [23]::int2[] union all select expansion_1.root_id, r.end_id, expansion_1.depth + 1, b.kind_ids operator (pg_catalog.&&) array [24]::int2[], r.id = any(expansion_1.path), expansion_1.path || r.id from expansion_1 join edge r on r.start_id = expansion_1.next_id join node b on b.id = r.end_id where not expansion_1.is_cycle and not expansion_1.stop) select a.properties, b.properties from expansion_1 join node a on a.id = expansion_1.root_id join node b on b.id = expansion_1.next_id where not expansion_1.is_cycle and expansion_1.stop;", formattedQuery)
+	require.Equal(t, "with recursive expansion_1(root_id, next_id, depth, stop, is_cycle, path) as materialized (select r.start_id, r.end_id, 1, false, r.start_id = r.end_id, array [r.id] from edge r join node a on a.id = r.start_id where a.kind_ids operator (pg_catalog.&&) array [23]::int2[] union all select expansion_1.root_id, r.end_id, expansion_1.depth + 1, b.kind_ids operator (pg_catalog.&&) array [24]::int2[], r.id = any(expansion_1.path), expansion_1.path || r.id from expansion_1 join edge r on r.start_id = expansion_1.next_id join node b on b.id = r.end_id where not expansion_1.is_cycle and not expansion_1.stop) select a.properties, b.properties from expansion_1 join node a on a.id = expansion_1.root_id join node b on b.id = expansion_1.next_id where not expansion_1.is_cycle and expansion_1.stop;", formattedQuery.Statement)
 }
 
 func TestFormat_QueryInjection(t *testing.T) {
@@ -689,5 +689,5 @@ func TestFormat_QueryInjection(t *testing.T) {
 
 	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
 	require.Nil(t, err)
-	require.Equal(t, `select * from table t where t.col1 = 'alpha'' || select (''malicious'')';`, formattedQuery)
+	require.Equal(t, `select * from table t where t.col1 = 'alpha'' || select (''malicious'')';`, formattedQuery.Statement)
 }

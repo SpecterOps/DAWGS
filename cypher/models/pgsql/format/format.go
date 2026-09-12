@@ -9,21 +9,25 @@ import (
 )
 
 type OutputBuilder struct {
-	MaterializeParameters bool
-	StripLiterals         bool
-	parameters            map[string]any
+	params                map[string]any
+	materializeParameters bool
+	materializedParams    map[string]any
 	builder               *strings.Builder
+	// TODO: figure out how to use a shared generator
+	generator pgsql.IdentifierGenerator
 }
 
 func NewOutputBuilder() *OutputBuilder {
 	return &OutputBuilder{
-		builder: &strings.Builder{},
+		builder:   &strings.Builder{},
+		generator: pgsql.NewIdentifierGenerator(),
+		params:    make(map[string]any),
 	}
 }
 
 func (s *OutputBuilder) WithMaterializedParameters(parameters map[string]any) *OutputBuilder {
-	s.MaterializeParameters = true
-	s.parameters = parameters
+	s.materializeParameters = true
+	s.materializedParams = parameters
 
 	return s
 }
@@ -47,25 +51,108 @@ func (s *OutputBuilder) Write(values ...any) {
 	}
 }
 
-func (s *OutputBuilder) Build() string {
-	return s.builder.String()
+func (s *OutputBuilder) Build() Formatted {
+	return Formatted{
+		Statement:  s.builder.String(),
+		Parameters: s.params,
+	}
 }
 
 func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql.DataType) error {
 	builder.Write("array [")
+
+	var (
+		tval    T
+		fmtFunc func(builder *OutputBuilder, value any) error
+	)
+	if _, ok := any(tval).(string); ok {
+		fmtFunc = formatAsParameter
+	} else {
+		fmtFunc = formatValue
+	}
 
 	for idx, value := range slice {
 		if idx > 0 {
 			builder.Write(", ")
 		}
 
-		if err := formatValue(builder, value); err != nil {
+		if err := fmtFunc(builder, value); err != nil {
 			return err
 		}
 	}
 
 	builder.Write("]::", dataType.String())
 	return nil
+}
+
+func formatParameterWithBinding(builder *OutputBuilder, value any) error {
+	switch value.(type) {
+	case int64, uint64, string, bool, float64:
+	default:
+		return fmt.Errorf("unsupported parameter type: %T", value)
+	}
+
+	if ident, err := builder.generator.NewIdentifier(pgsql.ParameterIdentifier); err != nil {
+		return fmt.Errorf("error creating bound parameter identifier: %w", err)
+	} else {
+		builder.params[ident.String()] = value
+		builder.Write("@", ident.String())
+	}
+
+	if _, ok := value.(string); ok {
+		builder.Write("::text")
+	}
+
+	return nil
+}
+
+func formatAsParameter(builder *OutputBuilder, value any) error {
+	switch typedValue := value.(type) {
+	case uint:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint8:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint16:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint32:
+		return formatParameterWithBinding(builder, uint64(typedValue))
+
+	case uint64:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case int:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int8:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int16:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int32:
+		return formatParameterWithBinding(builder, int64(typedValue))
+
+	case int64:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case string:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case bool:
+		return formatParameterWithBinding(builder, typedValue)
+
+	case float32:
+		return formatParameterWithBinding(builder, float64(typedValue))
+
+	case float64:
+		return formatParameterWithBinding(builder, typedValue)
+
+	default:
+		return fmt.Errorf("unsupported parameter type: %T", value)
+	}
 }
 
 func formatValue(builder *OutputBuilder, value any) error {
@@ -145,7 +232,12 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 		builder.Write("interval ")
 	}
 
-	return formatValue(builder, literal.Value)
+	switch literal.Value.(type) {
+	case string:
+		return formatAsParameter(builder, literal.Value)
+	default:
+		return formatValue(builder, literal.Value)
+	}
 }
 
 func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
@@ -546,8 +638,8 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			)
 
 		case pgsql.Parameter:
-			if builder.MaterializeParameters {
-				if parameterValue, hasParameter := builder.parameters[typedNextExpr.Identifier.String()]; !hasParameter {
+			if builder.materializeParameters {
+				if parameterValue, hasParameter := builder.materializedParams[typedNextExpr.Identifier.String()]; !hasParameter {
 					return fmt.Errorf("invalid parameter %s", typedNextExpr.Identifier.String())
 				} else if parameterLiteral, err := pgsql.AsLiteral(parameterValue); err != nil {
 					return fmt.Errorf("invalid parameter value for %s: %v", typedNextExpr.Identifier.String(), err)
@@ -611,9 +703,9 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 	return nil
 }
 
-func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (string, error) {
+func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (Formatted, error) {
 	if err := formatNode(builder, expression); err != nil {
-		return "", err
+		return Formatted{}, err
 	}
 
 	return builder.Build(), nil
@@ -1159,42 +1251,42 @@ func formatDeleteStatement(builder *OutputBuilder, sqlDelete pgsql.Delete) error
 	return nil
 }
 
-func Statement(statement pgsql.Statement, builder *OutputBuilder) (string, error) {
+func Statement(statement pgsql.Statement, builder *OutputBuilder) (Formatted, error) {
 	switch typedStatement := statement.(type) {
 	case pgsql.Merge:
 		if err := formatMergeStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Query:
 		if err := formatSetExpression(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Insert:
 		if err := formatInsertStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Update:
 		if err := formatUpdateStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Delete:
 		if err := formatDeleteStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	default:
-		return "", fmt.Errorf("unsupported PgSQL statement type: %T", statement)
+		return Formatted{}, fmt.Errorf("unsupported PgSQL statement type: %T", statement)
 	}
 
 	builder.Write(";")
 	return builder.Build(), nil
 }
 
-func SyntaxNode(node pgsql.SyntaxNode) (string, error) {
+func SyntaxNode(node pgsql.SyntaxNode) (Formatted, error) {
 	builder := NewOutputBuilder()
 
 	switch typedNode := node.(type) {
@@ -1205,7 +1297,7 @@ func SyntaxNode(node pgsql.SyntaxNode) (string, error) {
 		return Expression(typedNode, builder)
 
 	default:
-		return "", fmt.Errorf("unknown SQL AST type: %T", node)
+		return Formatted{}, fmt.Errorf("unknown SQL AST type: %T", node)
 	}
 }
 
