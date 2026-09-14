@@ -18,21 +18,44 @@ package bdd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/cucumber/godog"
+	"github.com/google/go-cmp/cmp"
 	"github.com/specterops/dawgs/graph"
 )
 
-type dbContext struct {
-	db         graph.Database
-	rowCount   int
-	actualRows []string
+type graphSnapshot struct {
+	NodesCount         int64
+	RelationshipsCount int64
 }
 
-// anEmptyGraph removes all nodes to give each scenario a clean graph.
+type dbContext struct {
+	db              graph.Database
+	beforeExecution graphSnapshot
+	actualResult    graph.Result
+	rowCount        int
+	actualRows      [][]string
+}
+
+// resetBeforeScenario clears persistent graph data and scenario-local result state.
+func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+	if err := c.anEmptyGraph(ctx); err != nil {
+		return ctx, fmt.Errorf("reset graph before scenario: %w", err)
+	}
+
+	c.beforeExecution = graphSnapshot{}
+	c.actualResult = nil
+	c.rowCount = 0
+	c.actualRows = nil
+
+	return ctx, nil
+}
+
+// anEmptyGraph removes all nodes and relationships from the graph.
 func (c *dbContext) anEmptyGraph(ctx context.Context) error {
 	err := c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		if err := tx.Nodes().Delete(); err != nil {
@@ -46,37 +69,38 @@ func (c *dbContext) anEmptyGraph(ctx context.Context) error {
 	return nil
 }
 
-// executingQuery runs a read query and records its rows for later comparison.
+// executingQuery runs a read query and records its rows and graph state for comparison.
 func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) error {
 	c.actualRows = nil
 
-	err := c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+	before, err := captureGraphState(ctx, c.db)
+	if err != nil {
+		return err
+	}
+	c.beforeExecution = before
+
+	err = c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		var rowCount int64
 		result := tx.Query(input.Content, nil)
 
 		defer result.Close()
 
 		for result.Next() {
-			var nodes []graph.Node
+			var row []string
 
 			rowCount++
 
 			for _, value := range result.Values() {
-				var node graph.Node
-
-				mapper := result.Mapper()
-				mapper.Map(value, &node)
-				nodes = append(nodes, node)
+				formatted, err := formatGraphValue(result.Mapper(), value)
+				if err != nil {
+					return fmt.Errorf("failed to format graph result: %w", err)
+				}
+				row = append(row, formatted)
 			}
-
-			// format graph nodes and their properties into a cypher query
-			formatted, err := formatGraphResults(nodes)
-			if err != nil {
-				return fmt.Errorf("failed to format graph result: %w", err)
-			}
-			c.actualRows = append(c.actualRows, formatted...)
+			c.actualRows = append(c.actualRows, row)
 		}
 
+		c.actualResult = result
 		c.rowCount = int(rowCount)
 		if result.Error() != nil {
 			return result.Error()
@@ -109,14 +133,17 @@ func (c *dbContext) havingExecuted(ctx context.Context, input *godog.DocString) 
 	return nil
 }
 
-// theResultShouldBe compares the recorded query rows with the expected table.
-func (c *dbContext) theResultShouldBe(expectedTable *godog.Table) error {
-	var expectedRows []string
-	for _, value := range expectedTable.Rows {
-		for _, cell := range value.Cells {
-			if cell.Value != "n" {
-				expectedRows = append(expectedRows, formatString(cell.Value))
+// theResultShouldBeInAnyOrder compares recorded query rows with an expected table,
+// ignoring row order.
+func (c *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) error {
+	var expectedRows [][]string
+	if len(expectedTable.Rows) > 1 {
+		for _, value := range expectedTable.Rows[1:] {
+			var row []string
+			for _, cell := range value.Cells {
+				row = append(row, formatString(cell.Value))
 			}
+			expectedRows = append(expectedRows, row)
 		}
 	}
 
@@ -124,16 +151,83 @@ func (c *dbContext) theResultShouldBe(expectedTable *godog.Table) error {
 		return fmt.Errorf("Invalid row count expected %d actual %d", len(expectedRows), c.rowCount)
 	}
 
-	for i := 0; i < len(expectedRows); i++ {
+	sortRows := func(rows [][]string) {
 		// TODO normalize exptected actual rows by sorting kinds and their properties
-		if formatString(expectedRows[i]) != formatString(c.actualRows[i]) {
-			return fmt.Errorf("Detected a drift expected %s, actual %s", expectedRows[i], c.actualRows[i])
+		slices.SortFunc(rows, func(a, b []string) int {
+			return slices.Compare(a, b)
+		})
+	}
+	sortRows(expectedRows)
+	sortRows(c.actualRows)
+	for i := range expectedRows {
+		if !slices.Equal(expectedRows[i], c.actualRows[i]) {
+			return fmt.Errorf("Detected a drift expected %s, actual %s", strings.Join(expectedRows[i], ", "), strings.Join(c.actualRows[i], ", "))
 		}
 	}
 
 	return nil
 }
 
+// formatGraphValue formats a supported graph value as a deterministic string.
+func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
+	var node graph.Node
+	if mapper.Map(value, &node) {
+		formatted, err := formatGraphResults([]graph.Node{node})
+		if err != nil {
+			return "", err
+		}
+		return formatted[0], nil
+	}
+
+	var relationship graph.Relationship
+	if mapper.Map(value, &relationship) {
+		return formatString(formatGraphRelationship(relationship)), nil
+	}
+
+	return "", fmt.Errorf("unsupported returned value of type %T", value)
+}
+
+// formatGraphRelationship formats a graph relationship as a deterministic string.
+func formatGraphRelationship(relationship graph.Relationship) string {
+	var builder strings.Builder
+	builder.WriteString("[:")
+	builder.WriteString(relationship.Kind.String())
+
+	if props := relationship.Properties.MapOrEmpty(); len(props) > 0 {
+		keys := relationship.Properties.Keys(nil)
+		slices.Sort(keys)
+		builder.WriteString("{")
+		for index, key := range keys {
+			if index > 0 {
+				builder.WriteString(", ")
+			}
+			value := relationship.Properties.Get(key)
+			strValue, _ := value.String()
+			builder.WriteString(key)
+			builder.WriteString(": '")
+			builder.WriteString(strValue)
+			builder.WriteString("'")
+		}
+		builder.WriteString("}")
+	}
+
+	builder.WriteString("]")
+	return builder.String()
+}
+
+// noSideEffects verifies that the query did not change graph node or relationship counts.
+func (c *dbContext) noSideEffects(ctx context.Context) error {
+	after, err := captureGraphState(ctx, c.db)
+	if err != nil {
+		return err
+	}
+	if !cmp.Equal(c.beforeExecution, after) {
+		return errors.New("Graph state drift detected")
+	}
+	return nil
+}
+
+// formatString normalizes a formatted graph value for comparison with feature data.
 func formatString(s string) string {
 	removeSpace := strings.ReplaceAll(s, " ", "")
 	if strings.Contains(s, `"`) {
@@ -142,6 +236,35 @@ func formatString(s string) string {
 	return removeSpace
 }
 
+// captureGraphState returns the current node and relationship counts for the database.
+func captureGraphState(ctx context.Context, db graph.Database) (graphSnapshot, error) {
+	var err error
+	var nodeCount int64
+	var relationshipCount int64
+
+	err = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		nodeCount, err = tx.Nodes().Count()
+		if err != nil {
+			return err
+		}
+		relationshipCount, err = tx.Relationships().Count()
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		return graphSnapshot{}, err
+	}
+
+	return graphSnapshot{
+		NodesCount:         nodeCount,
+		RelationshipsCount: relationshipCount,
+	}, nil
+}
+
+// formatGraphResults formats graph nodes as deterministic strings for BDD comparisons.
 func formatGraphResults(nodes []graph.Node) ([]string, error) {
 	sb := strings.Builder{}
 	for _, node := range nodes {
@@ -152,7 +275,8 @@ func formatGraphResults(nodes []graph.Node) ([]string, error) {
 		if len(node.Kinds) == 0 {
 			sb.WriteString("(")
 		}
-		if node.Properties.Len() != 0 {
+		props := node.Properties.MapOrEmpty()
+		if len(props) != 0 {
 			// TODO sort node properties of feature files
 			slices.Sort(node.Properties.Keys(nil))
 			sb.WriteString("{")
@@ -170,16 +294,14 @@ func formatGraphResults(nodes []graph.Node) ([]string, error) {
 			}
 			sb.WriteString("}")
 		}
-		if node.Properties != nil {
-			sb.WriteString(")\n")
-		}
+		sb.WriteString(")\n")
 	}
 
 	var result []string
 	list := strings.Split(sb.String(), "\n")
 	for _, item := range list {
 		if item != "" {
-			result = append(result, item)
+			result = append(result, formatString(item))
 		}
 	}
 
