@@ -1,0 +1,89 @@
+{
+  "graph": {
+    "nodes": [
+      {
+        "id": "a",
+        "kinds": ["A"],
+        "properties": {"name": "a"}
+      },
+      {
+        "id": "b1",
+        "kinds": ["X"],
+        "properties": {"name": "b1"}
+      },
+      {
+        "id": "b2",
+        "kinds": ["X"],
+        "properties": {"name": "b2"}
+      },
+      {
+        "id": "b3",
+        "kinds": ["X"],
+        "properties": {"name": "b3"}
+      },
+      {
+        "id": "b4",
+        "kinds": ["X"],
+        "properties": {"name": "b4"}
+      },
+      {
+        "id": "c11",
+        "kinds": ["X"],
+        "properties": {"name": "c11"}
+      },
+      {
+        "id": "c12",
+        "kinds": ["X"],
+        "properties": {"name": "c12"}
+      },
+      {
+        "id": "c21",
+        "kinds": ["X"],
+        "properties": {"name": "c21"}
+      },
+      {
+        "id": "c22",
+        "kinds": ["X"],
+        "properties": {"name": "c22"}
+      },
+      {
+        "id": "c31",
+        "kinds": ["X"],
+        "properties": {"name": "c31"}
+      },
+      {
+        "id": "c32",
+        "kinds": ["X"],
+        "properties": {"name": "c32"}
+      },
+      {
+        "id": "c41",
+        "kinds": ["X"],
+        "properties": {"name": "c41"}
+      },
+      {
+        "id": "c42",
+        "kinds": ["X"],
+        "properties": {"name": "c42"}
+      }
+    ],
+    "edges": [
+      {"start_id": "a", "end_id": "b1", "kind": "KNOWS"},
+      {"start_id": "a", "end_id": "b2", "kind": "KNOWS"},
+      {"start_id": "a", "end_id": "b3", "kind": "FOLLOWS"},
+      {"start_id": "a", "end_id": "b4", "kind": "FOLLOWS"},
+      {"start_id": "b1", "end_id": "c11", "kind": "FRIEND"},
+      {"start_id": "b1", "end_id": "c12", "kind": "FRIEND"},
+      {"start_id": "b2", "end_id": "c21", "kind": "FRIEND"},
+      {"start_id": "b2", "end_id": "c22", "kind": "FRIEND"},
+      {"start_id": "b3", "end_id": "c31", "kind": "FRIEND"},
+      {"start_id": "b3", "end_id": "c32", "kind": "FRIEND"},
+      {"start_id": "b4", "end_id": "c41", "kind": "FRIEND"},
+      {"start_id": "b4", "end_id": "c42", "kind": "FRIEND"},
+      {"start_id": "b1", "end_id": "b2", "kind": "FRIEND"},
+      {"start_id": "b2", "end_id": "b3", "kind": "FRIEND"},
+      {"start_id": "b3", "end_id": "b4", "kind": "FRIEND"},
+      {"start_id": "b4", "end_id": "b1", "kind": "FRIEND"}
+    ]
+  }
+}
