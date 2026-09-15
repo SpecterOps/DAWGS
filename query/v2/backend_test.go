@@ -24,6 +24,16 @@ func testKindMapper(kinds ...graph.Kind) *pgutil.InMemoryKindMapper {
 	return mapper
 }
 
+func hasStringParameterContaining(parameters map[string]any, expected string) bool {
+	for _, parameter := range parameters {
+		if value, ok := parameter.(string); ok && strings.Contains(value, expected) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func TestBackendParityNeo4jPrepare(t *testing.T) {
 	cases := map[string]struct {
 		builder        v2.QueryBuilder
@@ -247,8 +257,8 @@ func TestBackendParityPGTranslate(t *testing.T) {
 				v2.Node().ID(),
 				v2.Node().Kinds(),
 			),
-			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and cypher_contains((n0.properties ->> 'name'), (@pi0::text)::text)::bool)) select (s0.n0).id, (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] from s0;",
-			expectedParams: map[string]any{"pi0": "admin"},
+			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and cypher_contains((n0.properties ->> @__strlit0::text), (@pi0::text)::text)::bool)) select (s0.n0).id, (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] from s0;",
+			expectedParams: map[string]any{"__strlit0": "name", "pi0": "admin"},
 		},
 		"relationship read": {
 			builder: v2.New().Where(
@@ -268,8 +278,8 @@ func TestBackendParityPGTranslate(t *testing.T) {
 			).Update(
 				v2.SetProperty(v2.Node().Property("name"), "updated"),
 			),
-			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.id = @pi0::int8)), s1 as (update node n1 set properties = n1.properties || jsonb_build_object('name', @pi1::text)::jsonb from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select 1;",
-			expectedParams: map[string]any{"pi0": 1, "pi1": "updated"},
+			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.id = @pi0::int8)), s1 as (update node n1 set properties = n1.properties || jsonb_build_object(@__strlit0::text, @pi1::text)::jsonb from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select 1;",
+			expectedParams: map[string]any{"__strlit0": "name", "pi0": 1, "pi1": "updated"},
 		},
 		"delete relationship": {
 			builder: v2.New().Where(
@@ -350,8 +360,8 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			require.NoError(t, err)
 			require.Contains(t, sql.Statement, testCase.expectedHarness)
 			require.Contains(t, sql.Statement, "ordered_edges_to_path")
-			require.Contains(t, sql.Statement, "n0.id = 1")
-			require.Contains(t, sql.Statement, "n1.id = 2")
+			require.True(t, hasStringParameterContaining(translation.Parameters, "n0.id = 1"))
+			require.True(t, hasStringParameterContaining(translation.Parameters, "n1.id = 2"))
 
 			serializedHarnessQueryHasKindConstraint := false
 			for _, parameterValue := range translation.Parameters {

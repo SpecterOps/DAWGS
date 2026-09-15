@@ -26,5 +26,5 @@ func TestConsecutiveCreateClausesAreBuiltOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 2, strings.Count(formatted.Statement, "insert into node"))
-	require.Equal(t, 2, strings.Count(formatted.Statement, "nextval(pg_get_serial_sequence('node', 'id'))"))
+	require.Equal(t, 2, strings.Count(formatted.Statement, "nextval(pg_get_serial_sequence(@__strlit0::text, @__strlit1::text))"))
 }

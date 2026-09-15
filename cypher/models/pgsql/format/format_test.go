@@ -17,13 +17,20 @@ func mustAsLiteral(value any) pgsql.Literal {
 	}
 }
 
+func requireExtractedStringLiteral(t *testing.T, formatted format.Formatted, value string) {
+	t.Helper()
+	require.Equal(t, map[string]any{"__strlit0": value}, formatted.Parameters)
+	require.Equal(t, map[string]string{"__strlit0": value}, formatted.LiteralParameters)
+}
+
 func TestFormat_TypeCastedParenthetical(t *testing.T) {
 	typeCastedParenthetical := pgsql.NewTypeCast(pgsql.NewParenthetical(pgsql.NewLiteral("str", pgsql.Text)), pgsql.Text)
 
 	formattedQuery, err := format.Expression(typeCastedParenthetical, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "('str')::text", formattedQuery.Statement)
+	require.Equal(t, "(@__strlit0::text)::text", formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "str")
 }
 
 func TestFormat_Case(t *testing.T) {
@@ -158,7 +165,8 @@ func TestFormat_Update(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "update table t set col1 = 1, col2 = '12345' where t.col1 < 4;", formattedQuery.Statement)
+	require.Equal(t, "update table t set col1 = 1, col2 = @__strlit0::text where t.col1 < 4;", formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "12345")
 }
 
 func TestFormat_Insert(t *testing.T) {
@@ -177,7 +185,8 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) values ('1', 1, false);", formattedQuery.Statement)
+	require.Equal(t, "insert into table (col1, col2, col3) values (@__strlit0::text, 1, false);", formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "1")
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -206,7 +215,8 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234';", formattedQuery.Statement)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = @__strlit0::text;", formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "1234")
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -238,7 +248,8 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' returning id;", formattedQuery.Statement)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = @__strlit0::text returning id;", formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "1234")
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -289,7 +300,8 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' on conflict on constraint other.hash_constraint do update set hit_count = hit_count + 1 where hit_count < 9999 returning id, hit_count;", formattedQuery.Statement)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = @__strlit0::text on conflict on constraint other.hash_constraint do update set hit_count = hit_count + 1 where hit_count < 9999 returning id, hit_count;", formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "1234")
 
 	formattedQuery, err = format.Statement(pgsql.Insert{
 		Table: pgsql.TableReference{
@@ -339,7 +351,8 @@ func TestFormat_Insert(t *testing.T) {
 	}, format.NewOutputBuilder())
 
 	require.Nil(t, err)
-	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = '1234' on conflict (hash) do update set hit_count = hit_count + 1 where hit_count < 9999;", formattedQuery.Statement)
+	require.Equal(t, "insert into table (col1, col2, col3) select * from other where other.col1 = @__strlit0::text on conflict (hash) do update set hit_count = hit_count + 1 where hit_count < 9999;", formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "1234")
 }
 
 func TestFormat_Query(t *testing.T) {
@@ -689,7 +702,8 @@ func TestFormat_QueryInjection(t *testing.T) {
 
 	formattedQuery, err := format.Statement(query, format.NewOutputBuilder())
 	require.Nil(t, err)
-	require.Equal(t, `select * from table t where t.col1 = 'alpha'' || select (''malicious'')';`, formattedQuery.Statement)
+	require.Equal(t, `select * from table t where t.col1 = @__strlit0::text;`, formattedQuery.Statement)
+	requireExtractedStringLiteral(t, formattedQuery, "alpha' || select ('malicious')")
 }
 
 func TestFormat_MaterializedStringLiteralPreservesCast(t *testing.T) {

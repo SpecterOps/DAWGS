@@ -136,6 +136,12 @@ func requirePlanParameterContains(t *testing.T, translation Result, expected str
 	require.Failf(t, "missing plan parameter content", "expected a plan parameter to contain %q in %#v", expected, translation.Parameters)
 }
 
+func requireStringLiteralParameter(t *testing.T, parameters map[string]any, literalParameters map[string]string, name, expected string) {
+	t.Helper()
+	require.Equalf(t, expected, literalParameters[name], "unexpected literal parameter %q", name)
+	require.Equalf(t, expected, parameters[name], "unexpected formatted parameter %q", name)
+}
+
 func requireSkippedOptimizationLowering(t *testing.T, summary OptimizationSummary, name string, reason string) {
 	t.Helper()
 
@@ -302,6 +308,14 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "objectid")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "S-1-5-21-2643190041-1319121918-239771340-513")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit3", "authenticationenabled")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit4", "requiresmanagerapproval")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit5", "enrolleesuppliessubject")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit6", "schemaversion")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit7", "authorizedsignatures")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
@@ -321,7 +335,7 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.Contains(t, normalizedQuery, "from s5, s7")
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"where s7.satisfied and exists (select 1 from edge e5 join node n6",
-		"properties -> 'authenticationenabled'",
+		"properties -> @__strlit3::text",
 		"join edge e6 on n6.id = e6.start_id",
 		"e6.end_id = (s5.n2).id",
 		"and (s5.n0).id = s7.root_id",
@@ -471,17 +485,23 @@ RETURN p
 func TestOptimizerSafetyReversalAnchorsTerminalPredicateAtDriveRoot(t *testing.T) {
 	t.Parallel()
 
-	normalizedQuery := optimizerSafetySQL(t, `
+	translation := optimizerSafetyTranslation(t, `
 MATCH p = (n:Group)-[:MemberOf*1..]->(m)-[:Enroll]->(ca:EnterpriseCA)
 WHERE ca.name = 'target'
 RETURN p
 `)
+	formattedQuery, err := Translated(translation)
+	require.NoError(t, err)
+	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "target")
 
 	// InboundTraversalReversal drives this pattern from the constrained ca:EnterpriseCA terminal
 	// inward, so the ca.name predicate anchors at the leading s0 segment rather than being pushed
 	// into a recursive terminal exists check.
 	requireSQLContainsInOrder(t, normalizedQuery,
-		"(n0.properties ->> 'name') = 'target'",
+		"(n0.properties ->> @__strlit0::text) = @__strlit2::text",
 		"n0.kind_ids operator (pg_catalog.@>) array [5]::int2[]",
 		"n0.id = e0.end_id",
 		"e0.kind_id = any (array [4]::int2[])",
@@ -501,13 +521,16 @@ RETURN p
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "source")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"select n0.id as root_id from node n0 where",
-		"properties -> 'name'",
+		"properties -> @__strlit0::text",
 	)
 }
 
@@ -523,13 +546,16 @@ RETURN dst
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "source")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"join node n0 on",
-		"properties -> 'name'",
+		"properties -> @__strlit0::text",
 		"join node n1",
 	)
 }
@@ -596,11 +622,14 @@ RETURN p
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "target")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
 	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
-	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
-	require.Contains(t, normalizedQuery, "(n1.properties ->> 'name') = 'target'")
+	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> @__strlit0::text)) = @__strlit1::text")
+	require.Contains(t, normalizedQuery, "(n1.properties ->> @__strlit0::text) = @__strlit2::text")
 	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
 }
 
@@ -722,12 +751,13 @@ RETURN p
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "Member%")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPathRelationshipPredicate)
 	require.Contains(t, normalizedQuery, "exists (select 1 from edge i0 where")
 	require.Contains(t, normalizedQuery, "i0.id = any (s0.ep0)")
-	require.Contains(t, normalizedQuery, "kind_name(i0.kind_id)::text like 'member%'")
+	require.Contains(t, normalizedQuery, "kind_name(i0.kind_id)::text like @__strlit0::text")
 	require.NotContains(t, normalizedQuery, "select count(*)::int from unnest")
 	require.NotContains(t, normalizedQuery, "from unnest(((select coalesce(array_agg")
 }
@@ -941,10 +971,12 @@ LIMIT 100
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "hasspn")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "enabled")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "terminal_nodes(id) as materialized")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> @__strlit1::text")
 	require.Contains(t, normalizedQuery, "join terminal_nodes on terminal_nodes.id = traversal.next_id")
 }
 
@@ -973,9 +1005,10 @@ LIMIT 100
 		parameterValues = append(parameterValues, value)
 	}
 
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "enabled")
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
-	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "source_node.properties -> @__strlit0::text")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> @__strlit0::text")
 	require.Len(t, translation.Parameters, 2)
 	require.ElementsMatch(t, []any{true, false}, parameterValues)
 }
@@ -998,10 +1031,11 @@ LIMIT 100
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "enabled")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
-	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "source_node.properties -> @__strlit0::text")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> @__strlit0::text")
 	require.Len(t, translation.Parameters, 1)
 }
 
@@ -1163,7 +1197,7 @@ RETURN p
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
-	require.Contains(t, normalizedQuery, "traversal_terminal_filter")
+	requirePlanParameterContains(t, translation, "traversal_terminal_filter")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
 	requireOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
 }
@@ -1183,7 +1217,7 @@ LIMIT 1000
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
-	require.Contains(t, normalizedQuery, "traversal_terminal_filter")
+	requirePlanParameterContains(t, translation, "traversal_terminal_filter")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
 	requireOptimizationLowering(t, translation.Optimization, "ShortestPathFilterMaterialization")
 }
@@ -1228,11 +1262,12 @@ func TestOptimizerSafetyShortestPathRootCarriesUnwindSources(t *testing.T) {
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "source")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
-	require.Contains(t, normalizedQuery, "unnest(array ['source']::text[]) as i0")
-	requirePlanParameterContains(t, translation, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
-	requirePlanParameterContains(t, translation, "(n0.properties ->> 'name') = i0")
+	require.Contains(t, normalizedQuery, "unnest(array [@__strlit0::text]::text[]) as i0")
+	requirePlanParameterContains(t, translation, "jsonb_typeof((n1.properties -> 'name'::text)) = 'string'::text")
+	requirePlanParameterContains(t, translation, "(n0.properties ->> 'name'::text) = i0")
 }
 
 func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
@@ -1248,10 +1283,11 @@ func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "target")
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
-	require.Contains(t, normalizedQuery, "unnest(array ['target']::text[]) as i0")
-	requirePlanParameterContains(t, translation, "(n1.properties ->> 'name') = i0")
+	require.Contains(t, normalizedQuery, "unnest(array [@__strlit0::text]::text[]) as i0")
+	requirePlanParameterContains(t, translation, "(n1.properties ->> 'name'::text) = i0")
 }
 
 func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {
@@ -1318,7 +1354,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "e2.end_id = (s0.n0).id")
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"exists (select 1 from edge e1 join node n3",
-		"properties -> 'authenticationenabled'",
+		"properties -> @__strlit3::text",
 		"join edge e2 on n3.id = e2.start_id",
 		"e2.end_id = (s0.n0).id",
 	)

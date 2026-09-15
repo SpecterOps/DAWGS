@@ -28,8 +28,9 @@ func benchmarkTranslationBuild(query string, parameters map[string]any) func() (
 		sql, err := translate.Translated(translation)
 		maps.Copy(translation.Parameters, sql.Parameters)
 		return sql.Statement, translationCacheBuildResult{
-			parameters:       translation.Parameters,
-			parameterSources: parameterSources,
+			parameters:        translation.Parameters,
+			parameterSources:  parameterSources,
+			literalParameters: sql.LiteralParameters,
 		}, err
 	}
 }
