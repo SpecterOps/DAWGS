@@ -32,13 +32,15 @@ type translationCacheKey struct {
 }
 
 type translationCacheBuildResult struct {
-	parameters       map[string]any
-	parameterSources map[string]string
+	parameters        map[string]any
+	parameterSources  map[string]string
+	literalParameters map[string]string
 }
 
 type translationCacheEntry struct {
-	sql              string
-	parameterSources map[string]string
+	sql               string
+	parameterSources  map[string]string
+	literalParameters map[string]string
 }
 
 type translationCacheCall struct {
@@ -206,6 +208,12 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 					s.bindingFailures.Add(1)
 					return "", nil, err
 				}
+				if bindings == nil && len(entry.literalParameters) > 0 {
+					bindings = make(map[string]any, len(entry.literalParameters))
+				}
+				for key, value := range entry.literalParameters {
+					bindings[key] = value
+				}
 				s.hits.Add(1)
 				return entry.sql, bindings, nil
 			}
@@ -313,12 +321,23 @@ func cacheableTranslation(sql string, result translationCacheBuildResult, parame
 	if err != nil {
 		return translationCacheEntry{}, false
 	}
-	if len(result.parameters) != len(result.parameterSources) {
+	if len(result.parameters) != (len(result.parameterSources) + len(result.literalParameters)) {
 		return translationCacheEntry{}, false
 	}
 
 	sources := make(map[string]string, len(result.parameterSources))
+	literals := make(map[string]string, len(result.literalParameters))
 	for generated := range result.parameters {
+		literalValue, found := result.literalParameters[generated]
+		if found {
+			if literalValue != result.parameters[generated] {
+				return translationCacheEntry{}, false
+			}
+
+			literals[strings.Clone(generated)] = strings.Clone(literalValue)
+			continue
+		}
+
 		source, found := result.parameterSources[generated]
 		if !found {
 			return translationCacheEntry{}, false
@@ -333,8 +352,9 @@ func cacheableTranslation(sql string, result translationCacheBuildResult, parame
 	}
 
 	return translationCacheEntry{
-		sql:              strings.Clone(sql),
-		parameterSources: sources,
+		sql:               strings.Clone(sql),
+		parameterSources:  sources,
+		literalParameters: literals,
 	}, true
 }
 

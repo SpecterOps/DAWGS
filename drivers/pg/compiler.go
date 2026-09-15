@@ -91,8 +91,9 @@ func (s *SchemaManager) compile(ctx context.Context, source string, parameters m
 		} else {
 			maps.Copy(translated.Parameters, sqlQuery.Parameters)
 			return sqlQuery.Statement, translationCacheBuildResult{
-				parameters:       translated.Parameters,
-				parameterSources: parameterSources,
+				parameters:        translated.Parameters,
+				parameterSources:  parameterSources,
+				literalParameters: sqlQuery.LiteralParameters,
 			}, nil
 		}
 	}
