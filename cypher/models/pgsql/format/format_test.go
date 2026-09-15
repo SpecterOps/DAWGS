@@ -691,3 +691,41 @@ func TestFormat_QueryInjection(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, `select * from table t where t.col1 = 'alpha'' || select (''malicious'')';`, formattedQuery.Statement)
 }
+
+func TestFormat_MaterializedStringLiteralPreservesCast(t *testing.T) {
+	tests := []struct {
+		name     string
+		literal  pgsql.Literal
+		expected string
+	}{
+		{
+			name:     "text",
+			literal:  pgsql.NewLiteral("alpha'", pgsql.Text),
+			expected: `'alpha'''::text`,
+		},
+		{
+			name:     "interval",
+			literal:  pgsql.NewLiteral("P1D", pgsql.Interval),
+			expected: `'P1D'::interval`,
+		},
+		{
+			name:     "unset cast",
+			literal:  pgsql.Literal{Value: "alpha"},
+			expected: `'alpha'`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			formatted, err := format.Expression(
+				test.literal,
+				format.NewOutputBuilder().WithMaterializedParameters(map[string]any{}),
+			)
+
+			require.NoError(t, err)
+			require.Equal(t, test.expected, formatted.Statement)
+			require.Empty(t, formatted.Parameters)
+			require.Empty(t, formatted.LiteralParameters)
+		})
+	}
+}

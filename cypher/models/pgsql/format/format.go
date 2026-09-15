@@ -195,6 +195,14 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 
 	switch literal.Value.(type) {
 	case string:
+		if builder.materializeParameters {
+			if castType := literal.CastType; !castType.IsKnown() {
+				return formatEscapedStringLiteral(builder, literal)
+			} else {
+				return formatEscapedStringLiteralWithCast(builder, literal, castType)
+			}
+		}
+
 		if literal.CastType == pgsql.Interval {
 			return formatStringLiteralParameterWithCast(builder, literal.Value, literal.CastType)
 		}
@@ -207,6 +215,24 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 		}
 		return formatValue(builder, literal.Value)
 	}
+}
+
+func formatEscapedStringLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
+	if strValue, ok := literal.Value.(string); !ok {
+		return fmt.Errorf("unsupported literal type: %T", literal.Value)
+	} else {
+		builder.Write("'", strings.ReplaceAll(strValue, "'", "''"), "'")
+		return nil
+	}
+}
+
+func formatEscapedStringLiteralWithCast(builder *OutputBuilder, literal pgsql.Literal, castAs pgsql.DataType) error {
+	if err := formatEscapedStringLiteral(builder, literal); err != nil {
+		return err
+	}
+
+	builder.Write(fmt.Sprintf("::%s", castAs.String()))
+	return nil
 }
 
 func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
