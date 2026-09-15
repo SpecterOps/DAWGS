@@ -304,7 +304,7 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 				mustAsLiteral(property),
 			)
 		}
-		renderComparison = func(t *testing.T, lOperand pgsql.Expression, operator pgsql.Operator, rOperand pgsql.Expression) string {
+		renderComparison = func(t *testing.T, lOperand pgsql.Expression, operator pgsql.Operator, rOperand pgsql.Expression) (string, map[string]any) {
 			t.Helper()
 
 			treeTranslator := translate.NewExpressionTreeTranslator(nil)
@@ -316,38 +316,43 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			require.NoError(t, err)
 
 			// TODO: does this need to handle Properties?
-			return formatted.Statement
+			return formatted.Statement, formatted.Parameters
 		}
 		testCases = []struct {
-			Name     string
-			LOperand pgsql.Expression
-			Operator pgsql.Operator
-			ROperand pgsql.Expression
-			Expected string
+			Name           string
+			LOperand       pgsql.Expression
+			Operator       pgsql.Operator
+			ROperand       pgsql.Expression
+			ExpectedSql    string
+			ExpectedParams map[string]any
 		}{{
-			Name:     "string literal uses typed text property lookup",
-			LOperand: propertyLookup("isassignabletorole"),
-			Operator: pgsql.OperatorEquals,
-			ROperand: mustAsLiteral("true"),
-			Expected: "(jsonb_typeof((n.properties -> 'isassignabletorole')) = 'string' and (n.properties ->> 'isassignabletorole') = 'true')",
+			Name:           "string literal uses typed text property lookup",
+			LOperand:       propertyLookup("isassignabletorole"),
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       mustAsLiteral("true"),
+			ExpectedSql:    "(jsonb_typeof((n.properties -> @__strlit0::text)) = @__strlit1::text and (n.properties ->> @__strlit0::text) = @__strlit2::text)",
+			ExpectedParams: map[string]any{"__strlit0": "isassignabletorole", "__strlit1": "string", "__strlit2": "true"},
 		}, {
-			Name:     "string literal uses typed text property lookup when reversed",
-			LOperand: mustAsLiteral("true"),
-			Operator: pgsql.OperatorEquals,
-			ROperand: propertyLookup("isassignabletorole"),
-			Expected: "(jsonb_typeof((n.properties -> 'isassignabletorole')) = 'string' and 'true' = (n.properties ->> 'isassignabletorole'))",
+			Name:           "string literal uses typed text property lookup when reversed",
+			LOperand:       mustAsLiteral("true"),
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       propertyLookup("isassignabletorole"),
+			ExpectedSql:    "(jsonb_typeof((n.properties -> @__strlit0::text)) = @__strlit1::text and @__strlit2::text = (n.properties ->> @__strlit0::text))",
+			ExpectedParams: map[string]any{"__strlit0": "isassignabletorole", "__strlit1": "string", "__strlit2": "true"},
 		}, {
-			Name:     "numeric-looking string literal remains string typed",
-			LOperand: propertyLookup("rank"),
-			Operator: pgsql.OperatorEquals,
-			ROperand: mustAsLiteral("1"),
-			Expected: "(jsonb_typeof((n.properties -> 'rank')) = 'string' and (n.properties ->> 'rank') = '1')",
+			Name:           "numeric-looking string literal remains string typed",
+			LOperand:       propertyLookup("rank"),
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       mustAsLiteral("1"),
+			ExpectedSql:    "(jsonb_typeof((n.properties -> @__strlit0::text)) = @__strlit1::text and (n.properties ->> @__strlit0::text) = @__strlit2::text)",
+			ExpectedParams: map[string]any{"__strlit0": "rank", "__strlit1": "string", "__strlit2": "1"},
 		}, {
-			Name:     "text parameter uses typed text property lookup",
-			LOperand: propertyLookup("objectid"),
-			Operator: pgsql.OperatorEquals,
-			ROperand: pgsql.Parameter{Identifier: "pi0", CastType: pgsql.Text},
-			Expected: "(jsonb_typeof((n.properties -> 'objectid')) = 'string' and (n.properties ->> 'objectid') = @pi0::text)",
+			Name:           "text parameter uses typed text property lookup",
+			LOperand:       propertyLookup("objectid"),
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       pgsql.Parameter{Identifier: "pi0", CastType: pgsql.Text},
+			ExpectedSql:    "(jsonb_typeof((n.properties -> @__strlit0::text)) = @__strlit1::text and (n.properties ->> @__strlit0::text) = @pi0::text)",
+			ExpectedParams: map[string]any{"__strlit0": "objectid", "__strlit1": "string"},
 		}, {
 			Name:     "text function uses typed text property lookup",
 			LOperand: propertyLookup("distinguishedname"),
@@ -357,7 +362,8 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 				Parameters: []pgsql.Expression{mustAsLiteral("admin")},
 				CastType:   pgsql.Text,
 			},
-			Expected: "(jsonb_typeof((n.properties -> 'distinguishedname')) = 'string' and (n.properties ->> 'distinguishedname') = upper('admin')::text)",
+			ExpectedSql:    "(jsonb_typeof((n.properties -> @__strlit0::text)) = @__strlit1::text and (n.properties ->> @__strlit0::text) = upper(@__strlit2::text)::text)",
+			ExpectedParams: map[string]any{"__strlit0": "distinguishedname", "__strlit1": "string", "__strlit2": "admin"},
 		}, {
 			Name: "text function uses typed text property lookup when reversed",
 			LOperand: pgsql.FunctionCall{
@@ -365,39 +371,46 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 				Parameters: []pgsql.Expression{mustAsLiteral("admin")},
 				CastType:   pgsql.Text,
 			},
-			Operator: pgsql.OperatorEquals,
-			ROperand: propertyLookup("distinguishedname"),
-			Expected: "(jsonb_typeof((n.properties -> 'distinguishedname')) = 'string' and upper('admin')::text = (n.properties ->> 'distinguishedname'))",
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       propertyLookup("distinguishedname"),
+			ExpectedSql:    "(jsonb_typeof((n.properties -> @__strlit0::text)) = @__strlit1::text and upper(@__strlit2::text)::text = (n.properties ->> @__strlit0::text))",
+			ExpectedParams: map[string]any{"__strlit0": "distinguishedname", "__strlit1": "string", "__strlit2": "admin"},
 		}, {
-			Name:     "string inequality keeps non-string JSONB branch",
-			LOperand: propertyLookup("rank"),
-			Operator: pgsql.OperatorCypherNotEquals,
-			ROperand: mustAsLiteral("1"),
-			Expected: "(jsonb_typeof((n.properties -> 'rank')) = 'string' and (n.properties ->> 'rank') <> '1' or jsonb_typeof((n.properties -> 'rank')) <> 'string' and (n.properties -> 'rank') <> to_jsonb(('1')::text)::jsonb)",
+			Name:           "string inequality keeps non-string JSONB branch",
+			LOperand:       propertyLookup("rank"),
+			Operator:       pgsql.OperatorCypherNotEquals,
+			ROperand:       mustAsLiteral("1"),
+			ExpectedSql:    "(jsonb_typeof((n.properties -> @__strlit0::text)) = @__strlit1::text and (n.properties ->> @__strlit0::text) <> @__strlit2::text or jsonb_typeof((n.properties -> @__strlit0::text)) <> @__strlit1::text and (n.properties -> @__strlit0::text) <> to_jsonb((@__strlit2::text)::text)::jsonb)",
+			ExpectedParams: map[string]any{"__strlit0": "rank", "__strlit1": "string", "__strlit2": "1"},
 		}, {
-			Name:     "boolean literal keeps jsonb scalar equality",
-			LOperand: propertyLookup("isassignabletorole"),
-			Operator: pgsql.OperatorEquals,
-			ROperand: mustAsLiteral(true),
-			Expected: "((n.properties -> 'isassignabletorole'))::jsonb = to_jsonb((true)::bool)::jsonb",
+			Name:           "boolean literal keeps jsonb scalar equality",
+			LOperand:       propertyLookup("isassignabletorole"),
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       mustAsLiteral(true),
+			ExpectedSql:    "((n.properties -> @__strlit0::text))::jsonb = to_jsonb((true)::bool)::jsonb",
+			ExpectedParams: map[string]any{"__strlit0": "isassignabletorole"},
 		}, {
-			Name:     "numeric literal keeps jsonb scalar equality",
-			LOperand: propertyLookup("count"),
-			Operator: pgsql.OperatorEquals,
-			ROperand: mustAsLiteral(1),
-			Expected: "((n.properties -> 'count'))::jsonb = to_jsonb((1)::int8)::jsonb",
+			Name:           "numeric literal keeps jsonb scalar equality",
+			LOperand:       propertyLookup("count"),
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       mustAsLiteral(1),
+			ExpectedSql:    "((n.properties -> @__strlit0::text))::jsonb = to_jsonb((1)::int8)::jsonb",
+			ExpectedParams: map[string]any{"__strlit0": "count"},
 		}, {
-			Name:     "property to property equality keeps jsonb operands",
-			LOperand: propertyLookup("left"),
-			Operator: pgsql.OperatorEquals,
-			ROperand: propertyLookup("right"),
-			Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
+			Name:           "property to property equality keeps jsonb operands",
+			LOperand:       propertyLookup("left"),
+			Operator:       pgsql.OperatorEquals,
+			ROperand:       propertyLookup("right"),
+			ExpectedSql:    "(n.properties -> @__strlit0::text) = (n.properties -> @__strlit1::text)",
+			ExpectedParams: map[string]any{"__strlit0": "left", "__strlit1": "right"},
 		}}
 	)
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			require.Equal(t, testCase.Expected, renderComparison(t, testCase.LOperand, testCase.Operator, testCase.ROperand))
+			expectedSql, expectedParams := renderComparison(t, testCase.LOperand, testCase.Operator, testCase.ROperand)
+			require.Equal(t, testCase.ExpectedSql, expectedSql)
+			require.Equal(t, testCase.ExpectedParams, expectedParams)
 		})
 	}
 }
@@ -485,23 +498,25 @@ func TestExpressionTreeTranslator(t *testing.T) {
 	// Pull out the 'a' constraint
 	var (
 		aIdentifier         = pgsql.AsIdentifierSet("a")
-		expectedTranslation = "(a.name = 'a' and a.num_a > 1)"
+		expectedTranslation = "(a.name = @__strlit0::text and a.num_a > 1)"
+		expectedParameters  = map[string]any{"__strlit0": "a"}
 	)
 
-	validateConstraints(t, treeTranslator, aIdentifier, expectedTranslation)
+	validateConstraints(t, treeTranslator, aIdentifier, expectedTranslation, expectedParameters)
 
 	// Pull out the 'b' constraint next
 	bIdentifier := pgsql.AsIdentifierSet("b")
-	expectedTranslation = "(b.name = 'b')"
-	validateConstraints(t, treeTranslator, bIdentifier, expectedTranslation)
+	expectedTranslation = "(b.name = @__strlit0::text)"
+	expectedParameters = map[string]any{"__strlit0": "b"}
+	validateConstraints(t, treeTranslator, bIdentifier, expectedTranslation, expectedParameters)
 
 	// Pull out the constraint that depends on both 'a' and 'b' identifiers
 	idents := pgsql.AsIdentifierSet("a", "b")
 	expectedTranslation = "(a.other = b.other)"
-	validateConstraints(t, treeTranslator, idents, expectedTranslation)
+	validateConstraints(t, treeTranslator, idents, expectedTranslation, map[string]any{})
 }
 
-func validateConstraints(t *testing.T, constraintTracker *translate.ExpressionTreeTranslator, idents *pgsql.IdentifierSet, expectedTranslation string) {
+func validateConstraints(t *testing.T, constraintTracker *translate.ExpressionTreeTranslator, idents *pgsql.IdentifierSet, expectedTranslation string, expectedParameters map[string]any) {
 	constraint, err := constraintTracker.ConsumeConstraintsFromVisibleSet(idents)
 
 	require.NotNil(t, constraint)
@@ -512,4 +527,5 @@ func validateConstraints(t *testing.T, constraintTracker *translate.ExpressionTr
 
 	require.Nil(t, err)
 	require.Equal(t, expectedTranslation, formattedConstraint.Statement)
+	require.Equal(t, expectedParameters, formattedConstraint.Parameters)
 }
