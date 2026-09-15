@@ -114,7 +114,7 @@ func translateToPsqlCmd() CommandDesc {
 
 			ctx.output.WriteHighlighted(formattedQuery, "postgres")
 			if len(sqlQuery.Parameters) > 0 {
-				fmt.Fprintf(ctx.output, "PARAMETERS\n\n")
+				fmt.Fprintf(ctx.output, "\n\nPARAMETERS\n\n")
 				ctx.output.WriteHighlighted(spew.Sdump(sqlQuery.Parameters), "golang")
 				fmt.Fprintf(ctx.output, "\n")
 			}

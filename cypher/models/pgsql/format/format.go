@@ -2,26 +2,29 @@ package format
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+const extractedParameterNamespace = "__strlit"
+
 type OutputBuilder struct {
-	params                map[string]any
-	materializeParameters bool
-	materializedParams    map[string]any
-	builder               *strings.Builder
-	// TODO: figure out how to use a shared generator
-	generator pgsql.IdentifierGenerator
+	extractedParams        map[string]string
+	extractedParamsBackref map[string]string
+	materializeParameters  bool
+	materializedParams     map[string]any
+	builder                *strings.Builder
+	extractedLiteralID     int64
 }
 
 func NewOutputBuilder() *OutputBuilder {
 	return &OutputBuilder{
-		builder:   &strings.Builder{},
-		generator: pgsql.NewIdentifierGenerator(),
-		params:    make(map[string]any),
+		builder:                &strings.Builder{},
+		extractedParams:        make(map[string]string),
+		extractedParamsBackref: make(map[string]string),
 	}
 }
 
@@ -52,10 +55,31 @@ func (s *OutputBuilder) Write(values ...any) {
 }
 
 func (s *OutputBuilder) Build() Formatted {
-	return Formatted{
-		Statement:  s.builder.String(),
-		Parameters: s.params,
+	outParams := make(map[string]any)
+	for k, v := range s.extractedParams {
+		outParams[k] = v
 	}
+
+	return Formatted{
+		Statement:         s.builder.String(),
+		Parameters:        outParams,
+		LiteralParameters: maps.Clone(s.extractedParams),
+	}
+}
+
+// extractLiteral takes a literal value, stores it in a parameter map internal to the OutputBuilder,
+// and returns a string representation to be resolved by the database at query-time.
+func (s *OutputBuilder) extractLiteral(literalValue string) pgsql.Identifier {
+	if existingKey, ok := s.extractedParamsBackref[literalValue]; ok {
+		return pgsql.Identifier(existingKey)
+	}
+
+	literalKey := fmt.Sprintf("%s%d", extractedParameterNamespace, s.extractedLiteralID)
+	s.extractedParams[literalKey] = literalValue
+	s.extractedParamsBackref[literalValue] = literalKey
+	s.extractedLiteralID += 1
+
+	return pgsql.Identifier(literalKey)
 }
 
 func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql.DataType) error {
@@ -66,7 +90,7 @@ func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql
 		fmtFunc func(builder *OutputBuilder, value any) error
 	)
 	if _, ok := any(tval).(string); ok {
-		fmtFunc = formatAsParameter
+		fmtFunc = formatStringLiteralParameter
 	} else {
 		fmtFunc = formatValue
 	}
@@ -85,73 +109,18 @@ func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql
 	return nil
 }
 
-func formatParameterWithBinding(builder *OutputBuilder, value any) error {
-	switch value.(type) {
-	case int64, uint64, string, bool, float64:
-	default:
-		return fmt.Errorf("unsupported parameter type: %T", value)
-	}
-
-	if ident, err := builder.generator.NewIdentifier(pgsql.ParameterIdentifier); err != nil {
-		return fmt.Errorf("error creating bound parameter identifier: %w", err)
-	} else {
-		builder.params[ident.String()] = value
-		builder.Write("@", ident.String())
-	}
-
-	if _, ok := value.(string); ok {
-		builder.Write("::text")
-	}
-
-	return nil
+func formatStringLiteralParameter(builder *OutputBuilder, value any) error {
+	return formatStringLiteralParameterWithCast(builder, value, pgsql.Text)
 }
 
-func formatAsParameter(builder *OutputBuilder, value any) error {
-	switch typedValue := value.(type) {
-	case uint:
-		return formatParameterWithBinding(builder, uint64(typedValue))
+func formatStringLiteralParameterWithCast(builder *OutputBuilder, value any, castTo pgsql.DataType) error {
+	if stringValue, ok := value.(string); !ok {
+		return fmt.Errorf("input value is not a string")
+	} else {
+		ident := builder.extractLiteral(stringValue)
+		builder.Write(fmt.Sprintf("@%s::%s", ident.String(), castTo.String()))
 
-	case uint8:
-		return formatParameterWithBinding(builder, uint64(typedValue))
-
-	case uint16:
-		return formatParameterWithBinding(builder, uint64(typedValue))
-
-	case uint32:
-		return formatParameterWithBinding(builder, uint64(typedValue))
-
-	case uint64:
-		return formatParameterWithBinding(builder, typedValue)
-
-	case int:
-		return formatParameterWithBinding(builder, int64(typedValue))
-
-	case int8:
-		return formatParameterWithBinding(builder, int64(typedValue))
-
-	case int16:
-		return formatParameterWithBinding(builder, int64(typedValue))
-
-	case int32:
-		return formatParameterWithBinding(builder, int64(typedValue))
-
-	case int64:
-		return formatParameterWithBinding(builder, typedValue)
-
-	case string:
-		return formatParameterWithBinding(builder, typedValue)
-
-	case bool:
-		return formatParameterWithBinding(builder, typedValue)
-
-	case float32:
-		return formatParameterWithBinding(builder, float64(typedValue))
-
-	case float64:
-		return formatParameterWithBinding(builder, typedValue)
-
-	default:
-		return fmt.Errorf("unsupported parameter type: %T", value)
+		return nil
 	}
 }
 
@@ -202,9 +171,6 @@ func formatValue(builder *OutputBuilder, value any) error {
 	case []int64:
 		return formatSlice(builder, typedValue, pgsql.Int8Array)
 
-	case string:
-		builder.Write("'", strings.ReplaceAll(typedValue, "'", "''"), "'")
-
 	case bool:
 		builder.Write(strconv.FormatBool(typedValue))
 
@@ -227,15 +193,18 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 		return nil
 	}
 
-	switch literal.CastType {
-	case pgsql.Interval:
-		builder.Write("interval ")
-	}
-
 	switch literal.Value.(type) {
 	case string:
-		return formatAsParameter(builder, literal.Value)
+		if literal.CastType == pgsql.Interval {
+			return formatStringLiteralParameterWithCast(builder, literal.Value, literal.CastType)
+		}
+
+		return formatStringLiteralParameter(builder, literal.Value)
 	default:
+		switch literal.CastType {
+		case pgsql.Interval:
+			builder.Write("interval ")
+		}
 		return formatValue(builder, literal.Value)
 	}
 }
@@ -1302,6 +1271,7 @@ func SyntaxNode(node pgsql.SyntaxNode) (Formatted, error) {
 }
 
 type Formatted struct {
-	Statement  string
-	Parameters map[string]any
+	Statement         string
+	Parameters        map[string]any
+	LiteralParameters map[string]string
 }
