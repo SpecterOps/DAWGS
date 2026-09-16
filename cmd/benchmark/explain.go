@@ -70,7 +70,6 @@ func newPostgresExplainer(kindMapper pgsql.KindMapper, graphID int32) ExplainFun
 			return nil, err
 		}
 
-		// TODO: should this get the parameters as well?
 		return &ExplainResult{
 			SQL:          sqlQuery.Statement,
 			Plan:         plan,

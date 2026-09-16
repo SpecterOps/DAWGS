@@ -209,7 +209,6 @@ func (s *postgresSQLRunner) explain(ctx context.Context, cypherQuery string, par
 		return postgresExplain{}, err
 	}
 
-	// TODO: should this get the parameters as well?
 	return postgresExplain{
 		SQL:          sqlQuery.Statement,
 		Plan:         plan,

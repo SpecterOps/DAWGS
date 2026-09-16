@@ -90,7 +90,11 @@ func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql
 		fmtFunc func(builder *OutputBuilder, value any) error
 	)
 	if _, ok := any(tval).(string); ok {
-		fmtFunc = formatStringLiteralParameter
+		if builder.materializeParameters {
+			fmtFunc = formatEscapedString
+		} else {
+			fmtFunc = formatExtractedStringLiteralParameter
+		}
 	} else {
 		fmtFunc = formatValue
 	}
@@ -109,11 +113,11 @@ func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql
 	return nil
 }
 
-func formatStringLiteralParameter(builder *OutputBuilder, value any) error {
-	return formatStringLiteralParameterWithCast(builder, value, pgsql.Text)
+func formatExtractedStringLiteralParameter(builder *OutputBuilder, value any) error {
+	return formatExtractedStringLiteralParameterWithCast(builder, value, pgsql.Text)
 }
 
-func formatStringLiteralParameterWithCast(builder *OutputBuilder, value any, castTo pgsql.DataType) error {
+func formatExtractedStringLiteralParameterWithCast(builder *OutputBuilder, value any, castTo pgsql.DataType) error {
 	if stringValue, ok := value.(string); !ok {
 		return fmt.Errorf("input value is not a string")
 	} else {
@@ -180,6 +184,9 @@ func formatValue(builder *OutputBuilder, value any) error {
 	case float64:
 		builder.Write(strconv.FormatFloat(typedValue, 'f', -1, 64))
 
+	case []string:
+		return formatSlice(builder, typedValue, pgsql.TextArray)
+
 	default:
 		return fmt.Errorf("unsupported literal type: %T", value)
 	}
@@ -204,10 +211,10 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 		}
 
 		if literal.CastType == pgsql.Interval {
-			return formatStringLiteralParameterWithCast(builder, literal.Value, literal.CastType)
+			return formatExtractedStringLiteralParameterWithCast(builder, literal.Value, literal.CastType)
 		}
 
-		return formatStringLiteralParameter(builder, literal.Value)
+		return formatExtractedStringLiteralParameter(builder, literal.Value)
 	default:
 		switch literal.CastType {
 		case pgsql.Interval:
@@ -217,15 +224,27 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 	}
 }
 
-func formatEscapedStringLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
-	if strValue, ok := literal.Value.(string); !ok {
-		return fmt.Errorf("unsupported literal type: %T", literal.Value)
+func escapeString(raw string) string {
+	return strings.ReplaceAll(raw, "'", "''")
+}
+
+func formatEscapedString(builder *OutputBuilder, value any) error {
+	if strValue, ok := value.(string); !ok {
+		return fmt.Errorf("input value is not a string")
 	} else {
-		builder.Write("'", strings.ReplaceAll(strValue, "'", "''"), "'")
+		builder.Write("'", escapeString(strValue), "'")
 		return nil
 	}
 }
 
+// formatEscapedStringLiteral does a simple quote-escape of the string literal
+// and writes it into the output builder
+func formatEscapedStringLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
+	return formatEscapedString(builder, literal.Value)
+}
+
+// formatEscapedStringLiteralWithCast does the same as formatEscapedStringLiteral
+// but attaches a cast after the escaped string literal is written
 func formatEscapedStringLiteralWithCast(builder *OutputBuilder, literal pgsql.Literal, castAs pgsql.DataType) error {
 	if err := formatEscapedStringLiteral(builder, literal); err != nil {
 		return err

@@ -72,7 +72,6 @@ func SQLToDigraph(node pgsql.SyntaxNode) (Graph, error) {
 	if title, err := format.SyntaxNode(node); err != nil {
 		return Graph{}, err
 	} else {
-		// TODO: do we need to use Parameters here somehow?
 		visualizer.Graph.Title = title.Statement
 	}
 

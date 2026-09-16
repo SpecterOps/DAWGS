@@ -301,8 +301,8 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 		record.Error = err.Error()
 	}
 
-	// TODO: should this get the parameters as well?
 	record.SQL = sqlQuery.Statement
+	record.Params = translation.Parameters
 	record.PGPlan = plan
 	record.PGOperators = postgresOperators(plan)
 	record.PlannedLowerings = loweringNames(translation.Optimization.PlannedLowerings)

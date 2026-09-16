@@ -315,7 +315,6 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			formatted, err := format.Expression(treeTranslator.PeekOperand(), format.NewOutputBuilder())
 			require.NoError(t, err)
 
-			// TODO: does this need to handle Properties?
 			return formatted.Statement, formatted.Parameters
 		}
 		testCases = []struct {
