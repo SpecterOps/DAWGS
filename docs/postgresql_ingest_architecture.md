@@ -1,142 +1,189 @@
-# Hash-Filtered Ingest: Architecture Philosophy
+# Hash-Filtered Ingest: One Run, End to End
 
-Hash-filtered ingest is a way to make repeated, large-scale graph loads cheaper without treating a hash as the source of
-truth. It is intended for data that may be larger than process memory, may arrive as partial updates, and uses stable
-source identities rather than database row IDs.
+Hash-filtered ingest makes a large, repeatable graph load practical without
+making a hash the source of truth. The proposed design keeps a run bounded,
+recognizes complete records that are already current, and reconciles partial
+updates in the client before it writes.
 
-The central idea is simple: use inexpensive hashes to find the small set of records that might need work, then use
-complete identities and authoritative graph semantics to decide what actually changes.
+This guide follows one small run as a stand-in for a much larger one. The
+PostgreSQL proof-of-concept's API, exact data contract, and operating guidance
+live in [PostgreSQL hash-filtered ingest](postgresql_ingest.md). Hash values
+below are illustrative.
 
-This guide describes the principles that should remain true as the implementation evolves. For the current PostgreSQL
-API, data contract, and operating guidance, see [PostgreSQL hash-filtered ingest](postgresql_ingest.md).
+## The run begins with a partial update
 
-## A running example
+The database already contains these complete graph objects:
 
-Imagine a scheduled import from a company directory. Each run describes people, teams, and memberships. It might say
-that `employee:alice` is a `Person` named Alice, that `team:platform` is a `Team`, and that Alice is a member of that
-team. Tomorrow's run will contain many of the same facts again, perhaps with a changed title for Alice or with only a
-partial record from a source that knows her department but not her name.
+~~~text
+| id    | kinds  | properties           | identity_hash | content_hash |
+|-------|--------|----------------------|---------------|--------------|
+| Alice | [User] | {group: "finance"} | 0x12342384    | c:7d91       |
+| Eve   | [User] | {group: "sales"}   | 0x23456789    | c:aa20       |
+| Bob   | [User] | {group: "legal"}   | 0x51234567    | c:1111       |
+| Cara  | [User] | {group: "sales"}   | 0xa1234567    | c:2222       |
+| Dan   | [User] | {group: "it"}      | 0xe1234567    | c:3333       |
+~~~
 
-The ingest system wants the second run to be inexpensive without losing the ability to correctly combine those partial
-facts. The rest of this guide follows that example.
+The new input is a stream, not a complete in-memory collection:
 
-## The problem it solves
+~~~text
+{id: "Alice", properties: {group: "hr"}}
+{id: "Bob",   kinds: ["User"], properties: {group: "legal"}}
+{id: "Cara",  properties: {group: "marketing"}}
+{id: "Dan",   kinds: ["User"], properties: {group: "it"}}
+~~~
 
-Many ingest jobs re-send data that is already present. A conventional upsert path must still locate and consider every
-record, and a client that tries to avoid that work can end up loading too much of the graph into memory or duplicating
-the graph's merge rules.
+Alice and Cara changed. Bob and Dan are complete replays. Alice and Cara also
+demonstrate why comparing input payloads alone is insufficient: they omit
+stored fields such as their kind. The answer we need is not “does this payload
+look different?” but “does this payload produce a different complete object
+after the additive merge?”
 
-Hash-filtered ingest separates those concerns. It narrows each database lookup to records in the relevant hash range,
-lets proven unchanged records bypass the write path, and processes the input in bounded pieces. The result is an
-optimization for additive ingest, not a new definition of graph identity or merge behavior.
+An ordinary upsert path must find and evaluate every one of these objects. A
+naive client-side hash shortcut has the same problem: a partial payload cannot
+produce the hash of the final complete state without first seeing and merging
+that state.
 
-## Core principles
+## First, divide the run into bounded work
 
-### Hashes narrow the search; identities establish the match
+Each object has an exact source ID and a deliberately non-selective 32-bit
+identity hash derived from it. The hash is not an identity lookup key; it
+partitions both the input and stored graph into matching ranges. Exact IDs are
+always compared before two objects are considered the same.
 
-An identity hash groups records into a small, indexed search range. It is deliberately not treated as identity: hashes
-can collide, while graph identities cannot be ambiguous. After a range is read, the system compares the complete
-identity before deciding that two records refer to the same entity.
+For this run, choose BucketCount = 4. That divides the 32-bit hash space into
+four contiguous ranges:
 
-For example, a node's stable source identity is its `objectid`; an edge's is its directed source-endpoint-and-kind
-tuple. The current POC uses a 32-bit identity hash to select ranges, but the important architectural rule is that a
-hash only selects candidates. Exact identities make collisions harmless.
+~~~text
+bucket 0: 0x00000000 through 0x3fffffff
+bucket 1: 0x40000000 through 0x7fffffff
+bucket 2: 0x80000000 through 0xbfffffff
+bucket 3: 0xc0000000 through 0xffffffff
+~~~
 
-In the directory example, `employee:alice` is Alice's identity; it stays the same even if her display name changes.
-Suppose `employee:alice` and `employee:alicia` happen to land in the same hash range. That range tells ingest to look
-at both stored records, but it must still compare the complete strings before associating an incoming update with Alice.
-The extra candidate costs a little work; it cannot turn Alicia's update into Alice's.
+The client reads the input once, normalizes each object, computes its identity
+hash, and appends it to the corresponding private spool or bounded queue:
 
-A separate content hash represents a complete logical state for an exact identity. When both the identity and content
-hash match, the record is proven unchanged and can skip further work. A mismatch means only "this might need work";
-it never proves that a logical change occurred.
+~~~text
+incoming object                              identity hash     bucket
+---------------                              -------------     ------
+Alice                                        0x12342384        0
+Bob                                          0x51234567        1
+Cara                                         0xa1234567        2
+Dan                                          0xe1234567        3
+~~~
 
-### Keep the working set bounded
+At a realistic scale, every bucket contains many records. The important part
+is that the client does not need the whole input and graph in memory together.
+It has durable or bounded input work for each range, and can now work through
+one range at a time.
 
-The input is partitioned into hash ranges, called buckets. The ingest process handles one populated bucket at a time
-rather than mirroring the entire input or graph in memory. The current POC uses private local spool files between
-reading the stream and processing a bucket, but another implementation could use a different bounded-work queue.
+BucketCount is a runtime tuning choice, not graph data. More buckets make each
+work unit smaller but add spool, query, and transaction overhead. Fewer buckets
+do the opposite. Changing it changes only the order and size of work units; it
+does not change identities or graph meaning.
 
-Think of a directory export too large to spread across one desk. Ingest first sorts its records into labeled trays, then
-brings one tray to the desk, compares its records with the relevant stored candidates, and puts the tray away before
-opening the next one. The complete export and graph can be enormous, but the desk only needs room for one tray's work.
+## Process bucket 0: reconcile Alice
 
-Bucket sizing is a runtime tuning choice. More buckets reduce the amount of unrelated state examined for sparse input,
-while fewer buckets reduce per-bucket overhead for dense input. Changing that choice must not change graph meaning.
+The client opens the spool for bucket 0, which contains Alice. It asks
+PostgreSQL for all stored objects whose identity hash falls within bucket 0's
+range. That result contains Alice, Eve, and potentially many unrelated
+objects:
 
-### Compare complete state, merge in one authoritative place
+~~~text
+bucket 0 input                    stored rows in bucket 0 range
+--------------                    -----------------------------
+{id: "Alice",                     | id: Alice | kinds: [User] |
+ properties: {group: "hr"}}       | properties: {group: "finance"} |
+                                  | content_hash: c:7d91 |
+                                  | id: Eve | ... |
+~~~
 
-Incoming data can be partial. A record that looks different from the input alone may merge into the same stored logical
-state, while a record that looks similar may differ because of fields not present in the update. Correct change
-detection therefore needs a complete logical state and one authoritative definition of how updates merge.
+The client compares exact IDs. Alice matches Alice; Eve is simply an unrelated
+row from the same work range. A 32-bit hash collision is handled the same way:
+it may add a candidate row, but it cannot make two different exact IDs match.
 
-Where the system obtains that state and applies the merge is intentionally an implementation choice. It can read full
-objects and merge in the client, perform the merge in the database, or split the work between them. Whichever design is
-used must preserve one canonical merge rule and refresh the content hash from the resulting complete state.
+The client next needs to decide whether Alice changes. A full input record
+could be canonicalized and content-hashed before the lookup; if that hash
+matched the stored hash for exact ID Alice, it would skip the write immediately.
+Alice's partial input cannot do that. It is a content-hash miss and moves to
+client-side reconciliation:
 
-For example, the graph may already know Alice's name, title, and office. A later source sends only
-`{objectid: "employee:alice", title: "Engineer"}`. That partial record cannot by itself prove whether the final graph
-will change: perhaps Alice's stored title is already `Engineer`, or perhaps the merge rule normalizes it. Its content
-hash mismatch is therefore a reason to evaluate the canonical merge, not a reason to assume a write is necessary.
+~~~text
+stored complete state              incoming partial payload
+---------------------              ------------------------
+id: Alice                           id: Alice
+kinds: [User]                       properties: {group: "hr"}
+properties: {group: "finance"}
 
-The current POC performs its additive merge in PostgreSQL: node kinds are unioned and incoming property values win. It
-stages content-hash mismatches because a partial update may still be a valid no-op after that merge. This is a current
-strategy, not a constraint of the architecture.
+client's additive merge
+-----------------------
+id: Alice
+kinds: [User]
+properties: {group: "hr"}
+content_hash: c:40aa
+~~~
 
-### Preserve source identity across the full path
+The canonical merge rule is simple: kinds are unioned and incoming property
+values win. The client owns that rule and computes the refreshed content hash
+from the resulting complete state. PostgreSQL returns and persists objects and
+metadata, but does not decide what a partial update means or calculate its
+hash.
 
-Producers know their own stable identifiers; they should not need database-generated row IDs to route or identify
-records. In particular, an edge can be described by its source endpoint identities and kind before either endpoint has
-an internal database ID.
+Because c:40aa differs from stored c:7d91, the client writes Alice's
+reconciled complete object and its updated hash. It commits bucket 0 and
+releases that bucket's input and stored candidates from memory.
 
-Maintaining those source identities throughout ingest makes bucketing stable, supports precise comparisons, and lets
-the persistence layer resolve internal references only when needed. The current POC persists source endpoint IDs for
-its managed edges; future implementations may represent this information differently while retaining the same
-principle.
+~~~text
+| id    | kinds  | properties      | identity_hash | content_hash |
+|-------|--------|-----------------|---------------|--------------|
+| Alice | [User] | {group: "hr"} | 0x12342384    | c:40aa       |
+~~~
 
-### Make replay the normal recovery path
+The client then performs the same sequence for buckets 1, 2, and 3. Bob and
+Dan's complete records match their stored content hashes and bypass the write
+path. Cara's partial update is reconciled just as Alice's was.
 
-Work is committed in independent units. If processing stops, completed units remain durable and the active unit rolls
-back. Retrying the original input is then the ordinary recovery mechanism: records that are already known to match are
-filtered quickly, and only remaining or changed records continue.
+## Replay is the recovery path
 
-If the import completes the tray containing Alice and then fails while processing the Platform team, the next run can
-start from the full directory export. Alice's already-persisted state is recognized as unchanged, while the unfinished
-work receives another chance to run. Operators do not need to construct a special "resume from item 8,431,217" input.
+Each bucket has its own transaction. If the run fails after bucket 0 commits
+and before bucket 2 completes, the operator replays the original input rather
+than constructing a special resume payload. Alice's complete state now matches
+its stored content hash and skips a write. Buckets that never committed are
+processed again.
 
-This design favors simple, observable recovery over a complex checkpoint protocol. It depends on the ingest system
-being the authoritative writer for its managed data: writes that bypass hash maintenance can make a later unchanged
-decision unsafe.
+This only works when the ingest path is the coordinated writer for its managed
+graph. A separate writer that changes Alice without refreshing content_hash can
+make a later hash comparison incorrectly skip a change.
 
-## Conceptual flow
+## Edges follow the same flow
 
-```mermaid
-flowchart LR
-    A[Incoming entities] --> B[Normalize and identify]
-    B --> C[Partition into bounded work]
-    C --> D[Process one bucket]
-    D --> E[Find candidate stored state]
-    E --> F{Exact identity and\ncomplete state match?}
-    F -- Yes --> G[Skip]
-    F -- No --> H[Apply authoritative merge]
-    H --> I[Persist complete state\nand refreshed hash]
-    I --> J[Commit bucket]
-```
+An edge has a stable source identity before either endpoint has a database ID:
+the directed tuple (start ID, kind, end ID). For example:
 
-Nodes are processed before edges so an edge may refer to a node supplied by the same ingest. Edge processing adds
-endpoint resolution at the point its persistence strategy requires it.
+~~~text
+{start: "Alice", kind: "MemberOf", end: "Finance"}
+~~~
 
-## Architectural boundaries
+The client hashes that exact tuple to assign the edge to a work range, fetches
+the stored candidates for the range, compares exact tuples, and reconciles the
+complete edge state on a content-hash miss. Nodes are processed before edges so
+an edge can refer to a node supplied by the same run; PostgreSQL resolves its
+internal endpoint references when the client persists the reconciled edge.
 
-- **Additive, not synchronizing:** this path creates and updates entities; it does not infer deletions from omitted
-  input.
-- **One coordinated writer:** all writes to a managed graph must preserve the identity and content-hash contract.
-  Concurrent ingest or unrelated write paths need coordination before they can safely share that graph.
-- **Versioned logical representation:** changing identity rules, canonical content encoding, or merge semantics requires
-  a deliberate compatibility and rebuild strategy.
-- **Bounded resources have a cost:** local spooling trades memory pressure for trusted disk capacity; other bounded
-  queue designs have their own durability and operations trade-offs.
+## What must remain true
 
-These principles make hash-filtered ingest adaptable. The storage engine, hash algorithm, batch transport, and location
-of merge work can change, provided that exact identities remain authoritative, complete logical state determines
-unchanged records, and processing stays safe to replay.
+- Ingest is additive: absent input does not imply deletion.
+- The 32-bit identity hash partitions work; exact source IDs establish a match.
+- A content hash represents a complete canonical state, never a partial
+  payload.
+- There is one canonical reconciliation rule. This proposal runs it in the
+  client; its implementation location may change only if its meaning and hash
+  contract do not.
+- Hash and merge rules are versioned. Changing either requires a compatibility
+  and rebuild strategy.
+
+The storage engine, spool implementation, bucket count, and hash algorithms
+can evolve. The flow remains the same: partition the input, load one matching
+stored range, reconcile exact-ID matches in the client, write changed complete
+state, commit, and continue.
