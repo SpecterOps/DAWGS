@@ -1266,8 +1266,8 @@ func TestOptimizerSafetyShortestPathRootCarriesUnwindSources(t *testing.T) {
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array [@__strlit0::text]::text[]) as i0")
-	requirePlanParameterContains(t, translation, "jsonb_typeof((n1.properties -> 'name'::text)) = 'string'::text")
-	requirePlanParameterContains(t, translation, "(n0.properties ->> 'name'::text) = i0")
+	requirePlanParameterContains(t, translation, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
+	requirePlanParameterContains(t, translation, "(n0.properties ->> 'name') = i0")
 }
 
 func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
@@ -1287,7 +1287,7 @@ func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array [@__strlit0::text]::text[]) as i0")
-	requirePlanParameterContains(t, translation, "(n1.properties ->> 'name'::text) = i0")
+	requirePlanParameterContains(t, translation, "(n1.properties ->> 'name') = i0")
 }
 
 func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {

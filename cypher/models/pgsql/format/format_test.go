@@ -706,7 +706,7 @@ func TestFormat_QueryInjection(t *testing.T) {
 	requireExtractedStringLiteral(t, formattedQuery, "alpha' || select ('malicious')")
 }
 
-func TestFormat_MaterializedStringLiteralPreservesCast(t *testing.T) {
+func TestFormat_MaterializedStringLiteralUsesExplicitNonTextCast(t *testing.T) {
 	tests := []struct {
 		name     string
 		literal  pgsql.Literal
@@ -715,7 +715,7 @@ func TestFormat_MaterializedStringLiteralPreservesCast(t *testing.T) {
 		{
 			name:     "text",
 			literal:  pgsql.NewLiteral("alpha'", pgsql.Text),
-			expected: `'alpha'''::text`,
+			expected: `'alpha'''`,
 		},
 		{
 			name:     "interval",

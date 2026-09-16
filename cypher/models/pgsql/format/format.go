@@ -203,7 +203,7 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 	switch literal.Value.(type) {
 	case string:
 		if builder.materializeParameters {
-			if castType := literal.CastType; !castType.IsKnown() {
+			if castType := literal.CastType; !castType.IsKnown() || castType == pgsql.Text {
 				return formatEscapedStringLiteral(builder, literal)
 			} else {
 				return formatEscapedStringLiteralWithCast(builder, literal, castType)
@@ -1301,8 +1301,10 @@ func Statement(statement pgsql.Statement, builder *OutputBuilder) (Formatted, er
 }
 
 func SyntaxNode(node pgsql.SyntaxNode) (Formatted, error) {
-	builder := NewOutputBuilder()
+	return SyntaxNodeWithBuilder(node, NewOutputBuilder())
+}
 
+func SyntaxNodeWithBuilder(node pgsql.SyntaxNode, builder *OutputBuilder) (Formatted, error) {
 	switch typedNode := node.(type) {
 	case pgsql.Statement:
 		return Statement(typedNode, builder)
