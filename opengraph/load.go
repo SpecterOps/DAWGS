@@ -21,12 +21,39 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
 )
 
 // IDMap maps document string node IDs to their database-assigned IDs.
 type IDMap map[string]graph.ID
+
+type kindMappedDatabase interface {
+	KindMapper() pg.KindMapper
+}
+
+func assertGraphKinds(ctx context.Context, db graph.Database, g *Graph) error {
+	// If the database has a kind mapper, we have to pre-assert the kinds that will be
+	// used inside of the following batch queries
+	if kmdb, ok := db.(kindMappedDatabase); ok {
+		kindMapper := kmdb.KindMapper()
+
+		assertKindMap := make(map[graph.Kind]struct{})
+		for _, edge := range g.Edges {
+			assertKindMap[graph.StringKind(edge.Kind)] = struct{}{}
+		}
+
+		assertKinds := slices.Collect(maps.Keys(assertKindMap))
+		if _, err := kindMapper.AssertKinds(ctx, graph.Kinds(assertKinds)); err != nil {
+			return fmt.Errorf("could not assert kinds: %w", err)
+		}
+	}
+
+	return nil
+}
 
 // ParseDocument decodes and validates a Document from r without writing to a database.
 func ParseDocument(r io.Reader) (Document, error) {
@@ -59,6 +86,10 @@ func Load(ctx context.Context, db graph.Database, r io.Reader) (IDMap, error) {
 func WriteGraph(ctx context.Context, db graph.Database, g *Graph) (IDMap, error) {
 	if g == nil {
 		return nil, nil
+	}
+
+	if err := assertGraphKinds(ctx, db, g); err != nil {
+		return nil, fmt.Errorf("opengraph: kind assert error: %w", err)
 	}
 
 	nodeMap := make(IDMap, len(g.Nodes))

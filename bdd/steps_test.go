@@ -44,6 +44,7 @@ func InitializeTestSuite(ctxtestsuite *godog.TestSuiteContext, ctx context.Conte
 func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.Before(dbCtx.resetBeforeScenario)
 	ctx.Step(`^an empty graph$`, dbCtx.anEmptyGraph)
+	ctx.Step(`^the binary-tree-(\d+) graph$`, dbCtx.theBinarytreeGraph)
 	ctx.Step(`^having executed:$`, dbCtx.havingExecuted)
 	ctx.Step(`^executing query:$`, dbCtx.executingQuery)
 	ctx.Step(`^the result should be, in any order:$`, dbCtx.theResultShouldBeInAnyOrder)

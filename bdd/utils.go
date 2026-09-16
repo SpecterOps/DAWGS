@@ -20,12 +20,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
 	"github.com/cucumber/godog"
 	"github.com/google/go-cmp/cmp"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/opengraph"
 )
 
 type graphSnapshot struct {
@@ -66,6 +68,25 @@ func (c *dbContext) anEmptyGraph(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// theBinarytreeGraph load tck datasets
+func (c *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
+	fileName := fmt.Sprintf("testdata/binary-tree-%d.json", num)
+
+	file, err := os.Open(fileName)
+	if err != nil {
+		return fmt.Errorf("failed to open %v\n error: %w", fileName, err)
+	}
+
+	defer file.Close()
+
+	_, err = opengraph.Load(ctx, c.db, file)
+	if err != nil {
+		return fmt.Errorf("failed to write graph data error: %w\n", err)
+	}
+
 	return nil
 }
 
