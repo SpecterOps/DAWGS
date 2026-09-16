@@ -20,8 +20,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"math/rand"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/cucumber/godog"
@@ -37,7 +40,9 @@ type graphSnapshot struct {
 
 type dbContext struct {
 	db              graph.Database
+	testData        []string
 	beforeExecution graphSnapshot
+	afterExecution  graphSnapshot
 	actualResult    graph.Result
 	rowCount        int
 	actualRows      [][]string
@@ -90,7 +95,23 @@ func (c *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
 	return nil
 }
 
-// executingQuery runs a read query and records its rows and graph state for comparison.
+func (c *dbContext) anyGraph(ctx context.Context) error {
+	randomIndex := rand.Intn(len(c.testData))
+	file, err := os.Open(c.testData[randomIndex])
+	if err != nil {
+		return fmt.Errorf("open graph fixture: %w", err)
+	}
+	defer file.Close()
+
+	_, err = opengraph.Load(ctx, c.db, file)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// executingQuery runs a read query and records its rows for later comparison.
 func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) error {
 	c.actualRows = nil
 
@@ -100,37 +121,78 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	}
 	c.beforeExecution = before
 
-	err = c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		var rowCount int64
-		result := tx.Query(input.Content, nil)
+	if strings.Contains(input.Content, "CREATE") {
+		err = c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			var rowCount int64
+			result := tx.Query(input.Content, nil)
+			defer result.Close()
 
-		defer result.Close()
-
-		for result.Next() {
-			var row []string
-
-			rowCount++
-
-			for _, value := range result.Values() {
-				formatted, err := formatGraphValue(result.Mapper(), value)
-				if err != nil {
-					return fmt.Errorf("failed to format graph result: %w", err)
-				}
-				row = append(row, formatted)
+			if result.Error() != nil {
+				return err
 			}
-			c.actualRows = append(c.actualRows, row)
-		}
 
-		c.actualResult = result
-		c.rowCount = int(rowCount)
-		if result.Error() != nil {
-			return result.Error()
-		}
-		return nil
-	})
+			for result.Next() {
+				var row []string
 
-	if err != nil {
-		return err
+				rowCount++
+
+				for _, value := range result.Values() {
+					formatted, err := formatGraphValue(result.Mapper(), value)
+					if err != nil {
+						return fmt.Errorf("failed to format graph result: %w", err)
+					}
+					row = append(row, formatted)
+				}
+				c.actualRows = append(c.actualRows, row)
+			}
+
+			c.actualResult = result
+			c.rowCount = int(rowCount)
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		after, err := captureGraphState(ctx, c.db)
+		if err != nil {
+			return err
+		}
+		c.afterExecution = after
+	} else {
+
+		err = c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			var rowCount int64
+			result := tx.Query(input.Content, nil)
+
+			defer result.Close()
+
+			for result.Next() {
+				var row []string
+
+				rowCount++
+
+				for _, value := range result.Values() {
+					formatted, err := formatGraphValue(result.Mapper(), value)
+					if err != nil {
+						return fmt.Errorf("failed to format graph result: %w", err)
+					}
+					row = append(row, formatted)
+				}
+				c.actualRows = append(c.actualRows, row)
+			}
+
+			c.actualResult = result
+			c.rowCount = int(rowCount)
+			if result.Error() != nil {
+				return result.Error()
+			}
+			return nil
+		})
+
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -189,6 +251,14 @@ func (c *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) erro
 	return nil
 }
 
+func (c *dbContext) theResultShouldBeEmpty() error {
+
+	if c.rowCount != 0 || len(c.actualRows) != 0 {
+		return fmt.Errorf("The result set is not empty")
+	}
+	return nil
+}
+
 // formatGraphValue formats a supported graph value as a deterministic string.
 func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
 	var node graph.Node
@@ -244,6 +314,54 @@ func (c *dbContext) noSideEffects(ctx context.Context) error {
 	}
 	if !cmp.Equal(c.beforeExecution, after) {
 		return errors.New("Graph state drift detected")
+	}
+	return nil
+}
+
+func (c *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
+	actualRows := [][]string{}
+	if len(expectedTable.Rows) != 0 {
+		for _, row := range expectedTable.Rows {
+			var rows []string
+			for _, cell := range row.Cells {
+				rows = append(rows, cell.Value)
+			}
+			actualRows = append(actualRows, rows)
+		}
+	}
+
+	var err error
+	var nodeCountErr error
+	var relationshipCountErr error
+
+	for _, rows := range actualRows {
+		for _, row := range rows {
+			if strings.Contains(strings.ToLower(row), "node") {
+				finalNodeCount := int64(math.Abs(float64(c.afterExecution.NodesCount - c.beforeExecution.NodesCount)))
+				actualCount, err := strconv.ParseInt(rows[1], 10, 64)
+				if err != nil {
+					return err
+				}
+				if finalNodeCount != actualCount {
+					nodeCountErr = fmt.Errorf("no side effect detected for node count expected %d actual %d", finalNodeCount, actualCount)
+				}
+
+			}
+			if strings.Contains(strings.ToLower(row), "relationships") {
+				finalRelationshipCount := int64(math.Abs(float64(c.afterExecution.RelationshipsCount - c.beforeExecution.RelationshipsCount)))
+				actualCount, err := strconv.ParseInt(rows[1], 10, 64)
+				if err != nil {
+					return err
+				}
+				if int64(math.Abs(float64(finalRelationshipCount))) != actualCount {
+					relationshipCountErr = fmt.Errorf(" no side effect detected for relationship count expected %d actual %d", finalRelationshipCount, actualCount)
+				}
+			}
+		}
+	}
+	err = errors.Join(nodeCountErr, relationshipCountErr)
+	if err != nil {
+		return err
 	}
 	return nil
 }

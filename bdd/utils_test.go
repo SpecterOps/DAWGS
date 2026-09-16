@@ -436,6 +436,69 @@ func TestDBContextResultComparisonPreservesColumns(t *testing.T) {
 	require.NoError(t, context.theResultShouldBeInAnyOrder(expected))
 }
 
+func TestDBContextSideEffects(t *testing.T) {
+	tests := []struct {
+		name          string
+		before        graphSnapshot
+		after         graphSnapshot
+		expectedTable *godog.Table
+		expectedError string
+	}{
+		{
+			name:          "detect graph change",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 1},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "1"}, {"+relationships", "1"}}),
+			expectedError: "",
+		},
+		{
+			name:          "detect changed graph node",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 0},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
+			expectedError: "no side effect detected for node count expected 1 actual 0",
+		},
+		{
+			name:          "detect changed graph relationship",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 0, RelationshipsCount: 1},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
+			expectedError: " no side effect detected for relationship count expected 1 actual 0",
+		},
+		{
+			name:          "detect changed graph wrapping errors",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 1},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
+			expectedError: "no side effect detected for node count expected 1 actual 0\n no side effect detected for relationship count expected 1 actual 0",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			database := &stubDatabase{
+				transaction: &stubTransaction{
+					nodeQuery:         &stubNodeQuery{count: test.after.NodesCount},
+					relationshipQuery: &stubRelationshipQuery{count: test.after.RelationshipsCount},
+				},
+			}
+			databaseContext := &dbContext{
+				db:              database,
+				beforeExecution: test.before,
+				afterExecution:  test.after,
+			}
+
+			err := databaseContext.theSideEffectsShouldBe(test.expectedTable)
+
+			if test.expectedError == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, test.expectedError)
+			}
+		})
+	}
+}
+
 func TestDBContextNoSideEffects(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -478,6 +541,17 @@ func TestDBContextNoSideEffects(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newResultTableNoHeader(data [][]string) *godog.Table {
+	var rows []*messages.PickleTableRow
+	for _, value := range data {
+		rows = append(rows, &messages.PickleTableRow{
+			Cells: []*messages.PickleTableCell{{Value: value[0]}, {Value: value[1]}},
+		})
+	}
+
+	return &godog.Table{Rows: rows}
 }
 
 func newResultTable(values ...string) *godog.Table {
@@ -554,4 +628,53 @@ func TestFormatString(t *testing.T) {
 		actual := formatString(test.input)
 		require.Equal(t, test.expectedOutput, actual)
 	}
+}
+
+func TestTheResultShouldBeEmpty(t *testing.T) {
+	tests := []struct {
+		dbContext     dbContext
+		expectedError string
+	}{
+		{
+			dbContext: dbContext{
+				rowCount: 0,
+				actualRows: [][]string{
+					{"foo"},
+				},
+			},
+			expectedError: "The result set is not empty",
+		},
+		{
+			dbContext: dbContext{
+				rowCount:   1,
+				actualRows: [][]string{},
+			},
+			expectedError: "The result set is not empty",
+		},
+		{
+			dbContext: dbContext{
+				rowCount:   0,
+				actualRows: [][]string{},
+			},
+			expectedError: "",
+		},
+	}
+
+	for _, test := range tests {
+		err := test.dbContext.theResultShouldBeEmpty()
+		if test.expectedError == "" {
+			require.NoError(t, err)
+		} else {
+			require.EqualError(t, err, test.expectedError)
+		}
+	}
+}
+
+func TestAnyGraph(t *testing.T) {
+	dbCtx := dbContext{
+		testData: []string{"testdata/binary-tree-a.json"},
+	}
+	ctx := context.Background()
+	err := dbCtx.anyGraph(ctx)
+	require.EqualError(t, err, "open graph fixture: open testdata/binary-tree-a.json: no such file or directory")
 }
