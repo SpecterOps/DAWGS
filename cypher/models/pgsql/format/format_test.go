@@ -23,6 +23,22 @@ func requireExtractedStringLiteral(t *testing.T, formatted format.Formatted, val
 	require.Equal(t, map[string]string{"__strlit0": value}, formatted.LiteralParameters)
 }
 
+func TestFormat_PropertyKeyDoesNotExtract(t *testing.T) {
+	formattedQuery, err := format.Expression(
+		pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
+			pgsql.OperatorJSONField,
+			pgsql.PropertyKey{Literal: mustAsLiteral("name")},
+		),
+		format.NewOutputBuilder(),
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "(n.properties -> 'name')", formattedQuery.Statement)
+	require.Empty(t, formattedQuery.Parameters)
+	require.Empty(t, formattedQuery.LiteralParameters)
+}
+
 func TestFormat_TypeCastedParenthetical(t *testing.T) {
 	typeCastedParenthetical := pgsql.NewTypeCast(pgsql.NewParenthetical(pgsql.NewLiteral("str", pgsql.Text)), pgsql.Text)
 

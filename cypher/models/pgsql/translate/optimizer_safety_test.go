@@ -308,14 +308,9 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "objectid")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "S-1-5-21-2643190041-1319121918-239771340-513")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit3", "authenticationenabled")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit4", "requiresmanagerapproval")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit5", "enrolleesuppliessubject")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit6", "schemaversion")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit7", "authorizedsignatures")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "S-1-5-21-2643190041-1319121918-239771340-513")
+	require.NotContains(t, formattedQuery.Statement, "properties -> @__strlit")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "ExpansionSuffixPushdown")
 	requirePlannedOptimizationLowering(t, translation.Optimization, "PredicatePlacement")
@@ -335,7 +330,7 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.Contains(t, normalizedQuery, "from s5, s7")
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"where s7.satisfied and exists (select 1 from edge e5 join node n6",
-		"properties -> @__strlit3::text",
+		"properties -> 'authenticationenabled'",
 		"join edge e6 on n6.id = e6.start_id",
 		"e6.end_id = (s5.n2).id",
 		"and (s5.n0).id = s7.root_id",
@@ -493,15 +488,14 @@ RETURN p
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "target")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "target")
 
 	// InboundTraversalReversal drives this pattern from the constrained ca:EnterpriseCA terminal
 	// inward, so the ca.name predicate anchors at the leading s0 segment rather than being pushed
 	// into a recursive terminal exists check.
 	requireSQLContainsInOrder(t, normalizedQuery,
-		"(n0.properties ->> @__strlit0::text) = @__strlit2::text",
+		"(n0.properties ->> 'name') = @__strlit1::text",
 		"n0.kind_ids operator (pg_catalog.@>) array [5]::int2[]",
 		"n0.id = e0.end_id",
 		"e0.kind_id = any (array [4]::int2[])",
@@ -521,16 +515,15 @@ RETURN p
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "source")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "source")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"select n0.id as root_id from node n0 where",
-		"properties -> @__strlit0::text",
+		"properties -> 'name'",
 	)
 }
 
@@ -546,16 +539,15 @@ RETURN dst
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "source")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "source")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"join node n0 on",
-		"properties -> @__strlit0::text",
+		"properties -> 'name'",
 		"join node n1",
 	)
 }
@@ -622,14 +614,13 @@ RETURN p
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(formattedQuery.Statement), " ")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "name")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "string")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit2", "target")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "string")
+	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "target")
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
 	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
-	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> @__strlit0::text)) = @__strlit1::text")
-	require.Contains(t, normalizedQuery, "(n1.properties ->> @__strlit0::text) = @__strlit2::text")
+	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> 'name')) = @__strlit0::text")
+	require.Contains(t, normalizedQuery, "(n1.properties ->> 'name') = @__strlit1::text")
 	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
 }
 
@@ -971,12 +962,10 @@ LIMIT 100
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "hasspn")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit1", "enabled")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "terminal_nodes(id) as materialized")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> @__strlit1::text")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
 	require.Contains(t, normalizedQuery, "join terminal_nodes on terminal_nodes.id = traversal.next_id")
 }
 
@@ -1005,10 +994,9 @@ LIMIT 100
 		parameterValues = append(parameterValues, value)
 	}
 
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "enabled")
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
-	require.Contains(t, normalizedQuery, "source_node.properties -> @__strlit0::text")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> @__strlit0::text")
+	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
 	require.Len(t, translation.Parameters, 2)
 	require.ElementsMatch(t, []any{true, false}, parameterValues)
 }
@@ -1031,11 +1019,10 @@ LIMIT 100
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)
 	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
-	requireStringLiteralParameter(t, formattedQuery.Parameters, formattedQuery.LiteralParameters, "__strlit0", "enabled")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
-	require.Contains(t, normalizedQuery, "source_node.properties -> @__strlit0::text")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> @__strlit0::text")
+	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
 	require.Len(t, translation.Parameters, 1)
 }
 
@@ -1354,7 +1341,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "e2.end_id = (s0.n0).id")
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"exists (select 1 from edge e1 join node n3",
-		"properties -> @__strlit3::text",
+		"properties -> 'authenticationenabled'",
 		"join edge e2 on n3.id = e2.start_id",
 		"e2.end_id = (s0.n0).id",
 	)
