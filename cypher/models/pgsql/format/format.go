@@ -254,6 +254,10 @@ func formatEscapedStringLiteralWithCast(builder *OutputBuilder, literal pgsql.Li
 	return nil
 }
 
+func formatPropertyKey(builder *OutputBuilder, key pgsql.PropertyKey) error {
+	return formatEscapedStringLiteral(builder, key.Literal)
+}
+
 func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
 	if len(caseExpr.Conditions) != len(caseExpr.Then) {
 		return fmt.Errorf("case expression has %d conditions and %d then expressions", len(caseExpr.Conditions), len(caseExpr.Then))
@@ -329,6 +333,11 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 
 		case pgsql.Literal:
 			if err := formatLiteral(builder, typedNextExpr); err != nil {
+				return err
+			}
+
+		case pgsql.PropertyKey:
+			if err := formatPropertyKey(builder, typedNextExpr); err != nil {
 				return err
 			}
 

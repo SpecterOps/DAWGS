@@ -241,7 +241,7 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 			Branches: []pgsql.SyntaxNode{typedNode.Expression},
 		}, nil
 
-	case pgsql.CompoundIdentifier, pgsql.Operator, pgsql.Literal, pgsql.Identifier, pgsql.Parameter, *pgsql.Parameter:
+	case pgsql.CompoundIdentifier, pgsql.Operator, pgsql.Literal, pgsql.Identifier, pgsql.Parameter, *pgsql.Parameter, pgsql.PropertyKey:
 		return &Cursor[pgsql.SyntaxNode]{
 			Node: node,
 		}, nil
