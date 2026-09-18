@@ -196,8 +196,9 @@ func explainAsPsqlCmd() CommandDesc {
 				ctx.output.Warnf("could not format query: %s", err.Error())
 				formattedQuery = sqlQuery.Statement
 			}
-			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", formattedQuery)
-			ctx.output.WriteHighlighted(explainSQLQuery, "postgres")
+			// sqlfmt's lexer doesn't understand E'..' and is making janky queries, so use it for display only.
+			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", sqlQuery.Statement)
+			ctx.output.WriteHighlighted(formattedQuery, "postgres")
 			fmt.Fprint(ctx.output, "\n")
 			if len(sqlQuery.Parameters) > 0 {
 				fmt.Fprintf(ctx.output, "PARAMETERS\n\n")
