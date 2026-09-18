@@ -105,8 +105,8 @@ func TestPostgreSQLPropertyIndexPlans(t *testing.T) {
 				func(sqlQuery string) (string, bool) {
 					return replaceSQLExpressionOnce(
 						sqlQuery,
-						"n0.properties ->> 'objectid'",
-						"coalesce((n0.properties ->> 'objectid'), '')::text",
+						"n0.properties ->> E'objectid'",
+						"coalesce((n0.properties ->> E'objectid'), E'')::text",
 					)
 				},
 			)
@@ -152,8 +152,8 @@ func TestPostgreSQLPropertyIndexPlans(t *testing.T) {
 				func(sqlQuery string) (string, bool) {
 					return replaceSQLExpressionOnce(
 						sqlQuery,
-						"n0.properties ->> 'name'",
-						"coalesce((n0.properties ->> 'name'), '')::text",
+						"n0.properties ->> E'name'",
+						"coalesce((n0.properties ->> E'name'), E'')::text",
 					)
 				},
 			)

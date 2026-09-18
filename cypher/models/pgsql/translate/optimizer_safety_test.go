@@ -330,7 +330,7 @@ func TestOptimizerSafetyADCSQueryPrunesExpansionEdgeCarry(t *testing.T) {
 	require.Contains(t, normalizedQuery, "from s5, s7")
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"where s7.satisfied and exists (select 1 from edge e5 join node n6",
-		"properties -> 'authenticationenabled'",
+		"properties -> E'authenticationenabled'",
 		"join edge e6 on n6.id = e6.start_id",
 		"e6.end_id = (s5.n2).id",
 		"and (s5.n0).id = s7.root_id",
@@ -495,7 +495,7 @@ RETURN p
 	// inward, so the ca.name predicate anchors at the leading s0 segment rather than being pushed
 	// into a recursive terminal exists check.
 	requireSQLContainsInOrder(t, normalizedQuery,
-		"(n0.properties ->> 'name') = @__strlit1::text",
+		"(n0.properties ->> E'name') = @__strlit1::text",
 		"n0.kind_ids operator (pg_catalog.@>) array [5]::int2[]",
 		"n0.id = e0.end_id",
 		"e0.kind_id = any (array [4]::int2[])",
@@ -523,7 +523,7 @@ RETURN p
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"select n0.id as root_id from node n0 where",
-		"properties -> 'name'",
+		"properties -> E'name'",
 	)
 }
 
@@ -547,7 +547,7 @@ RETURN dst
 	requireNoSkippedOptimizationLowering(t, translation.Optimization, optimize.LoweringPredicatePlacement)
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"join node n0 on",
-		"properties -> 'name'",
+		"properties -> E'name'",
 		"join node n1",
 	)
 }
@@ -619,8 +619,8 @@ RETURN p
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
 	requireOptimizationLowering(t, translation.Optimization, "TraversalDirectionSelection")
-	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> 'name')) = @__strlit0::text")
-	require.Contains(t, normalizedQuery, "(n1.properties ->> 'name') = @__strlit1::text")
+	require.Contains(t, normalizedQuery, "jsonb_typeof((n1.properties -> E'name')) = @__strlit0::text")
+	require.Contains(t, normalizedQuery, "(n1.properties ->> E'name') = @__strlit1::text")
 	require.Contains(t, normalizedQuery, "join edge e0 on e0.end_id = s1_seed.root_id")
 }
 
@@ -965,7 +965,7 @@ LIMIT 100
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "terminal_nodes(id) as materialized")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> e'enabled'")
 	require.Contains(t, normalizedQuery, "join terminal_nodes on terminal_nodes.id = traversal.next_id")
 }
 
@@ -995,8 +995,8 @@ LIMIT 100
 	}
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
-	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "source_node.properties -> e'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> e'enabled'")
 	require.Len(t, translation.Parameters, 2)
 	require.ElementsMatch(t, []any{true, false}, parameterValues)
 }
@@ -1021,8 +1021,8 @@ LIMIT 100
 	normalizedQuery := strings.Join(strings.Fields(strings.ToLower(formattedQuery.Statement)), " ")
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
-	require.Contains(t, normalizedQuery, "source_node.properties -> 'enabled'")
-	require.Contains(t, normalizedQuery, "terminal_node.properties -> 'enabled'")
+	require.Contains(t, normalizedQuery, "source_node.properties -> e'enabled'")
+	require.Contains(t, normalizedQuery, "terminal_node.properties -> e'enabled'")
 	require.Len(t, translation.Parameters, 1)
 }
 
@@ -1253,8 +1253,8 @@ func TestOptimizerSafetyShortestPathRootCarriesUnwindSources(t *testing.T) {
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array [@__strlit0::text]::text[]) as i0")
-	requirePlanParameterContains(t, translation, "jsonb_typeof((n1.properties -> 'name')) = 'string'")
-	requirePlanParameterContains(t, translation, "(n0.properties ->> 'name') = i0")
+	requirePlanParameterContains(t, translation, "jsonb_typeof((n1.properties -> E'name')) = E'string'")
+	requirePlanParameterContains(t, translation, "(n0.properties ->> E'name') = i0")
 }
 
 func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
@@ -1274,7 +1274,7 @@ func TestOptimizerSafetyShortestPathTerminalCarriesUnwindSources(t *testing.T) {
 
 	require.Contains(t, normalizedQuery, "unidirectional_sp_harness")
 	require.Contains(t, normalizedQuery, "unnest(array [@__strlit0::text]::text[]) as i0")
-	requirePlanParameterContains(t, translation, "(n1.properties ->> 'name') = i0")
+	requirePlanParameterContains(t, translation, "(n1.properties ->> E'name') = i0")
 }
 
 func TestOptimizerSafetyTranslationReportsOptimizerMetadata(t *testing.T) {
@@ -1341,7 +1341,7 @@ RETURN p
 	require.Contains(t, normalizedQuery, "e2.end_id = (s0.n0).id")
 	requireSQLContainsInOrder(t, normalizedQuery,
 		"exists (select 1 from edge e1 join node n3",
-		"properties -> 'authenticationenabled'",
+		"properties -> E'authenticationenabled'",
 		"join edge e2 on n3.id = e2.start_id",
 		"e2.end_id = (s0.n0).id",
 	)

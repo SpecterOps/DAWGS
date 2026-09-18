@@ -23,7 +23,7 @@ func requireExtractedStringLiteral(t *testing.T, formatted format.Formatted, val
 	require.Equal(t, map[string]string{"__strlit0": value}, formatted.LiteralParameters)
 }
 
-func TestFormat_PropertyKeyDoesNotExtract(t *testing.T) {
+func TestFormat_PropertyKeyUsesEStringAndDoesNotExtract(t *testing.T) {
 	formattedQuery, err := format.Expression(
 		pgsql.NewBinaryExpression(
 			pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
@@ -34,9 +34,56 @@ func TestFormat_PropertyKeyDoesNotExtract(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	require.Equal(t, "(n.properties -> 'name')", formattedQuery.Statement)
+	require.Equal(t, "(n.properties -> E'name')", formattedQuery.Statement)
 	require.Empty(t, formattedQuery.Parameters)
 	require.Empty(t, formattedQuery.LiteralParameters)
+}
+
+func TestFormat_PropertyKeyEscapesEStringCharacters(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		expected string
+	}{
+		{
+			name:     "single quote",
+			key:      "alpha'beta",
+			expected: `E'alpha\'beta'`,
+		},
+		{
+			name:     "backslash",
+			key:      `alpha\beta`,
+			expected: `E'alpha\\beta'`,
+		},
+		{
+			name:     "single quote and backslash",
+			key:      `alpha\'beta`,
+			expected: `E'alpha\\\'beta'`,
+		},
+		{
+			name:     "injection-shaped value",
+			key:      `x'); drop table node; --`,
+			expected: `E'x\'); drop table node; --'`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			formattedQuery, err := format.Expression(
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
+					pgsql.OperatorJSONField,
+					pgsql.PropertyKey{Literal: mustAsLiteral(test.key)},
+				),
+				format.NewOutputBuilder(),
+			)
+
+			require.NoError(t, err)
+			require.Equal(t, "(n.properties -> "+test.expected+")", formattedQuery.Statement)
+			require.Empty(t, formattedQuery.Parameters)
+			require.Empty(t, formattedQuery.LiteralParameters)
+		})
+	}
 }
 
 func TestFormat_TypeCastedParenthetical(t *testing.T) {
@@ -722,26 +769,46 @@ func TestFormat_QueryInjection(t *testing.T) {
 	requireExtractedStringLiteral(t, formattedQuery, "alpha' || select ('malicious')")
 }
 
-func TestFormat_MaterializedStringLiteralUsesExplicitNonTextCast(t *testing.T) {
+func TestFormat_MaterializedStringLiteralUsesEStringSyntax(t *testing.T) {
 	tests := []struct {
 		name     string
 		literal  pgsql.Literal
 		expected string
 	}{
 		{
-			name:     "text",
-			literal:  pgsql.NewLiteral("alpha'", pgsql.Text),
-			expected: `'alpha'''`,
+			name:     "single quote",
+			literal:  pgsql.NewLiteral("alpha'beta", pgsql.Text),
+			expected: `E'alpha\'beta'`,
+		},
+		{
+			name:     "backslash",
+			literal:  pgsql.NewLiteral(`alpha\beta`, pgsql.Text),
+			expected: `E'alpha\\beta'`,
+		},
+		{
+			name:     "single quote and backslash",
+			literal:  pgsql.NewLiteral(`alpha\'beta`, pgsql.Text),
+			expected: `E'alpha\\\'beta'`,
+		},
+		{
+			name:     "newline",
+			literal:  pgsql.NewLiteral("alpha\nbeta", pgsql.Text),
+			expected: "E'alpha\nbeta'",
+		},
+		{
+			name:     "unicode",
+			literal:  pgsql.NewLiteral("caf\u00e9", pgsql.Text),
+			expected: "E'caf\u00e9'",
 		},
 		{
 			name:     "interval",
 			literal:  pgsql.NewLiteral("P1D", pgsql.Interval),
-			expected: `'P1D'::interval`,
+			expected: `E'P1D'::interval`,
 		},
 		{
 			name:     "unset cast",
 			literal:  pgsql.Literal{Value: "alpha"},
-			expected: `'alpha'`,
+			expected: `E'alpha'`,
 		},
 	}
 
@@ -758,4 +825,28 @@ func TestFormat_MaterializedStringLiteralUsesExplicitNonTextCast(t *testing.T) {
 			require.Empty(t, formatted.LiteralParameters)
 		})
 	}
+}
+
+func TestFormat_MaterializedStringArrayUsesEStrings(t *testing.T) {
+	formatted, err := format.Expression(
+		pgsql.NewLiteral([]string{"alpha'beta", `alpha\beta`}, pgsql.TextArray),
+		format.NewOutputBuilder().WithMaterializedParameters(map[string]any{}),
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, `array [E'alpha\'beta', E'alpha\\beta']::text[]`, formatted.Statement)
+	require.Empty(t, formatted.Parameters)
+	require.Empty(t, formatted.LiteralParameters)
+}
+
+func TestFormat_NonMaterializedStringLiteralRemainsExtracted(t *testing.T) {
+	value := `alpha\'beta`
+	formatted, err := format.Expression(
+		pgsql.NewLiteral(value, pgsql.Text),
+		format.NewOutputBuilder(),
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "@__strlit0::text", formatted.Statement)
+	requireExtractedStringLiteral(t, formatted, value)
 }

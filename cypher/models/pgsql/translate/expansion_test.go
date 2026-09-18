@@ -182,7 +182,7 @@ func TestBoundRootShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing.T) 
 
 	primerQuery, hasPrimerQuery := builder.queryParameters[expansionModel.PrimerQueryParameter.Identifier.String()].(string)
 	require.True(t, hasPrimerQuery)
-	require.Contains(t, primerQuery, "lower(n0.id)::text = '1'")
+	require.Contains(t, primerQuery, "lower(n0.id)::text = E'1'")
 	require.NotContains(t, primerQuery, "s0")
 	require.NotContains(t, primerQuery, "(s0.x).id")
 
@@ -207,7 +207,7 @@ func TestBoundTerminalShortestPathPrimerKeepsOnlySeedLocalConstraints(t *testing
 
 	backwardPrimerQuery, hasBackwardPrimerQuery := builder.queryParameters[expansionModel.BackwardPrimerQueryParameter.Identifier.String()].(string)
 	require.True(t, hasBackwardPrimerQuery)
-	require.Contains(t, backwardPrimerQuery, "lower(n1.id)::text = '2'")
+	require.Contains(t, backwardPrimerQuery, "lower(n1.id)::text = E'2'")
 	require.NotContains(t, backwardPrimerQuery, "s0")
 	require.NotContains(t, backwardPrimerQuery, "(s0.x).id")
 
