@@ -142,12 +142,12 @@ func TestCompileRegularQueryCachesBuilderShapeAndRebindsValues(t *testing.T) {
 
 	require.Equal(t, firstSQL, secondSQL)
 	require.NotEqual(t, firstBindings, secondBindings)
-	require.Len(t, firstBindings, 1)
-	require.Len(t, secondBindings, 1)
-	for name, firstValue := range firstBindings {
-		require.Equal(t, uint64(1), firstValue)
-		require.Equal(t, uint64(2), secondBindings[name])
-	}
+	require.Equal(t, map[string]any{
+		"pi0": uint64(1),
+	}, firstBindings)
+	require.Equal(t, map[string]any{
+		"pi0": uint64(2),
+	}, secondBindings)
 	stats := manager.translationCache.Stats()
 	require.Equal(t, int64(1), stats.Misses)
 	require.Equal(t, int64(1), stats.Hits)

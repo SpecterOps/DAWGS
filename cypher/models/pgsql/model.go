@@ -352,8 +352,20 @@ func NewPropertyLookup(identifier CompoundIdentifier, reference Literal) *Binary
 	return NewBinaryExpression(
 		identifier,
 		OperatorPropertyLookup,
-		reference,
+		PropertyKey{reference},
 	)
+}
+
+type PropertyKey struct {
+	Literal Literal
+}
+
+func (s PropertyKey) NodeType() string {
+	return "property_key"
+}
+
+func (s PropertyKey) AsExpression() Expression {
+	return s
 }
 
 type CompositeValue struct {

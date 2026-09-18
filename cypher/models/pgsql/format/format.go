@@ -2,28 +2,35 @@ package format
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+const extractedParameterNamespace = "__strlit"
+
 type OutputBuilder struct {
-	MaterializeParameters bool
-	StripLiterals         bool
-	parameters            map[string]any
-	builder               *strings.Builder
+	extractedParams        map[string]string
+	extractedParamsBackref map[string]string
+	materializeParameters  bool
+	materializedParams     map[string]any
+	builder                *strings.Builder
+	extractedLiteralID     int64
 }
 
 func NewOutputBuilder() *OutputBuilder {
 	return &OutputBuilder{
-		builder: &strings.Builder{},
+		builder:                &strings.Builder{},
+		extractedParams:        make(map[string]string),
+		extractedParamsBackref: make(map[string]string),
 	}
 }
 
 func (s *OutputBuilder) WithMaterializedParameters(parameters map[string]any) *OutputBuilder {
-	s.MaterializeParameters = true
-	s.parameters = parameters
+	s.materializeParameters = true
+	s.materializedParams = parameters
 
 	return s
 }
@@ -47,25 +54,78 @@ func (s *OutputBuilder) Write(values ...any) {
 	}
 }
 
-func (s *OutputBuilder) Build() string {
-	return s.builder.String()
+func (s *OutputBuilder) Build() Formatted {
+	outParams := make(map[string]any)
+	for k, v := range s.extractedParams {
+		outParams[k] = v
+	}
+
+	return Formatted{
+		Statement:         s.builder.String(),
+		Parameters:        outParams,
+		LiteralParameters: maps.Clone(s.extractedParams),
+	}
+}
+
+// extractLiteral takes a literal value, stores it in a parameter map internal to the OutputBuilder,
+// and returns a string representation to be resolved by the database at query-time.
+func (s *OutputBuilder) extractLiteral(literalValue string) pgsql.Identifier {
+	if existingKey, ok := s.extractedParamsBackref[literalValue]; ok {
+		return pgsql.Identifier(existingKey)
+	}
+
+	literalKey := fmt.Sprintf("%s%d", extractedParameterNamespace, s.extractedLiteralID)
+	s.extractedParams[literalKey] = literalValue
+	s.extractedParamsBackref[literalValue] = literalKey
+	s.extractedLiteralID += 1
+
+	return pgsql.Identifier(literalKey)
 }
 
 func formatSlice[T any, TS []T](builder *OutputBuilder, slice TS, dataType pgsql.DataType) error {
 	builder.Write("array [")
+
+	var (
+		tval    T
+		fmtFunc func(builder *OutputBuilder, value any) error
+	)
+	if _, ok := any(tval).(string); ok {
+		if builder.materializeParameters {
+			fmtFunc = formatEscapedString
+		} else {
+			fmtFunc = formatExtractedStringLiteralParameter
+		}
+	} else {
+		fmtFunc = formatValue
+	}
 
 	for idx, value := range slice {
 		if idx > 0 {
 			builder.Write(", ")
 		}
 
-		if err := formatValue(builder, value); err != nil {
+		if err := fmtFunc(builder, value); err != nil {
 			return err
 		}
 	}
 
 	builder.Write("]::", dataType.String())
 	return nil
+}
+
+func formatExtractedStringLiteralParameter(builder *OutputBuilder, value any) error {
+	return formatExtractedStringLiteralParameterWithCast(builder, value, pgsql.Text)
+}
+
+func formatExtractedStringLiteralParameterWithCast(builder *OutputBuilder, value any, castTo pgsql.DataType) error {
+	if stringValue, ok := value.(string); !ok {
+		return fmt.Errorf("input value is not a string")
+	} else {
+		ident := builder.extractLiteral(stringValue)
+		builder.Write(fmt.Sprintf("@%s::%s", ident.String(), castTo.String()))
+
+		return nil
+	}
 }
 
 func formatValue(builder *OutputBuilder, value any) error {
@@ -115,9 +175,6 @@ func formatValue(builder *OutputBuilder, value any) error {
 	case []int64:
 		return formatSlice(builder, typedValue, pgsql.Int8Array)
 
-	case string:
-		builder.Write("'", strings.ReplaceAll(typedValue, "'", "''"), "'")
-
 	case bool:
 		builder.Write(strconv.FormatBool(typedValue))
 
@@ -126,6 +183,9 @@ func formatValue(builder *OutputBuilder, value any) error {
 
 	case float64:
 		builder.Write(strconv.FormatFloat(typedValue, 'f', -1, 64))
+
+	case []string:
+		return formatSlice(builder, typedValue, pgsql.TextArray)
 
 	default:
 		return fmt.Errorf("unsupported literal type: %T", value)
@@ -140,12 +200,63 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 		return nil
 	}
 
-	switch literal.CastType {
-	case pgsql.Interval:
-		builder.Write("interval ")
+	switch literal.Value.(type) {
+	case string:
+		if builder.materializeParameters {
+			if castType := literal.CastType; !castType.IsKnown() || castType == pgsql.Text {
+				return formatEscapedStringLiteral(builder, literal)
+			} else {
+				return formatEscapedStringLiteralWithCast(builder, literal, castType)
+			}
+		}
+
+		if literal.CastType == pgsql.Interval {
+			return formatExtractedStringLiteralParameterWithCast(builder, literal.Value, literal.CastType)
+		}
+
+		return formatExtractedStringLiteralParameter(builder, literal.Value)
+	default:
+		switch literal.CastType {
+		case pgsql.Interval:
+			builder.Write("interval ")
+		}
+		return formatValue(builder, literal.Value)
+	}
+}
+
+func escapeString(raw string) string {
+	// Order matters here, backslashes must be escaped first
+	replacer := strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+	return replacer.Replace(raw)
+}
+
+func formatEscapedString(builder *OutputBuilder, value any) error {
+	if strValue, ok := value.(string); !ok {
+		return fmt.Errorf("input value is not a string")
+	} else {
+		builder.Write("E'", escapeString(strValue), "'")
+		return nil
+	}
+}
+
+// formatEscapedStringLiteral escapes the string literal and writes it into the output builder
+func formatEscapedStringLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
+	return formatEscapedString(builder, literal.Value)
+}
+
+// formatEscapedStringLiteralWithCast does the same as formatEscapedStringLiteral
+// but attaches a cast after the escaped string literal is written
+func formatEscapedStringLiteralWithCast(builder *OutputBuilder, literal pgsql.Literal, castAs pgsql.DataType) error {
+	if err := formatEscapedStringLiteral(builder, literal); err != nil {
+		return err
 	}
 
-	return formatValue(builder, literal.Value)
+	builder.Write(fmt.Sprintf("::%s", castAs.String()))
+	return nil
+}
+
+func formatPropertyKey(builder *OutputBuilder, key pgsql.PropertyKey) error {
+	return formatEscapedStringLiteral(builder, key.Literal)
 }
 
 func formatCase(builder *OutputBuilder, caseExpr pgsql.Case) error {
@@ -223,6 +334,11 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 
 		case pgsql.Literal:
 			if err := formatLiteral(builder, typedNextExpr); err != nil {
+				return err
+			}
+
+		case pgsql.PropertyKey:
+			if err := formatPropertyKey(builder, typedNextExpr); err != nil {
 				return err
 			}
 
@@ -546,8 +662,8 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			)
 
 		case pgsql.Parameter:
-			if builder.MaterializeParameters {
-				if parameterValue, hasParameter := builder.parameters[typedNextExpr.Identifier.String()]; !hasParameter {
+			if builder.materializeParameters {
+				if parameterValue, hasParameter := builder.materializedParams[typedNextExpr.Identifier.String()]; !hasParameter {
 					return fmt.Errorf("invalid parameter %s", typedNextExpr.Identifier.String())
 				} else if parameterLiteral, err := pgsql.AsLiteral(parameterValue); err != nil {
 					return fmt.Errorf("invalid parameter value for %s: %v", typedNextExpr.Identifier.String(), err)
@@ -611,9 +727,9 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 	return nil
 }
 
-func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (string, error) {
+func Expression(expression pgsql.SyntaxNode, builder *OutputBuilder) (Formatted, error) {
 	if err := formatNode(builder, expression); err != nil {
-		return "", err
+		return Formatted{}, err
 	}
 
 	return builder.Build(), nil
@@ -1159,44 +1275,46 @@ func formatDeleteStatement(builder *OutputBuilder, sqlDelete pgsql.Delete) error
 	return nil
 }
 
-func Statement(statement pgsql.Statement, builder *OutputBuilder) (string, error) {
+func Statement(statement pgsql.Statement, builder *OutputBuilder) (Formatted, error) {
 	switch typedStatement := statement.(type) {
 	case pgsql.Merge:
 		if err := formatMergeStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Query:
 		if err := formatSetExpression(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Insert:
 		if err := formatInsertStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Update:
 		if err := formatUpdateStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	case pgsql.Delete:
 		if err := formatDeleteStatement(builder, typedStatement); err != nil {
-			return "", err
+			return Formatted{}, err
 		}
 
 	default:
-		return "", fmt.Errorf("unsupported PgSQL statement type: %T", statement)
+		return Formatted{}, fmt.Errorf("unsupported PgSQL statement type: %T", statement)
 	}
 
 	builder.Write(";")
 	return builder.Build(), nil
 }
 
-func SyntaxNode(node pgsql.SyntaxNode) (string, error) {
-	builder := NewOutputBuilder()
+func SyntaxNode(node pgsql.SyntaxNode) (Formatted, error) {
+	return SyntaxNodeWithBuilder(node, NewOutputBuilder())
+}
 
+func SyntaxNodeWithBuilder(node pgsql.SyntaxNode, builder *OutputBuilder) (Formatted, error) {
 	switch typedNode := node.(type) {
 	case pgsql.Statement:
 		return Statement(typedNode, builder)
@@ -1205,11 +1323,12 @@ func SyntaxNode(node pgsql.SyntaxNode) (string, error) {
 		return Expression(typedNode, builder)
 
 	default:
-		return "", fmt.Errorf("unknown SQL AST type: %T", node)
+		return Formatted{}, fmt.Errorf("unknown SQL AST type: %T", node)
 	}
 }
 
 type Formatted struct {
-	Statement  string
-	Parameters map[string]any
+	Statement         string
+	Parameters        map[string]any
+	LiteralParameters map[string]string
 }

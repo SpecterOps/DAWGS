@@ -46,10 +46,12 @@ func translateToPsqlCmd() CommandDesc {
 	var (
 		kindMapperConnRef = ""
 		dumpTranslatedAst = false
+		materializeParams = false
 	)
 
 	flagSet.StringVar(&kindMapperConnRef, "conn", "", "Connection reference for choosing a kind mapper")
 	flagSet.BoolVar(&dumpTranslatedAst, "dump-pg-ast", false, "Whether to dump the translator's constructed AST")
+	flagSet.BoolVar(&materializeParams, "materialize-params", false, "Whether parameters should be materialized on formatting")
 
 	return CommandDesc{
 		args:  []string{"[flags]", "<...query>"},
@@ -60,6 +62,7 @@ func translateToPsqlCmd() CommandDesc {
 		ClearFlagsFn: func() {
 			kindMapperConnRef = ""
 			dumpTranslatedAst = false
+			materializeParams = false
 		},
 		Fn: func(ctx *CommandContext, fields []string) error {
 			if err := flagSet.Parse(fields); err != nil {
@@ -95,7 +98,7 @@ func translateToPsqlCmd() CommandDesc {
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
 			queryBuilder := pgFormat.NewOutputBuilder()
-			if result.Parameters != nil {
+			if materializeParams && result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}
 
@@ -104,27 +107,48 @@ func translateToPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
 
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
+			formattedQuery, err := sqlfmt.Format(sqlQuery.Statement, &sqlfmt.Options{
 				Distance: 0,
 			})
 			if err != nil {
 				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
+				formattedQuery = sqlQuery.Statement
 			}
 
 			ctx.output.WriteHighlighted(formattedQuery, "postgres")
+			if len(sqlQuery.Parameters) > 0 {
+				fmt.Fprintf(ctx.output, "\n\nPARAMETERS\n\n")
+				ctx.output.WriteHighlighted(spew.Sdump(sqlQuery.Parameters), "golang")
+				fmt.Fprintf(ctx.output, "\n")
+			}
+
 			return nil
 		},
 	}
 }
 
 func explainAsPsqlCmd() CommandDesc {
-	return CommandDesc{
-		args: []string{"<conn>", "<...query>"},
-		help: "Explains a translated query over an active PG connection",
-		desc: "Asks the PG query planner to explain the (translated) Cypher query in PG terms",
+	flagSet := flag.NewFlagSet("explain-psql", flag.ContinueOnError)
 
+	materializeParams := false
+
+	flagSet.BoolVar(&materializeParams, "materialize-params", false, "Whether parameters should be materialized on formatting")
+
+	return CommandDesc{
+		args:  []string{"[flags]", "<conn>", "<...query>"},
+		help:  "Explains a translated query over an active PG connection",
+		desc:  "Asks the PG query planner to explain the (translated) Cypher query in PG terms",
+		flags: flagSet,
+
+		ClearFlagsFn: func() {
+			materializeParams = false
+		},
 		Fn: func(ctx *CommandContext, fields []string) error {
+			if err := flagSet.Parse(fields); err != nil {
+				return fmt.Errorf("could not parse flags: %w", err)
+			}
+
+			fields = flagSet.Args()
 			if len(fields) < 2 {
 				return fmt.Errorf("invalid usage, requires: <connection name> <query>")
 			}
@@ -156,7 +180,7 @@ func explainAsPsqlCmd() CommandDesc {
 			// Certain queries will materialize parameters into the output when translated, so we need to build
 			// an OutputBuilder so we can carry forward those params.
 			queryBuilder := pgFormat.NewOutputBuilder()
-			if result.Parameters != nil {
+			if materializeParams && result.Parameters != nil {
 				queryBuilder.WithMaterializedParameters(result.Parameters)
 			}
 
@@ -165,19 +189,25 @@ func explainAsPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not format translated statement into a string query: %w", err)
 			}
 
-			formattedQuery, err := sqlfmt.Format(sqlQuery, &sqlfmt.Options{
+			formattedQuery, err := sqlfmt.Format(sqlQuery.Statement, &sqlfmt.Options{
 				Distance: 2,
 			})
 			if err != nil {
 				ctx.output.Warnf("could not format query: %s", err.Error())
-				formattedQuery = sqlQuery
+				formattedQuery = sqlQuery.Statement
 			}
-			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", formattedQuery)
-			ctx.output.WriteHighlighted(explainSQLQuery, "postgres")
-			fmt.Fprint(ctx.output, "\n\n")
+			// sqlfmt's lexer doesn't understand E'..' and is making janky queries, so use it for display only.
+			explainSQLQuery := fmt.Sprintf("EXPLAIN %s", sqlQuery.Statement)
+			ctx.output.WriteHighlighted(formattedQuery, "postgres")
+			fmt.Fprint(ctx.output, "\n")
+			if len(sqlQuery.Parameters) > 0 {
+				fmt.Fprintf(ctx.output, "PARAMETERS\n\n")
+				ctx.output.WriteHighlighted(spew.Sdump(sqlQuery.Parameters), "golang")
+				fmt.Fprintf(ctx.output, "\n")
+			}
 
 			err = conn.ReadTransaction(ctx, func(tx graph.Transaction) error {
-				result := tx.Raw(explainSQLQuery, nil)
+				result := tx.Raw(explainSQLQuery, sqlQuery.Parameters)
 				if err := result.Error(); err != nil {
 					return fmt.Errorf("error running raw query: '%s': %w", explainSQLQuery, err)
 				}

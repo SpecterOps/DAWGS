@@ -46,7 +46,7 @@ func PropertyLookup(owner pgsql.Identifier, propertyName string) *pgsql.BinaryEx
 	return pgsql.NewBinaryExpression(
 		Properties(owner),
 		pgsql.OperatorJSONTextField,
-		TextLiteral(propertyName),
+		pgsql.PropertyKey{Literal: TextLiteral(propertyName)},
 	)
 }
 

@@ -29,12 +29,12 @@ RETURN p`)
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	require.Contains(t, formatted, "as p from s0 where")
-	require.Contains(t, formatted, "exists (select 1 from edge")
-	require.Contains(t, formatted, "kind_id = any (array [3, 4]::int2[])")
-	require.Contains(t, formatted, "start_id = (s0.n0).id")
-	require.Contains(t, formatted, "end_id = (s0.n1).id")
-	require.NotContains(t, formatted, "with s1 as")
+	require.Contains(t, formatted.Statement, "as p from s0 where")
+	require.Contains(t, formatted.Statement, "exists (select 1 from edge")
+	require.Contains(t, formatted.Statement, "kind_id = any (array [3, 4]::int2[])")
+	require.Contains(t, formatted.Statement, "start_id = (s0.n0).id")
+	require.Contains(t, formatted.Statement, "end_id = (s0.n1).id")
+	require.NotContains(t, formatted.Statement, "with s1 as")
 }
 
 func TestOptimizedPatternPredicatesContinueAfterFirstPlacement(t *testing.T) {
@@ -57,8 +57,8 @@ func TestOptimizedPatternPredicatesContinueAfterFirstPlacement(t *testing.T) {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	require.Contains(t, formatted, "array [2]::int2[]")
-	require.Contains(t, formatted, "array [3]::int2[]")
+	require.Contains(t, formatted.Statement, "array [2]::int2[]")
+	require.Contains(t, formatted.Statement, "array [3]::int2[]")
 }
 
 func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[string]any) string {
@@ -76,7 +76,7 @@ func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[st
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 
-	return formatted
+	return formatted.Statement
 }
 
 func TestExclusiveDisjunctionTranslates(t *testing.T) {
@@ -134,17 +134,17 @@ func TestLiteralStringPredicatesKeepLikePatterns(t *testing.T) {
 		{
 			name:     "contains",
 			query:    `MATCH (n:NodeKind1) WHERE n.name CONTAINS 'needle' RETURN n`,
-			expected: "((n0.properties ->> 'name') like '%needle%')",
+			expected: "((n0.properties ->> E'name') like @__strlit0::text)",
 		},
 		{
 			name:     "starts with",
 			query:    `MATCH (n:NodeKind1) WHERE n.name STARTS WITH 'prefix' RETURN n`,
-			expected: "((n0.properties ->> 'name') like 'prefix%')",
+			expected: "((n0.properties ->> E'name') like @__strlit0::text)",
 		},
 		{
 			name:     "ends with",
 			query:    `MATCH (n:NodeKind1) WHERE n.name ENDS WITH 'suffix' RETURN n`,
-			expected: "((n0.properties ->> 'name') like '%suffix')",
+			expected: "((n0.properties ->> E'name') like @__strlit0::text)",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -172,23 +172,23 @@ func TestStringPropertyEqualityKeepsBTreeIndexableTextLookup(t *testing.T) {
 			name:       "untyped parameter equality",
 			query:      `MATCH (n) WHERE n.objectid = $objectid RETURN n`,
 			parameters: map[string]any{"objectid": "S-1-5-21-1"},
-			expected:   "jsonb_typeof((n0.properties -> 'objectid')) = 'string' and (n0.properties ->> 'objectid') = @pi0::text",
+			expected:   "jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') = @pi0::text",
 		},
 		{
 			name:       "typed parameter equality",
 			query:      `MATCH (n:NodeKind1) WHERE n.objectid = $objectid RETURN n`,
 			parameters: map[string]any{"objectid": "S-1-5-21-1"},
-			expected:   "jsonb_typeof((n0.properties -> 'objectid')) = 'string' and (n0.properties ->> 'objectid') = @pi0::text",
+			expected:   "jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') = @pi0::text",
 		},
 		{
 			name:     "inline property map equality",
 			query:    `MATCH (n:NodeKind1 {name: 'indexed-name'}) RETURN n`,
-			expected: "jsonb_typeof((n0.properties -> 'name')) = 'string' and (n0.properties ->> 'name') = 'indexed-name'",
+			expected: "jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text and (n0.properties ->> E'name') = @__strlit1::text",
 		},
 		{
 			name:     "reversed literal equality",
 			query:    `MATCH (n) WHERE 'S-1-5-21-1' = n.objectid RETURN n`,
-			expected: "jsonb_typeof((n0.properties -> 'objectid')) = 'string' and 'S-1-5-21-1' = (n0.properties ->> 'objectid')",
+			expected: "jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and @__strlit1::text = (n0.properties ->> E'objectid')",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -199,8 +199,8 @@ func TestStringPropertyEqualityKeepsBTreeIndexableTextLookup(t *testing.T) {
 			require.NotContains(t, normalized, "coalesce(")
 			require.NotContains(t, normalized, "lower(")
 			require.NotContains(t, normalized, "to_jsonb(")
-			require.NotContains(t, normalized, "->> 'objectid')::")
-			require.NotContains(t, normalized, "->> 'name')::")
+			require.NotContains(t, normalized, "->> E'objectid')::")
+			require.NotContains(t, normalized, "->> E'name')::")
 		})
 	}
 }
@@ -216,24 +216,24 @@ func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
 			name:       "contains parameter",
 			query:      `MATCH (n:NodeKind1) WHERE not n.name CONTAINS $needle RETURN n`,
 			parameters: map[string]any{"needle": "needle"},
-			expected:   "not cypher_contains(coalesce((n0.properties ->> 'name'), '')::text, (@pi0::text)::text)::bool",
+			expected:   "not cypher_contains(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, (@pi0::text)::text)::bool",
 		},
 		{
 			name:     "contains property",
 			query:    `MATCH (n:NodeKind1) WHERE not n.name CONTAINS n.other RETURN n`,
-			expected: "not cypher_contains(coalesce((n0.properties ->> 'name'), '')::text, coalesce((n0.properties ->> 'other'), '')::text)::bool",
+			expected: "not cypher_contains(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, coalesce((n0.properties ->> E'other'), @__strlit0::text)::text)::bool",
 		},
 		{
 			name:       "starts with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE not n.name STARTS WITH $prefix RETURN n`,
 			parameters: map[string]any{"prefix": "prefix"},
-			expected:   "not cypher_starts_with(coalesce((n0.properties ->> 'name'), '')::text, (@pi0::text)::text)::bool",
+			expected:   "not cypher_starts_with(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, (@pi0::text)::text)::bool",
 		},
 		{
 			name:       "ends with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE not n.name ENDS WITH $suffix RETURN n`,
 			parameters: map[string]any{"suffix": "suffix"},
-			expected:   "not cypher_ends_with(coalesce((n0.properties ->> 'name'), '')::text, (@pi0::text)::text)::bool",
+			expected:   "not cypher_ends_with(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, (@pi0::text)::text)::bool",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -271,8 +271,8 @@ RETURN n`)
 
 	// Extract the individual CTE bodies so each assertion is scoped to the CTE it
 	// describes, rather than matching anywhere in the flattened query string.
-	s1Body := extractCTEBody(t, formatted, "s1")
-	s2Body := extractCTEBody(t, formatted, "s2")
+	s1Body := extractCTEBody(t, formatted.Statement, "s1")
+	s2Body := extractCTEBody(t, formatted.Statement, "s2")
 
 	// The predicate root CTE (s1) must NOT have the outer MATCH frame (s0) as a
 	// comma-joined FROM source.  OmitPreviousFrameSource suppresses it so the subquery
@@ -300,7 +300,7 @@ RETURN n`)
 	require.NotContains(t, s2Body, "array [2]::int2[]")
 
 	// The existence check reads from the terminal set.
-	require.Contains(t, formatted, "count(*) > 0 from s2")
+	require.Contains(t, formatted.Statement, "count(*) > 0 from s2")
 }
 
 // extractCTEBody returns the parenthesised body of the named common table

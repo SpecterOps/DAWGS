@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -25,9 +26,11 @@ func benchmarkTranslationBuild(query string, parameters map[string]any) func() (
 		}
 
 		sql, err := translate.Translated(translation)
-		return sql, translationCacheBuildResult{
-			parameters:       translation.Parameters,
-			parameterSources: parameterSources,
+		maps.Copy(translation.Parameters, sql.Parameters)
+		return sql.Statement, translationCacheBuildResult{
+			parameters:        translation.Parameters,
+			parameterSources:  parameterSources,
+			literalParameters: sql.LiteralParameters,
 		}, err
 	}
 }

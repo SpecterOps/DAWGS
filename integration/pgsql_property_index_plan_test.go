@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -104,8 +105,8 @@ func TestPostgreSQLPropertyIndexPlans(t *testing.T) {
 				func(sqlQuery string) (string, bool) {
 					return replaceSQLExpressionOnce(
 						sqlQuery,
-						"n0.properties ->> 'objectid'",
-						"coalesce((n0.properties ->> 'objectid'), '')::text",
+						"n0.properties ->> E'objectid'",
+						"coalesce((n0.properties ->> E'objectid'), E'')::text",
 					)
 				},
 			)
@@ -151,8 +152,8 @@ func TestPostgreSQLPropertyIndexPlans(t *testing.T) {
 				func(sqlQuery string) (string, bool) {
 					return replaceSQLExpressionOnce(
 						sqlQuery,
-						"n0.properties ->> 'name'",
-						"coalesce((n0.properties ->> 'name'), '')::text",
+						"n0.properties ->> E'name'",
+						"coalesce((n0.properties ->> E'name'), E'')::text",
 					)
 				},
 			)
@@ -382,7 +383,8 @@ func translateIndexedCypher(t *testing.T, indexedDB indexedPostgresDB, cypherQue
 		t.Fatalf("failed to render translated SQL: %v", err)
 	}
 
-	return sqlQuery, translation.Parameters
+	maps.Copy(translation.Parameters, sqlQuery.Parameters)
+	return sqlQuery.Statement, translation.Parameters
 }
 
 // explainWithSeqScanDisabled captures a JSON EXPLAIN plan with sequential scans

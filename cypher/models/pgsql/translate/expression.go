@@ -53,6 +53,7 @@ func (s *Translator) translateCompositePropertyLookup(target pgsql.Expression, l
 		return s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup)
 	}
 }
+
 func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) error {
 	if err := cypher.ValidatePropertyKeyName(lookup.Symbol); err != nil {
 		return err
@@ -67,7 +68,7 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 				return err
 			} else {
 				s.treeTranslator.PushOperand(pgsql.CompoundIdentifier{typedTranslatedAtom, pgsql.ColumnProperties})
-				s.treeTranslator.PushOperand(fieldIdentifierLiteral)
+				s.treeTranslator.PushOperand(pgsql.PropertyKey{Literal: fieldIdentifierLiteral})
 
 				if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorPropertyLookup); err != nil {
 					return err

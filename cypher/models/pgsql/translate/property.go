@@ -38,8 +38,8 @@ func expressionToPropertyLookupBinaryExpression(expression pgsql.Expression) (*p
 func binaryExpressionToPropertyLookup(expression *pgsql.BinaryExpression) (PropertyLookup, error) {
 	if reference, typeOK := expression.LOperand.(pgsql.CompoundIdentifier); !typeOK {
 		return PropertyLookup{}, fmt.Errorf("expected left operand for property lookup to be a compound identifier but found type: %T", expression.LOperand)
-	} else if field, typeOK := expression.ROperand.(pgsql.Literal); !typeOK {
-		return PropertyLookup{}, fmt.Errorf("expected right operand for property lookup to be a literal but found type: %T", expression.ROperand)
+	} else if field, typeOK := propertyLookupLiteral(expression.ROperand); !typeOK {
+		return PropertyLookup{}, fmt.Errorf("expected right operand for property lookup to be a property key but found type: %T", expression.ROperand)
 	} else if field.CastType != pgsql.Text {
 		return PropertyLookup{}, fmt.Errorf("expected property lookup field a string literal but found data type: %s", field.CastType)
 	} else if stringField, typeOK := field.Value.(string); !typeOK {
@@ -49,6 +49,17 @@ func binaryExpressionToPropertyLookup(expression *pgsql.BinaryExpression) (Prope
 			Reference: reference,
 			Field:     stringField,
 		}, nil
+	}
+}
+
+func propertyLookupLiteral(expression pgsql.Expression) (pgsql.Literal, bool) {
+	switch typedExpression := expression.(type) {
+	case pgsql.Literal:
+		return typedExpression, true
+	case pgsql.PropertyKey:
+		return typedExpression.Literal, true
+	default:
+		return pgsql.Literal{}, false
 	}
 }
 

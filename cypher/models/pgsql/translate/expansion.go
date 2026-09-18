@@ -45,9 +45,7 @@ func expansionConstraints(traversalStep *TraversalStep) pgsql.Expression {
 	)
 }
 
-var (
-	ErrUnsupportedExpansionDirection = errors.New("unsupported expansion direction")
-)
+var ErrUnsupportedExpansionDirection = errors.New("unsupported expansion direction")
 
 type ExpansionBuilder struct {
 	PrimerStatement     pgsql.Select
@@ -1485,21 +1483,19 @@ func (s *ExpansionBuilder) prepareBackwardFrontRecursiveQuery(expansionModel *Ex
 }
 
 func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression) pgsql.CommonTableExpression {
-	var (
-		innerQuery = pgsql.Query{
-			Body: pgsql.Select{
-				Projection: []pgsql.SelectItem{
-					pgsql.Wildcard{},
-				},
-				From: []pgsql.FromClause{{
-					Source: pgsql.FunctionCall{
-						Function:   functionName,
-						Parameters: harnessParameters,
-					},
-				}},
+	innerQuery := pgsql.Query{
+		Body: pgsql.Select{
+			Projection: []pgsql.SelectItem{
+				pgsql.Wildcard{},
 			},
-		}
-	)
+			From: []pgsql.FromClause{{
+				Source: pgsql.FunctionCall{
+					Function:   functionName,
+					Parameters: harnessParameters,
+				},
+			}},
+		},
+	}
 
 	return pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
@@ -1936,13 +1932,13 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 		if formattedFilter, err := format.Statement(pairFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
-			pairFilter = formattedFilter
+			pairFilter = formattedFilter.Statement
 		}
 	} else if hasRootFilter {
 		if formattedFilter, err := format.Statement(rootFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
-			rootFilter = formattedFilter
+			rootFilter = formattedFilter.Statement
 		}
 	}
 
@@ -1950,7 +1946,7 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 		if formattedFilter, err := format.Statement(terminalFilterStatement, format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters)); err != nil {
 			return nil, err
 		} else {
-			terminalFilter = formattedFilter
+			terminalFilter = formattedFilter.Statement
 		}
 	}
 
@@ -1970,9 +1966,10 @@ func (s *ExpansionBuilder) shortestPathsParameters(expansionModel *Expansion, fo
 	var (
 		harnessParameters []pgsql.Expression
 		formatFragment    = func(query pgsql.SetExpression) (string, error) {
-			return format.Statement(
+			stmt, err := format.Statement(
 				nextFrontInsert(query),
 				format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters))
+			return stmt.Statement, err
 		}
 	)
 
@@ -2014,9 +2011,10 @@ func (s *ExpansionBuilder) bidirectionalAllShortestPathsParameters(expansionMode
 	var (
 		harnessParameters []pgsql.Expression
 		formatFragment    = func(query pgsql.SetExpression) (string, error) {
-			return format.Statement(
+			stmt, err := format.Statement(
 				nextFrontInsert(query),
 				format.NewOutputBuilder().WithMaterializedParameters(s.queryParameters))
+			return stmt.Statement, err
 		}
 	)
 
@@ -3573,7 +3571,6 @@ func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex
 	)
 
 	useBidirectionalSearch, err = s.useBidirectionalShortestPathStrategy(part, stepIndex, traversalStep)
-
 	if err != nil {
 		return err
 	}

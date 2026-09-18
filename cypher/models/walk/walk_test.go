@@ -1715,3 +1715,20 @@ func TestPgSQLWalkVisitsJoinTable(t *testing.T) {
 	require.True(t, visitedInnerProjection)
 	require.True(t, visitedJoinConstraint)
 }
+
+func TestPgSQLWalkVisitsPropertyKey(t *testing.T) {
+	lookup := pgsql.NewPropertyLookup(
+		pgsql.CompoundIdentifier{"n", pgsql.ColumnProperties},
+		pgsql.NewLiteral("name", pgsql.Text),
+	)
+	var visitedPropertyKey bool
+
+	visitor := walk.NewSimpleVisitor[pgsql.SyntaxNode](func(node pgsql.SyntaxNode, _ walk.VisitorHandler) {
+		if propertyKey, ok := node.(pgsql.PropertyKey); ok {
+			visitedPropertyKey = propertyKey.Literal.Value == "name"
+		}
+	})
+
+	require.NoError(t, walk.PgSQL(lookup, visitor))
+	require.True(t, visitedPropertyKey)
+}
