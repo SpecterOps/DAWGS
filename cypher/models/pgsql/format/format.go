@@ -225,20 +225,21 @@ func formatLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 }
 
 func escapeString(raw string) string {
-	return strings.ReplaceAll(raw, "'", "''")
+	// Order matters here, backslashes must be escaped first
+	replacer := strings.NewReplacer(`\`, `\\`, `'`, `\'`)
+	return replacer.Replace(raw)
 }
 
 func formatEscapedString(builder *OutputBuilder, value any) error {
 	if strValue, ok := value.(string); !ok {
 		return fmt.Errorf("input value is not a string")
 	} else {
-		builder.Write("'", escapeString(strValue), "'")
+		builder.Write("E'", escapeString(strValue), "'")
 		return nil
 	}
 }
 
-// formatEscapedStringLiteral does a simple quote-escape of the string literal
-// and writes it into the output builder
+// formatEscapedStringLiteral escapes the string literal and writes it into the output builder
 func formatEscapedStringLiteral(builder *OutputBuilder, literal pgsql.Literal) error {
 	return formatEscapedString(builder, literal.Value)
 }
