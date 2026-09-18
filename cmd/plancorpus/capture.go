@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	neo4jcore "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/specterops/dawgs"
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/neo4j"
@@ -22,22 +24,34 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// defaultGraphName names the isolated graph populated while capturing corpus plans.
 const defaultGraphName = "integration_test"
 
+// captureSpec binds a requested driver name to the connection string used for capture.
 type captureSpec struct {
+	// DriverName identifies the database driver selected for this capture.
 	DriverName string
+	// Connection contains the backend connection string.
 	Connection string
 }
 
+// backendCapture owns one plan-capture backend and its graph database handle.
 type backendCapture struct {
-	spec        captureSpec
-	db          graph.Database
-	pgDriver    *pg.Driver
-	pgGraphID   int32
+	// spec identifies the backend connection and driver being captured.
+	spec captureSpec
+	// db provides graph transactions for fixture preparation and query execution.
+	db graph.Database
+	// pgDriver provides PostgreSQL graph access and kind mapping.
+	pgDriver *pg.Driver
+	// pgGraphID selects the PostgreSQL graph partition cleared, populated, and queried during capture.
+	pgGraphID int32
+	// neo4jDriver owns the Neo4j connection used for plan capture.
 	neo4jDriver neo4jcore.Driver
+	// neo4jDBName selects the Neo4j database used for plan capture.
 	neo4jDBName string
 }
 
+// driverFromConnectionString selects a graph driver from the connection URI scheme.
 func driverFromConnectionString(connStr string) (string, error) {
 	u, err := url.Parse(connStr)
 	if err != nil {
@@ -54,6 +68,7 @@ func driverFromConnectionString(connStr string) (string, error) {
 	}
 }
 
+// captureCorpus loads each required fixture and captures every corpus query for one backend.
 func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec captureSpec) ([]PlanRecord, error) {
 	backend, err := openBackend(ctx, suite, spec)
 	if err != nil {
@@ -87,15 +102,20 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 
 		for _, file := range group.files {
 			for _, testCase := range file.Cases {
+				var idMap opengraph.IDMap
 				if testCase.Fixture == nil {
 					if err := ensureDatasetLoaded(); err != nil {
 						return nil, err
 					}
 				} else {
-					if err := loadCommittedFixture(ctx, backend.db, testCase.Fixture); err != nil {
+					if idMap, err = loadCommittedFixture(ctx, backend.db, testCase.Fixture); err != nil {
 						return nil, err
 					}
 					datasetLoaded = false
+				}
+				params, err := resolveFixtureParams(testCase.Params, testCase.NodeParams, testCase.NodeListParams, idMap)
+				if err != nil {
+					return nil, fmt.Errorf("%s/%s: %w", file.path, testCase.Name, err)
 				}
 
 				record := backend.capture(ctx, CorpusQuery{
@@ -103,7 +123,7 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 					Dataset: datasetName,
 					Name:    testCase.Name,
 					Cypher:  testCase.Cypher,
-					Params:  testCase.Params,
+					Params:  params,
 				})
 				records = append(records, record)
 			}
@@ -123,15 +143,25 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 				if err != nil {
 					return nil, fmt.Errorf("%s/%s/%s: %w", file.path, family.Name, variant.Name, err)
 				}
-				if err := loadCommittedFixture(ctx, backend.db, family.Fixture); err != nil {
+				idMap, err := loadCommittedFixture(ctx, backend.db, family.Fixture)
+				if err != nil {
 					return nil, err
+				}
+				params, err := resolveFixtureParams(
+					mergeParams(family.Params, variant.Params),
+					mergeStringMap(family.NodeParams, variant.NodeParams),
+					mergeStringListMap(family.NodeListParams, variant.NodeListParams),
+					idMap,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("%s/%s/%s: %w", file.path, family.Name, variant.Name, err)
 				}
 
 				record := backend.capture(ctx, CorpusQuery{
 					Source: file.path,
 					Name:   fileName + "/" + family.Name + "/" + variant.Name,
 					Cypher: rendered,
-					Params: mergeParams(family.Params, variant.Params),
+					Params: params,
 				})
 				records = append(records, record)
 			}
@@ -141,7 +171,7 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 			if family.Fixture == nil {
 				return nil, fmt.Errorf("%s/%s has no fixture", file.path, family.Name)
 			}
-			if err := loadCommittedFixture(ctx, backend.db, family.Fixture); err != nil {
+			if _, err := loadCommittedFixture(ctx, backend.db, family.Fixture); err != nil {
 				return nil, err
 			}
 
@@ -160,6 +190,7 @@ func captureCorpus(ctx context.Context, datasetDir string, suite corpus, spec ca
 	return records, nil
 }
 
+// openBackend opens the requested graph backend, asserts the capture schema, and retains driver-specific plan handles.
 func openBackend(ctx context.Context, suite corpus, spec captureSpec) (*backendCapture, error) {
 	cfg := dawgs.Config{
 		GraphQueryMemoryLimit: size.Gibibyte,
@@ -232,6 +263,7 @@ func openBackend(ctx context.Context, suite corpus, spec captureSpec) (*backendC
 	return backend, nil
 }
 
+// close closes the backend driver resources owned by a capture.
 func (s *backendCapture) close(ctx context.Context) {
 	if s.neo4jDriver != nil {
 		_ = s.neo4jDriver.Close()
@@ -241,14 +273,17 @@ func (s *backendCapture) close(ctx context.Context) {
 	}
 }
 
+// capture captures one query plan with driver, workload, and fixture metadata.
 func (s *backendCapture) capture(ctx context.Context, query CorpusQuery) PlanRecord {
 	record := PlanRecord{
-		Driver:  s.spec.DriverName,
-		Source:  query.Source,
-		Dataset: query.Dataset,
-		Name:    query.Name,
-		Cypher:  query.Cypher,
-		Params:  query.Params,
+		SchemaVersion:  planRecordSchemaVersion,
+		Driver:         s.spec.DriverName,
+		Source:         query.Source,
+		Dataset:        query.Dataset,
+		Name:           query.Name,
+		WorkloadSHA256: workloadFingerprint(query),
+		Cypher:         query.Cypher,
+		Params:         query.Params,
 	}
 
 	switch s.spec.DriverName {
@@ -257,10 +292,13 @@ func (s *backendCapture) capture(ctx context.Context, query CorpusQuery) PlanRec
 	case neo4j.DriverName:
 		s.captureNeo4j(query.Cypher, query.Params, &record)
 	}
+	record.PGPlanFingerprint = postgresPlanFingerprint(record.PGPlan)
+	record.Neo4jPlanFingerprint = neo4jPlanFingerprint(record.Neo4jPlan)
 
 	return record
 }
 
+// capturePostgres translates a Cypher query and attaches PostgreSQL EXPLAIN evidence to its record.
 func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string, params map[string]any, record *PlanRecord) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
 	if err != nil {
@@ -307,14 +345,27 @@ func (s *backendCapture) capturePostgres(ctx context.Context, cypherQuery string
 	record.Optimization = &translation.Optimization
 }
 
+// captureNeo4j runs PROFILE for reads and EXPLAIN for writes, then attaches its normalized operator tree.
 func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any, record *PlanRecord) {
+	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+	if err != nil {
+		record.Error = err.Error()
+		return
+	}
+	write := regularQueryHasUpdates(regularQuery)
+	accessMode := neo4jcore.AccessModeRead
+	command := "PROFILE "
+	if write {
+		accessMode = neo4jcore.AccessModeWrite
+		command = "EXPLAIN "
+	}
 	session := s.neo4jDriver.NewSession(neo4jcore.SessionConfig{
-		AccessMode:   neo4jcore.AccessModeWrite,
+		AccessMode:   accessMode,
 		DatabaseName: s.neo4jDBName,
 	})
 	defer session.Close()
 
-	result, err := session.Run("EXPLAIN "+cypherWithoutTerminator(cypherQuery), params)
+	result, err := session.Run(command+cypherWithoutTerminator(cypherQuery), params)
 	if err != nil {
 		record.Error = err.Error()
 		return
@@ -326,20 +377,50 @@ func (s *backendCapture) captureNeo4j(cypherQuery string, params map[string]any,
 		return
 	}
 
-	if plan := summary.Plan(); plan != nil {
+	if profile := summary.Profile(); profile != nil {
+		planNode := convertNeo4jProfile(profile)
+		record.Neo4jPlan = &planNode
+		record.Neo4jOperators = neo4jOperators(planNode)
+	} else if plan := summary.Plan(); plan != nil {
 		planNode := convertNeo4jPlan(plan)
 		record.Neo4jPlan = &planNode
 		record.Neo4jOperators = neo4jOperators(planNode)
 	}
 }
 
+// regularQueryHasUpdates reports whether any query part contains a mutation.
+func regularQueryHasUpdates(query *cypher.RegularQuery) bool {
+	if query == nil || query.SingleQuery == nil {
+		return false
+	}
+	if single := query.SingleQuery.SinglePartQuery; single != nil {
+		return len(single.UpdatingClauses) > 0
+	}
+	multi := query.SingleQuery.MultiPartQuery
+	if multi == nil {
+		return false
+	}
+	for _, part := range multi.Parts {
+		if part != nil && len(part.UpdatingClauses) > 0 {
+			return true
+		}
+	}
+	return multi.SinglePartQuery != nil && len(multi.SinglePartQuery.UpdatingClauses) > 0
+}
+
+// neo4jPlanDriverConfig contains a Neo4j server URI and optional target database parsed from a connection string.
 type neo4jPlanDriverConfig struct {
-	Target       string
-	Username     string
-	Password     string
+	// Target contains the Neo4j server URI without a database path.
+	Target string
+	// Username contains the Neo4j username decoded from the connection URI.
+	Username string
+	// Password contains the Neo4j password decoded from the connection URI.
+	Password string
+	// DatabaseName selects the Neo4j database targeted by the session.
 	DatabaseName string
 }
 
+// parseNeo4jPlanDriverConfig parses a Neo4j connection string while preserving its server URI and database path.
 func parseNeo4jPlanDriverConfig(connStr string) (neo4jPlanDriverConfig, error) {
 	connectionURL, err := url.Parse(connStr)
 	if err != nil {
@@ -376,6 +457,7 @@ func parseNeo4jPlanDriverConfig(connStr string) (neo4jPlanDriverConfig, error) {
 	}, nil
 }
 
+// neo4jDatabaseName returns the optional single-segment database name encoded in a Neo4j URI path.
 func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
 	databasePath := strings.Trim(connectionURL.EscapedPath(), "/")
 	if databasePath == "" {
@@ -397,6 +479,7 @@ func neo4jDatabaseName(connectionURL *url.URL) (string, error) {
 	return databaseName, nil
 }
 
+// openNeo4jPlanDriver parses the capture connection settings and returns a driver together with the selected Neo4j database name.
 func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
 	cfg, err := parseNeo4jPlanDriverConfig(connStr)
 	if err != nil {
@@ -414,12 +497,45 @@ func openNeo4jPlanDriver(connStr string) (neo4jcore.Driver, string, error) {
 	return driver, cfg.DatabaseName, nil
 }
 
+// clearGraph removes relationships before nodes, using PostgreSQL partition truncation when available.
 func clearGraph(ctx context.Context, db graph.Database) error {
+	if pgDriver, isPostgres := db.(*pg.Driver); isPostgres {
+		graphTarget, hasDefaultGraph := pgDriver.DefaultGraph()
+		if !hasDefaultGraph {
+			return fmt.Errorf("PostgreSQL default graph is not set")
+		}
+
+		return clearPostgresGraph(ctx, db, graphTarget.ID)
+	}
+
 	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		return tx.Nodes().Delete()
+		if err := tx.Relationships().Delete(); err != nil {
+			return fmt.Errorf("delete relationships: %w", err)
+		}
+
+		if err := tx.Nodes().Delete(); err != nil {
+			return fmt.Errorf("delete nodes: %w", err)
+		}
+
+		return nil
 	})
 }
 
+// clearPostgresGraph truncates one PostgreSQL graph's edge and node partitions in a transaction.
+func clearPostgresGraph(ctx context.Context, db graph.Database, graphID int32) error {
+	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		statement := fmt.Sprintf("truncate table edge_%d, node_%d", graphID, graphID)
+		result := tx.Raw(statement, nil)
+		result.Close()
+		if err := result.Error(); err != nil {
+			return fmt.Errorf("execute PostgreSQL graph reset: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// loadDataset decodes and loads a named fixture dataset into an empty graph.
 func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string) error {
 	f, err := os.Open(filepath.Join(datasetDir, name+".json"))
 	if err != nil {
@@ -433,27 +549,36 @@ func loadDataset(ctx context.Context, db graph.Database, datasetDir, name string
 	return nil
 }
 
-func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *opengraph.Graph) error {
+// loadCommittedFixture loads an inline fixture graph and returns its stable key-to-ID mapping.
+func loadCommittedFixture(ctx context.Context, db graph.Database, fixture *opengraph.Graph) (opengraph.IDMap, error) {
 	if fixture == nil {
-		return fmt.Errorf("fixture is nil")
+		return nil, fmt.Errorf("fixture is nil")
 	}
 
 	if err := clearGraph(ctx, db); err != nil {
-		return err
+		return nil, err
 	}
 
-	return db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		_, err := opengraph.WriteGraphTx(tx, fixture)
+	var idMap opengraph.IDMap
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		var err error
+		idMap, err = opengraph.WriteGraphTx(tx, fixture)
 		return err
-	})
+	}); err != nil {
+		return nil, err
+	}
+
+	return idMap, nil
 }
 
+// convertNeo4jPlan recursively converts a Neo4j plan into the stable serialized plan-node schema.
 func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	node := Neo4jPlanNode{
-		Operator:    plan.Operator(),
+		Operator:    normalizeNeo4jOperator(plan.Operator()),
 		Arguments:   stringifyArguments(plan.Arguments()),
 		Identifiers: append([]string(nil), plan.Identifiers()...),
 	}
+	node.EstimatedRows = neo4jArgumentFloat(node.Arguments, "EstimatedRows")
 
 	for _, child := range plan.Children() {
 		node.Children = append(node.Children, convertNeo4jPlan(child))
@@ -462,6 +587,60 @@ func convertNeo4jPlan(plan neo4jcore.Plan) Neo4jPlanNode {
 	return node
 }
 
+// convertNeo4jProfile recursively converts executed read-plan evidence.
+func convertNeo4jProfile(plan neo4jcore.ProfiledPlan) Neo4jPlanNode {
+	rows, dbHits := plan.Records(), plan.DbHits()
+	node := Neo4jPlanNode{
+		Operator:        normalizeNeo4jOperator(plan.Operator()),
+		Arguments:       stringifyArguments(plan.Arguments()),
+		Identifiers:     append([]string(nil), plan.Identifiers()...),
+		ActualRows:      &rows,
+		DBHits:          optionalNonnegativeInt64(dbHits),
+		PageCacheHits:   optionalNonnegativeInt64(plan.PageCacheHits()),
+		PageCacheMisses: optionalNonnegativeInt64(plan.PageCacheMisses()),
+		TimeNS:          optionalNonnegativeInt64(plan.Time()),
+	}
+	node.EstimatedRows = neo4jArgumentFloat(node.Arguments, "EstimatedRows")
+	for _, child := range plan.Children() {
+		node.Children = append(node.Children, convertNeo4jProfile(child))
+	}
+	return node
+}
+
+// optionalNonnegativeInt64 distinguishes unavailable profiler values from zero.
+func optionalNonnegativeInt64(value int64) *int64 {
+	if value < 0 {
+		return nil
+	}
+	return &value
+}
+
+// neo4jArgumentFloat parses an optional numeric plan argument.
+func neo4jArgumentFloat(arguments map[string]string, key string) *float64 {
+	value, found := arguments[key]
+	if !found {
+		return nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return nil
+	}
+	return &parsed
+}
+
+// normalizeNeo4jOperator removes repeated backend suffixes and applies exactly one.
+func normalizeNeo4jOperator(operator string) string {
+	operator = strings.TrimSpace(operator)
+	for strings.HasSuffix(operator, "@neo4j") {
+		operator = strings.TrimSuffix(operator, "@neo4j")
+	}
+	if operator == "" {
+		return ""
+	}
+	return operator + "@neo4j"
+}
+
+// stringifyArguments converts plan arguments to stable strings in a fresh map.
 func stringifyArguments(arguments map[string]any) map[string]string {
 	if len(arguments) == 0 {
 		return nil
@@ -474,6 +653,7 @@ func stringifyArguments(arguments map[string]any) map[string]string {
 	return values
 }
 
+// postgresOperators extracts normalized operator names from PostgreSQL text plans.
 func postgresOperators(plan []string) []string {
 	operators := make([]string, 0, len(plan))
 	for _, line := range plan {
@@ -491,6 +671,7 @@ func postgresOperators(plan []string) []string {
 	return operators
 }
 
+// neo4jOperators flattens a Neo4j plan tree into sorted unique operator names.
 func neo4jOperators(root Neo4jPlanNode) []string {
 	var (
 		operators []string
@@ -498,7 +679,7 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	)
 
 	walk = func(node Neo4jPlanNode) {
-		operators = append(operators, node.Operator)
+		operators = append(operators, normalizeNeo4jOperator(node.Operator))
 		for _, child := range node.Children {
 			walk(child)
 		}
@@ -507,6 +688,7 @@ func neo4jOperators(root Neo4jPlanNode) []string {
 	return operators
 }
 
+// loweringNames returns sorted unique names of applied SQL lowering decisions.
 func loweringNames(decisions []optimize.LoweringDecision) []string {
 	if len(decisions) == 0 {
 		return nil
@@ -529,6 +711,7 @@ func loweringNames(decisions []optimize.LoweringDecision) []string {
 	return names
 }
 
+// cypherWithoutTerminator trims surrounding whitespace and one trailing Cypher semicolon.
 func cypherWithoutTerminator(cypherQuery string) string {
 	return strings.TrimSuffix(strings.TrimSpace(cypherQuery), ";")
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// mustAsLiteral converts value to a PostgreSQL literal and panics when the value type is unsupported.
 func mustAsLiteral(value any) pgsql.Literal {
 	if literal, err := pgsql.AsLiteral(value); err != nil {
 		panic(fmt.Sprintf("%v", err))
@@ -225,6 +226,7 @@ func TestInferUnaryExpressionType(t *testing.T) {
 	}
 }
 
+// TestInferWrappedExpressionType verifies that wrappers preserve or derive the data type of their enclosed expressions.
 func TestInferWrappedExpressionType(t *testing.T) {
 	testCases := []struct {
 		Name         string
@@ -284,6 +286,17 @@ func TestInferWrappedExpressionType(t *testing.T) {
 		Name:         "all expression over scalar",
 		ExpectedType: pgsql.UnknownDataType,
 		Expression:   pgsql.NewAllExpression(mustAsLiteral(int64(1))),
+	}, {
+		Name:         "case expression ignores null branch during inference",
+		ExpectedType: pgsql.Int,
+		Expression: pgsql.Case{
+			Conditions: []pgsql.Expression{mustAsLiteral(true)},
+			Then: []pgsql.Expression{pgsql.FunctionCall{
+				Function: pgsql.FunctionJSONBArrayLength,
+				CastType: pgsql.Int,
+			}},
+			Else: pgsql.NullLiteral(),
+		},
 	}}
 
 	for _, nextCase := range testCases {
@@ -296,6 +309,7 @@ func TestInferWrappedExpressionType(t *testing.T) {
 	}
 }
 
+// TestPropertyLookupEqualityScalarRewrites verifies scalar equality operators receive type-aware property extraction.
 func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 	var (
 		propertyLookup = func(property string) *pgsql.BinaryExpression {
@@ -390,7 +404,13 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			LOperand: propertyLookup("left"),
 			Operator: pgsql.OperatorEquals,
 			ROperand: propertyLookup("right"),
-			Expected: "(n.properties -> 'left') = (n.properties -> 'right')",
+			Expected: "nullif((n.properties -> 'left'), ('null')::jsonb)::jsonb = nullif((n.properties -> 'right'), ('null')::jsonb)::jsonb",
+		}, {
+			Name:     "property ordering treats JSON null as SQL null",
+			LOperand: propertyLookup("left"),
+			Operator: pgsql.OperatorLessThan,
+			ROperand: propertyLookup("right"),
+			Expected: "nullif((n.properties -> 'left'), ('null')::jsonb)::jsonb < nullif((n.properties -> 'right'), ('null')::jsonb)::jsonb",
 		}}
 	)
 
@@ -500,6 +520,7 @@ func TestExpressionTreeTranslator(t *testing.T) {
 	validateConstraints(t, treeTranslator, idents, expectedTranslation)
 }
 
+// validateConstraints requires the generated constraint collection to contain exactly the expected SQL expressions.
 func validateConstraints(t *testing.T, constraintTracker *translate.ExpressionTreeTranslator, idents *pgsql.IdentifierSet, expectedTranslation string) {
 	constraint, err := constraintTracker.ConsumeConstraintsFromVisibleSet(idents)
 

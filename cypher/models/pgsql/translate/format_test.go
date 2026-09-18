@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestFromCypherProperlyEscapesDebugComment verifies that every source-query line remains inside the emitted PostgreSQL comment.
 func TestFromCypherProperlyEscapesDebugComment(t *testing.T) {
 	t.Parallel()
 

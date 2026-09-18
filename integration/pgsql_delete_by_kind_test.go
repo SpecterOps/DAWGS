@@ -29,6 +29,7 @@ import (
 
 // nodesByKindDeleter mirrors the capability the BloodHound delete path detects on the PostgreSQL driver.
 type nodesByKindDeleter interface {
+	// DeleteNodesByKinds deletes nodes matching any included kind unless they match an excluded kind.
 	DeleteNodesByKinds(ctx context.Context, includeAny graph.Kinds, excludeAny graph.Kinds) error
 }
 

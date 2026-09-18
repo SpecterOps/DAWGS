@@ -54,9 +54,9 @@ func (s *translationCacheCall) finish(reusable bool) {
 	})
 }
 
-// TranslationCacheStats contains aggregate counters only. It intentionally
+// CompilationCacheStats contains aggregate counters only. It intentionally
 // exposes no source text, SQL, parameter names, values, or connection data.
-type TranslationCacheStats struct {
+type CompilationCacheStats struct {
 	Hits                    int64
 	Misses                  int64
 	Coalesced               int64
@@ -235,7 +235,7 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 		s.lock.Unlock()
 
 		sql, result, err, panicked := callTranslationBuild(build)
-		entry, cacheable := cacheableTranslation(sql, result, parameters, err)
+		entry, cacheable := cacheableCompilation(sql, result, parameters, err)
 
 		s.lock.Lock()
 		currentGeneration := s.schemaGeneration.Load()
@@ -309,7 +309,7 @@ func cloneTranslationCacheKey(key translationCacheKey) translationCacheKey {
 	return key
 }
 
-func cacheableTranslation(sql string, result translationCacheBuildResult, parameters map[string]any, err error) (translationCacheEntry, bool) {
+func cacheableCompilation(sql string, result translationCacheBuildResult, parameters map[string]any, err error) (translationCacheEntry, bool) {
 	if err != nil {
 		return translationCacheEntry{}, false
 	}
@@ -381,7 +381,7 @@ func (s *translationCache) Close() {
 	}
 }
 
-func (s *translationCache) Stats() TranslationCacheStats {
+func (s *translationCache) Stats() CompilationCacheStats {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -390,7 +390,7 @@ func (s *translationCache) Stats() TranslationCacheStats {
 		size = s.entries.Stats().Size()
 	}
 
-	return TranslationCacheStats{
+	return CompilationCacheStats{
 		Hits:                    s.hits.Load(),
 		Misses:                  s.misses.Load(),
 		Coalesced:               s.coalesced.Load(),

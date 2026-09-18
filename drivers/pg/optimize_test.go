@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestOptimizeStorage verifies optimization vacuums both graph storage parents in one statement.
 func TestOptimizeStorage(t *testing.T) {
 	t.Run("always vacuums node and edge", func(t *testing.T) {
 		ctx := context.Background()

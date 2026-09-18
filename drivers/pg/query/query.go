@@ -217,6 +217,18 @@ func (s Query) DropSchema() error {
 	return nil
 }
 
+// InstallP5AdjacencyShadow installs the opt-in P5 adjacency materialization
+// used only by the feasibility study. Normal schema creation never calls it.
+func (s Query) InstallP5AdjacencyShadow() error {
+	return s.exec(sqlP5AdjacencyShadowUp, nil)
+}
+
+// DropP5AdjacencyShadow removes the opt-in P5 feasibility schema without
+// changing the core graph schema.
+func (s Query) DropP5AdjacencyShadow() error {
+	return s.exec(sqlP5AdjacencyShadowDown, nil)
+}
+
 func (s Query) insertGraph(name string) (model.Graph, error) {
 	var (
 		graphID int32

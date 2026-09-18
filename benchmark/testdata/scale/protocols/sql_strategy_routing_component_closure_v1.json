@@ -1,0 +1,135 @@
+{
+  "schema": "sql-strategy-routing-component-closure-v1",
+  "generation": "sql-strategy-routing-component-closure-v1",
+  "status": "frozen_measurement_closure",
+  "production_default": "off",
+  "purpose": "close the client/raw-PGX prepared-state and temporary-workspace observation gaps left by sql-strategy-routing-preflight-v1; this is not a selector, route cache, translation cache change, retry, schema change, or production qualification",
+  "predecessor": {
+    "protocol": "sql-strategy-routing-preflight-v1",
+    "clean_component_source_commit": "aaecb745c328128115273b4da7fa71a8de3351b7",
+    "artifact_directory": ".coverage/sql-routing-preflight-v1-clean-aaecb74",
+    "required_findings": [
+      "all open target/control observations exact",
+      "direct reverse component telemetry complete",
+      "both sparse target classes materially faster",
+      "cancellation rollback and size-one pool reuse exact"
+    ]
+  },
+  "identities": {
+    "incumbent": "EXPANSION-STEPWISE-FORWARD",
+    "component": "EXPANSION-SUFFIX-SEEDED-REVERSE",
+    "component_diagnostic_label": "suffix-route-component-v1",
+    "closure_label": "suffix-route-component-closure-v1",
+    "selector": "none",
+    "fallback": "forbidden"
+  },
+  "execution_boundary": {
+    "statement": "one exact incumbent statement or one exact forced reverse component statement",
+    "selection": "external diagnostic arm labeling only",
+    "transaction": "caller-owned repeatable_read with rollback-only raw-PGX closure transactions",
+    "fresh_session": "one dedicated newly opened PostgreSQL session executes its first prepared-statement miss",
+    "same_session": "the same dedicated session executes exactly the declared prepared-statement hits",
+    "pool_reacquisition": "a dedicated newly opened size-one raw-PGX pool executes one prepared miss, releases it, then every declared hit reacquires the same backend PID",
+    "inactive_forward_body": "forbidden in component SQL",
+    "same_statement_probe": "forbidden",
+    "transaction_retry": "forbidden",
+    "route_cache": "forbidden",
+    "translation_cache_change": "forbidden",
+    "persistent_schema_or_synopsis": "forbidden"
+  },
+  "roster": {
+    "tag": "suffix-route-component-v1",
+    "status": "open_training_only",
+    "targets": [
+      "GFSE-SRC-V1-TARGET-D16-F1024-sparse_endpoint_ids",
+      "GFSE-SRC-V1-TARGET-D17-F1025-sparse_path"
+    ],
+    "controls": [
+      "GFSE-SRC-V1-CONTROL-D08-F017-I1024-high_reverse_fanin",
+      "GFSE-SRC-V1-CONTROL-D05-F016-dense_suffix",
+      "GFSE-SRC-V1-CONTROL-D09-F513-no_path",
+      "GFSE-SRC-V1-CONTROL-CAP511",
+      "GFSE-SRC-V1-CONTROL-CAP512",
+      "GFSE-SRC-V1-CONTROL-CAP513",
+      "GFSE-SRC-V1-CONTROL-productive_cycle_path",
+      "GFSE-SRC-V1-CONTROL-productive_self_loop_path",
+      "GFSE-SRC-V1-CONTROL-multiple_relationship_distinct_paths"
+    ],
+    "excluded": [
+      "protected declarations",
+      "terminal-generation declarations",
+      "shortest-path and all-shortest-path declarations",
+      "endpoint-seeded expansion declarations"
+    ]
+  },
+  "design": {
+    "mode": "postgres_sql",
+    "pool_size": 1,
+    "traversal_telemetry": "diagnostic",
+    "require_clean_source": true,
+    "warmup_iterations": 1,
+    "timed_iterations": 5,
+    "rounds": 4,
+    "arm_orders": [
+      ["incumbent", "reverse_component"],
+      ["reverse_component", "incumbent"],
+      ["incumbent", "reverse_component"],
+      ["reverse_component", "incumbent"]
+    ],
+    "session_memory_ceiling_bytes": 1048576,
+    "pool_memory_ceiling_bytes": 1048576,
+    "raw_pgx_per_case": {
+      "fresh_session_prepared_misses": 1,
+      "same_session_prepared_hits": 5,
+      "pooled_prepared_misses": 1,
+      "pooled_release_reacquire_prepared_hits": 5
+    }
+  },
+  "required_observations": [
+    "exact_public_rows_and_paths_for_every_timed_and_raw_pgx_execution_with_per_sample_normalized_observation_sha256",
+    "component_reverse_runtime_identity_and_zero_inactive_forward_work",
+    "complete_suffix_boundary_reverse_receipt_ordered_hydration_and_workspace_counters",
+    "client_parse_optimize_translate_render_waterfall",
+    "raw_pgx_transaction_bind_prepare_first_row_decode_drain_close_and_total_waterfall",
+    "explicit_fresh_prepared_miss_same_session_prepared_hit_and_pool_reacquired_prepared_hit_strata",
+    "same_backend_pid_after_pool_release_reacquisition",
+    "per_query_fresh_session_pooled_session_and_pool_temporary_workspace_high_water",
+    "plan_buffers_temp_and_wal_with_no_public_rows_before_complete_status",
+    "separate_timeout_cancellation_rollback_and_exact_pool_replay"
+  ],
+  "workspace_measurement": {
+    "query": "sum(pg_total_relation_size) over pg_my_temp_schema() after result drain and before rollback",
+    "exclusions": [
+      "traversal_runtime_attestation_v1",
+      "telemetry-named temporary relations"
+    ],
+    "timing_effect": "the workspace observation is outside bind/first-row/decode/drain/total timing intervals",
+    "pool_interpretation": "the dedicated raw-PGX pool has size one, making pooled-session and pool high water directly comparable without inheriting the runner pool statement cache"
+  },
+  "acceptance": {
+    "all_records_status_ok": true,
+    "all_exact_oracles_required": true,
+    "complete_component_counter_status_required": true,
+    "component_workspace_required_families": ["suffix_component", "workspace"],
+    "all_raw_pgx_samples_require_nonnegative_workspace_and_stable_rows": true,
+    "all_pool_reacquired_samples_require_same_backend_pid": true,
+    "workspace_ceilings_must_not_be_exceeded": true,
+    "both_sparse_target_classes_must_remain_materially_improved_in_main_timed_samples": true,
+    "adverse_controls_must_remain_descriptive_only": true
+  },
+  "next_authorization": {
+    "requires": [
+      "this closure capture passes every acceptance condition",
+      "a separate frozen suffix-route-cache-feasibility-v1 protocol"
+    ],
+    "does_not_authorize": [
+      "automatic routing",
+      "route-decision cache implementation",
+      "translation cache key changes",
+      "persistent topology schema",
+      "transaction retry",
+      "protected holdout access",
+      "promotion or Neo4j release-gate claims"
+    ]
+  }
+}
