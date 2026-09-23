@@ -120,7 +120,9 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	}
 	c.beforeExecution = before
 
-	if strings.Contains(input.Content, "CREATE") {
+	if strings.Contains(strings.ToLower(input.Content), "create") {
+		isMutationWithoutReturn := strings.Contains(strings.ToLower(input.Content), "create") &&
+			!strings.Contains(strings.ToLower(input.Content), "return")
 		err = c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 			var rowCount int64
 			result := tx.Query(input.Content, nil)
@@ -131,6 +133,11 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 			}
 
 			for result.Next() {
+				// Mutations with no RETURN e.g CREATE ()-[:R]->() PG drivers generate SQL with SELECT 1; at the end of the statement which return one row;
+				// Discard append any rows. 
+				if isMutationWithoutReturn {
+					continue
+				}
 				var row []string
 
 				rowCount++
@@ -275,7 +282,16 @@ func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
 		return formatString(formatGraphRelationship(relationship)), nil
 	}
 
-	return "", fmt.Errorf("unsupported returned value of type %T", value)
+	switch value := value.(type) {
+	case string:
+		return formatString(value), nil
+	case int32:
+		return formatString(fmt.Sprint(value)), nil
+	case nil:
+		return "null", nil
+	default:
+		return "", fmt.Errorf("unsupported returned value of type %T", value)
+	}
 }
 
 // formatGraphRelationship formats a graph relationship as a deterministic string.

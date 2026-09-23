@@ -302,9 +302,9 @@ func TestFormatGraphValueRelationship(t *testing.T) {
 }
 
 func TestFormatGraphValueRejectsUnsupportedValue(t *testing.T) {
-	_, err := formatGraphValue((&stubResult{}).Mapper(), "not a graph value")
+	_, err := formatGraphValue((&stubResult{}).Mapper(), float64(1.23))
 
-	require.EqualError(t, err, "unsupported returned value of type string")
+	require.EqualError(t, err, "unsupported returned value of type float64")
 }
 
 func TestDBContextHavingExecuted(t *testing.T) {
@@ -677,4 +677,19 @@ func TestAnyGraph(t *testing.T) {
 	ctx := context.Background()
 	err := dbCtx.anyGraph(ctx)
 	require.EqualError(t, err, "open graph fixture: open testdata/binary-tree-a.json: no such file or directory")
+}
+
+func TestFormatGraphRelationship(t *testing.T) {
+	relationship := graph.Relationship{
+		ID:      1,
+		StartID: 1,
+		EndID:   2,
+		Kind:    graph.StringKind("MemberOf"),
+		Properties: &graph.Properties{
+			Map: map[string]any{"name": "a"},
+		},
+	}
+
+	output := formatGraphRelationship(relationship)
+	require.Equal(t, "[:MemberOf{name: 'a'}]", output)
 }
