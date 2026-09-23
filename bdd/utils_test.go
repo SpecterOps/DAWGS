@@ -456,21 +456,21 @@ func TestDBContextSideEffects(t *testing.T) {
 			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
 			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 0},
 			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
-			expectedError: "no side effect detected for node count expected 1 actual 0",
+			expectedError: "side effect +nodes: expected 0 actual 1",
 		},
 		{
 			name:          "detect changed graph relationship",
 			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
 			after:         graphSnapshot{NodesCount: 0, RelationshipsCount: 1},
 			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
-			expectedError: " no side effect detected for relationship count expected 1 actual 0",
+			expectedError: "side effect +relationships: expected 0 actual 1",
 		},
 		{
 			name:          "detect changed graph wrapping errors",
 			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
 			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 1},
 			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
-			expectedError: "no side effect detected for node count expected 1 actual 0\n no side effect detected for relationship count expected 1 actual 0",
+			expectedError: "side effect +nodes: expected 0 actual 1\nside effect +relationships: expected 0 actual 1",
 		},
 	}
 

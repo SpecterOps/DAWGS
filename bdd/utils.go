@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"slices"
@@ -127,7 +126,7 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 			result := tx.Query(input.Content, nil)
 			defer result.Close()
 
-			if result.Error() != nil {
+			if err = result.Error(); err != nil {
 				return err
 			}
 
@@ -154,11 +153,6 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 		if err != nil {
 			return err
 		}
-		after, err := captureGraphState(ctx, c.db)
-		if err != nil {
-			return err
-		}
-		c.afterExecution = after
 	} else {
 
 		err = c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -184,7 +178,7 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 
 			c.actualResult = result
 			c.rowCount = int(rowCount)
-			if result.Error() != nil {
+			if err := result.Error(); err != nil {
 				return result.Error()
 			}
 			return nil
@@ -194,6 +188,12 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 			return err
 		}
 	}
+
+	after, err := captureGraphState(ctx, c.db)
+	if err != nil {
+		return err
+	}
+	c.afterExecution = after
 
 	return nil
 }
@@ -330,36 +330,35 @@ func (c *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
 		}
 	}
 
-	var err error
-	var nodeCountErr error
-	var relationshipCountErr error
-
-	for _, rows := range actualRows {
-		for _, row := range rows {
-			if strings.Contains(strings.ToLower(row), "node") {
-				finalNodeCount := int64(math.Abs(float64(c.afterExecution.NodesCount - c.beforeExecution.NodesCount)))
-				actualCount, err := strconv.ParseInt(rows[1], 10, 64)
-				if err != nil {
-					return err
-				}
-				if finalNodeCount != actualCount {
-					nodeCountErr = fmt.Errorf("no side effect detected for node count expected %d actual %d", finalNodeCount, actualCount)
-				}
-
-			}
-			if strings.Contains(strings.ToLower(row), "relationships") {
-				finalRelationshipCount := int64(math.Abs(float64(c.afterExecution.RelationshipsCount - c.beforeExecution.RelationshipsCount)))
-				actualCount, err := strconv.ParseInt(rows[1], 10, 64)
-				if err != nil {
-					return err
-				}
-				if int64(math.Abs(float64(finalRelationshipCount))) != actualCount {
-					relationshipCountErr = fmt.Errorf(" no side effect detected for relationship count expected %d actual %d", finalRelationshipCount, actualCount)
-				}
-			}
+	nodeDelta := c.afterExecution.NodesCount - c.beforeExecution.NodesCount
+	relDelta := c.afterExecution.RelationshipsCount - c.beforeExecution.RelationshipsCount
+	var errs []error
+	for _, row := range actualRows {
+		if len(row) != 2 {
+			return fmt.Errorf("side effect row must have 2 cells, got %d", len(row))
+		}
+		expected, err := strconv.ParseInt(strings.TrimSpace(row[1]), 10, 64)
+		if err != nil {
+			return err
+		}
+		var actual int64
+		switch key := strings.TrimSpace(row[0]); key {
+		case "+nodes":
+			actual = max(nodeDelta, 0)
+		case "-nodes":
+			actual = max(-nodeDelta, 0)
+		case "+relationships":
+			actual = max(relDelta, 0)
+		case "-relationships":
+			actual = max(-relDelta, 0)
+		default:
+			return fmt.Errorf("unsupported side effect %q", key)
+		}
+		if actual != expected {
+			errs = append(errs, fmt.Errorf("side effect %s: expected %d actual %d", row[0], expected, actual))
 		}
 	}
-	err = errors.Join(nodeCountErr, relationshipCountErr)
+	err := errors.Join(errs...)
 	if err != nil {
 		return err
 	}
