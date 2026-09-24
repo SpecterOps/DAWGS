@@ -121,8 +121,9 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	c.beforeExecution = before
 
 	if strings.Contains(strings.ToLower(input.Content), "create") {
+		splitInput := strings.SplitAfter(input.Content, ")")
 		isMutationWithoutReturn := strings.Contains(strings.ToLower(input.Content), "create") &&
-			!strings.Contains(strings.ToLower(input.Content), "return")
+			!strings.Contains(strings.ToLower(splitInput[len(splitInput)-1]), "return")
 		err = c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 			var rowCount int64
 			result := tx.Query(input.Content, nil)
