@@ -121,9 +121,16 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	c.beforeExecution = before
 
 	if strings.Contains(strings.ToLower(input.Content), "create") {
-		splitInput := strings.SplitAfter(input.Content, ")")
+		var hasReturnClause bool
+		for _, txt := range strings.SplitAfter(input.Content, " ") {
+			// Note: TCK feature files does not include return a value within nodes properties
+			if strings.Contains(strings.ToLower(txt), "return") {
+				hasReturnClause = true
+				break
+			}
+		}
 		isMutationWithoutReturn := strings.Contains(strings.ToLower(input.Content), "create") &&
-			!strings.Contains(strings.ToLower(splitInput[len(splitInput)-1]), "return")
+			!hasReturnClause
 		err = c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 			var rowCount int64
 			result := tx.Query(input.Content, nil)
