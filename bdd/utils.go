@@ -28,6 +28,7 @@ import (
 
 	"github.com/cucumber/godog"
 	"github.com/google/go-cmp/cmp"
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
 )
@@ -121,16 +122,12 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	c.beforeExecution = before
 
 	if strings.Contains(strings.ToLower(input.Content), "create") {
-		var hasReturnClause bool
-		for _, txt := range strings.SplitAfter(input.Content, " ") {
-			// Note: TCK feature files does not include return a value within nodes properties
-			if strings.Contains(strings.ToLower(txt), "return") {
-				hasReturnClause = true
-				break
-			}
+		result, err := hasReturnClause(input.Content)
+		if err != nil {
+			return err
 		}
 		isMutationWithoutReturn := strings.Contains(strings.ToLower(input.Content), "create") &&
-			!hasReturnClause
+			!result
 		err = c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 			var rowCount int64
 			result := tx.Query(input.Content, nil)
@@ -142,7 +139,7 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 
 			for result.Next() {
 				// Mutations with no RETURN e.g CREATE ()-[:R]->() PG drivers generate SQL with SELECT 1; at the end of the statement which return one row;
-				// Discard append any rows. 
+				// Discard append any rows.
 				if isMutationWithoutReturn {
 					continue
 				}
@@ -468,4 +465,15 @@ func formatGraphResults(nodes []graph.Node) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func hasReturnClause(query string) (bool, error) {
+	parsedQuery, err := frontend.ParseCypher(frontend.NewContext(), query)
+	if err != nil {
+		return false, err
+	}
+	if parsedQuery.SingleQuery.SinglePartQuery.Return != nil {
+		return true, nil
+	}
+	return false, nil
 }
