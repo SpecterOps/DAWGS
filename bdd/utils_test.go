@@ -693,3 +693,25 @@ func TestFormatGraphRelationship(t *testing.T) {
 	output := formatGraphRelationship(relationship)
 	require.Equal(t, "[:MemberOf{name: 'a'}]", output)
 }
+
+func TestHasReturnClause(t *testing.T) {
+	tests := []struct {
+		queryString string
+		expected    bool
+	}{
+		{
+			queryString: "CREATE ()-[]->()",
+			expected:    false,
+		},
+		{
+			queryString: "CREATE(n:A) RETURN n",
+			expected:    true,
+		},
+	}
+
+	for _, test := range tests {
+		actual, err := hasReturnClause(test.queryString)
+		require.Nil(t, err)
+		require.Equal(t, test.expected, actual)
+	}
+}
