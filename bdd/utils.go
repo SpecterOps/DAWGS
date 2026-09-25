@@ -20,12 +20,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/cucumber/godog"
 	"github.com/google/go-cmp/cmp"
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/opengraph"
 )
@@ -37,7 +40,9 @@ type graphSnapshot struct {
 
 type dbContext struct {
 	db              graph.Database
+	testData        []string
 	beforeExecution graphSnapshot
+	afterExecution  graphSnapshot
 	actualResult    graph.Result
 	rowCount        int
 	actualRows      [][]string
@@ -90,7 +95,23 @@ func (c *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
 	return nil
 }
 
-// executingQuery runs a read query and records its rows and graph state for comparison.
+func (c *dbContext) anyGraph(ctx context.Context) error {
+	randomIndex := rand.Intn(len(c.testData))
+	file, err := os.Open(c.testData[randomIndex])
+	if err != nil {
+		return fmt.Errorf("open graph fixture: %w", err)
+	}
+	defer file.Close()
+
+	_, err = opengraph.Load(ctx, c.db, file)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// executingQuery runs a read query and records its rows for later comparison.
 func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) error {
 	c.actualRows = nil
 
@@ -100,38 +121,91 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 	}
 	c.beforeExecution = before
 
-	err = c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		var rowCount int64
-		result := tx.Query(input.Content, nil)
+	if strings.Contains(strings.ToLower(input.Content), "create") {
+		result, err := hasReturnClause(input.Content)
+		if err != nil {
+			return err
+		}
+		isMutationWithoutReturn := strings.Contains(strings.ToLower(input.Content), "create") &&
+			!result
+		err = c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			var rowCount int64
+			result := tx.Query(input.Content, nil)
+			defer result.Close()
 
-		defer result.Close()
-
-		for result.Next() {
-			var row []string
-
-			rowCount++
-
-			for _, value := range result.Values() {
-				formatted, err := formatGraphValue(result.Mapper(), value)
-				if err != nil {
-					return fmt.Errorf("failed to format graph result: %w", err)
-				}
-				row = append(row, formatted)
+			if err = result.Error(); err != nil {
+				return err
 			}
-			c.actualRows = append(c.actualRows, row)
-		}
 
-		c.actualResult = result
-		c.rowCount = int(rowCount)
-		if result.Error() != nil {
-			return result.Error()
-		}
-		return nil
-	})
+			for result.Next() {
+				// Mutations with no RETURN e.g CREATE ()-[:R]->() PG drivers generate SQL with SELECT 1; at the end of the statement which return one row;
+				// Discard append any rows.
+				if isMutationWithoutReturn {
+					continue
+				}
+				var row []string
 
+				rowCount++
+
+				for _, value := range result.Values() {
+					formatted, err := formatGraphValue(result.Mapper(), value)
+					if err != nil {
+						return fmt.Errorf("failed to format graph result: %w", err)
+					}
+					row = append(row, formatted)
+				}
+				c.actualRows = append(c.actualRows, row)
+			}
+
+			c.actualResult = result
+			c.rowCount = int(rowCount)
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+
+		err = c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			var rowCount int64
+			result := tx.Query(input.Content, nil)
+
+			defer result.Close()
+
+			for result.Next() {
+				var row []string
+
+				rowCount++
+
+				for _, value := range result.Values() {
+					formatted, err := formatGraphValue(result.Mapper(), value)
+					if err != nil {
+						return fmt.Errorf("failed to format graph result: %w", err)
+					}
+					row = append(row, formatted)
+				}
+				c.actualRows = append(c.actualRows, row)
+			}
+
+			c.actualResult = result
+			c.rowCount = int(rowCount)
+			if err := result.Error(); err != nil {
+				return result.Error()
+			}
+			return nil
+		})
+
+		if err != nil {
+			return err
+		}
+	}
+
+	after, err := captureGraphState(ctx, c.db)
 	if err != nil {
 		return err
 	}
+	c.afterExecution = after
 
 	return nil
 }
@@ -189,6 +263,14 @@ func (c *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) erro
 	return nil
 }
 
+func (c *dbContext) theResultShouldBeEmpty() error {
+
+	if c.rowCount != 0 || len(c.actualRows) != 0 {
+		return fmt.Errorf("The result set is not empty")
+	}
+	return nil
+}
+
 // formatGraphValue formats a supported graph value as a deterministic string.
 func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
 	var node graph.Node
@@ -205,7 +287,16 @@ func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
 		return formatString(formatGraphRelationship(relationship)), nil
 	}
 
-	return "", fmt.Errorf("unsupported returned value of type %T", value)
+	switch value := value.(type) {
+	case string:
+		return formatString(value), nil
+	case int32:
+		return formatString(fmt.Sprint(value)), nil
+	case nil:
+		return "null", nil
+	default:
+		return "", fmt.Errorf("unsupported returned value of type %T", value)
+	}
 }
 
 // formatGraphRelationship formats a graph relationship as a deterministic string.
@@ -244,6 +335,53 @@ func (c *dbContext) noSideEffects(ctx context.Context) error {
 	}
 	if !cmp.Equal(c.beforeExecution, after) {
 		return errors.New("Graph state drift detected")
+	}
+	return nil
+}
+
+func (c *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
+	actualRows := [][]string{}
+	if len(expectedTable.Rows) != 0 {
+		for _, row := range expectedTable.Rows {
+			var rows []string
+			for _, cell := range row.Cells {
+				rows = append(rows, cell.Value)
+			}
+			actualRows = append(actualRows, rows)
+		}
+	}
+
+	nodeDelta := c.afterExecution.NodesCount - c.beforeExecution.NodesCount
+	relDelta := c.afterExecution.RelationshipsCount - c.beforeExecution.RelationshipsCount
+	var errs []error
+	for _, row := range actualRows {
+		if len(row) != 2 {
+			return fmt.Errorf("side effect row must have 2 cells, got %d", len(row))
+		}
+		expected, err := strconv.ParseInt(strings.TrimSpace(row[1]), 10, 64)
+		if err != nil {
+			return err
+		}
+		var actual int64
+		switch key := strings.TrimSpace(row[0]); key {
+		case "+nodes":
+			actual = max(nodeDelta, 0)
+		case "-nodes":
+			actual = max(-nodeDelta, 0)
+		case "+relationships":
+			actual = max(relDelta, 0)
+		case "-relationships":
+			actual = max(-relDelta, 0)
+		default:
+			return fmt.Errorf("unsupported side effect %q", key)
+		}
+		if actual != expected {
+			errs = append(errs, fmt.Errorf("side effect %s: expected %d actual %d", row[0], expected, actual))
+		}
+	}
+	err := errors.Join(errs...)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -327,4 +465,15 @@ func formatGraphResults(nodes []graph.Node) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func hasReturnClause(query string) (bool, error) {
+	parsedQuery, err := frontend.ParseCypher(frontend.NewContext(), query)
+	if err != nil {
+		return false, err
+	}
+	if parsedQuery.SingleQuery.SinglePartQuery.Return != nil {
+		return true, nil
+	}
+	return false, nil
 }

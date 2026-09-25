@@ -44,11 +44,14 @@ func InitializeTestSuite(ctxtestsuite *godog.TestSuiteContext, ctx context.Conte
 func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.Before(dbCtx.resetBeforeScenario)
 	ctx.Step(`^an empty graph$`, dbCtx.anEmptyGraph)
+	ctx.Step(`^any graph$`, dbCtx.anyGraph)
 	ctx.Step(`^the binary-tree-(\d+) graph$`, dbCtx.theBinarytreeGraph)
 	ctx.Step(`^having executed:$`, dbCtx.havingExecuted)
 	ctx.Step(`^executing query:$`, dbCtx.executingQuery)
 	ctx.Step(`^the result should be, in any order:$`, dbCtx.theResultShouldBeInAnyOrder)
 	ctx.Step(`^no side effects$`, dbCtx.noSideEffects)
+	ctx.Step(`^the side effects should be:$`, dbCtx.theSideEffectsShouldBe)
+	ctx.Step(`^the result should be empty$`, dbCtx.theResultShouldBeEmpty)
 }
 
 func TestFeatures(t *testing.T) {
@@ -63,7 +66,8 @@ func TestFeatures(t *testing.T) {
 	})
 
 	dbCtx := &dbContext{
-		db: session.DB,
+		db:       session.DB,
+		testData: []string{"testdata/binary-tree-1.json", "testdata/binary-tree-2.json"},
 	}
 	suite := godog.TestSuite{
 		Name: "OpenCypher-TCK",
