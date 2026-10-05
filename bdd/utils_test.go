@@ -302,9 +302,9 @@ func TestFormatGraphValueRelationship(t *testing.T) {
 }
 
 func TestFormatGraphValueRejectsUnsupportedValue(t *testing.T) {
-	_, err := formatGraphValue((&stubResult{}).Mapper(), "not a graph value")
+	_, err := formatGraphValue((&stubResult{}).Mapper(), float64(1.23))
 
-	require.EqualError(t, err, "unsupported returned value of type string")
+	require.EqualError(t, err, "unsupported returned value of type float64")
 }
 
 func TestDBContextHavingExecuted(t *testing.T) {
@@ -436,6 +436,69 @@ func TestDBContextResultComparisonPreservesColumns(t *testing.T) {
 	require.NoError(t, context.theResultShouldBeInAnyOrder(expected))
 }
 
+func TestDBContextSideEffects(t *testing.T) {
+	tests := []struct {
+		name          string
+		before        graphSnapshot
+		after         graphSnapshot
+		expectedTable *godog.Table
+		expectedError string
+	}{
+		{
+			name:          "detect graph change",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 1},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "1"}, {"+relationships", "1"}}),
+			expectedError: "",
+		},
+		{
+			name:          "detect changed graph node",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 0},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
+			expectedError: "side effect +nodes: expected 0 actual 1",
+		},
+		{
+			name:          "detect changed graph relationship",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 0, RelationshipsCount: 1},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
+			expectedError: "side effect +relationships: expected 0 actual 1",
+		},
+		{
+			name:          "detect changed graph wrapping errors",
+			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
+			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 1},
+			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
+			expectedError: "side effect +nodes: expected 0 actual 1\nside effect +relationships: expected 0 actual 1",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			database := &stubDatabase{
+				transaction: &stubTransaction{
+					nodeQuery:         &stubNodeQuery{count: test.after.NodesCount},
+					relationshipQuery: &stubRelationshipQuery{count: test.after.RelationshipsCount},
+				},
+			}
+			databaseContext := &dbContext{
+				db:              database,
+				beforeExecution: test.before,
+				afterExecution:  test.after,
+			}
+
+			err := databaseContext.theSideEffectsShouldBe(test.expectedTable)
+
+			if test.expectedError == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, test.expectedError)
+			}
+		})
+	}
+}
+
 func TestDBContextNoSideEffects(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -478,6 +541,17 @@ func TestDBContextNoSideEffects(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newResultTableNoHeader(data [][]string) *godog.Table {
+	var rows []*messages.PickleTableRow
+	for _, value := range data {
+		rows = append(rows, &messages.PickleTableRow{
+			Cells: []*messages.PickleTableCell{{Value: value[0]}, {Value: value[1]}},
+		})
+	}
+
+	return &godog.Table{Rows: rows}
 }
 
 func newResultTable(values ...string) *godog.Table {
@@ -553,5 +627,91 @@ func TestFormatString(t *testing.T) {
 	for _, test := range tests {
 		actual := formatString(test.input)
 		require.Equal(t, test.expectedOutput, actual)
+	}
+}
+
+func TestTheResultShouldBeEmpty(t *testing.T) {
+	tests := []struct {
+		dbContext     dbContext
+		expectedError string
+	}{
+		{
+			dbContext: dbContext{
+				rowCount: 0,
+				actualRows: [][]string{
+					{"foo"},
+				},
+			},
+			expectedError: "The result set is not empty",
+		},
+		{
+			dbContext: dbContext{
+				rowCount:   1,
+				actualRows: [][]string{},
+			},
+			expectedError: "The result set is not empty",
+		},
+		{
+			dbContext: dbContext{
+				rowCount:   0,
+				actualRows: [][]string{},
+			},
+			expectedError: "",
+		},
+	}
+
+	for _, test := range tests {
+		err := test.dbContext.theResultShouldBeEmpty()
+		if test.expectedError == "" {
+			require.NoError(t, err)
+		} else {
+			require.EqualError(t, err, test.expectedError)
+		}
+	}
+}
+
+func TestAnyGraph(t *testing.T) {
+	dbCtx := dbContext{
+		testData: []string{"testdata/binary-tree-a.json"},
+	}
+	ctx := context.Background()
+	err := dbCtx.anyGraph(ctx)
+	require.EqualError(t, err, "open graph fixture: open testdata/binary-tree-a.json: no such file or directory")
+}
+
+func TestFormatGraphRelationship(t *testing.T) {
+	relationship := graph.Relationship{
+		ID:      1,
+		StartID: 1,
+		EndID:   2,
+		Kind:    graph.StringKind("MemberOf"),
+		Properties: &graph.Properties{
+			Map: map[string]any{"name": "a"},
+		},
+	}
+
+	output := formatGraphRelationship(relationship)
+	require.Equal(t, "[:MemberOf{name: 'a'}]", output)
+}
+
+func TestHasReturnClause(t *testing.T) {
+	tests := []struct {
+		queryString string
+		expected    bool
+	}{
+		{
+			queryString: "CREATE ()-[]->()",
+			expected:    false,
+		},
+		{
+			queryString: "CREATE(n:A) RETURN n",
+			expected:    true,
+		},
+	}
+
+	for _, test := range tests {
+		actual, err := hasReturnClause(test.queryString)
+		require.Nil(t, err)
+		require.Equal(t, test.expected, actual)
 	}
 }
