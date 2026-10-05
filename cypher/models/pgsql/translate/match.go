@@ -106,11 +106,13 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 	// our join anchor between the two CTEs
 	var joinConstraints pgsql.Expression
 	for _, exported := range originFrame.Exported.Slice() {
+		// Note using this operator will match Null=Null. This is needed to handle OPTIONAL MATCH
+		// correctly. It assumes exports will always have appropriate non-null join keys.
 		joinConstraints = pgsql.OptionalAnd(
 			pgsql.NewParenthetical(
 				pgsql.NewBinaryExpression(
 					pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported},
-					pgsql.OperatorEquals,
+					pgsql.OperatorIsNotDistinctFrom,
 					pgsql.CompoundIdentifier{optMatchFrame.Binding.Identifier, exported},
 				),
 			),
