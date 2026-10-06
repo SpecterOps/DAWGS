@@ -45,7 +45,7 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 
 	// If there is no valid previous frame, skip translating an `OPTIONAL MATCH`/treat as plain `MATCH`
 	if match.Optional {
-		if _, hasValidPrevious := s.previousValidFrame(s.scope.CurrentFrame()); hasValidPrevious {
+		if joinFrame != nil {
 			return s.translateOptionalMatch(joinFrame)
 		}
 	}
