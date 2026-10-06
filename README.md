@@ -37,6 +37,8 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 make test_bdd_integration
 ```
 
+The BDD run also writes cucumber results file to `.coverage/opencypher-tck-report.json` and an HTML summary to `.coverage/opencypher-tck-report.html`. The HTML report shows total, passed, and failed scenario counts.
+
 Use this module from another Go project:
 
 ```bash

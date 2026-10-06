@@ -22,6 +22,7 @@ package bdd
 import (
 	"context"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/cucumber/godog"
@@ -56,6 +57,9 @@ func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 
 func TestFeatures(t *testing.T) {
 	backgroundCtx := context.Background()
+	if err := os.MkdirAll(bddReportDir, 0o755); err != nil {
+		t.Fatalf("failed to create BDD report directory: %v", err)
+	}
 	// establish database connection
 	session := integration.Open(t, integration.Options{
 		Schema: &graph.Schema{
@@ -78,14 +82,17 @@ func TestFeatures(t *testing.T) {
 			InitializeScenario(ctx, dbCtx)
 		},
 		Options: &godog.Options{
-			Format: "pretty",
-			// TODO create env variable pointing to the TCK features via CI
+			Format:   "pretty,cucumber:" + bddJSONReportPath,
 			Paths:    []string{"features"},
 			TestingT: t,
 		},
 	}
 
-	if num := suite.Run(); num != 0 {
+	num := suite.Run()
+	if err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath); err != nil {
+		t.Errorf("failed to write BDD HTML report: %v", err)
+	}
+	if num != 0 {
 		t.Fatalf("TestSuite execution failed with status %d", num)
 	}
 }
