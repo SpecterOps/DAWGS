@@ -2,6 +2,7 @@ package graph
 
 import (
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/specterops/dawgs/util/size"
@@ -66,7 +67,7 @@ func NewTree(root *Node) Tree {
 }
 
 func (s Tree) SizeOf() size.Size {
-	return size.Of(s) + s.Root.size
+	return size.Of(s) + s.Root.SizeOf()
 }
 
 type PathSegment struct {
@@ -75,6 +76,9 @@ type PathSegment struct {
 	Edge     *Relationship
 	Branches []*PathSegment
 	Tag      any
+
+	// sizeLock protects size while multiple traversal workers update shared ancestors.
+	sizeLock sync.RWMutex
 	size     size.Size
 }
 
@@ -96,32 +100,58 @@ func (s *PathSegment) GetTrunkSegment() *PathSegment {
 }
 
 func (s *PathSegment) SizeOf() size.Size {
+	s.sizeLock.RLock()
+	defer s.sizeLock.RUnlock()
+
 	return s.size
 }
 
 func (s *PathSegment) computeAndSetSize() {
-	s.size = 0
-
-	s.size += size.Of(s) + size.Size(unsafe.Sizeof(s.size))
+	computedSize := size.Of(s) +
+		size.Size(unsafe.Sizeof(s.sizeLock)) +
+		size.Size(unsafe.Sizeof(s.size))
 
 	if s.Node != nil {
-		s.size += s.Node.SizeOf()
+		computedSize += s.Node.SizeOf()
 	}
 	if s.Edge != nil {
-		s.size += s.Edge.SizeOf()
+		computedSize += s.Edge.SizeOf()
 	}
 	if s.Trunk != nil {
-		s.size += size.Of(s.Trunk)
+		computedSize += size.Of(s.Trunk)
 	}
 	if s.Branches != nil {
-		s.size += size.Of(s.Branches) * size.Size(cap(s.Branches))
+		computedSize += size.Of(s.Branches) * size.Size(cap(s.Branches))
 	}
 
 	// recursively add sizes of all branches
 	for _, branch := range s.Branches {
 		branch.computeAndSetSize()
-		s.size += branch.size
+		computedSize += branch.SizeOf()
 	}
+
+	s.setSize(computedSize)
+}
+
+func (s *PathSegment) setSize(newSize size.Size) {
+	s.sizeLock.Lock()
+	defer s.sizeLock.Unlock()
+
+	s.size = newSize
+}
+
+func (s *PathSegment) addSize(sizeAdded size.Size) {
+	s.sizeLock.Lock()
+	defer s.sizeLock.Unlock()
+
+	s.size += sizeAdded
+}
+
+func (s *PathSegment) subtractSize(sizeRemoved size.Size) {
+	s.sizeLock.Lock()
+	defer s.sizeLock.Unlock()
+
+	s.size -= sizeRemoved
 }
 
 func (s *PathSegment) IsCycle() bool {
@@ -225,7 +255,7 @@ func (s *PathSegment) Detach() {
 
 	// Update size of the path tree now that this segment has been detached
 	for sizeCursor := s; sizeCursor != nil; sizeCursor = sizeCursor.Trunk {
-		sizeCursor.size -= sizeDetached
+		sizeCursor.subtractSize(sizeDetached)
 	}
 }
 
@@ -241,9 +271,6 @@ func (s *PathSegment) Descend(node *Node, relationship *Relationship) *PathSegme
 	sizeAdded := nextSegment.SizeOf()
 	oldBranchCapacity := cap(s.Branches)
 
-	// Track the size of the segment
-	nextSegment.size = sizeAdded
-
 	// Track this edge on the list of branches
 	s.Branches = append(s.Branches, nextSegment)
 
@@ -255,7 +282,7 @@ func (s *PathSegment) Descend(node *Node, relationship *Relationship) *PathSegme
 
 	// Track size on the root segment of this path tree
 	for sizeCursor := s; sizeCursor != nil; sizeCursor = sizeCursor.Trunk {
-		sizeCursor.size += sizeAdded
+		sizeCursor.addSize(sizeAdded)
 	}
 
 	return nextSegment

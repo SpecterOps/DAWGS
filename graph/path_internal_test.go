@@ -61,5 +61,5 @@ func Test_ComputeAndSetSize(t *testing.T) {
 	// Remove one branch and call the function, to ensure the size reduces accordingly
 	domainSegment.Branches = []*PathSegment{groupSegment}
 	domainSegment.computeAndSetSize()
-	require.Less(t, int64(domainSegment.size), sizeWithTwoBranches)
+	require.Less(t, int64(domainSegment.SizeOf()), sizeWithTwoBranches)
 }
