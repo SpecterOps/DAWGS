@@ -3,6 +3,7 @@ package translate
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/specterops/dawgs/cypher/models/cypher"
@@ -55,6 +56,8 @@ func (s Options) normalized() (Options, error) {
 
 type Translator struct {
 	walk.Visitor[cypher.SyntaxNode]
+
+	pendingMerge *cypher.Merge
 
 	ctx              context.Context
 	kindMapper       *contextAwareKindMapper
@@ -187,6 +190,18 @@ func (s *Translator) SetOptimizationPlan(plan optimize.Plan) {
 }
 
 func (s *Translator) Enter(expression cypher.SyntaxNode) {
+	switch expression.(type) {
+	case *cypher.Merge, *cypher.Create, *cypher.Delete, *cypher.Remove, *cypher.With, *cypher.Return:
+		if err := s.flushMerge(); err != nil {
+			s.SetError(err)
+			return
+		}
+	}
+	if set, ok := expression.(*cypher.Set); ok && s.pendingMerge != nil {
+		s.pendingMerge.MergeActions = append(s.pendingMerge.MergeActions, &cypher.MergeAction{OnCreate: true, OnMatch: true, Set: cypher.Copy(set)})
+		s.Consume()
+		return
+	}
 	switch typedExpression := expression.(type) {
 	case *cypher.RegularQuery, *cypher.SingleQuery, *cypher.PatternElement,
 		*cypher.Comparison, *cypher.Skip, *cypher.Limit, cypher.Operator, *cypher.ArithmeticExpression,
@@ -215,6 +230,15 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 			// the normal outer-scope lookup path.
 			s.unwindTargets[typedExpression.Variable] = struct{}{}
 		}
+
+	case *cypher.Merge:
+		// Preserve clause-entry bindings and route following SETs into both branches.
+		if err := s.flushCollectedMutations(); err != nil {
+			s.SetError(err)
+			return
+		}
+		s.pendingMerge = cypher.Copy(typedExpression)
+		s.Consume()
 
 	case *cypher.Create:
 		// CREATE pattern nodes and relationships are collected first, then
@@ -326,6 +350,27 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.ProjectionItem:
+		if variable, ok := typedExpression.Expression.(*cypher.Variable); ok && variable.Symbol == "*" && typedExpression.Alias == nil && s.query.CurrentPart().containsMerge {
+			// Expand user aliases after MERGE has hidden its private pipeline
+			// fields. Anonymous entities and bookkeeping have no user alias.
+			part := s.query.CurrentPart()
+			part.projections.Frame = s.scope.CurrentFrame()
+			bindings := []*BoundIdentifier{}
+			for _, id := range s.scope.CurrentFrame().Known().Slice() {
+				binding, _ := s.scope.Lookup(id)
+				if binding.Alias.Set {
+					bindings = append(bindings, binding)
+				}
+			}
+			sort.Slice(bindings, func(i, j int) bool { return bindings[i].Alias.Value < bindings[j].Alias.Value })
+			for _, binding := range bindings {
+				part.PrepareProjection()
+				part.CurrentProjection().SelectItem = binding.Identifier
+				part.CurrentProjection().SetAlias(binding.Alias.Value)
+			}
+			s.Consume()
+			return
+		}
 		if typedExpression.Alias != nil {
 			if _, collectIDs := s.collectIDMembershipAliases[pgsql.Identifier(typedExpression.Alias.Symbol)]; collectIDs {
 				s.collectIDProjectionDepth++
@@ -636,6 +681,10 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.ProjectionItem:
+		if variable, ok := typedExpression.Expression.(*cypher.Variable); ok && variable.Symbol == "*" && typedExpression.Alias == nil && s.query.CurrentPart().containsMerge {
+			return
+		}
+
 		if err := s.translateProjectionItem(s.scope, typedExpression); err != nil {
 			s.SetError(err)
 		}
@@ -666,6 +715,10 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.SinglePartQuery:
+		if err := s.flushMerge(); err != nil {
+			s.SetError(err)
+			return
+		}
 		if err := s.buildSinglePartQuery(typedExpression); err != nil {
 			s.SetError(err)
 		}

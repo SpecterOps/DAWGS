@@ -1,3 +1,7 @@
+drop function if exists cypher_merge_candidates(jsonb, boolean);
+drop function if exists cypher_set_property(jsonb, text, jsonb);
+drop function if exists cypher_merge_properties(jsonb);
+
 -- Drop triggers
 drop trigger if exists delete_node_edges on node;
 drop function if exists delete_node_edges;
@@ -127,3 +131,7 @@ drop
   extension if exists intarray;
 drop
   extension if exists pg_stat_statements;
+
+drop function if exists cypher_apply_property_patch(jsonb, jsonb);
+drop function if exists cypher_merge_assert(boolean, boolean, boolean, boolean);
+drop function if exists cypher_merge_value(jsonb);

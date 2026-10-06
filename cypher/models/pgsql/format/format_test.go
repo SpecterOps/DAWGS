@@ -850,3 +850,17 @@ func TestFormat_NonMaterializedStringLiteralRemainsExtracted(t *testing.T) {
 	require.Equal(t, "@__strlit0::text", formatted.Statement)
 	requireExtractedStringLiteral(t, formatted, value)
 }
+
+func TestFormatSelectHaving(t *testing.T) {
+	for _, grouped := range []bool{false, true} {
+		query := pgsql.Select{Projection: pgsql.Projection{pgsql.NewLiteral(1, pgsql.Int4)}, Having: pgsql.NewBinaryExpression(pgsql.FunctionCall{Function: "count", Parameters: []pgsql.Expression{pgsql.WildcardIdentifier}}, pgsql.OperatorGreaterThan, pgsql.NewLiteral(1, pgsql.Int4))}
+		expected := "select 1 having count(*) > 1"
+		if grouped {
+			query.GroupBy = []pgsql.Expression{pgsql.Identifier("key")}
+			expected = "select 1 group by key having count(*) > 1"
+		}
+		formatted, err := format.Expression(query, format.NewOutputBuilder())
+		require.NoError(t, err)
+		require.Equal(t, expected, formatted.Statement)
+	}
+}

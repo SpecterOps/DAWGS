@@ -23,6 +23,9 @@ const (
 )
 
 func AfterPooledConnectionEstablished(ctx context.Context, conn *pgx.Conn) error {
+	if err := validatePostgreSQLVersion(conn.PgConn().ParameterStatus("server_version")); err != nil {
+		return err
+	}
 	for _, dataType := range pgsql.CompositeTypes {
 		if definition, err := conn.LoadType(ctx, dataType.String()); err != nil {
 			if !StateObjectDoesNotExist.ErrorMatches(err) {

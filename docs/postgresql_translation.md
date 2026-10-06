@@ -1,6 +1,6 @@
 # PostgreSQL Translation
 
-DAWGS translates supported Cypher queries to vanilla PostgreSQL 16 SQL. The implementation lives under
+DAWGS translates supported Cypher queries to vanilla PostgreSQL 18 SQL. The implementation lives under
 [`cypher/models/pgsql`](../cypher/models/pgsql).
 
 ## Package Layout
@@ -150,3 +150,86 @@ CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawg
 
 PostgreSQL-only plan-corpus validation should confirm that `ExactRangeExpansion` and `PathRelationshipPredicate` are
 planned and applied for their supported cases without skipped entries for either lowering.
+
+## MERGE
+
+The PostgreSQL driver requires version 18 or newer, including callers supplying their own pool. Constructor signatures
+remain unchanged; connection hooks and transaction acquisition reject older servers before schema creation or queries.
+CI uses PostgreSQL 18.
+
+MERGE snapshots incoming bindings before introducing pattern variables. A materialized input CTE evaluates and validates match
+values once on both branches, including cached translations. Fixed maps project one JSONB column per AST key; dynamic
+maps retain runtime map validation. Matching uses these columns, including the typed text RHS of indexed string lookups.
+Fixed property objects are assembled only in the creation branch. A read branch searches for the **complete** pattern. If
+that search fails for an input row, the creation branch allocates identifiers for its unbound nodes and relationships.
+Partially matching unbound nodes are not reused. Undirected patterns match either orientation and create relationships
+from the left endpoint to the right. Relationship types must be singular; variable-length relationships and already
+bound relationship declarations are rejected. Previously declared nodes, including repeated variables within a pattern, must be referenced without redeclaring labels or properties.
+
+Conditional property/label SET clauses and ordinary SET immediately following MERGE use a materialized patch projection
+per clause. Each effective RHS is evaluated once against the incoming clause frame. The patch helper splits top-level
+null removals from values to set, applying `(properties - removed_keys) || set_values` once per binding/clause.
+Nested nulls survive. Final fixed match keys are projected from patches independently of unrelated payloads.
+Candidate composites are conservatively assembled at clause boundaries for entity, property, and path consumers before native
+`MERGE ... RETURNING` writes. Right-hand sides within one SET clause observe that clause's incoming values. Separate
+SET clauses are processed in order. Null assignments remove the selected property; null match properties raise an
+error. Changed rows are returned by native MERGE; unchanged matches use `DO NOTHING` and are carried through a read
+branch with `UNION ALL`, preserving all existing matches without a dummy UPDATE. Named paths use the returned entity
+composites. A singleton materialized guard demands every actual input value through a full aggregate scan and checks candidate
+conflicts. Each write source depends on that guard and filters to effective actions. The first native MERGE that can create an entity consumes a private sentinel source row whose DO NOTHING predicate
+references the guard. The INSERT action keeps PostgreSQL from pruning that source, even with LIMIT 0 or no actual
+entity actions. The sentinel has no target ID and produces no RETURNING row. When all MERGE entities are bound, a
+separate native MERGE anchor consumes the guard even without RETURN or with empty write sources. Its unmatched INSERT predicate
+is `NOT guard.valid`; the assertion returns true or raises, so no anchor row is inserted and no sequence is consumed.
+PostgreSQL prunes a MERGE with only DO NOTHING actions, and can prune an UPDATE-only sentinel source whose target ID
+is statically null. Neither form anchors validation. The separate anchor requires INSERT
+permission on `node` and invokes INSERT statement triggers; it invokes no row triggers. Database errors roll back the query.
+Bound entities with no mutation actions emit no entity write statement; unchanged results use their candidate values.
+String property predicates retain the JSON type guard and text equality expression used by property indexes.
+Match properties copied from existing entities retain their JSON types, including numbers, booleans, and arrays.
+Incoming named paths are materialized from their components before being carried into a subsequent MERGE.
+
+### First iteration limits
+
+This iteration defers visibility of earlier mutations to later clauses. All CTEs share the
+statement snapshot. Projected composites can be carried through WITH and RETURN, but a later MATCH cannot discover
+newly inserted rows and later separate mutations cannot safely modify a row already written in this statement.
+Ordered execution remains the separate extension described in `merge_gaps_plan.md`; this pipeline retains one statement
+snapshot and its established rejection contract.
+
+Repeated unchanged matches preserve input cardinality. Before native writes, a materialized candidate guard rejects
+repeated target writes, including writes through distinct bindings, with SQLSTATE 22023 and an explicit
+`MERGE requires ordered execution` error. Single-node creations accept multiple absent inputs only when neither input
+can match the other input's final created properties. Property values are compared exactly, including arrays. Multiple
+absent inputs for complete patterns are conservatively rejected. Target conflicts group only graph, entity type, and
+target ID across effective actions using UNION ALL. Preserved fixed keys group the complete original JSONB tuple and
+count distinct input IDs; changed keys join original tuples to final tuples, excluding the same input. Empty fixed
+maps explicitly conflict when more than one input is absent. Dynamic maps use relational per-key comparisons, including
+subset maps and exact arrays, and may still require pairwise work. No JSON candidate envelope is built. Narrow key
+relations exclude unrelated payload properties, while the mutation/result candidate relation still carries full entity
+composites. No input actions are silently discarded. Run rejected inputs as separate database commands until ordered execution is implemented.
+
+The edge uniqueness constraint on `(start_id, kind_id, end_id, graph_id)` is unchanged. A property-qualified merge
+requiring another relationship with that tuple raises SQLSTATE 23505 and rolls back; conflicting properties are never
+accepted as a match. Concurrent MERGE has PostgreSQL's native conflict behavior, with no automatic lock/recheck or
+retry. Concurrent relationship insertions may raise 23505; concurrent node creations without a unique property
+constraint may create duplicates. Applications requiring serialization must coordinate transactions externally.
+The batch/upsert storage contract remains unchanged; removing relationship uniqueness is a separate schema change.
+
+Shared integration cases and templates run against both backends. PostgreSQL-only tests verify cache hits, runtime
+validation, index usage, unchanged row versions, and storage conflicts. Use:
+
+```sh
+make format
+make test_update
+CONNECTION_STRING="$PG_CONNECTION_STRING" make test_all
+CONNECTION_STRING="$NEO4J_CONNECTION_STRING" make test_all
+CONNECTION_STRING="$PG_CONNECTION_STRING" go test -tags manual_integration ./integration \
+  -run '^$' -bench BenchmarkPostgreSQLMerge -benchtime=1s -count=3
+```
+
+The semantic execution experiments on PostgreSQL 18.6 showed that a sibling table scan sees zero rows after a MERGE
+insert CTE, that DO NOTHING emits no RETURNING row, and that a volatile PL/pgSQL helper can see its preceding insert
+and update. The helper was removed from this iteration after the scope change. These observations agree with
+[PostgreSQL MERGE](https://www.postgresql.org/docs/18/sql-merge.html) and
+[CTE snapshot behavior](https://www.postgresql.org/docs/18/queries-with.html).

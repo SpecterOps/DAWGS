@@ -1,6 +1,14 @@
 {
   "test_cases": [
     {
+      "name": "merge string match and action values",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {name: 'a'}) on create set n.status = 'created' on match set n.status = 'matched' return n",
+        "fitness": 6
+      }
+    },
+    {
       "name": "Multipart query with mutation",
       "type": "string_match",
       "details": {
@@ -247,6 +255,126 @@
       "details": {
         "query": "match (a:Thing1), (b:Thing2) detach delete a, b return b",
         "fitness": 4
+      }
+    },
+    {
+      "name": "Merge bound endpoints with conditional relationship actions",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1), (b:NodeKind2) merge (a)-[r:EdgeKind1]-\u003e(b) on create set r.score = 1 on match set r.score = 2 return r",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Merge complete named path with two relationships",
+      "type": "string_match",
+      "details": {
+        "query": "merge p = (a:NodeKind1)-[:EdgeKind1]-\u003e(b:NodeKind2)-[:EdgeKind2]-\u003e(c:NodeKind1) return p",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Merge unwound parameter properties",
+      "type": "string_match",
+      "details": {
+        "query": "unwind ['a', 'b'] as name merge (n:NodeKind1 {name: name}) on create set n.score = 1 return n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Merge copies typed entity properties",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) merge (n:NodeKind2 {active: a.active, score: a.score, values: a.values}) return n",
+        "fitness": 13
+      }
+    },
+    {
+      "name": "Merge carries a preceding named path",
+      "type": "string_match",
+      "details": {
+        "query": "merge p = (a:NodeKind1)-[:EdgeKind1]-\u003e(b:NodeKind2) merge (c:NodeKind1 {name: 'independent'}) return p",
+        "fitness": 11
+      }
+    },
+    {
+      "name": "Merge repeated binding keeps ordered actions",
+      "type": "string_match",
+      "details": {
+        "query": "merge (a:NodeKind1)-[:EdgeKind1]-\u003e(a) on match set a.score = 1 on match set a.score = 2 return a",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "merge clause swap",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {name: 'a'}) on create set n.a = 1, n.b = 2 set n.a = n.b, n.b = n.a return n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "merge separate clause dependency",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {name: 'a'}) set n.a = 1 set n.b = n.a return n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "merge repeated field final non-null",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {name: 'a'}) set n.a = null, n.a = 3 return n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "merge repeated field final null",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {name: 'a'}) set n.a = 3, n.a = null return n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "merge changes duplicate originals away",
+      "type": "string_match",
+      "details": {
+        "query": "unwind ['a', 'a'] as name merge (n:NodeKind1 {name: name}) on create set n.name = 'away' return n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "merge composite distinct originals",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 2] as value merge (n:NodeKind1 {name: 'same', score: value}) return n",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "Merge wildcard hides pipeline columns",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {name: 'a'}) on create set n.name = 'b' return *",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "merge 50 property patch",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {left: 1, name: 'large', right: 2}) set n.field0 = 0, n.field1 = 1, n.field2 = 2, n.field3 = 3, n.field4 = 4, n.field5 = 5, n.field6 = 6, n.field7 = 7, n.field8 = 8, n.field9 = 9, n.field10 = 10, n.field11 = 11, n.field12 = 12, n.field13 = 13, n.field14 = 14, n.field15 = 15, n.field16 = 16, n.field17 = 17, n.field18 = 18, n.field19 = 19, n.field20 = 20, n.field21 = 21, n.field22 = 22, n.field23 = 23, n.field24 = 24, n.field25 = 25, n.field26 = 26, n.field27 = 27, n.field28 = 28, n.field29 = 29, n.field30 = 30, n.field31 = 31, n.field32 = 32, n.field33 = 33, n.field34 = 34, n.field35 = 35, n.field36 = 36, n.field37 = 37, n.field38 = 38, n.field39 = 39, n.field40 = 40, n.field41 = 41, n.field42 = 42, n.field43 = 43, n.field44 = 44, n.field45 = 45, n.field46 = 46, n.field47 = 47, n.left = n.right, n.right = n.left return n.field0, n.field1, n.field2, n.field3, n.field4, n.field5, n.field6, n.field7, n.field8, n.field9, n.field10, n.field11, n.field12, n.field13, n.field14, n.field15, n.field16, n.field17, n.field18, n.field19, n.field20, n.field21, n.field22, n.field23, n.field24, n.field25, n.field26, n.field27, n.field28, n.field29, n.field30, n.field31, n.field32, n.field33, n.field34, n.field35, n.field36, n.field37, n.field38, n.field39, n.field40, n.field41, n.field42, n.field43, n.field44, n.field45, n.field46, n.field47, n.left, n.right",
+        "fitness": 12
+      }
+    },
+    {
+      "name": "merge 51 property patch",
+      "type": "string_match",
+      "details": {
+        "query": "merge (n:NodeKind1 {left: 1, name: 'large', right: 2}) set n.field0 = 0, n.field1 = 1, n.field2 = 2, n.field3 = 3, n.field4 = 4, n.field5 = 5, n.field6 = 6, n.field7 = 7, n.field8 = 8, n.field9 = 9, n.field10 = 10, n.field11 = 11, n.field12 = 12, n.field13 = 13, n.field14 = 14, n.field15 = 15, n.field16 = 16, n.field17 = 17, n.field18 = 18, n.field19 = 19, n.field20 = 20, n.field21 = 21, n.field22 = 22, n.field23 = 23, n.field24 = 24, n.field25 = 25, n.field26 = 26, n.field27 = 27, n.field28 = 28, n.field29 = 29, n.field30 = 30, n.field31 = 31, n.field32 = 32, n.field33 = 33, n.field34 = 34, n.field35 = 35, n.field36 = 36, n.field37 = 37, n.field38 = 38, n.field39 = 39, n.field40 = 40, n.field41 = 41, n.field42 = 42, n.field43 = 43, n.field44 = 44, n.field45 = 45, n.field46 = 46, n.field47 = 47, n.field48 = 48, n.left = n.right, n.right = n.left return n.field0, n.field1, n.field2, n.field3, n.field4, n.field5, n.field6, n.field7, n.field8, n.field9, n.field10, n.field11, n.field12, n.field13, n.field14, n.field15, n.field16, n.field17, n.field18, n.field19, n.field20, n.field21, n.field22, n.field23, n.field24, n.field25, n.field26, n.field27, n.field28, n.field29, n.field30, n.field31, n.field32, n.field33, n.field34, n.field35, n.field36, n.field37, n.field38, n.field39, n.field40, n.field41, n.field42, n.field43, n.field44, n.field45, n.field46, n.field47, n.field48, n.left, n.right",
+        "fitness": 12
       }
     }
   ]

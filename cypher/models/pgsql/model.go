@@ -985,6 +985,9 @@ type Merge struct {
 	Source     TableReference
 	JoinTarget Expression
 	Actions    []MergeAction
+	Returning  Projection
+	// SourceQuery permits a query source while retaining Source for existing callers.
+	SourceQuery *Subquery
 }
 
 func (s Merge) NodeType() string {
@@ -994,6 +997,20 @@ func (s Merge) NodeType() string {
 func (s Merge) AsStatement() Statement {
 	return s
 }
+
+func (s Merge) AsExpression() Expression       { return s }
+func (s Merge) AsSetExpression() SetExpression { return s }
+
+// MergeDoNothing preserves a matched or unmatched row without writing it.
+// PostgreSQL does not emit a RETURNING row for this action.
+type MergeDoNothing struct {
+	Matched   bool
+	Predicate Expression
+}
+
+func (s MergeDoNothing) NodeType() string           { return "merge_do_nothing" }
+func (s MergeDoNothing) AsExpression() Expression   { return s }
+func (s MergeDoNothing) AsMergeAction() MergeAction { return s }
 
 type ConflictTarget struct {
 	Columns    []Expression

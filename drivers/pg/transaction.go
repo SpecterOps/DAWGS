@@ -52,6 +52,9 @@ type transaction struct {
 }
 
 func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManager *SchemaManager, cfg *Config, allocateTransaction bool) (*transaction, error) {
+	if err := validatePostgreSQLVersion(conn.Conn().PgConn().ParameterStatus("server_version")); err != nil {
+		return nil, err
+	}
 	wrapper := &transaction{
 		schemaManager:      schemaManager,
 		queryExecMode:      cfg.QueryExecMode,

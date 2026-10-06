@@ -279,3 +279,94 @@ func edgeSchemaPlan(t *testing.T, ctx context.Context, tx pgx.Tx, statement stri
 	require.NoError(t, rows.Err())
 	return strings.Join(lines, "\n")
 }
+
+func TestPostgreSQLMergeHelperLifecycle(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	parsed, err := url.Parse(connection)
+	require.NoError(t, err)
+	if parsed.Scheme != "postgres" && parsed.Scheme != "postgresql" {
+		t.Skip("PostgreSQL CONNECTION_STRING required")
+	}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connection)
+	require.NoError(t, err)
+	defer conn.Close(ctx)
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+	schema := pgx.Identifier{fmt.Sprintf("merge_helpers_%d", time.Now().UnixNano())}.Sanitize()
+	execEdgeSchemaSQL(t, ctx, tx, "create schema "+schema)
+	execEdgeSchemaSQL(t, ctx, tx, "set local search_path to "+schema)
+	_, ddl, found := strings.Cut(sqlSchemaUp, "create or replace function cypher_merge_properties")
+	require.True(t, found)
+	ddl = "create or replace function cypher_merge_properties" + ddl
+	for idx := 0; idx < 2; idx++ {
+		execEdgeSchemaSQL(t, ctx, tx, ddl)
+		if idx == 0 {
+			execEdgeSchemaSQL(t, ctx, tx, `create table populated (properties jsonb); insert into populated values ('{"name":"existing"}')`)
+		}
+		var valid bool
+		require.NoError(t, tx.QueryRow(ctx, `select cypher_merge_assert(true,false,false,false)`).Scan(&valid))
+		require.True(t, valid)
+		var patched string
+		require.NoError(t, tx.QueryRow(ctx, `select cypher_apply_property_patch(properties,'{"removed":null,"nested":{"x":null},"score":2}')::text from populated`).Scan(&patched))
+		require.JSONEq(t, `{"name":"existing","nested":{"x":null},"score":2}`, patched)
+	}
+	for _, expression := range []string{`cypher_merge_assert(null,false,false,false)`, `cypher_merge_assert(true,null,false,false)`, `cypher_merge_assert(true,false,null,false)`, `cypher_merge_assert(true,false,false,null)`, `cypher_merge_value('null')`, `cypher_merge_properties('[]')`} {
+		execEdgeSchemaSQL(t, ctx, tx, "savepoint invalid_guard")
+		_, err := tx.Exec(ctx, "select "+expression)
+		var pgError *pgconn.PgError
+		require.ErrorAs(t, err, &pgError)
+		require.Equal(t, "22023", pgError.Code)
+		execEdgeSchemaSQL(t, ctx, tx, "rollback to savepoint invalid_guard")
+	}
+	for _, line := range strings.Split(sqlSchemaDown, "\n") {
+		if strings.Contains(line, "cypher_merge_") || strings.Contains(line, "cypher_apply_property_patch(") || strings.Contains(line, "cypher_set_property(") {
+			execEdgeSchemaSQL(t, ctx, tx, line)
+		}
+	}
+	var absent bool
+	require.NoError(t, tx.QueryRow(ctx, `select to_regprocedure('cypher_merge_assert(boolean,boolean,boolean,boolean)') is null and to_regprocedure('cypher_merge_value(jsonb)') is null and to_regprocedure('cypher_apply_property_patch(jsonb,jsonb)') is null`).Scan(&absent))
+	require.True(t, absent)
+}
+
+func TestPostgreSQLMergeValidationAnchor(t *testing.T) {
+	connection := os.Getenv("CONNECTION_STRING")
+	parsed, err := url.Parse(connection)
+	require.NoError(t, err)
+	if parsed.Scheme != "postgres" && parsed.Scheme != "postgresql" {
+		t.Skip("PostgreSQL CONNECTION_STRING required")
+	}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, connection)
+	require.NoError(t, err)
+	defer conn.Close(ctx)
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+	execEdgeSchemaSQL(t, ctx, tx, `create temporary table merge_anchor_target (id int not null); create temporary table merge_anchor_audit (calls int not null); insert into merge_anchor_audit values (0)`)
+	execEdgeSchemaSQL(t, ctx, tx, `create temporary table merge_anchor_statement_audit (statement_calls int, row_calls int); insert into merge_anchor_statement_audit values (0,0);
+create function pg_temp.merge_anchor_trigger() returns trigger language plpgsql as $$begin if TG_LEVEL='STATEMENT' then update merge_anchor_statement_audit set statement_calls=statement_calls+1; else update merge_anchor_statement_audit set row_calls=row_calls+1; end if; return null; end$$;
+create trigger anchor_statement after insert on merge_anchor_target for each statement execute function pg_temp.merge_anchor_trigger();
+create trigger anchor_row after insert on merge_anchor_target for each row execute function pg_temp.merge_anchor_trigger()`)
+	execEdgeSchemaSQL(t, ctx, tx, `create function pg_temp.merge_anchor_guard(fail boolean) returns boolean language plpgsql volatile as $$begin update merge_anchor_audit set calls=calls+1; if fail then raise exception 'anchor validation' using errcode='22023'; end if; return true; end$$`)
+	for _, tail := range []string{"select 1 limit 0", "select count(*) from merge_anchor_target", "select 1"} {
+		statement := `with guard as materialized (select pg_temp.merge_anchor_guard($1) as valid), anchor as (merge into merge_anchor_target using guard on false when not matched and not guard.valid then insert (id) values (null)) ` + tail
+		execEdgeSchemaSQL(t, ctx, tx, "savepoint guard_failure")
+		_, err := tx.Exec(ctx, statement, true)
+		var pgError *pgconn.PgError
+		require.ErrorAs(t, err, &pgError)
+		require.Equal(t, "22023", pgError.Code)
+		execEdgeSchemaSQL(t, ctx, tx, "rollback to savepoint guard_failure")
+		_, err = tx.Exec(ctx, statement, false)
+		require.NoError(t, err)
+	}
+	var calls, count int
+	require.NoError(t, tx.QueryRow(ctx, `select calls,(select count(*) from merge_anchor_target) from merge_anchor_audit`).Scan(&calls, &count))
+	require.Equal(t, 3, calls)
+	require.Zero(t, count)
+	var statementCalls, rowCalls int
+	require.NoError(t, tx.QueryRow(ctx, "select statement_calls,row_calls from merge_anchor_statement_audit").Scan(&statementCalls, &rowCalls))
+	require.Equal(t, 3, statementCalls)
+	require.Zero(t, rowCalls)
+}

@@ -1,0 +1,1256 @@
+{
+  "cases": [
+    {
+      "name": "merge absent node",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_prop": [
+          "name",
+          "a"
+        ]
+      }
+    },
+    {
+      "name": "merge existing node unchanged",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "node_ids": [
+          "a"
+        ]
+      }
+    },
+    {
+      "name": "merge multiple existing nodes",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 2
+      }
+    },
+    {
+      "name": "merge create branch",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON CREATE SET n.score=1 ON MATCH SET n.score=2 RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "contains_node_with_props": {
+          "name": "a",
+          "score": 1
+        }
+      }
+    },
+    {
+      "name": "merge match branch",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON CREATE SET n.score=1 ON MATCH SET n.score=2 RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "contains_node_with_props": {
+          "name": "a",
+          "score": 2
+        }
+      }
+    },
+    {
+      "name": "merge ordinary assignment",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) SET n.score=3 RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "contains_node_with_props": {
+          "name": "a",
+          "score": 3
+        }
+      }
+    },
+    {
+      "name": "merge ordered branch assignments",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON CREATE SET n.score=1 SET n.score=n.score+1 RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "contains_node_with_props": {
+          "score": 2
+        }
+      }
+    },
+    {
+      "name": "merge distinct input nodes",
+      "cypher": "UNWIND ['a','b'] AS name MERGE (n:NodeKind1 {name:name}) RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 2
+      }
+    },
+    {
+      "name": "merge zero inputs",
+      "cypher": "UNWIND [] AS name MERGE (n:NodeKind1 {name:name}) RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "empty"
+    },
+    {
+      "name": "merge no return",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'})",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "no_error"
+    },
+    {
+      "name": "merge limit zero",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) RETURN n LIMIT 0",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "empty"
+    },
+    {
+      "name": "merge null property",
+      "cypher": "MERGE (n:NodeKind1 {name:null}) RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "query_error"
+    },
+    {
+      "name": "merge null assignment removes field",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON MATCH SET n.score=null RETURN n.score",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "scalar_values": [
+          null
+        ]
+      }
+    },
+    {
+      "name": "merge kind assignment",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON CREATE SET n:NodeKind2 RETURN labels(n)",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1
+      }
+    },
+    {
+      "name": "merge complete absent pattern",
+      "cypher": "MERGE p=(a:NodeKind1 {name:'a'})-[:EdgeKind1]->(b:NodeKind2 {name:'b'}) RETURN p",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "path_lengths": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "merge complete pattern does not reuse partial node",
+      "cypher": "MERGE (a:NodeKind1 {name:'a'})-[:EdgeKind1]->(b:NodeKind2 {name:'b'}) RETURN a",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_prop": [
+          "name",
+          "a"
+        ]
+      }
+    },
+    {
+      "name": "merge bound endpoints",
+      "cypher": "MATCH (a:NodeKind1 {name:'a'}), (b:NodeKind2 {name:'b'}) MERGE (a)-[r:EdgeKind1]->(b) RETURN r",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind2"
+            ],
+            "properties": {
+              "name": "b"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_edge": {
+          "kind": "EdgeKind1"
+        }
+      }
+    },
+    {
+      "name": "merge existing relationship",
+      "cypher": "MATCH (a:NodeKind1 {name:'a'}), (b:NodeKind2 {name:'b'}) MERGE (a)-[r:EdgeKind1]->(b) ON MATCH SET r.score=6 RETURN r",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind2"
+            ],
+            "properties": {
+              "name": "b"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "EdgeKind1",
+            "properties": {
+              "score": 5
+            }
+          }
+        ]
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_edge": {
+          "kind": "EdgeKind1",
+          "props": {
+            "score": 6
+          }
+        }
+      }
+    },
+    {
+      "name": "merge undirected existing reverse",
+      "cypher": "MATCH (a:NodeKind2 {name:'b'}), (b:NodeKind1 {name:'a'}) MERGE (a)-[r:EdgeKind1]-(b) RETURN r",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind2"
+            ],
+            "properties": {
+              "name": "b"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "EdgeKind1",
+            "properties": {
+              "score": 5
+            }
+          }
+        ]
+      },
+      "assert": {
+        "row_count": 1
+      }
+    },
+    {
+      "name": "merge multiple relationships named path",
+      "cypher": "MERGE p=(a:NodeKind1)-[:EdgeKind1]->(b:NodeKind2)-[:EdgeKind2]->(c:NodeKind1) RETURN p",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "path_lengths": [
+          2
+        ]
+      }
+    },
+    {
+      "name": "merge repeated unchanged inputs",
+      "cypher": "UNWIND ['a','a'] AS name MERGE (n:NodeKind1 {name:name}) RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "node_ids": [
+          "a",
+          "a"
+        ]
+      }
+    },
+    {
+      "name": "merge assignments use clause entry values",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON MATCH SET n.score=1, n.score=n.score+1 RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "contains_node_with_props": {
+          "score": 5
+        }
+      }
+    },
+    {
+      "name": "merge consecutive independent clauses",
+      "cypher": "MERGE (a:NodeKind1 {name:'a'}) MERGE (b:NodeKind2 {name:'b'}) RETURN a,b",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1
+      }
+    },
+    {
+      "name": "merge carried through with",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) WITH n RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1
+      }
+    },
+    {
+      "name": "merge undirected creation",
+      "cypher": "MERGE p=(a:NodeKind1)-[r:EdgeKind1]-(b:NodeKind2) RETURN p",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "path_lengths": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "merge self relationship",
+      "cypher": "MERGE (a:NodeKind1 {name:'a'})-[r:EdgeKind1]->(a) RETURN r",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1
+      }
+    },
+    {
+      "name": "merge unlabeled node",
+      "cypher": "MERGE (n {name:'a'}) RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1
+      }
+    },
+    {
+      "name": "merge missing property matched null still errors",
+      "cypher": "MERGE (n:NodeKind1 {name:null}) RETURN n LIMIT 0",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": "query_error"
+    },
+    {
+      "name": "merge array equality does not accept subsets",
+      "cypher": "MERGE (n:NodeKind1 {values:[1]}) RETURN size(n.values)",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "original",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "values": [
+                1,
+                2
+              ]
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "exact_int": 1
+      }
+    },
+    {
+      "name": "merge constant return preserves matches",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) RETURN 1",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 2
+      }
+    },
+    {
+      "name": "merge zero input scalar projection",
+      "cypher": "UNWIND [] AS name MERGE (n:NodeKind1 {name:name}) RETURN 1",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "empty"
+    },
+    {
+      "name": "merge zero input aggregate projection",
+      "cypher": "UNWIND [] AS name MERGE (n:NodeKind1 {name:name}) RETURN count(*)",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "exact_int": 0
+      }
+    },
+    {
+      "name": "merge no return yields no rows",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'})",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "empty"
+    },
+    {
+      "name": "merge bound node redeclaration is invalid",
+      "cypher": "MATCH (n:NodeKind1) MERGE (n:NodeKind2) RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": "query_error"
+    },
+    {
+      "name": "merge null scalar match parameter",
+      "cypher": "MERGE (n:NodeKind1 {name:$name}) RETURN n",
+      "params": {
+        "name": null
+      },
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": "query_error"
+    },
+    {
+      "name": "merge null scalar assignment parameter",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON MATCH SET n.score=$value RETURN n.score",
+      "params": {
+        "value": null
+      },
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a",
+              "score": 4
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "scalar_values": [
+          null
+        ]
+      }
+    },
+    {
+      "name": "merge repeated node label declaration is invalid",
+      "cypher": "MERGE (a:NodeKind1 {name:'a'})-[:EdgeKind1]->(a:NodeKind2) RETURN a",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "query_error"
+    },
+    {
+      "name": "merge repeated node property declaration is invalid",
+      "cypher": "MERGE (a:NodeKind1 {name:'a'})-[:EdgeKind1]->(a {score:1}) RETURN a",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": "query_error"
+    },
+    {
+      "name": "merge copied property types match existing node",
+      "cypher": "MATCH (a:NodeKind1) MERGE (n:NodeKind2 {score:a.score, active:a.active, values:a.values}) RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "score": 4,
+              "active": true,
+              "values": [
+                1,
+                2
+              ]
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "NodeKind2"
+            ],
+            "properties": {
+              "score": 4,
+              "active": true,
+              "values": [
+                1,
+                2
+              ]
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "node_ids": [
+          "target"
+        ]
+      }
+    },
+    {
+      "name": "merge copied property types create node",
+      "cypher": "MATCH (a:NodeKind1) MERGE (n:NodeKind2 {score:a.score, active:a.active, values:a.values}) RETURN n",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "score": 4,
+              "active": true,
+              "values": [
+                1,
+                2
+              ]
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_props": {
+          "score": 4,
+          "active": true,
+          "values": [
+            1,
+            2
+          ]
+        }
+      }
+    },
+    {
+      "name": "merge carries path from preceding merge",
+      "cypher": "MERGE p=(a:NodeKind1 {name:'a'})-[:EdgeKind1]->(b:NodeKind2 {name:'b'}) MERGE (c:NodeKind1 {name:'independent'}) RETURN p",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "path_lengths": [
+          1
+        ],
+        "path_edge_kinds": [
+          [
+            "EdgeKind1"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "merge carries path from preceding match",
+      "cypher": "MATCH p=(a:NodeKind1)-[:EdgeKind1]->(b:NodeKind2) MERGE (c:NodeKind1 {name:'independent'}) RETURN p",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind2"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "EdgeKind1",
+            "properties": {}
+          }
+        ]
+      },
+      "assert": {
+        "path_node_ids": [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        "path_lengths": [
+          1
+        ]
+      }
+    },
+    {
+      "name": "merge clause swap",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) ON CREATE SET n.a=1,n.b=2 SET n.a=n.b,n.b=n.a RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_props": {
+          "name": "a",
+          "a": 2,
+          "b": 1
+        }
+      }
+    },
+    {
+      "name": "merge separate clause dependency",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) SET n.a=1 SET n.b=n.a RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_props": {
+          "name": "a",
+          "a": 1,
+          "b": 1
+        }
+      }
+    },
+    {
+      "name": "merge repeated field final non-null",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) SET n.a=null,n.a=3 RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_props": {
+          "name": "a",
+          "a": 3
+        }
+      }
+    },
+    {
+      "name": "merge repeated field final null",
+      "cypher": "MERGE (n:NodeKind1 {name:'a'}) SET n.a=3,n.a=null RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_props": {
+          "name": "a"
+        }
+      }
+    },
+    {
+      "name": "merge changes duplicate originals away",
+      "cypher": "UNWIND ['a','a'] AS name MERGE (n:NodeKind1 {name:name}) ON CREATE SET n.name='away' RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 2,
+        "contains_node_with_props": {
+          "name": "away"
+        }
+      }
+    },
+    {
+      "name": "merge composite distinct originals",
+      "cypher": "UNWIND [1,2] AS value MERGE (n:NodeKind1 {name:'same',score:value}) RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 2,
+        "contains_node_with_props": {
+          "name": "same",
+          "score": 1
+        }
+      }
+    },
+    {
+      "name": "merge repeated bound-endpoint matches",
+      "cypher": "MATCH (a:NodeKind1 {name:'a'}),(b:NodeKind2 {name:'b'}) UNWIND [1,2] AS input MERGE (a)-[:EdgeKind1]->(b) RETURN a",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind2"
+            ],
+            "properties": {
+              "name": "b"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "EdgeKind1",
+            "properties": {}
+          }
+        ]
+      },
+      "assert": {
+        "row_count": 2,
+        "contains_node_with_props": {
+          "name": "a"
+        }
+      }
+    },
+    {
+      "name": "merge return star hides private fields",
+      "cypher": "merge (n:NodeKind1 {name: 'a'}) on create set n.name = 'b' return *",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "contains_node_with_props": {
+          "name": "b"
+        },
+        "keys": [
+          "n"
+        ]
+      }
+    },
+    {
+      "name": "merge 51 property create patch",
+      "cypher": "MERGE (n:NodeKind1 {name:'large',left:1,right:2}) ON CREATE SET n.field0=0,n.field1=1,n.field2=2,n.field3=3,n.field4=4,n.field5=5,n.field6=6,n.field7=7,n.field8=8,n.field9=9,n.field10=10,n.field11=11,n.field12=12,n.field13=13,n.field14=14,n.field15=15,n.field16=16,n.field17=17,n.field18=18,n.field19=19,n.field20=20,n.field21=21,n.field22=22,n.field23=23,n.field24=24,n.field25=25,n.field26=26,n.field27=27,n.field28=28,n.field29=29,n.field30=30,n.field31=31,n.field32=32,n.field33=33,n.field34=34,n.field35=35,n.field36=36,n.field37=37,n.field38=38,n.field39=39,n.field40=40,n.field41=41,n.field42=42,n.field43=43,n.field44=44,n.field45=45,n.field46=46,n.field47=47,n.field48=48,n.left=n.right,n.right=n.left RETURN n.field0,n.field1,n.field2,n.field3,n.field4,n.field5,n.field6,n.field7,n.field8,n.field9,n.field10,n.field11,n.field12,n.field13,n.field14,n.field15,n.field16,n.field17,n.field18,n.field19,n.field20,n.field21,n.field22,n.field23,n.field24,n.field25,n.field26,n.field27,n.field28,n.field29,n.field30,n.field31,n.field32,n.field33,n.field34,n.field35,n.field36,n.field37,n.field38,n.field39,n.field40,n.field41,n.field42,n.field43,n.field44,n.field45,n.field46,n.field47,n.field48,n.left,n.right",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "row_values": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            2,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "name": "merge 51 property match patch",
+      "cypher": "MERGE (n:NodeKind1 {name:'large'}) ON MATCH SET n.field0=0,n.field1=1,n.field2=2,n.field3=3,n.field4=4,n.field5=5,n.field6=6,n.field7=7,n.field8=8,n.field9=9,n.field10=10,n.field11=11,n.field12=12,n.field13=13,n.field14=14,n.field15=15,n.field16=16,n.field17=17,n.field18=18,n.field19=19,n.field20=20,n.field21=21,n.field22=22,n.field23=23,n.field24=24,n.field25=25,n.field26=26,n.field27=27,n.field28=28,n.field29=29,n.field30=30,n.field31=31,n.field32=32,n.field33=33,n.field34=34,n.field35=35,n.field36=36,n.field37=37,n.field38=38,n.field39=39,n.field40=40,n.field41=41,n.field42=42,n.field43=43,n.field44=44,n.field45=45,n.field46=46,n.field47=47,n.field48=48,n.left=n.right,n.right=n.left RETURN n.field0,n.field1,n.field2,n.field3,n.field4,n.field5,n.field6,n.field7,n.field8,n.field9,n.field10,n.field11,n.field12,n.field13,n.field14,n.field15,n.field16,n.field17,n.field18,n.field19,n.field20,n.field21,n.field22,n.field23,n.field24,n.field25,n.field26,n.field27,n.field28,n.field29,n.field30,n.field31,n.field32,n.field33,n.field34,n.field35,n.field36,n.field37,n.field38,n.field39,n.field40,n.field41,n.field42,n.field43,n.field44,n.field45,n.field46,n.field47,n.field48,n.left,n.right",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "n",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "large",
+              "left": 1,
+              "right": 2
+            }
+          }
+        ],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "row_values": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            2,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "name": "merge 51 relationship property patch",
+      "cypher": "MERGE (:NodeKind1)-[n:EdgeKind1 {left:1,right:2}]->(:NodeKind2) SET n.field0=0,n.field1=1,n.field2=2,n.field3=3,n.field4=4,n.field5=5,n.field6=6,n.field7=7,n.field8=8,n.field9=9,n.field10=10,n.field11=11,n.field12=12,n.field13=13,n.field14=14,n.field15=15,n.field16=16,n.field17=17,n.field18=18,n.field19=19,n.field20=20,n.field21=21,n.field22=22,n.field23=23,n.field24=24,n.field25=25,n.field26=26,n.field27=27,n.field28=28,n.field29=29,n.field30=30,n.field31=31,n.field32=32,n.field33=33,n.field34=34,n.field35=35,n.field36=36,n.field37=37,n.field38=38,n.field39=39,n.field40=40,n.field41=41,n.field42=42,n.field43=43,n.field44=44,n.field45=45,n.field46=46,n.field47=47,n.field48=48,n.left=n.right,n.right=n.left RETURN n.field0,n.field1,n.field2,n.field3,n.field4,n.field5,n.field6,n.field7,n.field8,n.field9,n.field10,n.field11,n.field12,n.field13,n.field14,n.field15,n.field16,n.field17,n.field18,n.field19,n.field20,n.field21,n.field22,n.field23,n.field24,n.field25,n.field26,n.field27,n.field28,n.field29,n.field30,n.field31,n.field32,n.field33,n.field34,n.field35,n.field36,n.field37,n.field38,n.field39,n.field40,n.field41,n.field42,n.field43,n.field44,n.field45,n.field46,n.field47,n.field48,n.left,n.right",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "row_values": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            2,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "name": "merge property removal in second patch object",
+      "cypher": "MERGE (n:NodeKind1 {name:'large',removed:7}) SET n.field0=0,n.field1=1,n.field2=2,n.field3=3,n.field4=4,n.field5=5,n.field6=6,n.field7=7,n.field8=8,n.field9=9,n.field10=10,n.field11=11,n.field12=12,n.field13=13,n.field14=14,n.field15=15,n.field16=16,n.field17=17,n.field18=18,n.field19=19,n.field20=20,n.field21=21,n.field22=22,n.field23=23,n.field24=24,n.field25=25,n.field26=26,n.field27=27,n.field28=28,n.field29=29,n.field30=30,n.field31=31,n.field32=32,n.field33=33,n.field34=34,n.field35=35,n.field36=36,n.field37=37,n.field38=38,n.field39=39,n.field40=40,n.field41=41,n.field42=42,n.field43=43,n.field44=44,n.field45=45,n.field46=46,n.field47=47,n.field48=48,n.field49=49,n.removed=null RETURN n.field0,n.field1,n.field2,n.field3,n.field4,n.field5,n.field6,n.field7,n.field8,n.field9,n.field10,n.field11,n.field12,n.field13,n.field14,n.field15,n.field16,n.field17,n.field18,n.field19,n.field20,n.field21,n.field22,n.field23,n.field24,n.field25,n.field26,n.field27,n.field28,n.field29,n.field30,n.field31,n.field32,n.field33,n.field34,n.field35,n.field36,n.field37,n.field38,n.field39,n.field40,n.field41,n.field42,n.field43,n.field44,n.field45,n.field46,n.field47,n.field48,n.field49,n.removed",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "assert": {
+        "row_count": 1,
+        "row_values": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            null
+          ]
+        ]
+      }
+    }
+  ]
+}
