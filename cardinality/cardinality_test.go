@@ -7,6 +7,7 @@ import (
 
 	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/graph"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,7 +93,7 @@ func TestBitmap64EachConcurrent(t *testing.T) {
 		go func() {
 			defer waitGroup.Done()
 			for iteration := 0; iteration < 100; iteration++ {
-				require.Equal(t, values, collectEach(duplex))
+				assert.Equal(t, values, collectEach(duplex))
 			}
 		}()
 	}
