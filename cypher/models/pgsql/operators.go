@@ -90,6 +90,8 @@ const (
 	OperatorRegexMatch            Operator = "~"
 	OperatorAssignment            Operator = "="
 	OperatorAdditionAssignment    Operator = "+="
+	OperatorIsDistinctFrom        Operator = "is distinct from"
+	OperatorIsNotDistinctFrom     Operator = "is not distinct from"
 
 	OperatorCypherRegexMatch Operator = "=~"
 	OperatorCypherStartsWith Operator = "starts with"
