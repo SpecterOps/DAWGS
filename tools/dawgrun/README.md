@@ -76,11 +76,13 @@ Available commands:
     load-connections                Loads named backend connections from dawgrun config
     load-db-kinds                   Loads/shows the kind mapping from the specified DB into the 'active set'
     load-opengraph                  Loads an OpenGraph JSON file into a connection
+    load-synthetic                  Loads a deterministic synthetic Active Directory graph
     lookup-kind                     Looks up a kind from database based on kind name
     lookup-kind-id                  Looks up a kind from database based on kind ID
     open                            Connects to a named DAWGS-compatible backend using a connection string.
     parse                           Parses and dumps a Cypher query to AST form.
     query-cypher                    Executes a Cypher query and renders table or JSON output
+    render-overview                 Writes a top-level interactive graph overview as HTML
     quit                            Quit
     runtime-trace                   Manage runtime tracing
     save-connections                Saves open named backend connections to dawgrun config
@@ -198,6 +200,39 @@ Copy the full graph from one active connection to another:
 
     dawgrun > copy-opengraph source target
     Copied 12345 nodes and 67890 edges from connection 'source' to connection 'target'
+
+### Render a graph overview
+
+Write a compact interactive HTML view of a graph:
+
+    dawgrun > render-overview -out graph-overview.html local
+    Wrote overview of 12345 nodes, 67890 relationships, 8 clusters, and 21 connections to graph-overview.html
+
+Open `graph-overview.html` in a browser. The page renders one node per complete
+node-kind set (for example, `Base + User`) and one directed connection per
+source/target cluster pair. Connection details include the relationship-kind
+counts. It does not include individual graph nodes or properties.
+
+The generated page loads its pinned Cytoscape.js renderer from a CDN, so the
+browser needs internet access when the page is opened.
+
+### Load a synthetic Active Directory graph
+
+Load the reference-sized deterministic AD graph into a local connection:
+
+    dawgrun > load-synthetic local
+
+Scale the reference graph, clear the target first, or enable targeted workload
+shapes:
+
+    dawgrun > load-synthetic -scale 10 -clear local
+    dawgrun > load-synthetic -scale 100 -index-stress local
+    dawgrun > load-synthetic -nodes 200000 -edges 12000000 -ingest-stress local
+
+The default graph is production-shaped. `-index-stress` lowers the selectivity
+of common indexed string values, while `-ingest-stress` adds larger property
+payloads and duplicate relationships. The generator uses seed `8047` by
+default; pass `-seed` to reproduce a different graph.
 
 ### Parse a Cypher query to AST
 

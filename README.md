@@ -138,6 +138,7 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
+- [dawgrun](tools/dawgrun/README.md): interactive graph backend tooling.
 - [Cypher syntax support](cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
 
 ## Repository Map
