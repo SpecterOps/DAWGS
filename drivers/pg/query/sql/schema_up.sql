@@ -182,12 +182,14 @@ $$;
 -- deleted. While this could be done with a foreign key relationship, it would scope the cascade delete to individual
 -- node partitions and therefore require the graph_id value of each node as part of the delete statement. The trigger is
 -- statement-level and reads the deleted rows from a transition table so that deleting many nodes in a single statement
--- fires the cascading edge delete once rather than once per row.
+-- fires the cascading edge delete once rather than once per row. The start_id and end_id deletes are issued as separate
+-- statements because an OR across two transition table subqueries cannot be planned as index lookups and forces a
+-- sequential scan of every edge partition.
 create or replace function delete_node_edges() returns trigger as
 $$
 begin
-  delete from edge where start_id in (select id from deleted_nodes)
-                      or end_id in (select id from deleted_nodes);
+  delete from edge e using deleted_nodes d where e.start_id = d.id;
+  delete from edge e using deleted_nodes d where e.end_id = d.id;
   return null;
 end
 $$
