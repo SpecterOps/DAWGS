@@ -120,7 +120,11 @@ func writeBDDHTMLReport(inputPath, outputPath string) error {
 	if err != nil {
 		return fmt.Errorf("create HTML report: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if errClose := file.Close(); err != nil {
+			err = fmt.Errorf("close HTM report: %w", errClose)
+		}
+	}()
 	if err := bddReportTemplate.Execute(file, report); err != nil {
 		return fmt.Errorf("render HTML report: %w", err)
 	}
@@ -162,6 +166,7 @@ func aggregateBDDReport(features []cucumberFeature) bddReport {
 		sort.Slice(folder.Features, func(i, j int) bool { return folder.Features[i].Name < folder.Features[j].Name })
 		folders = append(folders, *folder)
 	}
+	sort.Slice(folders, func(i, j int) bool { return folders[i].Name < folders[j].Name })
 	report := bddReport{Folders: folders}
 	for _, folder := range folders {
 		report.Total += folder.Total

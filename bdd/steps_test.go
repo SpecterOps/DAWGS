@@ -88,6 +88,8 @@ func TestFeatures(t *testing.T) {
 		},
 	}
 
+	// delete staled reports
+	_ = os.Remove(bddJSONReportPath)
 	num := suite.Run()
 	if err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath); err != nil {
 		t.Errorf("failed to write BDD HTML report: %v", err)
