@@ -363,10 +363,18 @@ func formatNode(builder *OutputBuilder, rootExpr pgsql.SyntaxNode) error {
 			exprStack = append(exprStack, *typedNextExpr)
 
 		case pgsql.FunctionCall:
+			if typedNextExpr.Over != nil {
+				if len(typedNextExpr.Over.PartitionBy) > 0 || len(typedNextExpr.Over.OrderBy) > 0 || typedNextExpr.Over.WindowFrame != nil {
+					return fmt.Errorf("only empty SQL windows are supported")
+				}
+			}
 			if typedNextExpr.CastType.IsKnown() {
 				exprStack = append(exprStack, typedNextExpr.CastType, pgsql.FormattingLiteral("::"))
 			}
 
+			if typedNextExpr.Over != nil {
+				exprStack = append(exprStack, pgsql.FormattingLiteral(" over ()"))
+			}
 			if !typedNextExpr.Bare {
 				exprStack = append(exprStack, pgsql.FormattingLiteral(")"))
 			}
@@ -776,6 +784,12 @@ func formatSelect(builder *OutputBuilder, selectStmt pgsql.Select) error {
 		}
 	}
 
+	if selectStmt.Having != nil {
+		builder.Write(" having ")
+		if err := formatNode(builder, selectStmt.Having); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -998,6 +1012,8 @@ func formatSetExpression(builder *OutputBuilder, expression pgsql.SetExpression)
 
 	case pgsql.Update:
 		return formatUpdateStatement(builder, typedSetExpression)
+	case pgsql.Merge:
+		return formatMergeStatement(builder, typedSetExpression)
 
 	default:
 		return fmt.Errorf("unsupported set expression type %T", expression)
@@ -1019,7 +1035,14 @@ func formatMergeStatement(builder *OutputBuilder, merge pgsql.Merge) error {
 
 	builder.Write(" using ")
 
-	if err := formatNode(builder, merge.Source); err != nil {
+	if merge.SourceQuery != nil {
+		if err := formatNode(builder, *merge.SourceQuery); err != nil {
+			return err
+		}
+		if merge.Source.Binding.Set {
+			builder.Write(" as ", merge.Source.Binding.Value)
+		}
+	} else if err := formatNode(builder, merge.Source); err != nil {
 		return err
 	}
 
@@ -1039,6 +1062,18 @@ func formatMergeStatement(builder *OutputBuilder, merge pgsql.Merge) error {
 		builder.Write("when ")
 
 		switch typedMergeAction := mergeAction.(type) {
+		case pgsql.MergeDoNothing:
+			if !typedMergeAction.Matched {
+				builder.Write("not ")
+			}
+			builder.Write("matched")
+			if typedMergeAction.Predicate != nil {
+				builder.Write(" and ")
+				if err := formatNode(builder, typedMergeAction.Predicate); err != nil {
+					return err
+				}
+			}
+			builder.Write(" then do nothing")
 		case pgsql.MatchedUpdate:
 			builder.Write("matched")
 
@@ -1112,6 +1147,18 @@ func formatMergeStatement(builder *OutputBuilder, merge pgsql.Merge) error {
 		}
 	}
 
+	if len(merge.Returning) > 0 {
+		builder.Write(" returning ")
+		for idx, item := range merge.Returning {
+			if idx > 0 {
+				builder.Write(", ")
+			}
+			if err := formatNode(builder, item); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	return nil
 }
 

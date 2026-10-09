@@ -2639,3 +2639,108 @@ from public.bidirectional_sp_harness(forward_primer, forward_recursive, backward
 $$
   language sql volatile
                strict;
+
+-- MERGE properties must be non-null, including on the matched branch and when
+-- a compiled query is reused with different parameter values.
+create or replace function cypher_merge_properties(properties jsonb) returns jsonb
+language plpgsql volatile as $$
+begin
+  if properties is null or jsonb_typeof(properties) <> 'object' then
+    raise exception 'MERGE properties must be a non-null map' using errcode = '22023';
+  end if;
+  if exists (select 1 from jsonb_each(properties) p where p.value = 'null'::jsonb) then
+    raise exception 'Cannot merge an entity using a null property value' using errcode = '22023';
+  end if;
+  return properties;
+end;
+$$;
+
+-- SET null removes only the selected property, preserving nested JSON nulls.
+create or replace function cypher_set_property(properties jsonb, key text, value jsonb)
+returns jsonb language sql immutable as $$
+  select case when value is null or value = 'null'::jsonb
+              then properties - key else properties || jsonb_build_object(key, value) end;
+$$;
+
+-- Reject candidates requiring ordered command snapshots before native MERGE
+-- writes. Keep every input action; never resolve conflicts by deduplication.
+create or replace function cypher_merge_candidates(candidates jsonb, single_node boolean)
+returns boolean language plpgsql volatile as $$
+begin
+  if exists (
+    select 1 from jsonb_array_elements(candidates) c,
+      lateral jsonb_array_elements(c->'entities') e
+    where (e->>'write')::boolean
+    group by e->>'type', e->>'id' having count(*) > 1
+  ) then
+    raise exception 'MERGE requires ordered execution: repeated writes to the same target'
+      using errcode = '22023';
+  end if;
+
+  if (select count(distinct c->>'input') from jsonb_array_elements(candidates) c
+      where (c->>'created')::boolean) > 1 then
+    if not single_node then
+      raise exception 'MERGE requires ordered execution: multiple absent complete-pattern inputs'
+        using errcode = '22023';
+    end if;
+    -- Single-node creations are safe only if neither input can match the other
+    -- input's final created value. Compare fields exactly, including arrays.
+    if exists (
+      select 1 from jsonb_array_elements(candidates) a,
+        jsonb_array_elements(candidates) b
+      where (a->>'created')::boolean and (b->>'created')::boolean
+        and a->>'input' <> b->>'input'
+        and not exists (
+          select 1 from jsonb_each(a->'match_properties') p
+          where p.value is distinct from b->'entities'->0->'properties'->p.key
+        )
+    ) then
+      raise exception 'MERGE requires ordered execution: overlapping absent node inputs'
+        using errcode = '22023';
+    end if;
+  end if;
+  return true;
+end;
+$$;
+
+-- Validate a projected fixed-key value without assembling a match map.
+create or replace function cypher_merge_value(value jsonb) returns jsonb
+language plpgsql volatile as $$
+begin
+  if value is null or value = 'null'::jsonb then
+    raise exception 'Cannot merge an entity using a null property value' using errcode = '22023';
+  end if;
+  return value;
+end;
+$$;
+
+-- Compact relational MERGE assertion. SQL NULL flags are invalid, never success.
+create or replace function cypher_merge_assert(inputs_valid boolean, repeated boolean,
+                                             multiple_patterns boolean, overlap boolean)
+returns boolean language plpgsql volatile as $$
+begin
+  if inputs_valid is distinct from true or repeated is null
+     or multiple_patterns is null or overlap is null then
+    raise exception 'Invalid MERGE validation flags' using errcode = '22023';
+  end if;
+  if repeated then
+    raise exception 'MERGE requires ordered execution: repeated writes to the same target' using errcode = '22023';
+  end if;
+  if multiple_patterns then
+    raise exception 'MERGE requires ordered execution: multiple absent complete-pattern inputs' using errcode = '22023';
+  end if;
+  if overlap then
+    raise exception 'MERGE requires ordered execution: overlapping absent node inputs' using errcode = '22023';
+  end if;
+  return true;
+end;
+$$;
+
+-- The patch argument evaluates each effective clause RHS once. Remove only
+-- top-level null values; nested JSON nulls are legitimate property contents.
+create or replace function cypher_apply_property_patch(properties jsonb, patch jsonb)
+returns jsonb language sql immutable as $$
+  select (properties - coalesce(array_agg(key) filter (where value = 'null'::jsonb), '{}'::text[]))
+         || coalesce(jsonb_object_agg(key, value) filter (where value <> 'null'::jsonb), '{}'::jsonb)
+  from jsonb_each(patch);
+$$;

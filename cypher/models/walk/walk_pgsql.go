@@ -40,6 +40,55 @@ func newSQLWalkCursor(node pgsql.SyntaxNode) (*Cursor[pgsql.SyntaxNode], error) 
 	}
 
 	switch typedNode := node.(type) {
+	case pgsql.Values:
+		branches, err := pgsqlSyntaxNodeSliceTypeConvert(typedNode.Values)
+		if err != nil {
+			return nil, err
+		}
+		return &Cursor[pgsql.SyntaxNode]{Node: node, Branches: branches}, nil
+	case pgsql.Merge:
+		cursor := &Cursor[pgsql.SyntaxNode]{Node: node}
+		cursor.AddBranches(typedNode.Table, typedNode.JoinTarget, typedNode.Returning)
+		if typedNode.SourceQuery != nil {
+			cursor.AddBranches(*typedNode.SourceQuery)
+		} else {
+			cursor.AddBranches(typedNode.Source)
+		}
+		for _, action := range typedNode.Actions {
+			cursor.AddBranches(action)
+		}
+		return cursor, nil
+	case pgsql.MatchedUpdate:
+		cursor := &Cursor[pgsql.SyntaxNode]{Node: node}
+		if typedNode.Predicate != nil {
+			cursor.AddBranches(typedNode.Predicate)
+		}
+		for _, assignment := range typedNode.Assignments {
+			cursor.AddBranches(assignment)
+		}
+		return cursor, nil
+	case pgsql.MatchedDelete:
+		cursor := &Cursor[pgsql.SyntaxNode]{Node: node}
+		if typedNode.Predicate != nil {
+			cursor.AddBranches(typedNode.Predicate)
+		}
+		return cursor, nil
+	case pgsql.MergeDoNothing:
+		cursor := &Cursor[pgsql.SyntaxNode]{Node: node}
+		if typedNode.Predicate != nil {
+			cursor.AddBranches(typedNode.Predicate)
+		}
+		return cursor, nil
+	case pgsql.UnmatchedAction:
+		cursor := &Cursor[pgsql.SyntaxNode]{Node: node}
+		if typedNode.Predicate != nil {
+			cursor.AddBranches(typedNode.Predicate)
+		}
+		for _, column := range typedNode.Columns {
+			cursor.AddBranches(column)
+		}
+		cursor.AddBranches(typedNode.Values)
+		return cursor, nil
 	case pgsql.Query:
 		nextCursor := &Cursor[pgsql.SyntaxNode]{
 			Node: node,

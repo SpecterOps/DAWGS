@@ -55,6 +55,11 @@ func (s *Translator) buildSinglePartQuery(singlePartQuery *cypher.SinglePartQuer
 			s.query.CurrentPart().Model.Body = pgsql.Select{
 				Projection: []pgsql.SelectItem{literalReturn},
 			}
+			if s.query.CurrentPart().containsMerge {
+				body := s.query.CurrentPart().Model.Body.(pgsql.Select)
+				body.Where = pgsql.NewLiteral(false, pgsql.Boolean)
+				s.query.CurrentPart().Model.Body = body
+			}
 		}
 	} else if err := s.buildTailProjection(); err != nil {
 		s.SetError(err)
@@ -91,6 +96,10 @@ func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery
 			nextCTE.Query.Body = inlineSelect
 		}
 
+		if part.containsMerge && nextCTE.Query.CommonTableExpressions != nil {
+			multipartCTEChain = append(multipartCTEChain, nextCTE.Query.CommonTableExpressions.Expressions...)
+			nextCTE.Query.CommonTableExpressions = nil
+		}
 		multipartCTEChain = append(multipartCTEChain, nextCTE)
 	}
 

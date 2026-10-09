@@ -5,7 +5,7 @@ Database Abstraction Wrapper for Graph Schemas
 ![A Corgi Treat](logo_small.png)
 
 DAWGS provides tools and query helpers for running property graphs on vanilla PostgreSQL without extra database
-plugins. It exposes a backend abstraction for graph queries, with current backend support for PostgreSQL and Neo4j.
+plugins. PostgreSQL 18 or newer is required. It exposes a backend abstraction for graph queries, with current backend support for PostgreSQL and Neo4j.
 The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
 support Cypher natively.
 
@@ -147,3 +147,25 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - `integration/`: backend-equivalent integration suites and fixtures.
 - `cmd/`: command-line tools for capture, export, and diagnostics.
 - `tools/`: developer tools such as `dawgrun` and metrics reporting.
+
+### MERGE support
+
+CySQL supports node MERGE, relationships between bound endpoints, and complete fixed-length patterns with
+`ON CREATE SET`, `ON MATCH SET`, ordinary following `SET`, and named paths. Unchanged matches do not issue an UPDATE.
+Match values are evaluated once and preserve their JSON types. MERGE batches property assignments per SET clause and
+splits large patches to stay within PostgreSQL's function argument limit while preserving clause evaluation semantics.
+It uses relational conflict checks and omits unchanged bound endpoint writes. Named paths can be carried into subsequent MERGE clauses.
+Validation runs for every actual input even with no RETURN or LIMIT 0. Queries containing only bound MERGE entities
+use a validation anchor that requires INSERT permission on the node table and invokes INSERT statement triggers, while
+never inserting a row. Other queries consume the guard through a private DO NOTHING row in an existing entity write.
+PostgreSQL 18+ is enforced when connections are opened and transactions are acquired, including supplied pools.
+
+This first iteration uses one SQL statement. Later clauses do not observe earlier table mutations through scans.
+A materialized candidate guard rejects repeated target writes across rows or bindings with an ordered-execution error.
+Single-node creations accept distinct inputs only when neither can match the other created value; multiple absent
+complete-pattern inputs are rejected. Run rejected inputs as separate commands. Concurrent MERGE statements can raise
+uniqueness conflicts. Property-qualified relationships retain the existing endpoint/type uniqueness constraint and
+fail if their requested properties conflict with an existing relationship. See
+[MERGE semantics and limits](docs/postgresql_translation.md#merge) for the execution contract and validation commands.
+The [implementation evidence](docs/merge_implementation.md) describes the delivered pipeline and benchmark results;
+[merge_gaps.md](merge_gaps.md) and [merge_gaps_plan.md](merge_gaps_plan.md) preserve the historical analysis and plan.

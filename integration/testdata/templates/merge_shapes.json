@@ -1,0 +1,900 @@
+{
+  "families": [
+    {
+      "name": "merge nodes",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "string match and action values",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:$name}) ON CREATE SET n.status='created' ON MATCH SET n.status=$matched RETURN n"
+          },
+          "params": {
+            "name": "a",
+            "matched": "matched"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "a",
+              "status": "created"
+            }
+          }
+        },
+        {
+          "name": "create action",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'new'}) ON CREATE SET n.score=$score RETURN n"
+          },
+          "params": {
+            "score": 1
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "new",
+              "score": 1
+            }
+          }
+        },
+        {
+          "name": "ordinary set",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'new'}) SET n.score=$score RETURN n"
+          },
+          "params": {
+            "score": 1
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "new",
+              "score": 1
+            }
+          }
+        },
+        {
+          "name": "no assignments",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'new'}) RETURN n"
+          },
+          "assert": {
+            "row_count": 1
+          }
+        },
+        {
+          "name": "limit zero",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'new'}) RETURN n LIMIT 0"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "no return",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'new'})"
+          },
+          "assert": "no_error"
+        }
+      ]
+    },
+    {
+      "name": "merge relationships",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "create action",
+          "vars": {
+            "query": "MERGE (a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) ON CREATE SET r.score=$score RETURN r"
+          },
+          "params": {
+            "score": 1
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_edge": {
+              "kind": "TemplateEdgeKind1",
+              "props": {
+                "score": 1
+              }
+            }
+          }
+        },
+        {
+          "name": "ordinary set",
+          "vars": {
+            "query": "MERGE (a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) SET r.score=$score RETURN r"
+          },
+          "params": {
+            "score": 1
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_edge": {
+              "kind": "TemplateEdgeKind1",
+              "props": {
+                "score": 1
+              }
+            }
+          }
+        },
+        {
+          "name": "no assignments",
+          "vars": {
+            "query": "MERGE (a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) RETURN r"
+          },
+          "assert": {
+            "row_count": 1
+          }
+        },
+        {
+          "name": "limit zero",
+          "vars": {
+            "query": "MERGE (a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) RETURN r LIMIT 0"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "no return",
+          "vars": {
+            "query": "MERGE (a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2)"
+          },
+          "assert": "no_error"
+        }
+      ]
+    },
+    {
+      "name": "merge paths",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "create action",
+          "vars": {
+            "query": "MERGE p=(a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) ON CREATE SET r.score=$score RETURN p"
+          },
+          "params": {
+            "score": 1
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "ordinary set",
+          "vars": {
+            "query": "MERGE p=(a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) SET r.score=$score RETURN p"
+          },
+          "params": {
+            "score": 1
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "no assignments",
+          "vars": {
+            "query": "MERGE p=(a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) RETURN p"
+          },
+          "assert": {
+            "row_count": 1
+          }
+        },
+        {
+          "name": "limit zero",
+          "vars": {
+            "query": "MERGE p=(a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2) RETURN p LIMIT 0"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "no return",
+          "vars": {
+            "query": "MERGE p=(a:TemplateNodeKind1)-[r:TemplateEdgeKind1]->(b:TemplateNodeKind2)"
+          },
+          "assert": "no_error"
+        }
+      ]
+    },
+    {
+      "name": "merge copied property types matched",
+      "template": "MATCH (a:TemplateNodeKind1) MERGE (n:TemplateNodeKind2 {value:a.{{field}}}) RETURN n",
+      "variants": [
+        {
+          "name": "number",
+          "vars": {
+            "field": "number"
+          },
+          "assert": {
+            "node_ids": [
+              "number"
+            ]
+          }
+        },
+        {
+          "name": "boolean",
+          "vars": {
+            "field": "boolean"
+          },
+          "assert": {
+            "node_ids": [
+              "boolean"
+            ]
+          }
+        },
+        {
+          "name": "array",
+          "vars": {
+            "field": "array"
+          },
+          "assert": {
+            "node_ids": [
+              "array"
+            ]
+          }
+        }
+      ],
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "TemplateNodeKind1"
+            ],
+            "properties": {
+              "number": 4,
+              "boolean": true,
+              "array": [
+                1,
+                2
+              ]
+            }
+          },
+          {
+            "id": "number",
+            "kinds": [
+              "TemplateNodeKind2"
+            ],
+            "properties": {
+              "value": 4
+            }
+          },
+          {
+            "id": "boolean",
+            "kinds": [
+              "TemplateNodeKind2"
+            ],
+            "properties": {
+              "value": true
+            }
+          },
+          {
+            "id": "array",
+            "kinds": [
+              "TemplateNodeKind2"
+            ],
+            "properties": {
+              "value": [
+                1,
+                2
+              ]
+            }
+          }
+        ],
+        "edges": []
+      }
+    },
+    {
+      "name": "merge copied property types created",
+      "template": "MATCH (a:TemplateNodeKind1) MERGE (n:TemplateNodeKind2 {value:a.{{field}}}) RETURN n",
+      "variants": [
+        {
+          "name": "number",
+          "vars": {
+            "field": "number"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "value": 4
+            }
+          }
+        },
+        {
+          "name": "boolean",
+          "vars": {
+            "field": "boolean"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "value": true
+            }
+          }
+        },
+        {
+          "name": "array",
+          "vars": {
+            "field": "array"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "value": [
+                1,
+                2
+              ]
+            }
+          }
+        }
+      ],
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "TemplateNodeKind1"
+            ],
+            "properties": {
+              "number": 4,
+              "boolean": true,
+              "array": [
+                1,
+                2
+              ]
+            }
+          }
+        ],
+        "edges": []
+      }
+    },
+    {
+      "name": "merge carries incoming paths",
+      "template": "{{prefix}} p=(a:TemplateNodeKind1)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) MERGE (c:TemplateNodeKind1 {name:'independent'}) RETURN p",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "TemplateNodeKind1"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "TemplateNodeKind2"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "TemplateEdgeKind1",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "match",
+          "vars": {
+            "prefix": "MATCH"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "a",
+                "b"
+              ]
+            ],
+            "path_lengths": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "merge",
+          "vars": {
+            "prefix": "MERGE"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "a",
+                "b"
+              ]
+            ],
+            "path_lengths": [
+              1
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "merge distinct absent inputs with actions",
+      "template": "UNWIND ['a','b'] AS name MERGE (n:TemplateNodeKind1 {name:name}) ON CREATE SET n.score={{score}} RETURN n",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "integer",
+          "vars": {
+            "score": "1"
+          },
+          "assert": {
+            "row_count": 2,
+            "contains_node_with_props": {
+              "name": "a",
+              "score": 1
+            }
+          }
+        },
+        {
+          "name": "null removes property",
+          "vars": {
+            "score": "null"
+          },
+          "assert": {
+            "row_count": 2,
+            "contains_node_with_prop": [
+              "name",
+              "b"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "merge clause patches",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "merge clause swap",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'a'}) ON CREATE SET n.a=1,n.b=2 SET n.a=n.b,n.b=n.a RETURN n"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "a",
+              "a": 2,
+              "b": 1
+            }
+          }
+        },
+        {
+          "name": "merge separate clause dependency",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'a'}) SET n.a=1 SET n.b=n.a RETURN n"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "a",
+              "a": 1,
+              "b": 1
+            }
+          }
+        },
+        {
+          "name": "merge repeated field final non-null",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'a'}) SET n.a=null,n.a=3 RETURN n"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "a",
+              "a": 3
+            }
+          }
+        },
+        {
+          "name": "merge repeated field final null",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'a'}) SET n.a=3,n.a=null RETURN n"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "a"
+            }
+          }
+        },
+        {
+          "name": "merge changes duplicate originals away",
+          "vars": {
+            "query": "UNWIND ['a','a'] AS name MERGE (n:TemplateNodeKind1 {name:name}) ON CREATE SET n.name='away' RETURN n"
+          },
+          "assert": {
+            "row_count": 2,
+            "contains_node_with_props": {
+              "name": "away"
+            }
+          }
+        },
+        {
+          "name": "merge composite distinct originals",
+          "vars": {
+            "query": "UNWIND [1,2] AS value MERGE (n:TemplateNodeKind1 {name:'same',score:value}) RETURN n"
+          },
+          "assert": {
+            "row_count": 2,
+            "contains_node_with_props": {
+              "name": "same",
+              "score": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "merge repeated bound-endpoint matches",
+      "template": "MATCH (a:TemplateNodeKind1 {name:'a'}),(b:TemplateNodeKind2 {name:'b'}) UNWIND [1,2] AS input MERGE (a)-[:TemplateEdgeKind1]->(b) {{tail}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "TemplateNodeKind1"
+            ],
+            "properties": {
+              "name": "a"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "TemplateNodeKind2"
+            ],
+            "properties": {
+              "name": "b"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "TemplateEdgeKind1",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "return entity",
+          "vars": {
+            "tail": "RETURN a"
+          },
+          "assert": {
+            "row_count": 2,
+            "contains_node_with_props": {
+              "name": "a"
+            }
+          }
+        },
+        {
+          "name": "unused entity",
+          "vars": {
+            "tail": "RETURN input"
+          },
+          "assert": {
+            "row_count": 2
+          }
+        },
+        {
+          "name": "zero output",
+          "vars": {
+            "tail": "RETURN a LIMIT 0"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "merge wildcard projection",
+      "template": "merge (n:TemplateNodeKind1 {name: 'a'}) on create set n.name = 'b' return *",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "user columns only",
+          "vars": {},
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {
+              "name": "b"
+            },
+            "keys": [
+              "n"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "merge large property patches",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "50 assignments with clause swap",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'large',left:1,right:2}) SET n.field0=0,n.field1=1,n.field2=2,n.field3=3,n.field4=4,n.field5=5,n.field6=6,n.field7=7,n.field8=8,n.field9=9,n.field10=10,n.field11=11,n.field12=12,n.field13=13,n.field14=14,n.field15=15,n.field16=16,n.field17=17,n.field18=18,n.field19=19,n.field20=20,n.field21=21,n.field22=22,n.field23=23,n.field24=24,n.field25=25,n.field26=26,n.field27=27,n.field28=28,n.field29=29,n.field30=30,n.field31=31,n.field32=32,n.field33=33,n.field34=34,n.field35=35,n.field36=36,n.field37=37,n.field38=38,n.field39=39,n.field40=40,n.field41=41,n.field42=42,n.field43=43,n.field44=44,n.field45=45,n.field46=46,n.field47=47,n.left=n.right,n.right=n.left RETURN n.field0,n.field1,n.field2,n.field3,n.field4,n.field5,n.field6,n.field7,n.field8,n.field9,n.field10,n.field11,n.field12,n.field13,n.field14,n.field15,n.field16,n.field17,n.field18,n.field19,n.field20,n.field21,n.field22,n.field23,n.field24,n.field25,n.field26,n.field27,n.field28,n.field29,n.field30,n.field31,n.field32,n.field33,n.field34,n.field35,n.field36,n.field37,n.field38,n.field39,n.field40,n.field41,n.field42,n.field43,n.field44,n.field45,n.field46,n.field47,n.left,n.right"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                46,
+                47,
+                2,
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "51 assignments with clause swap",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'large',left:1,right:2}) SET n.field0=0,n.field1=1,n.field2=2,n.field3=3,n.field4=4,n.field5=5,n.field6=6,n.field7=7,n.field8=8,n.field9=9,n.field10=10,n.field11=11,n.field12=12,n.field13=13,n.field14=14,n.field15=15,n.field16=16,n.field17=17,n.field18=18,n.field19=19,n.field20=20,n.field21=21,n.field22=22,n.field23=23,n.field24=24,n.field25=25,n.field26=26,n.field27=27,n.field28=28,n.field29=29,n.field30=30,n.field31=31,n.field32=32,n.field33=33,n.field34=34,n.field35=35,n.field36=36,n.field37=37,n.field38=38,n.field39=39,n.field40=40,n.field41=41,n.field42=42,n.field43=43,n.field44=44,n.field45=45,n.field46=46,n.field47=47,n.field48=48,n.left=n.right,n.right=n.left RETURN n.field0,n.field1,n.field2,n.field3,n.field4,n.field5,n.field6,n.field7,n.field8,n.field9,n.field10,n.field11,n.field12,n.field13,n.field14,n.field15,n.field16,n.field17,n.field18,n.field19,n.field20,n.field21,n.field22,n.field23,n.field24,n.field25,n.field26,n.field27,n.field28,n.field29,n.field30,n.field31,n.field32,n.field33,n.field34,n.field35,n.field36,n.field37,n.field38,n.field39,n.field40,n.field41,n.field42,n.field43,n.field44,n.field45,n.field46,n.field47,n.field48,n.left,n.right"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                46,
+                47,
+                48,
+                2,
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "101 assignments with clause swap",
+          "vars": {
+            "query": "MERGE (n:TemplateNodeKind1 {name:'large',left:1,right:2}) SET n.field0=0,n.field1=1,n.field2=2,n.field3=3,n.field4=4,n.field5=5,n.field6=6,n.field7=7,n.field8=8,n.field9=9,n.field10=10,n.field11=11,n.field12=12,n.field13=13,n.field14=14,n.field15=15,n.field16=16,n.field17=17,n.field18=18,n.field19=19,n.field20=20,n.field21=21,n.field22=22,n.field23=23,n.field24=24,n.field25=25,n.field26=26,n.field27=27,n.field28=28,n.field29=29,n.field30=30,n.field31=31,n.field32=32,n.field33=33,n.field34=34,n.field35=35,n.field36=36,n.field37=37,n.field38=38,n.field39=39,n.field40=40,n.field41=41,n.field42=42,n.field43=43,n.field44=44,n.field45=45,n.field46=46,n.field47=47,n.field48=48,n.field49=49,n.field50=50,n.field51=51,n.field52=52,n.field53=53,n.field54=54,n.field55=55,n.field56=56,n.field57=57,n.field58=58,n.field59=59,n.field60=60,n.field61=61,n.field62=62,n.field63=63,n.field64=64,n.field65=65,n.field66=66,n.field67=67,n.field68=68,n.field69=69,n.field70=70,n.field71=71,n.field72=72,n.field73=73,n.field74=74,n.field75=75,n.field76=76,n.field77=77,n.field78=78,n.field79=79,n.field80=80,n.field81=81,n.field82=82,n.field83=83,n.field84=84,n.field85=85,n.field86=86,n.field87=87,n.field88=88,n.field89=89,n.field90=90,n.field91=91,n.field92=92,n.field93=93,n.field94=94,n.field95=95,n.field96=96,n.field97=97,n.field98=98,n.left=n.right,n.right=n.left RETURN n.field0,n.field1,n.field2,n.field3,n.field4,n.field5,n.field6,n.field7,n.field8,n.field9,n.field10,n.field11,n.field12,n.field13,n.field14,n.field15,n.field16,n.field17,n.field18,n.field19,n.field20,n.field21,n.field22,n.field23,n.field24,n.field25,n.field26,n.field27,n.field28,n.field29,n.field30,n.field31,n.field32,n.field33,n.field34,n.field35,n.field36,n.field37,n.field38,n.field39,n.field40,n.field41,n.field42,n.field43,n.field44,n.field45,n.field46,n.field47,n.field48,n.field49,n.field50,n.field51,n.field52,n.field53,n.field54,n.field55,n.field56,n.field57,n.field58,n.field59,n.field60,n.field61,n.field62,n.field63,n.field64,n.field65,n.field66,n.field67,n.field68,n.field69,n.field70,n.field71,n.field72,n.field73,n.field74,n.field75,n.field76,n.field77,n.field78,n.field79,n.field80,n.field81,n.field82,n.field83,n.field84,n.field85,n.field86,n.field87,n.field88,n.field89,n.field90,n.field91,n.field92,n.field93,n.field94,n.field95,n.field96,n.field97,n.field98,n.left,n.right"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25,
+                26,
+                27,
+                28,
+                29,
+                30,
+                31,
+                32,
+                33,
+                34,
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                46,
+                47,
+                48,
+                49,
+                50,
+                51,
+                52,
+                53,
+                54,
+                55,
+                56,
+                57,
+                58,
+                59,
+                60,
+                61,
+                62,
+                63,
+                64,
+                65,
+                66,
+                67,
+                68,
+                69,
+                70,
+                71,
+                72,
+                73,
+                74,
+                75,
+                76,
+                77,
+                78,
+                79,
+                80,
+                81,
+                82,
+                83,
+                84,
+                85,
+                86,
+                87,
+                88,
+                89,
+                90,
+                91,
+                92,
+                93,
+                94,
+                95,
+                96,
+                97,
+                98,
+                2,
+                1
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

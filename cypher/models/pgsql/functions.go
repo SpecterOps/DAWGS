@@ -38,6 +38,7 @@ const (
 	FunctionReplace                       Identifier = "replace"
 	FunctionUnnest                        Identifier = "unnest"
 	FunctionNextValue                     Identifier = "nextval"
+	FunctionMergeAction                   Identifier = "merge_action"
 	FunctionPGGetSerialSequence           Identifier = "pg_get_serial_sequence"
 	FunctionJSONBSet                      Identifier = "jsonb_set"
 	FunctionCount                         Identifier = "count"
