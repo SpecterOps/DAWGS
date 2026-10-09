@@ -22,11 +22,17 @@ package bdd
 import (
 	"context"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/cucumber/godog"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/integration"
+)
+
+var (
+	bddDawgsFailed   bool
+	bddReportInvalid bool
 )
 
 func InitializeTestSuite(ctxtestsuite *godog.TestSuiteContext, ctx context.Context, c *dbContext) {
@@ -56,6 +62,9 @@ func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 
 func TestFeatures(t *testing.T) {
 	backgroundCtx := context.Background()
+	if err := os.MkdirAll(bddReportDir, 0o755); err != nil {
+		t.Fatalf("failed to create BDD report directory: %v", err)
+	}
 	// establish database connection
 	session := integration.Open(t, integration.Options{
 		Schema: &graph.Schema{
@@ -78,14 +87,34 @@ func TestFeatures(t *testing.T) {
 			InitializeScenario(ctx, dbCtx)
 		},
 		Options: &godog.Options{
-			Format: "pretty",
-			// TODO create env variable pointing to the TCK features via CI
+			Format:   "pretty,cucumber:" + bddJSONReportPath,
 			Paths:    []string{"features"},
 			TestingT: t,
 		},
 	}
 
-	if num := suite.Run(); num != 0 {
-		t.Fatalf("TestSuite execution failed with status %d", num)
+	// delete staled reports
+	_ = os.Remove(bddJSONReportPath)
+	suite.Run()
+	report, err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath)
+	if err != nil {
+		bddReportInvalid = true
+		t.Errorf("failed to write BDD HTML report: %v", err)
+		return
 	}
+	if len(report.Folders) == 0 {
+		bddReportInvalid = true
+		t.Errorf("BDD report is empty")
+		return
+	}
+	bddDawgsFailed = hasFolderFailure(report, "dawgs")
+}
+
+func TestMain(m *testing.M) {
+	m.Run()
+	// Only DAWGS feature failures and invalid reports should fail the BDD command.
+	if bddDawgsFailed || bddReportInvalid {
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
