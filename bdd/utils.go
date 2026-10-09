@@ -37,6 +37,7 @@ import (
 type graphSnapshot struct {
 	NodesCount         int64
 	RelationshipsCount int64
+	PropertiesCount    int64
 }
 
 // dbContext owns the active database session and the state needed by BDD query assertions.
@@ -338,6 +339,10 @@ func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
 		return formatString(value), nil
 	case int32:
 		return formatString(fmt.Sprint(value)), nil
+	case float64:
+		return formatString(fmt.Sprint(value)), nil
+	case int64:
+		return formatString(fmt.Sprint(value)), nil
 	case nil:
 		return "null", nil
 	default:
@@ -373,7 +378,7 @@ func formatGraphRelationship(relationship graph.Relationship) string {
 	return builder.String()
 }
 
-// noSideEffects verifies that the query did not change graph node or relationship counts.
+// noSideEffects verifies that node, relationship, and property counts are unchanged.
 func (s *dbContext) noSideEffects(ctx context.Context) error {
 	after, err := captureGraphState(ctx, s.db)
 	if err != nil {
@@ -385,52 +390,42 @@ func (s *dbContext) noSideEffects(ctx context.Context) error {
 	return nil
 }
 
-// theSideEffectsShouldBe compares observed node and relationship changes with the scenario's expected effects.
+// theSideEffectsShouldBe compares signed net changes with the scenario's expected effects.
 func (s *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
-	actualRows := [][]string{}
-	if len(expectedTable.Rows) != 0 {
-		for _, row := range expectedTable.Rows {
-			var rows []string
-			for _, cell := range row.Cells {
-				rows = append(rows, cell.Value)
-			}
-			actualRows = append(actualRows, rows)
-		}
+	deltas := map[string]int64{
+		"nodes":         s.afterExecution.NodesCount - s.beforeExecution.NodesCount,
+		"relationships": s.afterExecution.RelationshipsCount - s.beforeExecution.RelationshipsCount,
+		"properties":    s.afterExecution.PropertiesCount - s.beforeExecution.PropertiesCount,
 	}
-
-	nodeDelta := s.afterExecution.NodesCount - s.beforeExecution.NodesCount
-	relDelta := s.afterExecution.RelationshipsCount - s.beforeExecution.RelationshipsCount
 	var errs []error
-	for _, row := range actualRows {
-		if len(row) != 2 {
-			return fmt.Errorf("side effect row must have 2 cells, got %d", len(row))
+	for _, row := range expectedTable.Rows {
+		if len(row.Cells) != 2 {
+			return fmt.Errorf("side effect row must have 2 cells, got %d", len(row.Cells))
 		}
-		expected, err := strconv.ParseInt(strings.TrimSpace(row[1]), 10, 64)
-		if err != nil {
-			return err
-		}
-		var actual int64
-		switch key := strings.TrimSpace(row[0]); key {
-		case "+nodes":
-			actual = max(nodeDelta, 0)
-		case "-nodes":
-			actual = max(-nodeDelta, 0)
-		case "+relationships":
-			actual = max(relDelta, 0)
-		case "-relationships":
-			actual = max(-relDelta, 0)
+		key := strings.TrimSpace(row.Cells[0].Value)
+		var delta int64
+		switch key {
+		case "+nodes", "-nodes", "+relationships", "-relationships", "+properties", "-properties":
+			delta = deltas[key[1:]]
 		default:
 			return fmt.Errorf("unsupported side effect %q", key)
 		}
+		expected, err := strconv.ParseInt(strings.TrimSpace(row.Cells[1].Value), 10, 64)
+		if err != nil {
+			return fmt.Errorf("side effect %s: invalid count: %w", key, err)
+		}
+		if expected < 0 {
+			return fmt.Errorf("side effect %s: count must be nonnegative", key)
+		}
+		if key[0] == '-' {
+			delta = -delta
+		}
+		actual := max(delta, 0)
 		if actual != expected {
-			errs = append(errs, fmt.Errorf("side effect %s: expected %d actual %d", row[0], expected, actual))
+			errs = append(errs, fmt.Errorf("side effect %s: expected %d actual %d", key, expected, actual))
 		}
 	}
-	err := errors.Join(errs...)
-	if err != nil {
-		return err
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // formatString normalizes a formatted graph value for comparison with feature data.
@@ -442,32 +437,45 @@ func formatString(s string) string {
 	return removeSpace
 }
 
-// captureGraphState returns the current node and relationship counts for the database.
+// captureGraphState scans the graph once per entity type to count entities and
+// non-null property entries. It measures net cardinalities, not value changes.
 func captureGraphState(ctx context.Context, db graph.Database) (graphSnapshot, error) {
-	var err error
-	var nodeCount int64
-	var relationshipCount int64
-
-	err = db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		nodeCount, err = tx.Nodes().Count()
-		if err != nil {
-			return err
+	var snapshot graphSnapshot
+	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		if err := tx.Nodes().Fetch(func(cursor graph.Cursor[*graph.Node]) error {
+			for node := range cursor.Chan() {
+				snapshot.NodesCount++
+				snapshot.PropertiesCount += countGraphProperties(node.Properties)
+			}
+			return cursor.Error()
+		}); err != nil {
+			return fmt.Errorf("capture nodes: %w", err)
 		}
-		relationshipCount, err = tx.Relationships().Count()
-		if err != nil {
-			return err
+		if err := tx.Relationships().Fetch(func(cursor graph.Cursor[*graph.Relationship]) error {
+			for relationship := range cursor.Chan() {
+				snapshot.RelationshipsCount++
+				snapshot.PropertiesCount += countGraphProperties(relationship.Properties)
+			}
+			return cursor.Error()
+		}); err != nil {
+			return fmt.Errorf("capture relationships: %w", err)
 		}
 		return nil
 	})
-
 	if err != nil {
 		return graphSnapshot{}, err
 	}
+	return snapshot, nil
+}
 
-	return graphSnapshot{
-		NodesCount:         nodeCount,
-		RelationshipsCount: relationshipCount,
-	}, nil
+func countGraphProperties(properties *graph.Properties) int64 {
+	var count int64
+	for _, value := range properties.MapOrEmpty() {
+		if value != nil {
+			count++
+		}
+	}
+	return count
 }
 
 // formatGraphResults formats graph nodes as deterministic strings for BDD comparisons.
