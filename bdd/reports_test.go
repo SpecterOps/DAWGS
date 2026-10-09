@@ -43,6 +43,48 @@ func TestAggregateBDDReport(t *testing.T) {
 	}
 }
 
+func TestHasFolderFailure(t *testing.T) {
+	tests := []struct {
+		name   string
+		report bddReport
+		want   bool
+	}{
+		{
+			name: "finds a failure in any folder position",
+			report: bddReport{Folders: []folderResult{
+				{Name: "clauses", Failed: 1},
+				{Name: "expressions", Failed: 0},
+				{Name: "bdd_dawgs", Failed: 1},
+			}},
+			want: true,
+		},
+		{
+			name: "ignores failures outside the requested folder",
+			report: bddReport{Folders: []folderResult{
+				{Name: "clauses", Failed: 1},
+				{Name: "expressions", Failed: 2},
+			}},
+			want: false,
+		},
+		{
+			name:   "matches folder names case insensitively",
+			report: bddReport{Folders: []folderResult{{Name: "DAWGS", Failed: 1}}},
+			want:   true,
+		},
+		{
+			name:   "returns false for an empty report",
+			report: bddReport{},
+			want:   false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, hasFolderFailure(test.report, "dawgs"))
+		})
+	}
+}
+
 func TestTopLevelFolderFromURI(t *testing.T) {
 	tests := []struct {
 		uri    string

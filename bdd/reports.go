@@ -18,11 +18,11 @@ package bdd
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 	"time"
 )
 
@@ -174,6 +174,15 @@ func aggregateBDDReport(features []cucumberFeature) bddReport {
 		report.Failed += folder.Failed
 	}
 	return report
+}
+
+func hasFolderFailure(report bddReport, name string) bool {
+	for _, folder := range report.Folders {
+		if strings.Contains(strings.ToLower(folder.Name), strings.ToLower(name)) && folder.Failed > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func topLevelFolderFromURI(uri string) (string, bool) {

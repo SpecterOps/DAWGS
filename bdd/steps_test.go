@@ -23,13 +23,16 @@ import (
 	"context"
 	"log"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/cucumber/godog"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/integration"
+)
+
+var (
+	bddDawgsFailed   bool
+	bddReportInvalid bool
 )
 
 func InitializeTestSuite(ctxtestsuite *godog.TestSuiteContext, ctx context.Context, c *dbContext) {
@@ -95,17 +98,23 @@ func TestFeatures(t *testing.T) {
 	suite.Run()
 	report, err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath)
 	if err != nil {
+		bddReportInvalid = true
 		t.Errorf("failed to write BDD HTML report: %v", err)
+		return
 	}
-	if strings.Contains(strings.ToLower(report.Folders[0].Name), "dawgs") && report.Folders[0].Failed > 0 {
-		os.Exit(1)
+	if len(report.Folders) == 0 {
+		bddReportInvalid = true
+		t.Errorf("BDD report is empty")
+		return
 	}
+	bddDawgsFailed = hasFolderFailure(report, "dawgs")
 }
 
 func TestMain(m *testing.M) {
-	spew.Dump("here")
-	num := m.Run()
-	if num == 1 {
-		os.Exit(0)
+	m.Run()
+	// Only DAWGS feature failures and invalid reports should fail the BDD command.
+	if bddDawgsFailed || bddReportInvalid {
+		os.Exit(1)
 	}
+	os.Exit(0)
 }
