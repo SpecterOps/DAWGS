@@ -102,23 +102,23 @@ var bddReportTemplate = template.Must(template.New("bdd-report").Parse(`<!doctyp
 {{end}}</details>
 {{end}}</body></html>`))
 
-func writeBDDHTMLReport(inputPath, outputPath string) error {
+func writeBDDHTMLReport(inputPath, outputPath string) (bddReport, error) {
 	data, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("read Cucumber report: %w", err)
+		return bddReport{}, fmt.Errorf("read Cucumber report: %w", err)
 	}
 	var features []cucumberFeature
 	if err := json.Unmarshal(data, &features); err != nil {
-		return fmt.Errorf("parse Cucumber report: %w", err)
+		return bddReport{}, fmt.Errorf("parse Cucumber report: %w", err)
 	}
 	report := aggregateBDDReport(features)
 	report.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		return fmt.Errorf("create report directory: %w", err)
+		return bddReport{}, fmt.Errorf("create report directory: %w", err)
 	}
 	file, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("create HTML report: %w", err)
+		return bddReport{}, fmt.Errorf("create HTML report: %w", err)
 	}
 	defer func() {
 		if errClose := file.Close(); err != nil {
@@ -126,9 +126,9 @@ func writeBDDHTMLReport(inputPath, outputPath string) error {
 		}
 	}()
 	if err := bddReportTemplate.Execute(file, report); err != nil {
-		return fmt.Errorf("render HTML report: %w", err)
+		return bddReport{}, fmt.Errorf("render HTML report: %w", err)
 	}
-	return nil
+	return report, nil
 }
 
 func aggregateBDDReport(features []cucumberFeature) bddReport {

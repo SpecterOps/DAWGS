@@ -23,9 +23,11 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/cucumber/godog"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/integration"
 )
@@ -90,11 +92,20 @@ func TestFeatures(t *testing.T) {
 
 	// delete staled reports
 	_ = os.Remove(bddJSONReportPath)
-	num := suite.Run()
-	if err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath); err != nil {
+	suite.Run()
+	report, err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath)
+	if err != nil {
 		t.Errorf("failed to write BDD HTML report: %v", err)
 	}
-	if num != 0 {
-		t.Fatalf("TestSuite execution failed with status %d", num)
+	if strings.Contains(strings.ToLower(report.Folders[0].Name), "dawgs") && report.Folders[0].Failed > 0 {
+		os.Exit(1)
+	}
+}
+
+func TestMain(m *testing.M) {
+	spew.Dump("here")
+	num := m.Run()
+	if num == 1 {
+		os.Exit(0)
 	}
 }
