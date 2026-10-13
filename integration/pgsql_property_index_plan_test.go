@@ -123,6 +123,7 @@ func TestPostgreSQLPropertyIndexPlans(t *testing.T) {
 		for _, testCase := range []struct {
 			name   string
 			cypher string
+			params map[string]any
 		}{
 			{
 				name:   "literal starts with",
@@ -136,11 +137,55 @@ func TestPostgreSQLPropertyIndexPlans(t *testing.T) {
 				name:   "literal contains",
 				cypher: `MATCH (n) WHERE n.name CONTAINS 'needle' RETURN n`,
 			},
+			{
+				name:   "parameter starts with",
+				cypher: `MATCH (n) WHERE n.name STARTS WITH $prefix RETURN n`,
+				params: map[string]any{"prefix": "prefix"},
+			},
+			{
+				name:   "parameter ends with",
+				cypher: `MATCH (n) WHERE n.name ENDS WITH $suffix RETURN n`,
+				params: map[string]any{"suffix": "suffix"},
+			},
+			{
+				name:   "parameter contains",
+				cypher: `MATCH (n) WHERE n.name CONTAINS $needle RETURN n`,
+				params: map[string]any{"needle": "needle"},
+			},
+			{
+				name:   "literal toLower starts with",
+				cypher: `MATCH (n) WHERE toLower(n.name) STARTS WITH 'prefix' RETURN n`,
+			},
+			{
+				name:   "literal toLower contains",
+				cypher: `MATCH (n) WHERE toLower(n.name) CONTAINS 'needle' RETURN n`,
+			},
+			{
+				name:   "parameter toLower ends with",
+				cypher: `MATCH (n) WHERE toLower(n.name) ENDS WITH $suffix RETURN n`,
+				params: map[string]any{"suffix": "suffix"},
+			},
+			{
+				name:   "parameter toLower contains",
+				cypher: `MATCH (n) WHERE toLower(n.name) CONTAINS $needle RETURN n`,
+				params: map[string]any{"needle": "needle"},
+			},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
-				assertTranslatedPlanUsesIndex(t, indexedDB, testCase.cypher, nil, indexedDB.nodeIndexes["name"])
+				assertTranslatedPlanUsesIndex(t, indexedDB, testCase.cypher, testCase.params, indexedDB.nodeIndexes["name"])
 			})
 		}
+
+		t.Run("parameter contains with generic plan", func(t *testing.T) {
+			assertTranslatedPlanUsesIndex(
+				t,
+				indexedDB,
+				`MATCH (n) WHERE n.name CONTAINS $needle RETURN n`,
+				map[string]any{"needle": "needle"},
+				indexedDB.nodeIndexes["name"],
+				"set local plan_cache_mode = force_generic_plan",
+			)
+		})
 
 		t.Run("negative control misses wrapped name expression", func(t *testing.T) {
 			assertMutatedTranslatedPlanMissesIndex(
@@ -313,11 +358,11 @@ func analyzeIndexedNodePartition(t *testing.T, indexedDB indexedPostgresDB) {
 // assertTranslatedPlanUsesIndex translates the Cypher query through the normal
 // CySQL path, explains the rendered SQL, and fails unless the expected index is
 // present in the JSON plan.
-func assertTranslatedPlanUsesIndex(t *testing.T, indexedDB indexedPostgresDB, cypherQuery string, params map[string]any, expectedIndex string) {
+func assertTranslatedPlanUsesIndex(t *testing.T, indexedDB indexedPostgresDB, cypherQuery string, params map[string]any, expectedIndex string, sessionSettings ...string) {
 	t.Helper()
 
 	sqlQuery, sqlParams := translateIndexedCypher(t, indexedDB, cypherQuery, params)
-	plan := explainWithSeqScanDisabled(t, indexedDB, sqlQuery, sqlParams)
+	plan := explainWithSeqScanDisabled(t, indexedDB, sqlQuery, sqlParams, sessionSettings...)
 	if !planContainsIndex(plan, expectedIndex) {
 		t.Fatalf("expected PostgreSQL plan for %q to use index %q, got:\n%s", cypherQuery, expectedIndex, formatPlanForFailure(plan))
 	}
@@ -389,8 +434,9 @@ func translateIndexedCypher(t *testing.T, indexedDB indexedPostgresDB, cypherQue
 
 // explainWithSeqScanDisabled captures a JSON EXPLAIN plan with sequential scans
 // disabled so the test verifies expression-index matchability rather than the
-// cost model's choice for a tiny fixture.
-func explainWithSeqScanDisabled(t *testing.T, indexedDB indexedPostgresDB, sqlQuery string, params map[string]any) any {
+// cost model's choice for a tiny fixture. Optional session settings are applied
+// in the same transaction before the plan is captured.
+func explainWithSeqScanDisabled(t *testing.T, indexedDB indexedPostgresDB, sqlQuery string, params map[string]any, sessionSettings ...string) any {
 	t.Helper()
 
 	var plan any
@@ -399,6 +445,14 @@ func explainWithSeqScanDisabled(t *testing.T, indexedDB indexedPostgresDB, sqlQu
 		setResult.Close()
 		if err := setResult.Error(); err != nil {
 			return fmt.Errorf("disable sequential scan: %w", err)
+		}
+
+		for _, sessionSetting := range sessionSettings {
+			settingResult := tx.Raw(sessionSetting, nil)
+			settingResult.Close()
+			if err := settingResult.Error(); err != nil {
+				return fmt.Errorf("apply session setting %q: %w", sessionSetting, err)
+			}
 		}
 
 		result := tx.Raw("explain (format json, costs off) "+sqlQuery, params)

@@ -59,8 +59,8 @@ with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::e
 
 -- case: match (s)-[r]->(e) where id(e) = $a and not (id(s) = $b) and (r:EdgeKind1 or r:EdgeKind2) and not (s.objectid ends with $c or e.objectid ends with $d) return distinct id(s), id(r), id(e)
 -- cypher_params: {"a":1,"b":2,"c":"123","d":"456"}
--- pgsql_params:{"pi0":1,"pi1":2,"pi2":"123","pi3":"456"}
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on n1.id = e0.end_id join node n0 on (not (n0.id = @pi1::float8)) and n0.id = e0.start_id where ((e0.kind_id = any (array [3]::int2[]) or e0.kind_id = any (array [4]::int2[]))) and (not (cypher_ends_with((n0.properties ->> E'objectid'), (@pi2::text)::text)::bool or cypher_ends_with((n1.properties ->> E'objectid'), (@pi3::text)::text)::bool) and n1.id = @pi0::float8)) select distinct (s0.n0).id, (s0.e0).id, (s0.n1).id from s0;
+-- pgsql_params:{"__strlit0":"%","pi0":1,"pi1":2,"pi2":"123","pi3":"456"}
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n1 on n1.id = e0.end_id join node n0 on (not (n0.id = @pi1::float8)) and n0.id = e0.start_id where ((e0.kind_id = any (array [3]::int2[]) or e0.kind_id = any (array [4]::int2[]))) and (not ((n0.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi2::text)::text)::text)::text or (n1.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi3::text)::text)::text)::text) and n1.id = @pi0::float8)) select distinct (s0.n0).id, (s0.e0).id, (s0.n1).id from s0;
 
 -- case: match (s)-[r]->(e) where s.name = '123' and e:NodeKind1 and not r.property return s, r, e
 -- pgsql_params:{"__strlit0":"string","__strlit1":"123"}
@@ -116,7 +116,7 @@ with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::e
 
 -- case: match (s)-[r]->(e) where s:NodeKind1 and toLower(s.name) starts with 'test' and r:EdgeKind1 and id(e) in [1, 2] return r limit 1
 -- pgsql_params:{"__strlit0":"test%"}
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and lower((n0.properties ->> E'name'))::text like @__strlit0::text) and n0.id = e0.start_id join node n1 on (n1.id = any (array [1, 2]::int8[])) and n1.id = e0.end_id where (e0.kind_id = any (array [3]::int2[])) limit 1) select s0.e0 as r from s0 limit 1;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and ((n0.properties ->> E'name') ilike @__strlit0::text and lower((n0.properties ->> E'name'))::text like @__strlit0::text)) and n0.id = e0.start_id join node n1 on (n1.id = any (array [1, 2]::int8[])) and n1.id = e0.end_id where (e0.kind_id = any (array [3]::int2[])) limit 1) select s0.e0 as r from s0 limit 1;
 
 -- case: match (n1)-[]->(n2) where n1 <> n2 return n2
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (n0.id <> n1.id)) select s0.n1 as n2 from s0;

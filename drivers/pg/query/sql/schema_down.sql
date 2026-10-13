@@ -16,6 +16,7 @@ drop function if exists cypher_jsonb_type_rank(jsonb);
 drop function if exists cypher_contains(text, text);
 drop function if exists cypher_starts_with(text, text);
 drop function if exists cypher_ends_with(text, text);
+drop function if exists cypher_like_escape(text);
 drop function if exists kind_name(smallint);
 drop function if exists start_node(edgeComposite);
 drop function if exists end_node(edgeComposite);

@@ -17,6 +17,7 @@ const (
 	FunctionCypherContains                Identifier = "cypher_contains"
 	FunctionCypherStartsWith              Identifier = "cypher_starts_with"
 	FunctionCypherEndsWith                Identifier = "cypher_ends_with"
+	FunctionCypherLikeEscape              Identifier = "cypher_like_escape"
 	FunctionCypherMin                     Identifier = "cypher_min"
 	FunctionCypherMax                     Identifier = "cypher_max"
 	FunctionArrayLength                   Identifier = "array_length"
