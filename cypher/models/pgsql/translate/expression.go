@@ -1064,6 +1064,54 @@ func cypherStringPredicateFunction(function pgsql.Identifier, lOperand, rOperand
 	}, nil
 }
 
+// cypherStringPredicateExpression translates a Cypher string predicate with a non-literal right operand. Right
+// operands that do not reference any row data are translated to an escaped like pattern so that the comparison
+// remains eligible for index acceleration. All other right operands are translated to the matching helper function.
+func cypherStringPredicateExpression(function pgsql.Identifier, lOperand, rOperand pgsql.Expression) (pgsql.Expression, error) {
+	if !isStaticIDEqualityOperand(rOperand) {
+		return cypherStringPredicateFunction(function, lOperand, rOperand)
+	}
+
+	leftText, err := cypherStringPredicateTextOperand(lOperand)
+	if err != nil {
+		return nil, err
+	}
+
+	rightText, err := cypherStringPredicateTextOperand(rOperand)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		wildcard                  = pgsql.NewLiteral("%", pgsql.Text)
+		pattern  pgsql.Expression = pgsql.FunctionCall{
+			Function:   pgsql.FunctionCypherLikeEscape,
+			Parameters: []pgsql.Expression{rightText},
+			CastType:   pgsql.Text,
+		}
+	)
+
+	switch function {
+	case pgsql.FunctionCypherContains:
+		pattern = pgsql.NewBinaryExpression(
+			wildcard,
+			pgsql.OperatorConcatenate,
+			pgsql.NewBinaryExpression(pattern, pgsql.OperatorConcatenate, wildcard),
+		)
+
+	case pgsql.FunctionCypherStartsWith:
+		pattern = pgsql.NewBinaryExpression(pattern, pgsql.OperatorConcatenate, wildcard)
+
+	case pgsql.FunctionCypherEndsWith:
+		pattern = pgsql.NewBinaryExpression(wildcard, pgsql.OperatorConcatenate, pattern)
+
+	default:
+		return nil, fmt.Errorf("unsupported string predicate function %s", function)
+	}
+
+	return pgsql.NewBinaryExpression(leftText, pgsql.OperatorLike, pgsql.NewTypeCast(pattern, pgsql.Text)), nil
+}
+
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:
@@ -1102,7 +1150,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 		default:
-			if predicateFunction, err := cypherStringPredicateFunction(
+			if predicateFunction, err := cypherStringPredicateExpression(
 				pgsql.FunctionCypherContains,
 				newExpression.LOperand,
 				typedROperand,
@@ -1143,7 +1191,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 		default:
-			if predicateFunction, err := cypherStringPredicateFunction(
+			if predicateFunction, err := cypherStringPredicateExpression(
 				pgsql.FunctionCypherStartsWith,
 				newExpression.LOperand,
 				typedROperand,
@@ -1180,7 +1228,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 
 		default:
-			if predicateFunction, err := cypherStringPredicateFunction(
+			if predicateFunction, err := cypherStringPredicateExpression(
 				pgsql.FunctionCypherEndsWith,
 				newExpression.LOperand,
 				typedROperand,

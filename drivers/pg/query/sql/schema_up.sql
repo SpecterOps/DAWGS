@@ -662,6 +662,16 @@ $$
   parallel safe
   strict;
 
+create or replace function public.cypher_like_escape(value text)
+  returns text as
+$$
+select replace(replace(replace(value, '\', '\\'), '%', '\%'), '_', '\_');
+$$
+  language sql
+  immutable
+  parallel safe
+  strict;
+
 create or replace function public.nodes_to_path(nodes variadic int8[]) returns pathComposite as
 $$
 select row (array_agg(distinct (n.id, n.kind_ids, n.properties)::nodeComposite)::nodeComposite[],
