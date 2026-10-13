@@ -78,6 +78,30 @@
           "assert": {"scalar_values": ["alpha"]}
         },
         {
+          "name": "toLower starts with parameter matches mixed case values",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.objectid) starts with $prefix return n.name"
+          },
+          "params": {"prefix": "s-1-"},
+          "assert": {"scalar_values": ["alpha"]}
+        },
+        {
+          "name": "toLower starts with uppercase parameter returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.objectid) starts with $prefix return n.name"
+          },
+          "params": {"prefix": "S-1-"},
+          "assert": "empty"
+        },
+        {
+          "name": "negated toLower starts with parameter",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.score is not null and not toLower(n.objectid) starts with $prefix return n.name order by n.name"
+          },
+          "params": {"prefix": "s-1-"},
+          "assert": {"ordered_scalar_values": ["beta", "gamma"]}
+        },
+        {
           "name": "contains percent parameter treats percent as a literal character",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.group = 'wildcard' and n.name contains $needle return n.name"

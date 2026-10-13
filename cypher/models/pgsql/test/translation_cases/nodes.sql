@@ -279,7 +279,11 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where n:NodeKind1 and toLower(n.tenantid) contains 'myid' and n.system_tags contains 'tag' return n
 -- pgsql_params:{"__strlit0":"%myid%","__strlit1":"%tag%"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and lower((n0.properties ->> E'tenantid'))::text like @__strlit0::text and (n0.properties ->> E'system_tags') like @__strlit1::text)) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.@>) array [1]::int2[] and ((n0.properties ->> E'tenantid') ilike @__strlit0::text and lower((n0.properties ->> E'tenantid'))::text like @__strlit0::text) and (n0.properties ->> E'system_tags') like @__strlit1::text)) select s0.n0 as n from s0;
+
+-- case: match (n) where not toLower(n.name) ends with 'admin' return n
+-- pgsql_params:{"__strlit0":"%admin"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not ((n0.properties ->> E'name') ilike @__strlit0::text and lower((n0.properties ->> E'name'))::text like @__strlit0::text))) select s0.n0 as n from s0;
 
 -- case: match (s) where not (s)-[]-() return s
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s0.n0 as s from s0 where (not exists (select 1 from edge e0 where (e0.start_id = (s0.n0).id or e0.end_id = (s0.n0).id)));

@@ -1064,24 +1064,39 @@ func cypherStringPredicateFunction(function pgsql.Identifier, lOperand, rOperand
 	}, nil
 }
 
-// cypherStringPredicateExpression translates a Cypher string predicate with a non-literal right operand. Right
-// operands that do not reference any row data are translated to an escaped like pattern so that the comparison
-// remains eligible for index acceleration. All other right operands are translated to the matching helper function.
-func cypherStringPredicateExpression(function pgsql.Identifier, lOperand, rOperand pgsql.Expression) (pgsql.Expression, error) {
-	if !isStaticIDEqualityOperand(rOperand) {
-		return cypherStringPredicateFunction(function, lOperand, rOperand)
+// lowerPropertyLookupArgument returns the property lookup wrapped by a lower(...) function call, if any.
+func lowerPropertyLookupArgument(operand pgsql.Expression) (pgsql.Expression, bool) {
+	if typeCast, isTypeCast := operand.(pgsql.TypeCast); isTypeCast {
+		operand = typeCast.Expression
 	}
 
-	leftText, err := cypherStringPredicateTextOperand(lOperand)
-	if err != nil {
-		return nil, err
+	if functionCall, isFunctionCall := operand.(pgsql.FunctionCall); isFunctionCall && functionCall.Function == pgsql.FunctionToLower && len(functionCall.Parameters) == 1 {
+		if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(functionCall.Parameters[0]); isPropertyLookup {
+			return propertyLookup, true
+		}
 	}
 
-	rightText, err := cypherStringPredicateTextOperand(rOperand)
-	if err != nil {
-		return nil, err
+	return nil, false
+}
+
+// caseInsensitiveLikeExpression rewrites a like comparison against lower(property) into an ilike comparison against
+// the bare property, which is eligible for trigram index acceleration, followed by the original comparison to preserve
+// exact Cypher semantics. Comparisons that do not match this shape are returned unchanged.
+func caseInsensitiveLikeExpression(likeExpression *pgsql.BinaryExpression, indexPattern pgsql.Expression) pgsql.Expression {
+	if propertyLookup, isLowerPropertyLookup := lowerPropertyLookupArgument(likeExpression.LOperand); isLowerPropertyLookup {
+		return pgsql.NewParenthetical(
+			pgsql.NewBinaryExpression(
+				pgsql.NewBinaryExpression(propertyLookup, pgsql.OperatorILike, indexPattern),
+				pgsql.OperatorAnd,
+				likeExpression,
+			),
+		)
 	}
 
+	return likeExpression
+}
+
+func cypherStringLikePattern(function pgsql.Identifier, rightText pgsql.Expression) (pgsql.Expression, error) {
 	var (
 		wildcard                  = pgsql.NewLiteral("%", pgsql.Text)
 		pattern  pgsql.Expression = pgsql.FunctionCall{
@@ -1109,7 +1124,38 @@ func cypherStringPredicateExpression(function pgsql.Identifier, lOperand, rOpera
 		return nil, fmt.Errorf("unsupported string predicate function %s", function)
 	}
 
-	return pgsql.NewBinaryExpression(leftText, pgsql.OperatorLike, pgsql.NewTypeCast(pattern, pgsql.Text)), nil
+	return pgsql.NewTypeCast(pattern, pgsql.Text), nil
+}
+
+// cypherStringPredicateExpression translates a Cypher string predicate with a non-literal right operand. Right
+// operands that do not reference any row data are translated to an escaped like pattern so that the comparison
+// remains eligible for index acceleration. All other right operands are translated to the matching helper function.
+func cypherStringPredicateExpression(function pgsql.Identifier, lOperand, rOperand pgsql.Expression) (pgsql.Expression, error) {
+	if !isStaticIDEqualityOperand(rOperand) {
+		return cypherStringPredicateFunction(function, lOperand, rOperand)
+	}
+
+	leftText, err := cypherStringPredicateTextOperand(lOperand)
+	if err != nil {
+		return nil, err
+	}
+
+	rightText, err := cypherStringPredicateTextOperand(rOperand)
+	if err != nil {
+		return nil, err
+	}
+
+	pattern, err := cypherStringLikePattern(function, rightText)
+	if err != nil {
+		return nil, err
+	}
+
+	indexPattern, err := cypherStringLikePattern(function, rightText)
+	if err != nil {
+		return nil, err
+	}
+
+	return caseInsensitiveLikeExpression(pgsql.NewBinaryExpression(leftText, pgsql.OperatorLike, pattern), indexPattern), nil
 }
 
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
@@ -1162,7 +1208,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 		}
 
-		s.PushOperand(newExpression)
+		s.PushOperand(caseInsensitiveLikeExpression(newExpression, newExpression.ROperand))
 
 	case pgsql.OperatorCypherRegexMatch:
 		newExpression.Operator = pgsql.OperatorRegexMatch
@@ -1203,7 +1249,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 		}
 
-		s.PushOperand(newExpression)
+		s.PushOperand(caseInsensitiveLikeExpression(newExpression, newExpression.ROperand))
 
 	case pgsql.OperatorCypherEndsWith:
 		newExpression.Operator = pgsql.OperatorLike
@@ -1240,7 +1286,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 		}
 
-		s.PushOperand(newExpression)
+		s.PushOperand(caseInsensitiveLikeExpression(newExpression, newExpression.ROperand))
 
 	case pgsql.OperatorIs:
 		switch typedLOperand := newExpression.LOperand.(type) {

@@ -152,6 +152,24 @@ func TestPostgreSQLPropertyIndexPlans(t *testing.T) {
 				cypher: `MATCH (n) WHERE n.name CONTAINS $needle RETURN n`,
 				params: map[string]any{"needle": "needle"},
 			},
+			{
+				name:   "literal toLower starts with",
+				cypher: `MATCH (n) WHERE toLower(n.name) STARTS WITH 'prefix' RETURN n`,
+			},
+			{
+				name:   "literal toLower contains",
+				cypher: `MATCH (n) WHERE toLower(n.name) CONTAINS 'needle' RETURN n`,
+			},
+			{
+				name:   "parameter toLower ends with",
+				cypher: `MATCH (n) WHERE toLower(n.name) ENDS WITH $suffix RETURN n`,
+				params: map[string]any{"suffix": "suffix"},
+			},
+			{
+				name:   "parameter toLower contains",
+				cypher: `MATCH (n) WHERE toLower(n.name) CONTAINS $needle RETURN n`,
+				params: map[string]any{"needle": "needle"},
+			},
 		} {
 			t.Run(testCase.name, func(t *testing.T) {
 				assertTranslatedPlanUsesIndex(t, indexedDB, testCase.cypher, testCase.params, indexedDB.nodeIndexes["name"])

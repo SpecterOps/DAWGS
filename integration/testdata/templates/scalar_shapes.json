@@ -161,6 +161,20 @@
           "assert": {"ordered_scalar_values": ["alpha", "gamma"]}
         },
         {
+          "name": "toLower string prefix predicate matches mixed case values",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.objectid) starts with 's-1-' return n.name"
+          },
+          "assert": {"scalar_values": ["alpha"]}
+        },
+        {
+          "name": "toLower string prefix predicate with uppercase literal returns no rows",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where toLower(n.objectid) starts with 'S-1-' return n.name"
+          },
+          "assert": "empty"
+        },
+        {
           "name": "empty literal list membership returns no rows",
           "vars": {
             "query": "match (n:TemplateNodeKind1) where n.name in [] return n.name"
