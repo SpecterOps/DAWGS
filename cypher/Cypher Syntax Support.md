@@ -406,7 +406,6 @@ efforts may be pursued to add support for these language features.
 * List Comprehensions
 * Pattern Comprehensions
 * Existential Subqueries (e.g. exists)
-* Merge Statements
 * Unwind Expressions
 * Pattern Predicates using Recursive Expansion
 
@@ -484,3 +483,14 @@ return 1
 The reference `n` is being projected by the multipart `with` statement but this projection removes the resultset from
 the original query, allowing for ambiguity to slip into future operations against `n.name` where some values of
 `n.name` may be `null`.
+
+### MERGE statements
+
+On PostgreSQL 18+, CySQL supports node merges, fixed-length complete patterns, bound endpoints, undirected relationships,
+named paths, ON CREATE SET, ON MATCH SET, and following SET clauses. Match properties cannot be null. Relationship
+types must be singular, ranges are invalid, and a previously bound relationship cannot be redeclared in MERGE.
+
+This initial implementation uses a shared SQL statement snapshot. Later clauses cannot scan earlier writes; repeated
+inputs that depend on earlier creations or updates are rejected with an ordered-execution error. Multiple absent
+complete-pattern inputs are also rejected. Relationship uniqueness and native
+PostgreSQL concurrent-conflict behavior also apply. See [MERGE semantics](../docs/postgresql_translation.md#merge).

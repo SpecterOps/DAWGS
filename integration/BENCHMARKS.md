@@ -62,3 +62,34 @@
 | linear        | a     |        1 | 0.17ms | 0.27ms | 0.38ms |
 | wide_diamond  | a     |        3 | 0.21ms | 0.34ms | 0.47ms |
 | local/phantom | -     |        - |      - |      - |      - |
+
+
+### PostgreSQL MERGE matrix and plan captures
+
+`BenchmarkPostgreSQLMerge` separates explicit same-value SET from alternating updates. Its selected matrix varies
+batch size (1, 8, 64, 512, 4096), unrelated payload (0, 256, 4096, 65536 bytes), and independent assignments (0, 1, 8, 32).
+Creation, unchanged matches, updates, mixed composite keys, dynamic maps, and target conflicts have separate cases.
+Dynamic matching uses one map input against a batch-sized fixture; Cypher parameter maps are not specialized from
+runtime keys. Seeds and parameters are prepared outside timing. Matrix transactions roll back, preserving the
+match/create mix across iterations; result drain and transaction rollback are included. The small legacy scenarios
+commit. Compilation is warmed before timing. Sequence values consumed by rolled-back creations are not reset.
+
+With a PostgreSQL CONNECTION_STRING supplied:
+
+```sh
+go test -tags manual_integration ./integration -run '^$' \
+  -bench BenchmarkPostgreSQLMerge -benchtime=1s -count=5 -benchmem
+MERGE_PLAN_DIR="$PWD/.coverage/merge-plans" go test -tags manual_integration ./integration \
+  -run '^TestPostgreSQLMergePlans$' -count=1
+```
+
+Plan capture writes SQL and JSON with runtime parameters for fixed keys, wide payloads, changed keys, dynamic maps,
+bound endpoints, and repeated-target rejection. Successful plans use EXPLAIN (ANALYZE, BUFFERS, WAL, VERBOSE, FORMAT JSON)
+in rollback transactions. PostgreSQL 18.6 can emit malformed execution JSON for partitioned MERGE (tuple counters
+appear inside the Target Tables array). The harness preserves that raw output and captures valid non-executing JSON
+and EXPLAIN ANALYZE text in separate rollback transactions. It does not rewrite the server output. Rejected workloads use non-executing EXPLAIN and assert the runtime error separately.
+Run captures and database suites serially: integration setup can reset shared database tables. Do not run EXPLAIN ANALYZE
+on production fixtures. For before/after comparisons use the same harness and server settings in a separate baseline
+checkout. Record work_mem, durability, fixture/index setup, cache warmth, and timing boundaries with results.
+
+See [MERGE implementation evidence](../docs/merge_implementation.md) for measurements and remaining costs.

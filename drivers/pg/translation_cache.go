@@ -18,7 +18,7 @@ const (
 	translationCacheCapacity  = 256
 	translationCacheKeyFormat = 3
 	maxCachedCypherBytes      = 64 * 1024
-	translationCachePolicy    = "compiler-v4:optimized"
+	translationCachePolicy    = "compiler-v5:optimized"
 )
 
 type translationCacheKey struct {

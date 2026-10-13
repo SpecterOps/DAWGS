@@ -1357,6 +1357,14 @@ func (s *Translator) buildTailProjection() error {
 	)
 
 	singlePartQuerySelect.From = s.collectProjectionFromFrames(currentPart.projections.Items)
+	if len(singlePartQuerySelect.From) == 0 && s.scope.CurrentFrame() != nil {
+		for _, part := range s.query.Parts {
+			if part.containsMerge {
+				singlePartQuerySelect.From = []pgsql.FromClause{frameReference(s.scope.CurrentFrame())}
+				break
+			}
+		}
+	}
 	singlePartQuerySelect.From = append(singlePartQuerySelect.From, unwindFromClauses(currentPart.ConsumeUnwindClauses())...)
 
 	if projectionConstraint, err := s.treeTranslator.ConsumeAllConstraints(); err != nil {

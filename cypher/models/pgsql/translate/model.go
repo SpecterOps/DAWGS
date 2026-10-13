@@ -616,6 +616,7 @@ type QueryPart struct {
 	quantifierIdentifiers           *pgsql.IdentifierSet
 	unwindClauses                   []UnwindClause
 	isCreating                      bool
+	containsMerge                   bool
 }
 
 type UnwindClause struct {

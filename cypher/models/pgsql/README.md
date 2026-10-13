@@ -5,7 +5,7 @@ take openCypher input and output valid PostgreSQL SQL. This model is not intende
 available SQL dialect features but rather the subset of the dialect required to perform openCypher to PostgreSQL
 translation.
 
-**Expected PostgreSQL SQL dialect version**: `16.X`
+**Expected PostgreSQL SQL dialect version**: `18+`
 
 ## Formatting
 
@@ -28,3 +28,7 @@ The `visualization` package contains a PUML digraph formatter for the PgSQL synt
 ## Test Cases
 
 The `test` package contains the test cases used to validate translation.
+
+`Merge` is a statement and a set expression, so it can be used as a CTE body. It supports returning projections,
+`MergeDoNothing`, and optional `SourceQuery` while retaining table sources for existing callers. `FunctionMergeAction`
+represents PostgreSQL's `merge_action()`. Empty SQL windows support pipeline row numbering.

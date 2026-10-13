@@ -1,4 +1,4 @@
-# openCypher to PgSQL 16 Translation
+# openCypher to PgSQL 18 Translation
 
 ## Renaming
 
@@ -521,3 +521,29 @@ with s0 as (with ex0(root_id, next_id, depth, satisfied, is_cycle, path)
 select edges_to_path(variadic ep0)::pathcomposite as p
 from s0;
 ```
+
+## MERGE translation
+
+`merge.go` builds a complete-pattern match/create plan with clause-entry boundness, input identity, and result identity.
+Materialized inputs hold individually validated fixed-key values or a validated dynamic map. Lookup predicates reuse
+those values; the creation branch assembles fixed property objects. Text arguments to `to_jsonb` retain an explicit
+cast when SQL parameters are materialized into literals. Each action clause projects its effective RHS
+values into a materialized patch before applying one property-bag transformation per updated binding. Patches with more
+than 50 fields concatenate bounded `jsonb_build_object` calls before application, keeping each call within PostgreSQL's
+100-argument limit. All RHS values
+observe the incoming clause. Parallel final-key columns follow patches without reading unrelated entity payloads.
+Entity composites are retained conservatively at clause boundaries for downstream property, whole-entity, and path
+consumers; dynamic overlap remains a general per-key comparison of original maps and final properties.
+
+Relational action projections carry only graph, type, and target ID. Fixed preserved keys use GROUP BY/HAVING;
+changed keys use original-to-final equality joins. A materialized scalar guard combines a full-consumption input
+aggregate with conflict facts. Every real write filters validated candidates to effective actions. The first entity write with an INSERT action consumes a sentinel source row: its null target ID and guard-valued
+DO NOTHING predicate force validation without writing or returning a row. With only bound entities, a conditional INSERT
+MERGE anchor guarantees guard consumption when outputs/writes are unused; the assertion returns true or raises,
+so its `WHEN NOT MATCHED AND NOT guard.valid THEN INSERT` never inserts. The separate anchor requires INSERT permission and can invoke
+INSERT statement triggers on node. A MERGE with only a DO NOTHING action was experimentally pruned on PostgreSQL 18.6.
+
+Only unbound entities and bound entities with explicit actions emit entity writes. RETURNING values are joined by
+result identity and coalesced with unchanged candidates. Private input, result, key, patch, and branch fields are hidden
+from RETURN *; key and patch projections are dropped after their last consumer. Unchanged matches are returned without updating them. See [MERGE](../../../../docs/postgresql_translation.md#merge)
+for supported patterns, statement-snapshot limits, repeated inputs, storage conflicts, and validation.

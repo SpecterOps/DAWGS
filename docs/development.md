@@ -17,6 +17,9 @@ make test
 - `.coverage/unit.out`
 - `.coverage/coverage.txt`
 
+The PostgreSQL driver requires PostgreSQL 18 or newer. CI and `docker-compose.yml` use the same PostgreSQL 18 image.
+Connection hooks and schema/transaction acquisition reject older servers, including supplied pools.
+
 Run the integration suite when a backend is available:
 
 ```bash
