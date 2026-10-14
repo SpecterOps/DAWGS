@@ -95,6 +95,98 @@ where x.id = $1`, nodeID).Scan(&schema, &partition))
 		indexValidity(t, ctx, pool, schema, invalidCCNew, validCCNew, invalidUnnamed))
 }
 
+// TestPostgreSQLOptimizeStorageRebuildsBtreeIndexes verifies that OptimizeStorage rebuilds every valid btree index on
+// node and edge partitions, observed as a new relation file node, and leaves GIN indexes untouched.
+func TestPostgreSQLOptimizeStorageRebuildsBtreeIndexes(t *testing.T) {
+	var (
+		nodeKind = graph.StringKind("OptimizeStorageReindexNode")
+		edgeKind = graph.StringKind("OptimizeStorageReindexEdge")
+	)
+
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		ExtraNodeKinds:       graph.Kinds{nodeKind},
+		ExtraEdgeKinds:       graph.Kinds{edgeKind},
+	})
+
+	ctx := session.Ctx
+
+	require.NoError(t, session.DB.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		start, err := tx.CreateNode(graph.NewProperties(), nodeKind)
+		if err != nil {
+			return err
+		}
+
+		end, err := tx.CreateNode(graph.NewProperties(), nodeKind)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.CreateRelationshipByIDs(start.ID, end.ID, edgeKind, graph.NewProperties())
+		return err
+	}))
+
+	before := graphPartitionIndexFileNodes(t, ctx, session.PGPool)
+	require.NoError(t, session.DB.OptimizeStorage(ctx))
+	after := graphPartitionIndexFileNodes(t, ctx, session.PGPool)
+
+	var btreeCount, ginCount int
+	for name, previous := range before {
+		current, exists := after[name]
+		require.True(t, exists, "index %s missing after OptimizeStorage", name)
+		require.Equal(t, previous.method, current.method)
+
+		switch previous.method {
+		case "btree":
+			btreeCount++
+			require.NotEqual(t, previous.fileNode, current.fileNode, "btree index %s was not rebuilt", name)
+		case "gin":
+			ginCount++
+			require.Equal(t, previous.fileNode, current.fileNode, "gin index %s was rebuilt", name)
+		}
+	}
+
+	require.Positive(t, btreeCount)
+	require.Positive(t, ginCount)
+}
+
+type indexFileNode struct {
+	method   string
+	fileNode uint32
+}
+
+// graphPartitionIndexFileNodes returns the access method and relation file node of every valid index on node and edge
+// partitions, keyed by schema-qualified index name.
+func graphPartitionIndexFileNodes(t *testing.T, ctx context.Context, pool *pgxpool.Pool) map[string]indexFileNode {
+	t.Helper()
+
+	rows, err := pool.Query(ctx, `select n.nspname || '.' || i.relname, a.amname, pg_relation_filenode(i.oid)
+from pg_inherits inh
+         join pg_index x on x.indrelid = inh.inhrelid
+         join pg_class i on i.oid = x.indexrelid
+         join pg_namespace n on n.oid = i.relnamespace
+         join pg_am a on a.oid = i.relam
+where inh.inhparent in ('node'::regclass, 'edge'::regclass)
+  and x.indisvalid`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	fileNodes := map[string]indexFileNode{}
+	for rows.Next() {
+		var (
+			name  string
+			entry indexFileNode
+		)
+		require.NoError(t, rows.Scan(&name, &entry.method, &entry.fileNode))
+		fileNodes[name] = entry
+	}
+	require.NoError(t, rows.Err())
+
+	return fileNodes
+}
+
 func execSimple(t *testing.T, ctx context.Context, pool *pgxpool.Pool, stmt string) {
 	t.Helper()
 

@@ -68,9 +68,15 @@ storage maintenance on the `node` and `edge` tables in the following order:
 1. Drops INVALID btree indexes on `node` and `edge` partitions whose names end in `_ccnew[N]` or `_ccold[N]`. These are
    left behind when a `REINDEX CONCURRENTLY` is interrupted. Drops use `DROP INDEX CONCURRENTLY IF EXISTS`.
 2. Runs `VACUUM (ANALYZE) node, edge`, which covers every partition.
+3. Rebuilds every valid btree index on `node` and `edge` partitions with `REINDEX INDEX CONCURRENTLY`, smallest first,
+   so that an early cancellation still completes as many rebuilds as possible. GIN indexes are not rebuilt; `VACUUM`
+   already merges their pending lists.
 
-A failure on one statement does not stop the remaining work; every failure is returned together as a joined error.
-Context cancellation stops the pass before the next statement and is included in the returned error.
+Concurrent drops and rebuilds take `SHARE UPDATE EXCLUSIVE` locks, which do not block reads or writes. A failure on one
+statement does not stop the remaining work; every failure is returned together as a joined error. Context cancellation
+stops the pass before the next statement and is included in the returned error. A cancelled rebuild may leave an
+INVALID `_ccnew` index behind, which the next pass drops in step 1. The pass applies no thresholds and has no time
+limit; callers are responsible for scheduling it, for example behind a cooldown.
 
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
 

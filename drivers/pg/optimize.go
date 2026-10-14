@@ -27,6 +27,19 @@ where inh.inhparent in ('node'::regclass, 'edge'::regclass)
   and i.relname ~ '_cc(new|old)[0-9]*$'
 order by n.nspname, i.relname`
 
+// sqlSelectBtreeIndexes lists valid btree indexes on node and edge partitions, smallest first, so that an early
+// cancellation still completes as many rebuilds as possible.
+const sqlSelectBtreeIndexes = `select n.nspname, i.relname, pg_relation_size(i.oid)
+from pg_inherits inh
+         join pg_index x on x.indrelid = inh.inhrelid
+         join pg_class i on i.oid = x.indexrelid
+         join pg_namespace n on n.oid = i.relnamespace
+         join pg_am a on a.oid = i.relam
+where inh.inhparent in ('node'::regclass, 'edge'::regclass)
+  and a.amname = 'btree'
+  and x.indisvalid
+order by pg_relation_size(i.oid), n.nspname, i.relname`
+
 type optimizeStorageConn interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -39,6 +52,7 @@ type optimizeStoragePhase func(ctx context.Context, conn optimizeStorageConn) er
 var optimizeStoragePhases = []optimizeStoragePhase{
 	dropInvalidReindexArtifacts,
 	vacuumGraphTables,
+	reindexBtreeIndexes,
 }
 
 type graphIndex struct {
@@ -161,4 +175,17 @@ func vacuumGraphTables(ctx context.Context, conn optimizeStorageConn) error {
 	}
 
 	return nil
+}
+
+func reindexBtreeIndexes(ctx context.Context, conn optimizeStorageConn) error {
+	indexes, err := listGraphIndexes(ctx, conn, sqlSelectBtreeIndexes)
+	if err != nil {
+		return fmt.Errorf("list btree indexes: %w", err)
+	}
+
+	slog.InfoContext(ctx, "Rebuilding PostgreSQL btree indexes", slog.Int("count", len(indexes)))
+
+	return execIndexStatements(ctx, conn, "reindex", indexes, func(index graphIndex) string {
+		return "REINDEX INDEX CONCURRENTLY " + index.identifier()
+	})
 }

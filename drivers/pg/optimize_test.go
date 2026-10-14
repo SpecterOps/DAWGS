@@ -18,24 +18,31 @@ func TestOptimizeStorage(t *testing.T) {
 		ctx := context.Background()
 		conn := newOptimizeStorageMockConn(t)
 
-		expectInvalidReindexArtifacts(conn)
+		expectGraphIndexes(conn, sqlSelectInvalidReindexArtifacts)
 		expectOptimizeStorageVacuum(conn, optimizeStorageVacuumStatement)
+		expectGraphIndexes(conn, sqlSelectBtreeIndexes)
 
 		require.NoError(t, optimizeStorage(ctx, conn))
 		require.NoError(t, conn.ExpectationsWereMet())
 	})
 
-	t.Run("drops invalid reindex artifacts before vacuuming", func(t *testing.T) {
+	t.Run("drops invalid reindex artifacts, vacuums, then rebuilds btree indexes in listed order", func(t *testing.T) {
 		ctx := context.Background()
 		conn := newOptimizeStorageMockConn(t)
 
-		expectInvalidReindexArtifacts(conn,
+		expectGraphIndexes(conn, sqlSelectInvalidReindexArtifacts,
 			graphIndex{schema: "public", name: "node_1_pkey_ccnew", sizeBytes: 8192},
 			graphIndex{schema: `odd"schema`, name: "edge_2_kind_index_ccold1", sizeBytes: 16384},
 		)
 		expectIndexStatement(conn, `DROP INDEX CONCURRENTLY IF EXISTS "public"."node_1_pkey_ccnew"`, nil)
 		expectIndexStatement(conn, `DROP INDEX CONCURRENTLY IF EXISTS "odd""schema"."edge_2_kind_index_ccold1"`, nil)
 		expectOptimizeStorageVacuum(conn, optimizeStorageVacuumStatement)
+		expectGraphIndexes(conn, sqlSelectBtreeIndexes,
+			graphIndex{schema: "public", name: "edge_1_kind_index", sizeBytes: 8192},
+			graphIndex{schema: `odd"schema`, name: "node_1_pkey", sizeBytes: 16384},
+		)
+		expectIndexStatement(conn, `REINDEX INDEX CONCURRENTLY "public"."edge_1_kind_index"`, nil)
+		expectIndexStatement(conn, `REINDEX INDEX CONCURRENTLY "odd""schema"."node_1_pkey"`, nil)
 
 		require.NoError(t, optimizeStorage(ctx, conn))
 		require.NoError(t, conn.ExpectationsWereMet())
@@ -43,13 +50,14 @@ func TestOptimizeStorage(t *testing.T) {
 
 	t.Run("continues past failures and joins every error", func(t *testing.T) {
 		var (
-			ctx       = context.Background()
-			conn      = newOptimizeStorageMockConn(t)
-			dropErr   = errors.New("drop failed")
-			vacuumErr = errors.New("vacuum failed")
+			ctx        = context.Background()
+			conn       = newOptimizeStorageMockConn(t)
+			dropErr    = errors.New("drop failed")
+			vacuumErr  = errors.New("vacuum failed")
+			reindexErr = errors.New("reindex failed")
 		)
 
-		expectInvalidReindexArtifacts(conn,
+		expectGraphIndexes(conn, sqlSelectInvalidReindexArtifacts,
 			graphIndex{schema: "public", name: "node_1_pkey_ccnew"},
 			graphIndex{schema: "public", name: "edge_1_pkey_ccnew"},
 		)
@@ -58,11 +66,36 @@ func TestOptimizeStorage(t *testing.T) {
 		conn.ExpectExec(optimizeStorageVacuumStatement).
 			WithArgs(pgx.QueryExecModeSimpleProtocol).
 			WillReturnError(vacuumErr)
+		expectGraphIndexes(conn, sqlSelectBtreeIndexes,
+			graphIndex{schema: "public", name: "node_1_pkey"},
+			graphIndex{schema: "public", name: "edge_1_pkey"},
+		)
+		expectIndexStatement(conn, `REINDEX INDEX CONCURRENTLY "public"."node_1_pkey"`, reindexErr)
+		expectIndexStatement(conn, `REINDEX INDEX CONCURRENTLY "public"."edge_1_pkey"`, nil)
 
 		err := optimizeStorage(ctx, conn)
 		require.ErrorIs(t, err, dropErr)
 		require.ErrorIs(t, err, vacuumErr)
+		require.ErrorIs(t, err, reindexErr)
 		require.ErrorContains(t, err, `"public"."node_1_pkey_ccnew"`)
+		require.ErrorContains(t, err, `REINDEX INDEX CONCURRENTLY "public"."node_1_pkey"`)
+		require.NoError(t, conn.ExpectationsWereMet())
+	})
+
+	t.Run("reports a failure to list btree indexes", func(t *testing.T) {
+		var (
+			ctx     = context.Background()
+			conn    = newOptimizeStorageMockConn(t)
+			listErr = errors.New("list failed")
+		)
+
+		expectGraphIndexes(conn, sqlSelectInvalidReindexArtifacts)
+		expectOptimizeStorageVacuum(conn, optimizeStorageVacuumStatement)
+		conn.ExpectQuery(sqlSelectBtreeIndexes).WillReturnError(listErr)
+
+		err := optimizeStorage(ctx, conn)
+		require.ErrorIs(t, err, listErr)
+		require.ErrorContains(t, err, "list btree indexes")
 		require.NoError(t, conn.ExpectationsWereMet())
 	})
 
@@ -75,6 +108,7 @@ func TestOptimizeStorage(t *testing.T) {
 
 		conn.ExpectQuery(sqlSelectInvalidReindexArtifacts).WillReturnError(listErr)
 		expectOptimizeStorageVacuum(conn, optimizeStorageVacuumStatement)
+		expectGraphIndexes(conn, sqlSelectBtreeIndexes)
 
 		err := optimizeStorage(ctx, conn)
 		require.ErrorIs(t, err, listErr)
@@ -95,6 +129,7 @@ func TestOptimizeStorage(t *testing.T) {
 				RowError(0, scanErr),
 		)
 		expectOptimizeStorageVacuum(conn, optimizeStorageVacuumStatement)
+		expectGraphIndexes(conn, sqlSelectBtreeIndexes)
 
 		require.ErrorIs(t, optimizeStorage(ctx, conn), scanErr)
 		require.NoError(t, conn.ExpectationsWereMet())
@@ -117,7 +152,7 @@ func TestOptimizeStorage(t *testing.T) {
 		mock := newOptimizeStorageMockConn(t)
 		conn := &cancelOnExecConn{optimizeStorageConn: mock, cancel: cancel}
 
-		expectInvalidReindexArtifacts(mock,
+		expectGraphIndexes(mock, sqlSelectInvalidReindexArtifacts,
 			graphIndex{schema: "public", name: "node_1_pkey_ccnew"},
 			graphIndex{schema: "public", name: "edge_1_pkey_ccnew"},
 		)
@@ -176,6 +211,17 @@ func TestInvalidReindexArtifactQueryFilters(t *testing.T) {
 	}
 }
 
+func TestBtreeIndexQueryFilters(t *testing.T) {
+	for _, fragment := range []string{
+		"inh.inhparent in ('node'::regclass, 'edge'::regclass)",
+		"a.amname = 'btree'",
+		"and x.indisvalid",
+		"order by pg_relation_size(i.oid),",
+	} {
+		require.Contains(t, sqlSelectBtreeIndexes, fragment)
+	}
+}
+
 // cancelOnExecConn cancels its context after each Exec to simulate cancellation arriving mid-pass.
 type cancelOnExecConn struct {
 	optimizeStorageConn
@@ -195,13 +241,13 @@ func unwrapJoined(err error) []error {
 	return []error{err}
 }
 
-func expectInvalidReindexArtifacts(conn pgxmock.PgxConnIface, indexes ...graphIndex) {
+func expectGraphIndexes(conn pgxmock.PgxConnIface, sql string, indexes ...graphIndex) {
 	rows := pgxmock.NewRows([]string{"nspname", "relname", "size"})
 	for _, index := range indexes {
 		rows.AddRow(index.schema, index.name, index.sizeBytes)
 	}
 
-	conn.ExpectQuery(sqlSelectInvalidReindexArtifacts).WillReturnRows(rows)
+	conn.ExpectQuery(sql).WillReturnRows(rows)
 }
 
 func expectIndexStatement(conn pgxmock.PgxConnIface, stmt string, err error) {
@@ -209,7 +255,7 @@ func expectIndexStatement(conn pgxmock.PgxConnIface, stmt string, err error) {
 	if err != nil {
 		expectation.WillReturnError(err)
 	} else {
-		expectation.WillReturnResult(pgxmock.NewResult("DROP INDEX", 0))
+		expectation.WillReturnResult(pgxmock.NewResult("OK", 0))
 	}
 }
 
