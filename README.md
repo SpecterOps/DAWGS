@@ -62,6 +62,16 @@ queries. Its default capacity is 256 entries; callers that need a different capa
 newly started compilations across every PostgreSQL driver in the process. See
 [PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
 
+The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
+storage maintenance on the `node` and `edge` tables in the following order:
+
+1. Drops INVALID btree indexes on `node` and `edge` partitions whose names end in `_ccnew[N]` or `_ccold[N]`. These are
+   left behind when a `REINDEX CONCURRENTLY` is interrupted. Drops use `DROP INDEX CONCURRENTLY IF EXISTS`.
+2. Runs `VACUUM (ANALYZE) node, edge`, which covers every partition.
+
+A failure on one statement does not stop the remaining work; every failure is returned together as a joined error.
+Context cancellation stops the pass before the next statement and is included in the returned error.
+
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
 
 ```bash
