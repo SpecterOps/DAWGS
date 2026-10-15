@@ -168,11 +168,15 @@ func TestOptimizeStorage(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		mock := newOptimizeStorageMockConn(t)
-		conn := &cancelOnExecConn{optimizeStorageConn: mock, cancel: cancel}
+		const reindexStatement = `REINDEX INDEX CONCURRENTLY "public"."node_1_pkey"`
 
-		expectInvalidReindexArtifacts(mock)
+		mock := newOptimizeStorageMockConn(t)
+		conn := &cancelOnExecConn{optimizeStorageConn: mock, cancel: cancel, onStatement: reindexStatement}
+
+		expectGraphIndexes(mock, sqlSelectInvalidReindexArtifacts)
 		expectOptimizeStorageVacuum(mock, optimizeStorageVacuumStatement)
+		expectGraphIndexes(mock, sqlSelectBtreeIndexes, graphIndex{schema: "public", name: "node_1_pkey"})
+		expectIndexStatement(mock, reindexStatement, nil)
 
 		err := optimizeStorage(ctx, conn)
 		require.ErrorIs(t, err, context.Canceled)
@@ -184,17 +188,19 @@ func TestOptimizeStorage(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		mock := newOptimizeStorageMockConn(t)
-		conn := &cancelOnExecConn{optimizeStorageConn: mock, cancel: cancel}
+		const reindexStatement = `REINDEX INDEX CONCURRENTLY "public"."node_1_pkey"`
 
-		expectInvalidReindexArtifacts(mock)
-		mock.ExpectExec(optimizeStorageVacuumStatement).
-			WithArgs(pgx.QueryExecModeSimpleProtocol).
-			WillReturnError(context.Canceled)
+		mock := newOptimizeStorageMockConn(t)
+		conn := &cancelOnExecConn{optimizeStorageConn: mock, cancel: cancel, onStatement: reindexStatement}
+
+		expectGraphIndexes(mock, sqlSelectInvalidReindexArtifacts)
+		expectOptimizeStorageVacuum(mock, optimizeStorageVacuumStatement)
+		expectGraphIndexes(mock, sqlSelectBtreeIndexes, graphIndex{schema: "public", name: "node_1_pkey"})
+		expectIndexStatement(mock, reindexStatement, context.Canceled)
 
 		err := optimizeStorage(ctx, conn)
 		require.ErrorIs(t, err, context.Canceled)
-		require.ErrorContains(t, err, optimizeStorageVacuumStatement)
+		require.ErrorContains(t, err, reindexStatement)
 		require.Len(t, unwrapJoined(err), 1)
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -222,14 +228,19 @@ func TestBtreeIndexQueryFilters(t *testing.T) {
 	}
 }
 
-// cancelOnExecConn cancels its context after each Exec to simulate cancellation arriving mid-pass.
+// cancelOnExecConn cancels its context after each Exec, or only after onStatement when set, to simulate cancellation
+// arriving mid-pass.
 type cancelOnExecConn struct {
 	optimizeStorageConn
-	cancel context.CancelFunc
+	cancel      context.CancelFunc
+	onStatement string
 }
 
 func (s *cancelOnExecConn) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
-	defer s.cancel()
+	if s.onStatement == "" || sql == s.onStatement {
+		defer s.cancel()
+	}
+
 	return s.optimizeStorageConn.Exec(ctx, sql, arguments...)
 }
 
