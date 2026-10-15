@@ -69,6 +69,10 @@ func optimizeStorage(ctx context.Context, conn optimizeStorageConn) error {
 		}
 	}
 
+	if err := ctx.Err(); err != nil && !errors.Is(errors.Join(errs...), err) {
+		errs = append(errs, err)
+	}
+
 	return errors.Join(errs...)
 }
 

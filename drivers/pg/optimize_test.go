@@ -128,6 +128,41 @@ func TestOptimizeStorage(t *testing.T) {
 		require.Len(t, unwrapJoined(err), 1)
 		require.NoError(t, mock.ExpectationsWereMet())
 	})
+
+	t.Run("reports cancellation during the final phase once", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		mock := newOptimizeStorageMockConn(t)
+		conn := &cancelOnExecConn{optimizeStorageConn: mock, cancel: cancel}
+
+		expectInvalidReindexArtifacts(mock)
+		expectOptimizeStorageVacuum(mock, optimizeStorageVacuumStatement)
+
+		err := optimizeStorage(ctx, conn)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Len(t, unwrapJoined(err), 1)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("does not duplicate cancellation returned by the final phase", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		mock := newOptimizeStorageMockConn(t)
+		conn := &cancelOnExecConn{optimizeStorageConn: mock, cancel: cancel}
+
+		expectInvalidReindexArtifacts(mock)
+		mock.ExpectExec(optimizeStorageVacuumStatement).
+			WithArgs(pgx.QueryExecModeSimpleProtocol).
+			WillReturnError(context.Canceled)
+
+		err := optimizeStorage(ctx, conn)
+		require.ErrorIs(t, err, context.Canceled)
+		require.ErrorContains(t, err, optimizeStorageVacuumStatement)
+		require.Len(t, unwrapJoined(err), 1)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
 func TestInvalidReindexArtifactQueryFilters(t *testing.T) {
