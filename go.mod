@@ -2,7 +2,6 @@ module github.com/specterops/dawgs
 
 go 1.27.2
 
-// Dawgrun requirements
 require (
 	cuelang.org/go v0.17.0
 	github.com/RoaringBitmap/roaring/v2 v2.19.0

@@ -1,8 +1,23 @@
 package cardinality
 
 import (
+	"sync"
+
 	"github.com/RoaringBitmap/roaring/v2/roaring64"
 )
+
+// bitmap64IteratorPool reuses roaring64 iterators across Each calls. roaring64.IntIterator64
+// is resettable via Initialize and embeds its container iterator, so a pooled iterator can be
+// re-pointed at each bitmap without allocating a fresh iterator (and its per-container iterator)
+// on every traversal. The pool is safe for concurrent use, and reentrant iteration is safe
+// because each active traversal holds its own iterator until it returns to the pool. Iterators
+// are zeroed before being returned so that pooled iterators do not keep the last iterated
+// bitmap reachable.
+var bitmap64IteratorPool = sync.Pool{
+	New: func() any {
+		return &roaring64.IntIterator64{}
+	},
+}
 
 type bitmap64Iterator struct {
 	iterator roaring64.IntPeekable64
@@ -42,11 +57,17 @@ func (s bitmap64) Clear() {
 }
 
 func (s bitmap64) Each(delegate func(nextValue uint64) bool) {
-	for itr := s.bitmap.Iterator(); itr.HasNext(); {
+	itr := bitmap64IteratorPool.Get().(*roaring64.IntIterator64)
+	itr.Initialize(s.bitmap)
+
+	for itr.HasNext() {
 		if ok := delegate(itr.Next()); !ok {
 			break
 		}
 	}
+
+	*itr = roaring64.IntIterator64{}
+	bitmap64IteratorPool.Put(itr)
 }
 
 func (s bitmap64) Iterator() Iterator[uint64] {
