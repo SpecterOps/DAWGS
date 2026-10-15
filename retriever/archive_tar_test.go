@@ -54,6 +54,81 @@ func TestCollectionTarDeterministicAndSorted(t *testing.T) {
 	}
 }
 
+func TestCollectionTarFileMatchesStreamAndExcludesSidecars(t *testing.T) {
+	dumpDir := writeArchiveFixture(t)
+	if err := os.WriteFile(filepath.Join(dumpDir, "sidecar.parquet"), []byte("sidecar"), 0o600); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+	archivePath := filepath.Join(t.TempDir(), "nested", "dump.tar")
+	if err := WriteCollectionArchiveFile(ArchiveFileOptions{
+		CollectionDir: dumpDir,
+		OutputPath:    archivePath,
+	}); err != nil {
+		t.Fatalf("write tar file: %v", err)
+	}
+	actual, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read tar file: %v", err)
+	}
+	var expected bytes.Buffer
+	if err := WriteCollectionTar(&expected, dumpDir); err != nil {
+		t.Fatalf("write tar stream: %v", err)
+	}
+	if !bytes.Equal(actual, expected.Bytes()) {
+		t.Fatalf("tar file differs from collection tar stream")
+	}
+	for _, name := range tarEntryNames(t, actual) {
+		if strings.HasSuffix(name, ".parquet") {
+			t.Fatalf("tar contains sidecar %q", name)
+		}
+	}
+	if info, err := os.Stat(archivePath); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("archive file mode = %v, error = %v", info, err)
+	}
+}
+
+func TestCollectionTarFilePreservesExistingOutputAndCleansUpFailure(t *testing.T) {
+	dumpDir := writeArchiveFixture(t)
+	archiveDir := t.TempDir()
+	archivePath := filepath.Join(archiveDir, "dump.tar")
+	if err := os.WriteFile(archivePath, []byte("existing"), 0o600); err != nil {
+		t.Fatalf("write existing archive: %v", err)
+	}
+	if err := WriteCollectionArchiveFile(ArchiveFileOptions{
+		CollectionDir: dumpDir,
+		OutputPath:    archivePath,
+	}); err == nil {
+		t.Fatal("expected existing archive to be refused")
+	}
+	if actual, err := os.ReadFile(archivePath); err != nil || string(actual) != "existing" {
+		t.Fatalf("existing archive changed: %q, error = %v", actual, err)
+	}
+	if err := os.Remove(archivePath); err != nil {
+		t.Fatalf("remove existing archive: %v", err)
+	}
+
+	manifest, err := readManifest(dumpDir)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	fragmentPath := filepath.Join(dumpDir, filepath.FromSlash(manifest.Graphs[0].Files[0].Path))
+	if err := os.Remove(fragmentPath); err != nil {
+		t.Fatalf("remove fragment: %v", err)
+	}
+	if err := WriteCollectionArchiveFile(ArchiveFileOptions{
+		CollectionDir: dumpDir,
+		OutputPath:    archivePath,
+	}); err == nil {
+		t.Fatal("expected missing fragment to fail archive creation")
+	}
+	if _, err := os.Stat(archivePath); !os.IsNotExist(err) {
+		t.Fatalf("partial archive remains: %v", err)
+	}
+	if temps, err := filepath.Glob(filepath.Join(archiveDir, "dump.tar.*.tmp")); err != nil || len(temps) != 0 {
+		t.Fatalf("temporary archives remain: %v, error = %v", temps, err)
+	}
+}
+
 func TestCollectionTarStableMetadata(t *testing.T) {
 	dir := writeArchiveFixture(t)
 	var buffer bytes.Buffer

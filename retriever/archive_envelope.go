@@ -104,21 +104,27 @@ func WriteEncryptedCollectionArchiveWithOptions(writer io.Writer, dumpDir string
 	return nil
 }
 
-func WriteEncryptedCollectionArchiveFile(dumpDir, archivePath string, recipient hpke.PublicKey) error {
-	return WriteEncryptedCollectionArchiveFileWithOptions(dumpDir, archivePath, recipient, ArchiveOptions{})
+// ArchiveFileOptions packages an existing collection at OutputPath.
+// A nil Recipient writes a plain TAR; a non-nil Recipient encrypts it.
+type ArchiveFileOptions struct {
+	CollectionDir string
+	OutputPath    string
+	Recipient     hpke.PublicKey
+	Progress      ProgressFunc
 }
 
-func writeEncryptedCollectionArchive(dumpDir, archivePath string, recipient hpke.PublicKey) error {
-	return WriteEncryptedCollectionArchiveFile(dumpDir, archivePath, recipient)
-}
-
-func WriteEncryptedCollectionArchiveFileWithOptions(dumpDir, archivePath string, recipient hpke.PublicKey, options ArchiveOptions) error {
-	archivePath = strings.TrimSpace(archivePath)
-	if err := preflightArchiveOutputPath(archivePath); err != nil {
+// WriteCollectionArchiveFile writes one archive without replacing an existing file.
+func WriteCollectionArchiveFile(options ArchiveFileOptions) error {
+	collectionDir := strings.TrimSpace(options.CollectionDir)
+	outputPath := strings.TrimSpace(options.OutputPath)
+	if collectionDir == "" {
+		return fmt.Errorf("collection directory is required")
+	}
+	if err := preflightArchiveOutputPath(outputPath); err != nil {
 		return err
 	}
 
-	tempFile, err := os.CreateTemp(filepath.Dir(archivePath), filepath.Base(archivePath)+".*.tmp")
+	tempFile, err := os.CreateTemp(filepath.Dir(outputPath), filepath.Base(outputPath)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("create archive temp file: %w", err)
 	}
@@ -130,45 +136,51 @@ func WriteEncryptedCollectionArchiveFileWithOptions(dumpDir, archivePath string,
 		}
 	}()
 
-	slog.Info("retriever archive encryption started",
-		slog.String("input_dir", dumpDir),
-		slog.String("archive", archivePath),
-	)
-	options.Progress.emit(ProgressEvent{
-		Operation:   OperationArchive,
-		Message:     "retriever archive encryption started",
-		InputDir:    dumpDir,
-		ArchivePath: archivePath,
-	})
+	if options.Recipient != nil {
+		slog.Info("retriever archive encryption started",
+			slog.String("input_dir", collectionDir),
+			slog.String("archive", outputPath),
+		)
+		options.Progress.emit(ProgressEvent{
+			Operation:   OperationArchive,
+			Message:     "retriever archive encryption started",
+			InputDir:    collectionDir,
+			ArchivePath: outputPath,
+		})
+	}
 
-	if err := WriteEncryptedCollectionArchiveWithOptions(tempFile, dumpDir, recipient, options, archivePath, tempPath); err != nil {
+	archiveOptions := ArchiveOptions{Progress: options.Progress}
+	if options.Recipient == nil {
+		err = WriteCollectionTarWithOptions(tempFile, collectionDir, archiveOptions, outputPath, tempPath)
+	} else {
+		err = WriteEncryptedCollectionArchiveWithOptions(tempFile, collectionDir, options.Recipient, archiveOptions, outputPath, tempPath)
+	}
+	if err != nil {
 		_ = tempFile.Close()
 		return err
 	}
-
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close archive temp file: %w", err)
 	}
-
-	if err := requirePathDoesNotExist(archivePath); err != nil {
+	if err := requirePathDoesNotExist(outputPath); err != nil {
 		return err
 	}
-
-	if err := os.Rename(tempPath, archivePath); err != nil {
+	if err := os.Rename(tempPath, outputPath); err != nil {
 		return fmt.Errorf("rename archive: %w", err)
 	}
-
 	cleanupTemp = false
 
-	slog.Info("retriever archive encryption completed",
-		slog.String("archive", archivePath),
-	)
-	options.Progress.emit(ProgressEvent{
-		Operation:   OperationArchive,
-		Message:     "retriever archive encryption completed",
-		InputDir:    dumpDir,
-		ArchivePath: archivePath,
-	})
+	if options.Recipient != nil {
+		slog.Info("retriever archive encryption completed",
+			slog.String("archive", outputPath),
+		)
+		options.Progress.emit(ProgressEvent{
+			Operation:   OperationArchive,
+			Message:     "retriever archive encryption completed",
+			InputDir:    collectionDir,
+			ArchivePath: outputPath,
+		})
+	}
 	return nil
 }
 

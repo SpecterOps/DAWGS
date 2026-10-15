@@ -15,7 +15,7 @@ Assumption: "QC resistant" means quantum-computer-resistant cryptography.
 Use a raw TAR packaging layer plus an encrypted streaming envelope:
 
 ```text
-retriever dump -> dump directory -> raw tar stream -> HPKE/ML-KEM encrypted archive
+retriever dump -> dump directory -> raw tar stream -> archive file
 ```
 
 Default crypto suite:
@@ -152,7 +152,7 @@ detected.
 4. Add TAR unpacker with path traversal protections.
 5. Add encrypted streaming writer using an HPKE sender context.
 6. Add encrypted streaming reader using an HPKE recipient context.
-7. Wire `dump -archive-out -recipient`.
+7. Wire `dump -archive-out [-recipient]`.
 8. Add `retriever unpack`.
 9. Optionally wire `load -archive -identity`.
 10. Add `slog` progress for archive walking, TAR streaming, encryption,
