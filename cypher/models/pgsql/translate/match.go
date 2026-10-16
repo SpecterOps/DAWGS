@@ -14,6 +14,26 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 	// so we can use this point for optional match outer joins
 	joinFrame := s.scope.CurrentFrame()
 
+	// if there's no prior frame (this was a leading optional match),
+	// build out an initial "null" frame to join to
+	if match.Optional && joinFrame == nil {
+		seedFrame, err := s.scope.PushFrame()
+		if err != nil {
+			return err
+		}
+
+		s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
+			Alias: pgsql.TableAlias{Name: seedFrame.Binding.Identifier},
+			Query: pgsql.Query{
+				Body: pgsql.Select{
+					Projection: pgsql.Projection{pgsql.NullLiteral()},
+				},
+			},
+		})
+
+		joinFrame = seedFrame
+	}
+
 	for _, part := range currentQueryPart.ConsumeCurrentPattern().Parts {
 		if !part.IsTraversal {
 			if err := s.translateNonTraversalPatternPart(part); err != nil {
@@ -43,11 +63,8 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 		return err
 	}
 
-	// If there is no valid previous frame, skip translating an `OPTIONAL MATCH`/treat as plain `MATCH`
 	if match.Optional {
-		if joinFrame != nil {
-			return s.translateOptionalMatch(joinFrame)
-		}
+		return s.translateOptionalMatch(joinFrame)
 	}
 
 	return nil
@@ -118,6 +135,12 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 			),
 			joinConstraints,
 		)
+	}
+
+	// if prior frame had no exports (for instance, for a leading optional join)
+	// we need to just set TRUE as the join constraint
+	if joinConstraints == nil {
+		joinConstraints = pgsql.NewLiteral(true, pgsql.Boolean)
 	}
 
 	// Construct the projection for this frame. Just take all of the exports for the "origin" frame
