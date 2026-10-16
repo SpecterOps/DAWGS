@@ -112,8 +112,6 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 		optMatchFrame = aggregationFrame.Previous
 	)
 
-	// originFrame could be nil if no previous frame is defined (for ex., leading OPTIONAL MATCH, which is
-	// valid but effectively a plain MATCH)
 	if originFrame == nil {
 		return pgsql.Query{}, fmt.Errorf("could not get origin frame prior to OPTIONAL MATCH")
 	}
