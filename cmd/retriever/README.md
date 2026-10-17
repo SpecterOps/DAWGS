@@ -178,8 +178,9 @@ retriever dump \
 The TAR contains the manifest and its JSONL fragments. `-out` remains the
 collection directory; `-archive-out` adds a second artifact. Parquet sidecars,
 when requested, stay in the directory and are not included in the TAR.
-Existing archive files are refused, and partial archive files are removed if
-packaging fails.
+Existing archive paths, including dangling symlinks, are refused even if
+created while packaging is in progress. Publication requires filesystem support
+for hard links. Temporary archive files are removed after success or failure.
 To load an unencrypted TAR, extract it into a collection directory and pass
 that directory to `retriever load -in`. The `retriever unpack` and
 `retriever load -archive` commands currently accept encrypted archives only.

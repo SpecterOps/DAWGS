@@ -83,6 +83,9 @@ func TestCollectionTarFileMatchesStreamAndExcludesSidecars(t *testing.T) {
 			t.Fatalf("tar contains sidecar %q", name)
 		}
 	}
+	if temps, err := filepath.Glob(archivePath + ".*.tmp"); err != nil || len(temps) != 0 {
+		t.Fatalf("temporary archives remain: %v, error = %v", temps, err)
+	}
 	if info, err := os.Stat(archivePath); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("archive file mode = %v, error = %v", info, err)
 	}
@@ -130,105 +133,85 @@ func TestCollectionTarFilePreservesExistingOutputAndCleansUpFailure(t *testing.T
 	}
 }
 
-func TestCollectionArchiveFilePublication(t *testing.T) {
-	privateKey, publicKey := generateTestArchiveKeyPair(t)
+func TestCollectionArchiveFilePublicationCollisions(t *testing.T) {
 	for _, encrypted := range []bool{false, true} {
 		name := "plain"
 		if encrypted {
 			name = "encrypted"
 		}
 		t.Run(name, func(t *testing.T) {
-			for _, test := range []struct {
-				name      string
-				collision bool
-				symlink   bool
-				late      bool
-			}{
-				{name: "success"},
-				{name: "existing_file", collision: true},
-				{name: "existing_dangling_symlink", collision: true, symlink: true},
-				{name: "file_created_during_write", collision: true, late: true},
-				{name: "dangling_symlink_created_during_write", collision: true, symlink: true, late: true},
-			} {
-				t.Run(test.name, func(t *testing.T) {
-					dumpDir := writeArchiveFixture(t)
-					archiveDir := t.TempDir()
-					archivePath := filepath.Join(archiveDir, "dump.tar")
-					missingTarget := filepath.Join(archiveDir, "missing")
-					created := false
-					createCollision := func() {
-						t.Helper()
-						var err error
-						if test.symlink {
-							err = os.Symlink(missingTarget, archivePath)
-						} else {
-							err = os.WriteFile(archivePath, []byte("existing"), 0o600)
+			for _, afterPreflight := range []bool{false, true} {
+				phase := "preflight"
+				if afterPreflight {
+					phase = "publication"
+				}
+				t.Run(phase, func(t *testing.T) {
+					for _, symlink := range []bool{false, true} {
+						kind := "file"
+						if symlink {
+							kind = "dangling symlink"
 						}
-						if err != nil {
-							t.Fatalf("create collision: %v", err)
-						}
-						created = true
-					}
-					if test.collision && !test.late {
-						createCollision()
-					}
-					options := ArchiveFileOptions{
-						CollectionDir: dumpDir,
-						OutputPath:    archivePath,
-						Progress: func(event ProgressEvent) {
-							if test.late && event.Message == "retriever archive tar streaming completed" {
-								createCollision()
+						t.Run(kind, func(t *testing.T) {
+							archiveDir := t.TempDir()
+							archivePath := filepath.Join(archiveDir, "dump.tar")
+							target := filepath.Join(archiveDir, "missing")
+							options := ArchiveFileOptions{
+								CollectionDir: writeArchiveFixture(t),
+								OutputPath:    archivePath,
 							}
-						},
-					}
-					if encrypted {
-						options.Recipient = publicKey
-					}
-					err := WriteCollectionArchiveFile(options)
-					if test.collision {
-						if !created {
-							t.Fatal("collision was not created")
-						}
-						if err == nil {
-							t.Fatal("expected output collision to fail")
-						}
-						if test.late && !errors.Is(err, os.ErrExist) {
-							t.Fatalf("expected publication to fail with ErrExist, got %v", err)
-						}
-						if test.symlink {
-							if target, err := os.Readlink(archivePath); err != nil || target != missingTarget {
-								t.Fatalf("symlink changed: target = %q, error = %v", target, err)
+							if encrypted {
+								_, options.Recipient = generateTestArchiveKeyPair(t)
 							}
-							if _, err := os.Lstat(missingTarget); !os.IsNotExist(err) {
-								t.Fatalf("symlink target was created: %v", err)
+							createDestination := func() {
+								t.Helper()
+								var err error
+								if symlink {
+									err = os.Symlink(target, archivePath)
+								} else {
+									err = os.WriteFile(archivePath, []byte("existing"), 0o600)
+								}
+								if err != nil {
+									t.Fatalf("create destination: %v", err)
+								}
 							}
-						} else if contents, err := os.ReadFile(archivePath); err != nil || string(contents) != "existing" {
-							t.Fatalf("existing output changed: %q, error = %v", contents, err)
-						}
-					} else {
-						if err != nil {
-							t.Fatalf("write archive: %v", err)
-						}
-						contents, err := os.ReadFile(archivePath)
-						if err != nil {
-							t.Fatalf("read archive: %v", err)
-						}
-						if encrypted {
-							contents, err = decryptArchiveBytes(contents, privateKey)
-							if err != nil {
-								t.Fatalf("decrypt archive: %v", err)
+							created := false
+							if afterPreflight {
+								options.Progress = func(event ProgressEvent) {
+									if event.Message == "retriever archive tar streaming completed" {
+										createDestination()
+										created = true
+									}
+									if event.Message == "retriever archive encryption completed" {
+										t.Error("encryption success reported before publication")
+									}
+								}
+							} else {
+								createDestination()
 							}
-						}
-						var expected bytes.Buffer
-						if err := WriteCollectionTar(&expected, dumpDir); err != nil {
-							t.Fatalf("write expected tar: %v", err)
-						}
-						if !bytes.Equal(contents, expected.Bytes()) {
-							t.Fatal("published archive differs from expected tar")
-						}
-					}
-					if entries, err := os.ReadDir(archiveDir); err != nil || len(entries) != 1 || entries[0].Name() != "dump.tar" {
-						t.Fatalf("expected only output after cleanup, got %v, error = %v", entries, err)
+							err := WriteCollectionArchiveFile(options)
+							if err == nil {
+								t.Fatal("expected destination collision")
+							}
+							if afterPreflight && (!created || !strings.Contains(err.Error(), "publish archive") || !errors.Is(err, os.ErrExist)) {
+								t.Fatalf("expected atomic publication collision, created = %v, error = %v", created, err)
+							}
+							if !afterPreflight && !strings.Contains(err.Error(), "already exists") {
+								t.Fatalf("expected preflight collision: %v", err)
+							}
+							if symlink {
+								if actual, err := os.Readlink(archivePath); err != nil || actual != target {
+									t.Fatalf("symlink changed: %q, error = %v", actual, err)
+								}
+								if _, err := os.Lstat(target); !os.IsNotExist(err) {
+									t.Fatalf("symlink target created: %v", err)
+								}
+							} else if actual, err := os.ReadFile(archivePath); err != nil || string(actual) != "existing" {
+								t.Fatalf("destination changed: %q, error = %v", actual, err)
+							}
+							if entries, err := os.ReadDir(archiveDir); err != nil || len(entries) != 1 {
+								t.Fatalf("temporary archives remain: %v, error = %v", entries, err)
+							}
+						})
 					}
 				})
 			}

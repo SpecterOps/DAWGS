@@ -125,12 +125,24 @@ func TestEncryptedCollectionArchiveSyntheticRoundTrip(t *testing.T) {
 
 	dumpDir := writeArchiveFixture(t)
 	archivePath := filepath.Join(dir, "dump.tar.pq")
+	completed := false
 	if err := WriteCollectionArchiveFile(ArchiveFileOptions{
 		CollectionDir: dumpDir,
 		OutputPath:    archivePath,
 		Recipient:     publicKey,
+		Progress: func(event ProgressEvent) {
+			if event.Message == "retriever archive encryption completed" {
+				completed = true
+				if _, err := os.ReadFile(archivePath); err != nil {
+					t.Errorf("archive unavailable at completion: %v", err)
+				}
+			}
+		},
 	}); err != nil {
 		t.Fatalf("write encrypted collection archive: %v", err)
+	}
+	if !completed {
+		t.Fatal("expected encryption completion after publication")
 	}
 
 	outputDir := filepath.Join(dir, "unpacked")
@@ -148,8 +160,11 @@ func TestEncryptedCollectionArchiveSyntheticRoundTrip(t *testing.T) {
 		t.Fatalf("read unpacked Manifest: %v", err)
 	}
 
-	if _, err := os.Stat(archivePath + ".tmp"); !os.IsNotExist(err) {
-		t.Fatalf("expected archive temp path cleanup, got %v", err)
+	if temps, err := filepath.Glob(archivePath + ".*.tmp"); err != nil || len(temps) != 0 {
+		t.Fatalf("temporary archives remain: %v, error = %v", temps, err)
+	}
+	if info, err := os.Stat(archivePath); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("archive file mode = %v, error = %v", info, err)
 	}
 }
 

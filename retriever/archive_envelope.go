@@ -159,10 +159,10 @@ func WriteCollectionArchiveFile(options ArchiveFileOptions) error {
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close archive temp file: %w", err)
 	}
-	// Linking publishes the completed file only if the destination is absent.
-	// Unlike a check followed by Rename, this cannot replace a concurrent output.
+	// Linking publishes without replacing a destination created after preflight.
+	// Deferred cleanup removes only the temporary name, leaving the archive intact.
 	if err := os.Link(tempPath, outputPath); err != nil {
-		return fmt.Errorf("publish archive: %w", err)
+		return fmt.Errorf("publish archive %s: %w", outputPath, err)
 	}
 
 	if options.Recipient != nil {
