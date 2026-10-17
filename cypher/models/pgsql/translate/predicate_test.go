@@ -85,44 +85,50 @@ func TestExclusiveDisjunctionTranslates(t *testing.T) {
 	require.Contains(t, formatted, "true != false")
 }
 
-func TestDynamicStringPredicatesUseHelperFunctions(t *testing.T) {
+func TestDynamicStringPredicatesUseEscapedLikePatterns(t *testing.T) {
 	for _, testCase := range []struct {
 		name       string
 		query      string
 		parameters map[string]any
-		function   string
+		expected   string
 	}{
 		{
 			name:       "contains parameter",
 			query:      `MATCH (n:NodeKind1) WHERE n.name CONTAINS $needle RETURN n`,
 			parameters: map[string]any{"needle": "needle"},
-			function:   "cypher_contains",
+			expected:   "((n0.properties ->> E'name') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit0::text)::text)",
 		},
 		{
 			name:       "starts with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE n.name STARTS WITH $prefix RETURN n`,
 			parameters: map[string]any{"prefix": "prefix"},
-			function:   "cypher_starts_with",
+			expected:   "((n0.properties ->> E'name') like (cypher_like_escape((@pi0::text)::text)::text || @__strlit0::text)::text)",
 		},
 		{
 			name:       "ends with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE n.name ENDS WITH $suffix RETURN n`,
 			parameters: map[string]any{"suffix": "suffix"},
-			function:   "cypher_ends_with",
-		},
-		{
-			name:     "contains property",
-			query:    `MATCH (n:NodeKind1) WHERE n.name CONTAINS n.other RETURN n`,
-			function: "cypher_contains",
+			expected:   "((n0.properties ->> E'name') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text)::text)",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			formatted := translatePredicateQuery(t, testCase.query, testCase.parameters)
 
-			require.Contains(t, formatted, testCase.function+"(")
+			require.Contains(t, formatted, testCase.expected)
+			require.NotContains(t, formatted, "cypher_contains(")
+			require.NotContains(t, formatted, "cypher_starts_with(")
+			require.NotContains(t, formatted, "cypher_ends_with(")
 			require.NotContains(t, formatted, "replace(")
 		})
 	}
+}
+
+func TestPropertyStringPredicatesUseHelperFunctions(t *testing.T) {
+	formatted := translatePredicateQuery(t, `MATCH (n:NodeKind1) WHERE n.name CONTAINS n.other RETURN n`, nil)
+
+	require.Contains(t, formatted, "cypher_contains(")
+	require.NotContains(t, formatted, "cypher_like_escape(")
+	require.NotContains(t, formatted, " like ")
 }
 
 func TestLiteralStringPredicatesKeepLikePatterns(t *testing.T) {
@@ -216,7 +222,7 @@ func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
 			name:       "contains parameter",
 			query:      `MATCH (n:NodeKind1) WHERE not n.name CONTAINS $needle RETURN n`,
 			parameters: map[string]any{"needle": "needle"},
-			expected:   "not cypher_contains(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, (@pi0::text)::text)::bool",
+			expected:   "not coalesce((n0.properties ->> E'name'), @__strlit0::text)::text like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text",
 		},
 		{
 			name:     "contains property",
@@ -227,13 +233,13 @@ func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
 			name:       "starts with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE not n.name STARTS WITH $prefix RETURN n`,
 			parameters: map[string]any{"prefix": "prefix"},
-			expected:   "not cypher_starts_with(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, (@pi0::text)::text)::bool",
+			expected:   "not coalesce((n0.properties ->> E'name'), @__strlit0::text)::text like (cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text",
 		},
 		{
 			name:       "ends with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE not n.name ENDS WITH $suffix RETURN n`,
 			parameters: map[string]any{"suffix": "suffix"},
-			expected:   "not cypher_ends_with(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, (@pi0::text)::text)::bool",
+			expected:   "not coalesce((n0.properties ->> E'name'), @__strlit0::text)::text like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

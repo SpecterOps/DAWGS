@@ -97,7 +97,7 @@ test_all: test test_integration test_bdd_integration
 test_integration:
 	@echo "Running all integration tests..."
 	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
-test_bdd_integration:
+test_bdd_integration: $(METRICS_DIR)
 	@echo "Running all BDD integration tests..."
 	@$(GO_CMD) test -v -tags 'bdd_integration' -count=1 ./bdd
 test_bench:

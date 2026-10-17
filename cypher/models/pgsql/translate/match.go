@@ -10,6 +10,10 @@ import (
 func (s *Translator) translateMatch(match *cypher.Match) error {
 	currentQueryPart := s.query.CurrentPart()
 
+	// Note the current frame before adding frames from the match
+	// so we can use this point for optional match outer joins
+	joinFrame := s.scope.CurrentFrame()
+
 	for _, part := range currentQueryPart.ConsumeCurrentPattern().Parts {
 		if !part.IsTraversal {
 			if err := s.translateNonTraversalPatternPart(part); err != nil {
@@ -41,22 +45,22 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 
 	// If there is no valid previous frame, skip translating an `OPTIONAL MATCH`/treat as plain `MATCH`
 	if match.Optional {
-		if _, hasValidPrevious := s.previousValidFrame(s.scope.CurrentFrame()); hasValidPrevious {
-			return s.translateOptionalMatch()
+		if joinFrame != nil {
+			return s.translateOptionalMatch(joinFrame)
 		}
 	}
 
 	return nil
 }
 
-func (s *Translator) translateOptionalMatch() error {
+func (s *Translator) translateOptionalMatch(joinFrame *Frame) error {
 	// Building this aggregation step requires pushing another frame onto the scope
 	aggrFrame, err := s.scope.PushFrame()
 	if err != nil {
 		return err
 	}
 
-	query, err := s.buildOptionalMatchAggregationStep(aggrFrame)
+	query, err := s.buildOptionalMatchAggregationStep(aggrFrame, joinFrame)
 	if err != nil {
 		return err
 	}
@@ -83,13 +87,12 @@ func (s *Translator) translateOptionalMatch() error {
 
 // buildOptionalMatchAggregationStep constructs a "merge" frame to insert after an `OPTIONAL MATCH`,
 // which requires a subsequent "aggregation" step to collate the optional match to the initial result set.
-func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame) (pgsql.Query, error) {
+func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, originFrame *Frame) (pgsql.Query, error) {
 	// An "aggregation" frame like this will only be triggered after an OPTIONAL MATCH, which should only
 	// take place AFTER `n>=1` previous MATCH expressions. To properly base the aggregation, we need to
 	// join to the origin frame (prior to the OPTIONAL MATCH) based on the OPTIONAL MATCH's frame.
 	var (
 		optMatchFrame = aggregationFrame.Previous
-		originFrame   = optMatchFrame.Previous
 	)
 
 	// originFrame could be nil if no previous frame is defined (for ex., leading OPTIONAL MATCH, which is
@@ -103,11 +106,13 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame) 
 	// our join anchor between the two CTEs
 	var joinConstraints pgsql.Expression
 	for _, exported := range originFrame.Exported.Slice() {
+		// Note using this operator will match Null=Null. This is needed to handle OPTIONAL MATCH
+		// correctly. It assumes exports will always have appropriate non-null join keys.
 		joinConstraints = pgsql.OptionalAnd(
 			pgsql.NewParenthetical(
 				pgsql.NewBinaryExpression(
 					pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported},
-					pgsql.OperatorEquals,
+					pgsql.OperatorIsNotDistinctFrom,
 					pgsql.CompoundIdentifier{optMatchFrame.Binding.Identifier, exported},
 				),
 			),

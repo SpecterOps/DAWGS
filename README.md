@@ -37,6 +37,8 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 make test_bdd_integration
 ```
 
+The BDD run also writes a Cucumber results file to `.coverage/opencypher-tck-report.json` and an HTML summary to `.coverage/opencypher-tck-report.html`. The HTML report shows total, passed, and failed scenario counts.
+
 Use this module from another Go project:
 
 ```bash
@@ -59,6 +61,22 @@ queries. Its default capacity is 256 entries; callers that need a different capa
 `pg.NewDriverWithOptions`. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
 newly started compilations across every PostgreSQL driver in the process. See
 [PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
+
+The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
+storage maintenance on the `node` and `edge` tables in the following order:
+
+1. Drops INVALID btree indexes on `node` and `edge` partitions whose names end in `_ccnew[N]` or `_ccold[N]`. These are
+   left behind when a `REINDEX CONCURRENTLY` is interrupted. Drops use `DROP INDEX CONCURRENTLY IF EXISTS`.
+2. Runs `VACUUM (ANALYZE) node, edge`, which covers every partition.
+3. Rebuilds every valid btree index on `node` and `edge` partitions with `REINDEX INDEX CONCURRENTLY`, smallest first,
+   so that an early cancellation still completes as many rebuilds as possible. GIN indexes are not rebuilt; `VACUUM`
+   already merges their pending lists.
+
+Concurrent drops and rebuilds take `SHARE UPDATE EXCLUSIVE` locks, which do not block reads or writes. A failure on one
+statement does not stop the remaining work; every failure is returned together as a joined error. Context cancellation
+stops the pass before the next statement and is included in the returned error. A cancelled rebuild may leave an
+INVALID `_ccnew` index behind, which the next pass drops in step 1. The pass applies no thresholds and has no time
+limit; callers are responsible for scheduling it, for example behind a cooldown.
 
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
 

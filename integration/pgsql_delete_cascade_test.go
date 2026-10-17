@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 
@@ -72,6 +73,7 @@ func TestPostgreSQLStatementLevelDeleteTriggerCascadesEdges(t *testing.T) {
 			{nodes[1].ID, nodes[3].ID}, // start deleted -> removed
 			{nodes[4].ID, nodes[2].ID}, // end deleted -> removed
 			{nodes[3].ID, nodes[4].ID}, // neither deleted -> survives
+			{nodes[2].ID, nodes[2].ID}, // self-loop on deleted node -> removed
 		}
 
 		for _, edge := range edges {
@@ -105,6 +107,110 @@ func TestPostgreSQLStatementLevelDeleteTriggerCascadesEdges(t *testing.T) {
 	// Count the edge storage directly rather than via Cypher: a Cypher match only sees edges whose endpoints still
 	// exist, so an orphaned CascadeDeleteEdge left behind by a failed cascade would be silently excluded. A SQL
 	// count(*) over the edge table detects those orphans and holds the cascade to exactly the one surviving edge.
+	if edgeCount := countEdgesByKindSQL(t, ctx, db, edgeKind); edgeCount != 1 {
+		t.Fatalf("surviving edge count: got %d, want 1", edgeCount)
+	}
+}
+
+// TestPostgreSQLDeleteTriggerAvoidsEdgeSequentialScan verifies that the delete_node_edges trigger locates incident edges
+// through the start_id and end_id indexes. Sequential scans are disabled for the transaction so that the cost model's
+// preference for a tiny fixture does not mask a trigger statement that can only be planned as a full edge scan. The
+// trigger's statements are attributed to the deleting transaction, so pg_stat_xact_user_tables exposes any edge
+// partition scans they perform.
+func TestPostgreSQLDeleteTriggerAvoidsEdgeSequentialScan(t *testing.T) {
+	connStr := os.Getenv("CONNECTION_STRING")
+	if connStr == "" {
+		t.Skip("CONNECTION_STRING env var is not set")
+	}
+
+	driver, err := DriverFromConnectionString(connStr)
+	if err != nil {
+		t.Fatalf("failed to detect driver: %v", err)
+	}
+	if driver != pg.DriverName {
+		t.Skip("CONNECTION_STRING is not a PostgreSQL connection string")
+	}
+
+	var (
+		nodeKind       = graph.StringKind("CascadeDeleteScanNode")
+		edgeKind       = graph.StringKind("CascadeDeleteScanEdge")
+		db, ctx        = SetupDBWithKinds(t, CleanupGraph, graph.Kinds{nodeKind}, graph.Kinds{edgeKind})
+		deletedIDs     []int64
+		edgeSeqScans   int64
+		edgeIndexScans int64
+	)
+
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		var nodes [3]*graph.Node
+
+		for i := range nodes {
+			node, err := tx.CreateNode(graph.NewProperties(), nodeKind)
+			if err != nil {
+				return err
+			}
+			nodes[i] = node
+		}
+
+		deletedIDs = []int64{int64(nodes[0].ID)}
+
+		edges := [][2]graph.ID{
+			{nodes[0].ID, nodes[1].ID}, // start deleted -> removed
+			{nodes[2].ID, nodes[0].ID}, // end deleted -> removed
+			{nodes[1].ID, nodes[2].ID}, // neither deleted -> survives
+		}
+
+		for _, edge := range edges {
+			if _, err := tx.CreateRelationshipByIDs(edge[0], edge[1], edgeKind, graph.NewProperties()); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatalf("failed to create delete-scan fixture: %v", err)
+	}
+
+	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		setResult := tx.Raw("set local enable_seqscan = off", nil)
+		setResult.Close()
+		if err := setResult.Error(); err != nil {
+			return fmt.Errorf("disable sequential scan: %w", err)
+		}
+
+		deleteResult := tx.Raw("delete from node where id = any(@ids)", map[string]any{"ids": deletedIDs})
+		deleteResult.Close()
+		if err := deleteResult.Error(); err != nil {
+			return fmt.Errorf("delete nodes: %w", err)
+		}
+
+		result := tx.Raw(`select coalesce(sum(seq_scan), 0)::int8, coalesce(sum(idx_scan), 0)::int8
+			from pg_stat_xact_user_tables where relname like 'edge\_%'`, nil)
+		defer result.Close()
+
+		if !result.Next() {
+			if err := result.Error(); err != nil {
+				return err
+			}
+			return errors.New("expected scan count row")
+		}
+
+		if err := result.Scan(&edgeSeqScans, &edgeIndexScans); err != nil {
+			return err
+		}
+
+		return result.Error()
+	}); err != nil {
+		t.Fatalf("failed to delete nodes and read edge scan counts: %v", err)
+	}
+
+	if edgeSeqScans != 0 {
+		t.Fatalf("delete_node_edges sequentially scanned edge partitions: got %d sequential scans, want 0", edgeSeqScans)
+	}
+
+	if edgeIndexScans == 0 {
+		t.Fatal("delete_node_edges performed no edge index scans")
+	}
+
 	if edgeCount := countEdgesByKindSQL(t, ctx, db, edgeKind); edgeCount != 1 {
 		t.Fatalf("surviving edge count: got %d, want 1", edgeCount)
 	}
