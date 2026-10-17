@@ -125,7 +125,11 @@ func TestEncryptedCollectionArchiveSyntheticRoundTrip(t *testing.T) {
 
 	dumpDir := writeArchiveFixture(t)
 	archivePath := filepath.Join(dir, "dump.tar.pq")
-	if err := writeEncryptedCollectionArchive(dumpDir, archivePath, publicKey); err != nil {
+	if err := WriteCollectionArchiveFile(ArchiveFileOptions{
+		CollectionDir: dumpDir,
+		OutputPath:    archivePath,
+		Recipient:     publicKey,
+	}); err != nil {
 		t.Fatalf("write encrypted collection archive: %v", err)
 	}
 
@@ -243,7 +247,11 @@ func TestEncryptedCollectionArchiveFailureDoesNotReplaceOutput(t *testing.T) {
 	dir := t.TempDir()
 	dumpDir := writeArchiveFixture(t)
 	goodArchivePath := filepath.Join(dir, "good.tar.pq")
-	if err := writeEncryptedCollectionArchive(dumpDir, goodArchivePath, publicKey); err != nil {
+	if err := WriteCollectionArchiveFile(ArchiveFileOptions{
+		CollectionDir: dumpDir,
+		OutputPath:    goodArchivePath,
+		Recipient:     publicKey,
+	}); err != nil {
 		t.Fatalf("write encrypted collection archive: %v", err)
 	}
 
@@ -474,7 +482,11 @@ func TestEncryptedCollectionArchiveOutputCollisionFails(t *testing.T) {
 	_, publicKey := generateTestArchiveKeyPair(t)
 	dumpDir := writeArchiveFixture(t)
 
-	if err := writeEncryptedCollectionArchive(dumpDir, filepath.Join(dumpDir, manifestFileName), publicKey); err == nil {
+	if err := WriteCollectionArchiveFile(ArchiveFileOptions{
+		CollectionDir: dumpDir,
+		OutputPath:    filepath.Join(dumpDir, manifestFileName),
+		Recipient:     publicKey,
+	}); err == nil {
 		t.Fatalf("expected archive path collision to fail")
 	}
 }

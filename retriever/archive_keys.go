@@ -373,7 +373,7 @@ func writeExclusiveArchiveKeyFile(path string, mode os.FileMode, write func(io.W
 }
 
 func requirePathDoesNotExist(path string) error {
-	if _, err := os.Stat(path); err == nil {
+	if _, err := os.Lstat(path); err == nil {
 		return fmt.Errorf("%s already exists", path)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("inspect %s: %w", path, err)
