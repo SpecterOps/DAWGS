@@ -129,11 +129,8 @@ func WriteCollectionArchiveFile(options ArchiveFileOptions) error {
 		return fmt.Errorf("create archive temp file: %w", err)
 	}
 	tempPath := tempFile.Name()
-	cleanupTemp := true
 	defer func() {
-		if cleanupTemp {
-			_ = os.Remove(tempPath)
-		}
+		_ = os.Remove(tempPath)
 	}()
 
 	if options.Recipient != nil {
@@ -162,13 +159,11 @@ func WriteCollectionArchiveFile(options ArchiveFileOptions) error {
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close archive temp file: %w", err)
 	}
-	if err := requirePathDoesNotExist(outputPath); err != nil {
-		return err
+	// Linking publishes the completed file only if the destination is absent.
+	// Unlike a check followed by Rename, this cannot replace a concurrent output.
+	if err := os.Link(tempPath, outputPath); err != nil {
+		return fmt.Errorf("publish archive: %w", err)
 	}
-	if err := os.Rename(tempPath, outputPath); err != nil {
-		return fmt.Errorf("rename archive: %w", err)
-	}
-	cleanupTemp = false
 
 	if options.Recipient != nil {
 		slog.Info("retriever archive encryption completed",

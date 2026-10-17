@@ -96,7 +96,8 @@ PostgreSQL and Neo4j, uncompressed, gzip, and zstd fragments, bounded keyset
 scans, resumable dump checkpoints, checksum validation before load, optional
 deterministic property scrubbing, optional write-only Parquet sidecars for
 analytical readers, and a read-throughput benchmark mode. It can also package
-dumps as single unencrypted TAR or HPKE/ML-KEM encrypted TAR archives. See
+dumps as single unencrypted TAR or HPKE/ML-KEM encrypted TAR archives. Archive
+file creation refuses existing output paths. See
 [cmd/retriever/README.md](cmd/retriever/README.md) for dump, Parquet sidecar,
 archive, load, scrubbed dump, metrics verification, and benchmark
 examples.
