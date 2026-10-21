@@ -91,3 +91,35 @@ func TestDumpArchiveOutputPreflightBeforeDatabase(t *testing.T) {
 		t.Fatalf("expected archive preflight error before database open, got %v", err)
 	}
 }
+
+func TestDumpUnencryptedArchiveValidationBeforeDatabase(t *testing.T) {
+	runtime := commandRuntime{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "dump.tar")
+	dumpDir := filepath.Join(dir, "dump")
+
+	for name, testCase := range map[string]struct {
+		args []string
+		want string
+	}{
+		"missing output":            {[]string{"dump", "-archive-out", archivePath}, "output directory is required"},
+		"recipient without archive": {[]string{"dump", "-out", dumpDir, "-recipient", "public.key"}, "-recipient requires -archive-out"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := runtime.run(context.Background(), testCase.args)
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+		})
+	}
+
+	if err := os.WriteFile(archivePath, []byte("exists"), 0o600); err != nil {
+		t.Fatalf("write existing archive: %v", err)
+	}
+	err := runtime.run(context.Background(), []string{
+		"dump", "-out", dumpDir, "-archive-out", archivePath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected archive preflight error before database open, got %v", err)
+	}
+}

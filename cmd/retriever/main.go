@@ -92,8 +92,8 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 	flags.BoolVar(&cfg.Force, "force", false, "Replace an existing non-empty output directory.")
 	flags.BoolVar(&cfg.Resume, "resume", false, "Resume an interrupted dump from its validated checkpoint.")
 	flags.BoolVar(&cfg.Parquet, "parquet", false, "Also write Parquet sidecars for each JSONL fragment.")
-	flags.StringVar(&archiveOut, "archive-out", "", "Optional encrypted archive output path.")
-	flags.StringVar(&recipientPath, "recipient", "", "Recipient public key for -archive-out.")
+	flags.StringVar(&archiveOut, "archive-out", "", "Optional TAR archive output path.")
+	flags.StringVar(&recipientPath, "recipient", "", "Recipient public key to encrypt -archive-out.")
 	flags.StringVar(&scrubValue, "scrub", string(cfg.Scrub), "Scrub mode: none or full.")
 	flags.StringVar(&cfg.Salt, "salt", "", "Scrub salt. Overrides RETRIEVER_SCRUB_SALT and is never written.")
 	flags.StringVar(&scrubConfig, "config", "", "Optional retriever TOML config for scrub classifier settings.")
@@ -134,16 +134,13 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 
 	var archiveRecipient hpke.PublicKey
 	if strings.TrimSpace(archiveOut) != "" {
-		if strings.TrimSpace(recipientPath) == "" {
-			return fmt.Errorf("-archive-out requires -recipient")
+		if strings.TrimSpace(recipientPath) != "" {
+			var err error
+			archiveRecipient, err = retriever.LoadArchivePublicKey(recipientPath)
+			if err != nil {
+				return err
+			}
 		}
-
-		var err error
-		archiveRecipient, err = retriever.LoadArchivePublicKey(recipientPath)
-		if err != nil {
-			return err
-		}
-
 		if err := retriever.PreflightArchiveOutputPath(archiveOut); err != nil {
 			return err
 		}
@@ -175,10 +172,13 @@ func (s commandRuntime) runDump(ctx context.Context, args []string) error {
 
 	var archiveLine string
 	if strings.TrimSpace(archiveOut) != "" {
-		if err := retriever.WriteEncryptedCollectionArchiveFile(cfg.OutputDir, archiveOut, archiveRecipient); err != nil {
+		if err := retriever.WriteCollectionArchiveFile(retriever.ArchiveFileOptions{
+			CollectionDir: cfg.OutputDir,
+			OutputPath:    archiveOut,
+			Recipient:     archiveRecipient,
+		}); err != nil {
 			return err
 		}
-
 		archiveLine = fmt.Sprintf("archive: %s\n", archiveOut)
 	}
 

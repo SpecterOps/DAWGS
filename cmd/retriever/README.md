@@ -163,7 +163,28 @@ The listener shuts down when the Retriever command exits, and failure to bind
 the requested address fails the command before database work starts. Treat all
 captured profiles as sensitive operational artifacts.
 
-## Encrypted Archives
+## Archives
+
+Pass `-archive-out` without `-recipient` to write an unencrypted TAR file
+alongside the collection directory:
+
+```bash
+retriever dump \
+  -connection "$CONNECTION_STRING" \
+  -out ./dumpdir \
+  -archive-out ./dump.tar
+```
+
+The TAR contains the manifest and its JSONL fragments. `-out` remains the
+collection directory; `-archive-out` adds a second artifact. Parquet sidecars,
+when requested, stay in the directory and are not included in the TAR.
+Existing archive files are refused, and partial archive files are removed if
+packaging fails.
+To load an unencrypted TAR, extract it into a collection directory and pass
+that directory to `retriever load -in`. The `retriever unpack` and
+`retriever load -archive` commands currently accept encrypted archives only.
+
+### Encrypted Archives
 
 Generate a recipient key pair before creating encrypted archives:
 
@@ -177,8 +198,8 @@ The private key is written as an unencrypted JSON key envelope with restrictive
 file permissions. Store it separately from archives and treat it as sensitive.
 Key generation refuses to replace existing key files.
 
-Pass `-archive-out` and `-recipient` to create a single encrypted TAR archive
-after a dump succeeds:
+Pass `-archive-out` with `-recipient` to write an encrypted TAR archive
+alongside the collection directory:
 
 ```bash
 retriever dump \
@@ -192,10 +213,10 @@ retriever dump \
 ```
 
 The archive layer uses an uncompressed TAR stream encrypted with HPKE using
-ML-KEM-1024, HKDF-SHA512, and AES-256-GCM. Fragment compression inside the dump
-directory remains controlled by `-compression`; the archive itself is not
-compressed. If archive creation fails, the command fails and removes partial
-archive output while leaving the completed dump directory for inspection.
+ML-KEM-1024, HKDF-SHA512, and AES-256-GCM. Fragment compression remains
+controlled by `-compression`; the archive itself is not compressed. If archive
+creation fails, the command removes partial archive output and leaves the
+completed collection directory for inspection.
 
 Unpack an encrypted archive with the private key:
 
@@ -247,7 +268,7 @@ retriever load \
   -in ./dumpdir
 ```
 
-Encrypted archives produced by `dump -archive-out` can be loaded directly:
+Encrypted archives produced by `dump -archive-out -recipient` can be loaded directly:
 
 ```bash
 retriever load \
