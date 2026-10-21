@@ -35,6 +35,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/opengraph"
 )
 
 const liveAggregateTraversalCypher = `
@@ -50,6 +51,71 @@ RETURN u
 ORDER BY adminCount DESC
 LIMIT 100
 `
+
+// TestPostgreSQLAggregateTraversalCountBindingSemantics runs the shared F5/F6
+// cases against both compiler modes, including exact counts and mutation state.
+func TestPostgreSQLAggregateTraversalCountBindingSemantics(t *testing.T) {
+	var corpus cypherTemplateFile
+	for _, file := range loadCypherTemplateFiles(t) {
+		if strings.HasSuffix(file.path, "/aggregate_traversal_count_shapes.json") {
+			corpus = file
+			break
+		}
+	}
+	if len(corpus.Families) == 0 {
+		t.Fatal("aggregate traversal count corpus is missing")
+	}
+	nodeKinds, edgeKinds := cypherTemplateKinds([]cypherTemplateFile{corpus})
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		CleanupMode:          CleanupGraph,
+		ExtraNodeKinds:       nodeKinds,
+		ExtraEdgeKinds:       edgeKinds,
+	})
+	ClearGraph(t, session.DB, session.Ctx)
+	pgDriver := session.DB.(*pg.Driver)
+	defaultGraph, ok := pgDriver.DefaultGraph()
+	if !ok {
+		t.Fatal("default graph is missing")
+	}
+
+	for _, mode := range []translate.OptimizerMode{translate.OptimizerEnabled, translate.OptimizerDisabled} {
+		t.Run(string(mode), func(t *testing.T) {
+			for _, family := range corpus.Families {
+				t.Run(family.Name, func(t *testing.T) {
+					for _, variant := range family.Variants {
+						t.Run(variant.Name, func(t *testing.T) {
+							query := renderCypherTemplate(t, family.Template, variant.Vars)
+							parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+							if err != nil {
+								t.Fatal(err)
+							}
+							translation, err := translate.TranslateWithOptions(session.Ctx, parsed, pgDriver.KindMapper(), nil, defaultGraph.ID, translate.Options{OptimizerMode: mode})
+							if err != nil {
+								t.Fatal(err)
+							}
+							formatted, err := translate.Translated(translation)
+							if err != nil {
+								t.Fatal(err)
+							}
+							maps.Copy(translation.Parameters, formatted.Parameters)
+							if err := session.WithRollbackFixture(t, family.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
+								result := tx.Raw(formatted.Statement, translation.Parameters)
+								parseAssertion(t, variant.Assert).checkResult(t, result, newAssertionContext(idMap))
+								result.Close()
+								return runStateAssertions(t, tx, idMap, variant.PostAssertions)
+							}); err != nil {
+								t.Fatal(err)
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
 
 type livePGKindMapper struct {
 	pool *pgxpool.Pool
