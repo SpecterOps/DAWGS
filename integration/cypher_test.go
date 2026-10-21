@@ -194,6 +194,7 @@ func TestCypher(t *testing.T) {
 //	{"path_relationship_records": [[{start,end,kind,props}...]]} — exact ordered relationships for every returned path
 //	{"relationship_list_kinds": [["K"...]]} — exact multiset of returned relationship-list kind sequences
 //
+// ordered_column_values maps column names to exact scalar values in row order.
 // Object assertions may combine multiple keys; every assertion must pass.
 func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 	t.Helper()
@@ -241,6 +242,9 @@ func parseAssertion(t *testing.T, raw json.RawMessage) caseAssertion {
 
 		case "ordered_scalar_values":
 			assertions = append(assertions, assertScalarValues(decodeAssertionValue[[]any](t, key, val), true))
+
+		case "ordered_column_values":
+			assertions = append(assertions, assertOrderedColumnValues(decodeAssertionValue[map[string][]any](t, key, val)))
 
 		case "row_values":
 			assertions = append(assertions, assertRowValues(decodeAssertionValue[[][]any](t, key, val), false))
@@ -678,6 +682,30 @@ func assertScalarValues(expected []any, ordered bool) resultAssertion {
 			}
 		} else {
 			assertStringMultiset(t, got, want, "scalar values")
+		}
+	}
+}
+
+// assertOrderedColumnValues checks scalar columns alongside entity projections.
+func assertOrderedColumnValues(expected map[string][]any) resultAssertion {
+	return func(t *testing.T, result queryResult, ctx assertionContext) {
+		t.Helper()
+		for key, values := range expected {
+			column := queryResult{}
+			for rowIdx, row := range result.rows {
+				index := -1
+				for idx, rowKey := range row.keys {
+					if rowKey == key {
+						index = idx
+						break
+					}
+				}
+				if index < 0 || index >= len(row.values) {
+					t.Fatalf("row %d has no column %q", rowIdx, key)
+				}
+				column.rows = append(column.rows, resultRow{values: []any{row.values[index]}})
+			}
+			assertScalarValues(values, true)(t, column, ctx)
 		}
 	}
 }
