@@ -3195,9 +3195,12 @@ func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol s
 	leftNode, leftOK := patternPart.PatternElements[0].AsNodePattern()
 	relationship, relationshipOK := patternPart.PatternElements[1].AsRelationshipPattern()
 	rightNode, rightOK := patternPart.PatternElements[2].AsNodePattern()
+	// The count executor filters sources using only the first MATCH and does
+	// not enforce terminal = source. Keep these constraints on ordinary traversal.
 	if !leftOK || !relationshipOK || !rightOK ||
 		leftNode == nil || relationship == nil || rightNode == nil ||
 		variableSymbol(leftNode.Variable) != sourceSymbol ||
+		len(leftNode.Kinds) > 0 ||
 		leftNode.Properties != nil ||
 		relationship.Variable != nil ||
 		relationship.Range == nil ||
@@ -3205,7 +3208,8 @@ func aggregateTraversalMatch(readingClause *cypher.ReadingClause, sourceSymbol s
 		relationship.Direction == graph.DirectionBoth ||
 		rightNode.Properties != nil ||
 		rightNode.Variable == nil ||
-		rightNode.Variable.Symbol == "" {
+		rightNode.Variable.Symbol == "" ||
+		rightNode.Variable.Symbol == sourceSymbol {
 		return nil, nil, nil, "", false
 	}
 

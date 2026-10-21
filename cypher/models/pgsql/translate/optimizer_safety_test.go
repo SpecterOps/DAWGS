@@ -2851,6 +2851,34 @@ LIMIT 100
 	}
 }
 
+// TestAggregateTraversalCountFallsBackForBindingConstraints verifies that F5 and
+// F6 never reach the specialized count SQL, including through alias projections.
+func TestAggregateTraversalCountFallsBackForBindingConstraints(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		pattern string
+		count   string
+	}{
+		{name: "F5 source labels", pattern: "(s:Group)-[:MemberOf*1..2]->(t)", count: "t"},
+		{name: "F5 source labels row count", pattern: "(s:Group)-[:MemberOf*1..2]->(t)", count: "*"},
+		{name: "F6 repeated endpoint", pattern: "(s)-[:MemberOf*1..2]->(s)", count: "s"},
+		{name: "F6 inbound repeated endpoint", pattern: "(s)<-[:MemberOf*1..2]-(s)", count: "*"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			translation := optimizerSafetyTranslation(t, fmt.Sprintf(
+				"MATCH (s:User) MATCH %s WITH s, count(%s) AS c RETURN c AS total, s AS source ORDER BY total DESC LIMIT 10",
+				tc.pattern, tc.count))
+			requireNoPlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+			requireNoOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
+			formatted, err := Translated(translation)
+			require.NoError(t, err)
+			require.NotContains(t, strings.ToLower(formatted.Statement), "candidate_sources(root_id)")
+		})
+	}
+}
+
 // TestOptimizerSafetyAggregateTraversalCountSkipsParameterizedCorrelatedTerminalFilter verifies optimizer safety aggregate traversal count skips parameterized correlated terminal filter behavior.
 func TestOptimizerSafetyAggregateTraversalCountSkipsParameterizedCorrelatedTerminalFilter(t *testing.T) {
 	t.Parallel()

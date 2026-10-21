@@ -133,6 +133,10 @@ queries. Its default capacity is 256 entries; callers that need a different capa
 newly started compilations across every PostgreSQL driver in the process. See
 [PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
 
+Aggregate traversal counts use ordinary traversal when the second `MATCH` labels the source or reuses it as the
+terminal. The shared `aggregate_traversal_count_shapes` integration templates verify source labels, cycle counts,
+ranking, and mutation effects; PostgreSQL coverage executes these cases with the optimizer enabled and disabled.
+
 The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
 storage maintenance on the `node` and `edge` tables in the following order:
 

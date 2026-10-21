@@ -2075,6 +2075,41 @@ func TestLoweringPlanSkipsAggregateTraversalCountWithCorrelatedTerminalFilter(t 
 	require.NotContains(t, plan.LoweringPlan.Decisions(), LoweringDecision{Name: LoweringAggregateTraversalCount})
 }
 
+// TestAggregateTraversalCountAdmissionPreservesBindingConstraints guards F5 and F6.
+func TestAggregateTraversalCountAdmissionPreservesBindingConstraints(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		pattern string
+		count   string
+		want    bool
+	}{
+		{name: "ordinary terminal count", pattern: "(s)-[:MemberOf*1..2]->(t)", count: "t", want: true},
+		{name: "ordinary row count", pattern: "(s)-[:MemberOf*1..2]->(t)", count: "*", want: true},
+		{name: "F5 additional source label", pattern: "(s:Group)-[:MemberOf*1..2]->(t)", count: "t"},
+		{name: "F5 multiple source labels", pattern: "(s:Group:Computer)-[:MemberOf*1..2]->(t)", count: "*"},
+		{name: "F5 repeated source label", pattern: "(s:User)-[:MemberOf*1..2]->(t)", count: "t"},
+		{name: "F6 repeated endpoint", pattern: "(s)-[:MemberOf*1..2]->(s)", count: "s"},
+		{name: "F6 repeated endpoint row count", pattern: "(s)-[:MemberOf*1..2]->(s)", count: "*"},
+		{name: "F6 inbound repeated endpoint", pattern: "(s)<-[:MemberOf*1..2]-(s)", count: "s"},
+		{name: "F6 zero depth repeated endpoint", pattern: "(s)-[:MemberOf*0..2]->(s)", count: "s"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			regularQuery, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(
+				"MATCH (s:User) MATCH %s WITH s, count(%s) AS c RETURN c AS total, s AS source ORDER BY total DESC LIMIT 10",
+				tc.pattern, tc.count))
+			require.NoError(t, err)
+
+			_, admitted := AggregateTraversalCountShapeForQuery(regularQuery)
+			require.Equal(t, tc.want, admitted, "raw query admission")
+			plan, err := Optimize(regularQuery)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, len(plan.LoweringPlan.AggregateTraversalCount) > 0, "optimized query admission")
+		})
+	}
+}
+
 // TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip verifies lowering plan skips suffix pushdown after right endpoint predicate direction flip behavior.
 func TestLoweringPlanSkipsSuffixPushdownAfterRightEndpointPredicateDirectionFlip(t *testing.T) {
 	t.Parallel()
