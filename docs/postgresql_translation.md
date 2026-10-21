@@ -22,6 +22,9 @@ Current PostgreSQL optimization coverage includes:
   trees, planned/applied lowerings, skipped lowerings, and skipped-lowering reasons.
 - Count-store fast paths for simple node and directed-edge count queries, including typed variants where kind filters
   map cleanly.
+- Aggregate traversal counts for eligible source-anchored variable-length matches followed by descending count ranking.
+  A source label on the traversal's second `MATCH`, or reuse of the source as its terminal, selects ordinary traversal
+  so both source constraints and endpoint identity are preserved.
 - Predicate placement accounting for binding-scope predicates pushed into fixed traversal steps, expansion seeds,
   expansion edges, expansion terminal checks, and eligible pattern predicates.
 - Shared and late path materialization for path functions such as `nodes(p)`, `relationships(p)`,

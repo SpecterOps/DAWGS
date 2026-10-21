@@ -17,6 +17,10 @@ The assertion vocabulary includes exact fixture-backed state checks:
 - `relationship_records` for exact triples and complete property maps;
 - `exact_int` and `row_count` for counts.
 
+Use `ordered_column_values` to check scalar values alongside returned entities,
+for example `{"ordered_column_values": {"total": [2, 1]}}`. Combine it with
+`ordered_node_ids` and `keys` to verify ranked node/count pairs and aliases.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse
