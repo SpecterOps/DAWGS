@@ -872,6 +872,16 @@ func (s *Translator) applyIDOnlyNodeProjection(part *PatternPart, stepIndex int,
 	if part == nil || binding == nil || !part.HasTarget {
 		return false
 	}
+	// Without a field-requirement plan (including optimizer-disabled mode),
+	// preserve composites: a missing decision cannot prove an ID is sufficient.
+	if len(s.fieldRequirementDecisions[part.Target.QueryPartIndex]) == 0 {
+		return false
+	}
+	// A materialized frame already fixes this binding's representation.
+	// Carry it unchanged; changing the flag cannot convert its stored value.
+	if binding.LastProjection != nil {
+		return false
+	}
 
 	var (
 		isContinuation = traversalStepContinuesFromBinding(part, stepIndex, binding)

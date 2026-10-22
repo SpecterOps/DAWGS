@@ -1,0 +1,341 @@
+{
+  "families": [
+    {
+      "name": "F7 leading and attached UNWIND",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "seed",
+            "kinds": [
+              "F7Seed"
+            ],
+            "properties": {
+              "name": "seed"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "empty",
+          "vars": {
+            "query": "UNWIND [] AS x WITH x RETURN x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "singleton",
+          "vars": {
+            "query": "UNWIND [1] AS x WITH x RETURN x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "multiple",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x WITH x RETURN x"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "filter",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x WITH x WHERE x > 1 RETURN x + 10"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                12
+              ],
+              [
+                13
+              ]
+            ]
+          }
+        },
+        {
+          "name": "consecutive",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x UNWIND [3, 4] AS y WITH x, y RETURN x, y"
+          },
+          "assert": {
+            "row_count": 4,
+            "row_values": [
+              [
+                1,
+                3
+              ],
+              [
+                1,
+                4
+              ],
+              [
+                2,
+                3
+              ],
+              [
+                2,
+                4
+              ]
+            ]
+          }
+        },
+        {
+          "name": "source attached",
+          "vars": {
+            "query": "MATCH (n:F7Seed) UNWIND [1, 2] AS x WITH n, x RETURN n.name, x"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "seed",
+                1
+              ],
+              [
+                "seed",
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "consecutive parts",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x WITH x UNWIND [3] AS y WITH x, y RETURN x + y"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                4
+              ],
+              [
+                5
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "F7 multipart CREATE and mutation effects",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "seed",
+            "kinds": [
+              "F7Seed"
+            ],
+            "properties": {
+              "name": "seed"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "original",
+          "vars": {
+            "query": "CREATE (n) WITH n RETURN n"
+          },
+          "assert": {
+            "row_count": 1,
+            "contains_node_with_props": {}
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "properties",
+          "vars": {
+            "query": "CREATE (n:F7Created {name: 'created', x: 7}) WITH n RETURN n.name, n.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "created",
+                7
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "read properties after boundary",
+          "vars": {
+            "query": "CREATE (n:F7Created {name: 'created'}) WITH n WHERE n.name = 'created' RETURN n.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "created"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "source per row",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x CREATE (n:F7Created {x: x}) WITH n, x RETURN n.x, x"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                1,
+                1
+              ],
+              [
+                2,
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "match with create",
+          "vars": {
+            "query": "MATCH (s:F7Seed) WITH s CREATE (n:F7Created {name: s.name}) WITH n RETURN n.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "seed"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty source",
+          "vars": {
+            "query": "UNWIND [] AS x CREATE (n:F7Created {x: x}) WITH n RETURN n.x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "multiple create boundaries",
+          "vars": {
+            "query": "CREATE (a:F7Created {x: 1}) WITH a CREATE (b:F7Created {x: 2}) WITH a, b RETURN a.x, b.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1,
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "created relationships",
+          "vars": {
+            "query": "CREATE (a:F7Created {x: 1})-[:F7Edge]->(b:F7Created {x: 2}) WITH a, b RETURN a.x, b.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1,
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:F7Seed RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

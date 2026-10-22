@@ -3383,8 +3383,14 @@ func (s *ExpansionBuilder) bidirectionalShortestPathsParameters(expansionModel *
 
 // Build combines the configured expansion stages into a recursive CTE and final projection query.
 func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTableExpressions ...pgsql.CommonTableExpression) pgsql.Query {
+	primerStatement := s.PrimerStatement
+	if s.model != nil && s.model.Options.MaxDepth.Set && s.model.Options.MaxDepth.Value == 0 {
+		// The primer always consumes one edge. A zero-only expansion must
+		// obtain its rows exclusively from the zero-depth branch.
+		primerStatement.Where = pgsql.OptionalAnd(primerStatement.Where, pgsql.NewLiteral(false, pgsql.Boolean))
+	}
 	expansionBody := pgsql.SetExpression(pgsql.SetOperation{
-		LOperand: s.PrimerStatement,
+		LOperand: primerStatement,
 		ROperand: s.RecursiveStatement,
 		Operator: pgsql.OperatorUnion,
 		All:      s.UseUnionAll,
@@ -3404,7 +3410,7 @@ func (s *ExpansionBuilder) Build(expansionIdentifier pgsql.Identifier, commonTab
 		expansionBody = pgsql.SetOperation{
 			LOperand: pgsql.SetOperation{
 				LOperand: *s.ZeroDepthStatement,
-				ROperand: s.PrimerStatement,
+				ROperand: primerStatement,
 				Operator: pgsql.OperatorUnion,
 				All:      s.UseUnionAll,
 			},
@@ -4333,16 +4339,7 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 			Name:    pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier},
 			Binding: models.EmptyOptional[pgsql.Identifier](),
 		},
-		Joins: []pgsql.Join{
-			expansionNodeLookupJoin(
-				traversalStep.LeftNode,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionRootID},
-			),
-			expansionNodeLookupJoin(
-				traversalStep.RightNode,
-				pgsql.CompoundIdentifier{expansionModel.Frame.Binding.Identifier, expansionNextID},
-			),
-		},
+		Joins: expansionProjectionNodeJoins(traversalStep, expansionModel.Frame.Binding.Identifier),
 	})
 
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
@@ -4352,6 +4349,19 @@ func (s *Translator) buildExpansionPatternStep(traversalStepContext TraversalSte
 			projectionConstraints,
 			selfLoopIdentityConstraint(traversalStep, expansionModel.Frame.Binding.Identifier),
 		)
+		// Terminal predicates may already have been consumed by the prefix.
+		// Correlate every completed state, including zero-depth states, with
+		// the terminal identity carried by that prefix independently of them.
+		if traversalStep.RightNodeBound {
+			projectionConstraints = pgsql.OptionalAnd(projectionConstraints,
+				boundEndpointProjectionConstraint(
+					traversalStep.Frame.Previous.Binding.Identifier,
+					traversalStep.RightNode,
+					expansionModel.Frame.Binding.Identifier,
+					expansionNextID,
+				),
+			)
+		}
 		projectionConstraints = rewriteCurrentFrameProjectionReferences(
 			projectionConstraints,
 			traversalStep.Frame.Binding.Identifier,
@@ -4829,11 +4839,12 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 		return err
 	}
 
-	// Remove the previous projections of the root and terminal node to reproject them after expansion
-	traversalStep.LeftNode.Dematerialize()
-	traversalStep.RightNode.Dematerialize()
+	// Decide while the input representations are still known. Seed and
+	// correlation expressions read those frames even after rehydration.
 	leftNodeIDOnly := s.applyIDOnlyNodeProjection(part, stepIndex, traversalStep.LeftNode)
 	rightNodeIDOnly := s.applyIDOnlyNodeProjection(part, stepIndex, traversalStep.RightNode)
+	traversalStep.LeftNode.Dematerialize()
+	traversalStep.RightNode.Dematerialize()
 	if leftNodeIDOnly || rightNodeIDOnly {
 		s.recordLowering(optimize.LoweringFieldRequirements)
 	}

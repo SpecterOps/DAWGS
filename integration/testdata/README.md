@@ -21,6 +21,21 @@ Use `ordered_column_values` to check scalar values alongside returned entities,
 for example `{"ordered_column_values": {"total": [2, 1]}}`. Combine it with
 `ordered_node_ids` and `keys` to verify ranked node/count pairs and aliases.
 
+`bound_expansion_endpoint_shapes.json` checks expansions that reuse a bound
+terminal: false and genuine cycles, zero hops, repeated bindings through
+`WITH`, per-row endpoint correlation, and mutation selection. Assertions check
+complete returned node records and ordered path node IDs. Direction coverage
+includes outbound/inbound expansions and undirected fixed prefixes; fully
+undirected variable expansions are currently unsupported by the translator.
+
+`node_representation_shapes.json` checks carried node IDs, aliases, inline node
+and relationship map expressions, and exact mutation selection.
+`leading_multipart_shapes.json` checks leading/attached UNWIND and CREATE across
+WITH, including empty inputs, properties, relationship creation, and post-state.
+`correlated_suffix_shapes.json` checks carried suffix predicates on boundaries,
+nodes, and relationships, with ordered path nodes and duplicate row multiplicity.
+PostgreSQL tests also execute these corpora with each compiler mode explicitly.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse
