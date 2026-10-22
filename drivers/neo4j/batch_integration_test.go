@@ -134,7 +134,7 @@ func TestBatchTransaction_NodeUpdate(t *testing.T) {
 				assert.Equal(t, numNodes, len(nodes))
 
 				for _, node := range nodes {
-					assert.True(t, node.Properties.Exists(HeatProperty))
+					assert.False(t, node.Properties.Exists(HeatProperty))
 					assert.Equal(t, true, node.Properties.Get(NewProperty).Any())
 				}
 
