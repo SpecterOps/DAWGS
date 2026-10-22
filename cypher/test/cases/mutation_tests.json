@@ -368,6 +368,62 @@
         "query": "match (x:NodeKind1)-[r:EdgeKind1]->(y:NodeKind2) set x.src = true, y.dst = true with x, y set y.seen = x.src return y",
         "fitness": 2
       }
+    },
+    {
+      "name": "DAWGS-045 node set remove set",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.x = 1 remove n.x set n.x = 2 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 node remove set remove",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) remove n.x set n.x = 1 remove n.x return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 relationship set remove set",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() set r.x = 1 remove r.x set r.x = 2 return r",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-045 kind set remove set",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n:NodeKind2 remove n:NodeKind2 set n:NodeKind2 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 kind remove set remove",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) remove n:NodeKind2 set n:NodeKind2 remove n:NodeKind2 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 mixed fields and kinds",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.x = 1, n.y = 2, n:NodeKind2 remove n.x, n:NodeKind2 set n.y = 3 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 ordered changes across WITH",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.x = 1 remove n.x with n set n.x = 2 remove n.x return n",
+        "fitness": -1
+      }
     }
   ]
 }
