@@ -1,0 +1,652 @@
+{
+  "families": [
+    {
+      "name": "updates preserve input row multiplicity and null targets",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["UpdateSource"], "properties": {"name": "source"}},
+          {"id": "isolated", "kinds": ["UpdateSource"], "properties": {"name": "isolated"}},
+          {"id": "one", "kinds": ["UpdateTarget"], "properties": {"name": "one"}},
+          {"id": "two", "kinds": ["UpdateTarget"], "properties": {"name": "two"}},
+          {"id": "decoy", "kinds": ["UpdateDecoy"], "properties": {"name": "decoy"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "one", "kind": "UpdateLink", "properties": {"marker": "one"}},
+          {"start_id": "source", "end_id": "two", "kind": "UpdateLink", "properties": {"marker": "two"}},
+          {"start_id": "source", "end_id": "decoy", "kind": "OtherUpdateLink", "properties": {"marker": "decoy"}},
+          {"start_id": "one", "end_id": "source", "kind": "UpdateLink", "properties": {"marker": "reverse"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "fan out node updates",
+          "vars": {
+            "query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET x.src = true, y.dst = true RETURN x.name, y.name, x.src, y.dst ORDER BY y.name"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["source", "one", true, true], ["source", "two", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "repeated source is the last target",
+          "vars": {
+            "query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET y.dst = true, x.src = true RETURN x.name, y.name, x.src, y.dst ORDER BY y.name"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["source", "one", true, true], ["source", "two", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "single repeated node retains rows",
+          "vars": {"query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET x.src = true RETURN y.name ORDER BY y.name"},
+          "assert": {"row_count": 2, "ordered_row_values": [["one"], ["two"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge updates after repeated node",
+          "vars": {"query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET x.src = true, r.visited = true RETURN y.name, r.visited ORDER BY y.name"},
+          "assert": {"row_count": 2, "ordered_row_values": [["one", true], ["two", true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one", "visited": true}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two", "visited": true}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node updates after edges",
+          "vars": {
+            "query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET r.visited = true, x.src = true RETURN y.name, r.visited, x.src ORDER BY y.name"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["one", true, true], ["two", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one", "visited": true}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two", "visited": true}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "later assignment reads its own input row",
+          "vars": {
+            "query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET x.src = true, y.marker = r.marker RETURN y.name, y.marker ORDER BY y.name"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["one", "one"], ["two", "two"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "marker": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "marker": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "later assignment reads refreshed source",
+          "vars": {
+            "query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET x.src = true, y.dst = x.src RETURN x.name, y.name, x.src, y.dst ORDER BY y.name"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["source", "one", true, true], ["source", "two", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "entity aliases and captured scalars retain duplicate rows",
+          "vars": {
+            "query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) WITH x, y, x AS alias, x.name AS captured SET x.src = true RETURN y.name, alias.src, captured ORDER BY y.name"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["one", true, "source"], ["two", true, "source"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "nullable first node target",
+          "vars": {
+            "query": "MATCH (x:UpdateSource) OPTIONAL MATCH (x)-[r:UpdateLink]->(y:UpdateTarget) SET y.dst = true, x.src = true RETURN x.name, y.name, x.src, y.dst ORDER BY x.name, y.name"
+          },
+          "assert": {"row_count": 3, "ordered_row_values": [["isolated", null, true, null], ["source", "one", true, true], ["source", "two", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated", "src": true}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "nullable last node target",
+          "vars": {
+            "query": "MATCH (x:UpdateSource) OPTIONAL MATCH (x)-[r:UpdateLink]->(y:UpdateTarget) SET x.src = true, y.dst = true RETURN x.name, y.name, x.src, y.dst ORDER BY x.name, y.name"
+          },
+          "assert": {"row_count": 3, "ordered_row_values": [["isolated", null, true, null], ["source", "one", true, true], ["source", "two", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated", "src": true}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "nullable relationship target",
+          "vars": {
+            "query": "MATCH (x:UpdateSource) OPTIONAL MATCH (x)-[r:UpdateLink]->(y:UpdateTarget) SET r.visited = true, x.src = true RETURN x.name, y.name, x.src, r.visited ORDER BY x.name, y.name"
+          },
+          "assert": {"row_count": 3, "ordered_row_values": [["isolated", null, true, null], ["source", "one", true, true], ["source", "two", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated", "src": true}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one", "visited": true}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two", "visited": true}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "all targets null",
+          "vars": {"query": "MATCH (x:UpdateSource {name: 'isolated'}) OPTIONAL MATCH (x)-[r:UpdateLink]->(y:UpdateTarget) SET y.dst = true RETURN x.name, y.name"},
+          "assert": {"row_count": 1, "ordered_row_values": [["isolated", null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source"}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "duplicate input values remain duplicate",
+          "vars": {"query": "MATCH (x:UpdateSource {name: 'source'}) UNWIND [1, 1, 2] AS item WITH x, item SET x.src = true RETURN item, x.src ORDER BY item"},
+          "assert": {"row_count": 3, "ordered_row_values": [[1, true], [1, true], [2, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source", "src": true}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty input causes no writes",
+          "vars": {"query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) WHERE x.name = 'missing' SET x.src = true, y.dst = true RETURN y.name"},
+          "assert": {"row_count": 0, "ordered_row_values": []},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source"}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two"}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "repeated property removal preserves later targets",
+          "vars": {"query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) REMOVE x.name SET y.dst = true RETURN y.name, x.name, y.dst ORDER BY y.name"},
+          "assert": {"row_count": 2, "ordered_row_values": [["one", null, true], ["two", null, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "repeated kind update preserves later targets",
+          "vars": {"query": "MATCH (x:UpdateSource)-[r:UpdateLink]->(y:UpdateTarget) SET x:UpdateDecoy, y.dst = true RETURN y.name, y.dst ORDER BY y.name"},
+          "assert": {"row_count": 2, "ordered_row_values": [["one", true], ["two", true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource", "UpdateDecoy"], "props": {"name": "source"}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one"}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two"}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fan-in updates preserve every source row",
+      "fixture": {
+        "nodes": [
+          {"id": "left", "kinds": ["UpdateSource"], "properties": {"name": "left"}},
+          {"id": "right", "kinds": ["UpdateSource"], "properties": {"name": "right"}},
+          {"id": "shared", "kinds": ["UpdateTarget"], "properties": {"name": "shared"}},
+          {"id": "decoy", "kinds": ["UpdateSource"], "properties": {"name": "decoy"}}
+        ],
+        "edges": [
+          {"start_id": "left", "end_id": "shared", "kind": "UpdateLink"},
+          {"start_id": "right", "end_id": "shared", "kind": "UpdateLink"},
+          {"start_id": "shared", "end_id": "decoy", "kind": "UpdateLink"}
+        ]
+      },
+      "template": "MATCH (x:UpdateSource)-[:UpdateLink]->(y:UpdateTarget) {{updates}} RETURN x.name, y.name, x.src, y.dst ORDER BY x.name",
+      "variants": [
+        {
+          "name": "repeated destination first",
+          "vars": {"updates": "SET y.dst = true, x.src = true"},
+          "assert": {"row_count": 2, "ordered_row_values": [["left", "shared", true, true], ["right", "shared", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "left", "kinds": ["UpdateSource"], "props": {"name": "left", "src": true}},
+                  {"id": "right", "kinds": ["UpdateSource"], "props": {"name": "right", "src": true}},
+                  {"id": "shared", "kinds": ["UpdateTarget"], "props": {"name": "shared", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateSource"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "left", "end": "shared", "kind": "UpdateLink", "props": {}},
+                  {"start": "right", "end": "shared", "kind": "UpdateLink", "props": {}},
+                  {"start": "shared", "end": "decoy", "kind": "UpdateLink", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "repeated destination last",
+          "vars": {"updates": "SET x.src = true, y.dst = true"},
+          "assert": {"row_count": 2, "ordered_row_values": [["left", "shared", true, true], ["right", "shared", true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "left", "kinds": ["UpdateSource"], "props": {"name": "left", "src": true}},
+                  {"id": "right", "kinds": ["UpdateSource"], "props": {"name": "right", "src": true}},
+                  {"id": "shared", "kinds": ["UpdateTarget"], "props": {"name": "shared", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateSource"], "props": {"name": "decoy"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "left", "end": "shared", "kind": "UpdateLink", "props": {}},
+                  {"start": "right", "end": "shared", "kind": "UpdateLink", "props": {}},
+                  {"start": "shared", "end": "decoy", "kind": "UpdateLink", "props": {}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "repeated relationship targets preserve following updates",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["UpdateSource"], "properties": {"name": "source"}},
+          {"id": "isolated", "kinds": ["UpdateSource"], "properties": {"name": "isolated"}},
+          {"id": "one", "kinds": ["UpdateTarget"], "properties": {"name": "one"}},
+          {"id": "two", "kinds": ["UpdateTarget"], "properties": {"name": "two"}},
+          {"id": "decoy", "kinds": ["UpdateDecoy"], "properties": {"name": "decoy"}},
+          {"id": "root", "kinds": ["UpdateDecoy"], "properties": {"name": "root"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "one", "kind": "UpdateLink", "properties": {"marker": "one"}},
+          {"start_id": "source", "end_id": "two", "kind": "UpdateLink", "properties": {"marker": "two"}},
+          {"start_id": "source", "end_id": "decoy", "kind": "OtherUpdateLink", "properties": {"marker": "decoy"}},
+          {"start_id": "one", "end_id": "source", "kind": "UpdateLink", "properties": {"marker": "reverse"}},
+          {"start_id": "root", "end_id": "source", "kind": "OtherUpdateLink", "properties": {"marker": "lead"}}
+        ]
+      },
+      "template": "MATCH (:UpdateDecoy)-[r:OtherUpdateLink]->(:UpdateSource)-[tail:UpdateLink]->(y:UpdateTarget) SET r.visited = true, tail.marked = true, y.dst = true RETURN y.name, r.visited, tail.marked, y.dst ORDER BY y.name",
+      "variants": [
+        {
+          "name": "fan-out after a shared relationship",
+          "assert": {"row_count": 2, "ordered_row_values": [["one", true, true, true], ["two", true, true, true]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["UpdateSource"], "props": {"name": "source"}},
+                  {"id": "isolated", "kinds": ["UpdateSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["UpdateTarget"], "props": {"name": "one", "dst": true}},
+                  {"id": "two", "kinds": ["UpdateTarget"], "props": {"name": "two", "dst": true}},
+                  {"id": "decoy", "kinds": ["UpdateDecoy"], "props": {"name": "decoy"}},
+                  {"id": "root", "kinds": ["UpdateDecoy"], "props": {"name": "root"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "UpdateLink", "props": {"marker": "one", "marked": true}},
+                  {"start": "source", "end": "two", "kind": "UpdateLink", "props": {"marker": "two", "marked": true}},
+                  {"start": "source", "end": "decoy", "kind": "OtherUpdateLink", "props": {"marker": "decoy"}},
+                  {"start": "one", "end": "source", "kind": "UpdateLink", "props": {"marker": "reverse"}},
+                  {"start": "root", "end": "source", "kind": "OtherUpdateLink", "props": {"marker": "lead", "visited": true}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

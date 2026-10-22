@@ -17,15 +17,89 @@
 package pg
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/pashagolub/pgxmock/v5"
+	"github.com/specterops/dawgs/drivers/pg/model"
+	sql "github.com/specterops/dawgs/drivers/pg/query"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
 
 // staticKindMapper returns deterministic kind mappings for relationship batch tests.
 type staticKindMapper struct {
+}
+
+func TestNodeUpsertKindRemovalsUseResolvedIDs(t *testing.T) {
+	batch := sql.NewNodeUpdateBatch()
+	removedKind := graph.StringKind("Removed")
+	for idx, name := range []string{"untouched", "one", "two"} {
+		node := graph.PrepareNode(graph.AsProperties(map[string]any{"id": name, "preserved": true}), graph.StringKind("Base"))
+		if idx > 0 {
+			node.DeleteKinds(removedKind)
+		}
+		future, err := batch.Add(graph.NodeUpdate{Node: node, IdentityProperties: []string{"id"}})
+		require.NoError(t, err)
+		future.Value = graph.ID(10 + idx)
+	}
+	removals := nodeUpsertKindRemovals(batch)
+	require.Len(t, removals, 2)
+	ids := []graph.ID{}
+	for _, node := range removals {
+		ids = append(ids, node.ID)
+		require.Equal(t, graph.Kinds{removedKind}, node.DeletedKinds)
+		require.Empty(t, node.Kinds, "removing a kind must not replace or add any other kinds")
+		require.Empty(t, node.Properties.Map, "the second write must leave properties alone")
+	}
+	require.ElementsMatch(t, []graph.ID{11, 12}, ids)
+	require.Empty(t, nodeUpsertKindRemovals(sql.NewNodeUpdateBatch()))
+}
+
+func TestNodeUpsertKindRemovalExecution(t *testing.T) {
+	for _, fail := range []string{"", "upsert", "removal"} {
+		t.Run("failure="+fail, func(t *testing.T) {
+			ctx := context.Background()
+			manager := NewSchemaManager(nil, 0)
+			t.Cleanup(func() { manager.parseCache.Close(); manager.compilationCache.Close() })
+			manager.hasDefaultGraph = true
+			manager.defaultGraph = model.Graph{ID: 1, Partitions: model.GraphPartitions{Node: model.NewGraphPartition("node_1")}}
+			removed := graph.StringKind("Removed")
+			manager.kindsByID[removed] = 7
+			node := graph.PrepareNode(graph.AsProperties(map[string]any{"id": "one"}))
+			node.DeleteKinds(removed)
+			updates := sql.NewNodeUpdateBatch()
+			future, err := updates.Add(graph.NodeUpdate{Node: node, IdentityProperties: []string{"id"}})
+			require.NoError(t, err)
+			parameters := NewNodeUpsertParameters(1)
+			parameters.IDFutures = append(parameters.IDFutures, future)
+			b := &batch{ctx: ctx, schemaManager: manager, innerTransaction: &transaction{schemaManager: manager}, kindIDEncoder: Int2ArrayEncoder{buffer: &bytes.Buffer{}}}
+			mock, err := pgxmock.NewConn(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+			require.NoError(t, err)
+			failure := errors.New("forced write failure")
+			upsert := mock.ExpectQuery(sql.FormatNodeUpsert(manager.defaultGraph, []string{"id"})).WithArgs(int32(1), parameters.KindIDSlices, parameters.Properties)
+			if fail == "upsert" {
+				upsert.WillReturnError(failure)
+			} else {
+				upsert.WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(uint64(42)))
+				removal := mock.ExpectQuery(sql.FormatNodesUpdate(manager.defaultGraph)).WithArgs([]graph.ID{42}, []string{"{}"}, []string{"{7}"}, pgxmock.AnyArg(), pgxmock.AnyArg())
+				if fail == "removal" {
+					removal.WillReturnError(failure)
+				} else {
+					removal.WillReturnRows(pgxmock.NewRows([]string{}))
+				}
+			}
+			err = b.flushNodeUpsertBatchWithDriver(updates, parameters, mock)
+			if fail == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, failure)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
 
 // MapKindID returns the fixed kind associated with every synthetic ID.

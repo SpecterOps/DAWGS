@@ -1254,11 +1254,10 @@ func (s *Mutations) AddPropertyRemoval(scope *Scope, propertyLookup PropertyLook
 	return nil
 }
 
-// AddPropertyAssignment builds the SQL model fragment responsible for add property assignment.
+// AddPropertyAssignment retains an assignment until its input frame is known.
+// Binding expressions here would pin later targets to an earlier update stream.
 func (s *Mutations) AddPropertyAssignment(scope *Scope, propertyLookup PropertyLookup, operator pgsql.Operator, assignmentValueExpression pgsql.Expression) error {
 	if mutation, err := s.getIdentifierMutation(scope, propertyLookup.Reference.Root()); err != nil {
-		return err
-	} else if err := RewriteFrameBindings(scope, assignmentValueExpression); err != nil {
 		return err
 	} else {
 		mutation.PropertyAssignments.Put(propertyLookup.Field, PropertyAssignment{

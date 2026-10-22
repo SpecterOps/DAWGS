@@ -196,6 +196,19 @@ Current PostgreSQL optimization coverage includes:
   Admission checks the expansion boundary itself for previous bindings, including reuse of the root. The shared
   `bound_suffix_boundary_shapes` cases verify false and true cycles, zero-depth paths, aliases, and exact mutation effects.
 
+## Update row preservation
+
+SET and REMOVE retain their input rows independently of PostgreSQL's per-target UPDATE cardinality. Each UPDATE CTE
+returns only the changed entity. A subsequent projection left joins that result to the input by entity ID, preserving
+duplicate matches and null targets before another update or RETURN consumes the stream. Assignment expressions resolve
+against the preceding projection, keeping per-row values and refreshed entity aliases in scope. Captured scalar values,
+paths and lists retain their existing representations.
+
+The shared `update_row_stream_shapes` templates assert result multiplicity and complete node and relationship post-state
+for fan-out, fan-in, repeated node/relationship targets, null targets, property removals, kind changes and empty inputs.
+PostgreSQL executes them with both compiler modes; the same expectations run on Neo4j. The inline continuation case
+checks that a later WITH mutation consumes the preserved stream.
+
 ## Multipart write visibility
 
 A PostgreSQL statement snapshot cannot read rows inserted by a sibling data-modifying CTE. Multipart writes therefore
