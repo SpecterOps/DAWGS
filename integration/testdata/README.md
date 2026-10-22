@@ -56,6 +56,13 @@ post-state as well as returned row multiplicity. `update_row_stream_inline.json`
 checks continuation through a later WITH mutation. PostgreSQL also executes the
 template variants with each compiler mode explicitly.
 
+`update_clause_order_shapes.json` checks final property and kind intent for SET/REMOVE
+in both orders, alternating and repeated changes, overlapping label lists, mixed node
+and relationship targets, fan-out, null targets, empty input, and continuation through
+WITH. Each variant checks complete node and relationship post-state, including decoys.
+PostgreSQL runs the same variants with each compiler mode explicitly. These constant-value
+assignments do not establish sequential evaluation of expressions that read earlier writes.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse
