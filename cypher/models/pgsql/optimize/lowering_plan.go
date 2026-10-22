@@ -546,7 +546,10 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 				noSuffixRelationshipVariables := true
 				noRelationshipPredicates := step.Relationship.Properties == nil && !syntaxDependsOn(readingClause.Match.Where, variableSymbol(step.Relationship.Variable))
 				suffixSteps := steps[stepIndex+1 : stepIndex+1+suffixLength]
-				uncorrelatedSuffix := true
+				// Reverse search shares suffix boundaries across root rows. It
+				// cannot enforce an expansion endpoint already bound by the input,
+				// including a boundary that reuses the expansion root itself.
+				uncorrelatedSuffix := !symbolDeclared(declaredEndpoints[stepIndex].BeforeRightNode, variableSymbol(step.RightNode.Variable))
 				for _, suffixStep := range suffixSteps {
 					directedSuffix = directedSuffix && suffixStep.Relationship.Direction != graph.DirectionBoth
 					noSuffixRelationshipVariables = noSuffixRelationshipVariables && suffixStep.Relationship.Variable == nil

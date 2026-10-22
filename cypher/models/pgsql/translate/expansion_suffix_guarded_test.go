@@ -5,6 +5,7 @@ package translate
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"strings"
 	"testing"
@@ -15,6 +16,47 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
+
+func TestSuffixPoliciesRejectBoundExpansionBoundary(t *testing.T) {
+	for _, depth := range []string{"0..16", "1..16"} {
+		for _, boundary := range []string{"root", "boundary"} {
+			bindings := ""
+			if boundary != "root" {
+				bindings = "MATCH (boundary:ExpansionNode) WITH root, boundary"
+			}
+			queryText := fmt.Sprintf(`MATCH (root:ExpansionRoot) %s MATCH path = (root)-[:Expand*%s]->(%s)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path`, bindings, depth, boundary)
+			for name, options := range map[string]ToolOptions{
+				"guard":       {EnableExpansionSuffixReverseGuard: true},
+				"retry":       {EnableExpansionSuffixReverseRetry: true},
+				"component":   {EnableExpansionSuffixRouteComponent: true},
+				"orientation": {EnableExpansionOrientationTournament: true},
+				"shadow":      {EnableExpansionOrientationShadow: true},
+				"forced":      {ForceExpansionSearchStrategy: optimize.ExpansionSearchSuffixSeededReverse},
+			} {
+				t.Run(depth+"/"+boundary+"/"+name, func(t *testing.T) {
+					query, err := frontend.ParseCypher(frontend.NewContext(), queryText)
+					require.NoError(t, err)
+					_, err = TranslateForTool(context.Background(), query, optimizerSafetyKindMapper(), nil, DefaultGraphID, options)
+					require.Error(t, err, "forced diagnostics must decline bound suffix boundaries")
+				})
+			}
+			for _, selector := range []optimize.ExpansionSearchPolicy{optimize.ExpansionSearchPolicyTopologyFixedSuffixV1, optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1} {
+				t.Run(depth+"/"+boundary+"/"+string(selector), func(t *testing.T) {
+					query, err := frontend.ParseCypher(frontend.NewContext(), queryText)
+					require.NoError(t, err)
+					_, err = TranslateWithProductionOptions(context.Background(), query, optimizerSafetyKindMapper(), nil, DefaultGraphID, ProductionOptions{
+						EnableTopologyFixedSuffix: true,
+						SelectorVersion:           string(selector),
+						TopologyFixedSuffixCaps: &ProductionFixedSuffixCaps{
+							SuffixRowLimit: 7, StateLimit: 11, OutputRowLimit: 13, OutputBytesLimit: 17,
+						},
+					})
+					require.ErrorContains(t, err, "no statically eligible full-path fixed-suffix targets")
+				})
+			}
+		}
+	}
+}
 
 func translateSuffixReverseGuard(t *testing.T, query string, options ToolOptions) (Result, string) {
 	t.Helper()

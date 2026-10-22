@@ -645,8 +645,8 @@ func buildProjectionForNodeComposite(alias pgsql.Identifier, projected *BoundIde
 
 // buildProjectionForExpansionEdge materializes an expansion path's edge identifiers as edge composites.
 func buildProjectionForExpansionEdge(alias pgsql.Identifier, projected *BoundIdentifier, scope *Scope) ([]pgsql.SelectItem, error) {
-	// Change the type to the edge composite now that this is projected
-	projected.DataType = pgsql.EdgeComposite
+	// The projected relationship list remains an array in subsequent frames.
+	projected.DataType = pgsql.EdgeCompositeArray
 
 	// Create a new final projection that's aliased to the visible binding's identifier
 	return []pgsql.SelectItem{
@@ -1757,7 +1757,7 @@ func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cyphe
 		return err
 	} else if nextExpression, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
-	} else if selectItem, isProjection := nextExpression.(pgsql.SelectItem); !isProjection {
+	} else if selectItem, isProjection := concreteEmptyArray(nextExpression).(pgsql.SelectItem); !isProjection {
 		s.SetErrorf("invalid type for select item: %T", nextExpression)
 	} else {
 		if identifiers, err := ExtractSyntaxNodeReferences(selectItem); err != nil {

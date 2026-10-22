@@ -3,8 +3,11 @@ package pg
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"testing"
+	"time"
+	"weak"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -102,6 +105,110 @@ func testPoolConfig(t *testing.T) *pgxpool.Config {
 	config, err := pgxpool.ParseConfig("postgresql://localhost:5432/dawgs")
 	require.NoError(t, err)
 	return config
+}
+
+func TestDirectPoolCloseAllowsRuntimeReclamation(t *testing.T) {
+	registrySize := func() int {
+		count := 0
+		poolRuntimes.Range(func(_, _ any) bool {
+			count++
+			return true
+		})
+		return count
+	}
+	initialRegistrySize := registrySize()
+	type references struct {
+		pool     weak.Pointer[pgxpool.Pool]
+		runtime  weak.Pointer[poolRuntime]
+		provider weak.Pointer[connectionCacheProvider]
+	}
+	var closed []references
+	for range 3 {
+		closed = append(closed, func() references {
+			pool, err := NewPoolWithRuntimeConfig(context.Background(), testPoolConfig(t), RuntimeConfig{
+				TranslationCacheEntries: 3,
+				Pool:                    &PoolConfig{MinConnections: 0, MaxConnections: 1},
+			})
+			require.NoError(t, err)
+			owner := poolRuntimeFor(pool)
+			require.NotNil(t, owner)
+			// No connection has ever existed, so reclamation cannot depend on
+			// the per-connection BeforeClose hook running.
+			require.Zero(t, pool.Stat().TotalConns())
+			owner.warmups.replace(testPreparedWarmups(t, "select 1"))
+			refs := references{weak.Make(pool), weak.Make(owner), weak.Make(owner.provider)}
+			t.Cleanup(func() {
+				if retained := refs.runtime.Value(); retained != nil {
+					retained.close()
+				}
+			})
+			pool.Close()
+			return refs
+		}())
+	}
+
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		for _, refs := range closed {
+			if refs.pool.Value() != nil || refs.runtime.Value() != nil || refs.provider.Value() != nil {
+				return false
+			}
+		}
+		return registrySize() <= initialRegistrySize
+	}, 5*time.Second, 10*time.Millisecond, "directly closed pools and their runtime state must not remain globally reachable")
+}
+
+func TestPoolRuntimeLookupSurvivesGCAndDriverClose(t *testing.T) {
+	pool, err := NewPoolWithRuntimeConfig(context.Background(), testPoolConfig(t), RuntimeConfig{
+		Pool: &PoolConfig{MinConnections: 0, MaxConnections: 1},
+	})
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	ownerRef := weak.Make(poolRuntimeFor(pool))
+	runtime.GC()
+	owner := poolRuntimeFor(pool)
+	require.NotNil(t, owner, "a live pool must own its runtime even before its first connection")
+	require.Same(t, ownerRef.Value(), owner)
+	driver := NewDriver(0, pool)
+	require.Same(t, owner, driver.runtime)
+	require.NoError(t, driver.Close(context.Background()))
+	require.Nil(t, poolRuntimeFor(pool), "driver close must retire the association synchronously")
+	require.True(t, owner.provider.closed)
+}
+
+func TestClosedPoolsAreReclaimedWhenTheirConfigIsReused(t *testing.T) {
+	config := testPoolConfig(t)
+	var closed []weak.Pointer[pgxpool.Pool]
+	for range 3 {
+		closed = append(closed, func() weak.Pointer[pgxpool.Pool] {
+			pool, err := NewPoolWithRuntimeConfig(context.Background(), config, RuntimeConfig{
+				Pool: &PoolConfig{MinConnections: 0, MaxConnections: 1},
+			})
+			require.NoError(t, err)
+			owner := weak.Make(poolRuntimeFor(pool))
+			t.Cleanup(func() {
+				if retained := owner.Value(); retained != nil {
+					retained.close()
+				}
+			})
+			// Config returns reusable callbacks. Keeping the latest copy also
+			// keeps callbacks composed from previous pools reachable.
+			config = pool.Config()
+			pool.Close()
+			return weak.Make(pool)
+		}())
+	}
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		for _, pool := range closed {
+			if pool.Value() != nil {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 10*time.Millisecond, "copied configuration hooks must not retain closed pools")
+	runtime.KeepAlive(config)
 }
 
 func TestComposePoolConfigCopiesAndOrdersHooks(t *testing.T) {

@@ -1,12 +1,46 @@
 package optimize
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSuffixSearchRejectsBoundExpansionBoundary(t *testing.T) {
+	for _, depth := range []string{"0..16", "1..16", "0..0", "2..2"} {
+		for _, tc := range []struct {
+			name     string
+			bindings string
+			boundary string
+			eligible bool
+		}{
+			{name: "repeated root", boundary: "root"},
+			{name: "root carried through WITH", bindings: "WITH root", boundary: "root"},
+			{name: "boundary from earlier MATCH", bindings: "MATCH (boundary:ExpansionNode)", boundary: "boundary"},
+			{name: "boundary carried through WITH", bindings: "MATCH (boundary:ExpansionNode) WITH root, boundary", boundary: "boundary"},
+			{name: "boundary aliases root", bindings: "WITH root, root AS boundary", boundary: "boundary"},
+			{name: "unbound distinct boundary", boundary: "boundary", eligible: true},
+		} {
+			t.Run(depth+"/"+tc.name, func(t *testing.T) {
+				query, err := frontend.ParseCypher(frontend.NewContext(), fmt.Sprintf(`MATCH (root:ExpansionRoot) %s MATCH path = (root)-[:Expand*%s]->(%s)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path`, tc.bindings, depth, tc.boundary))
+				require.NoError(t, err)
+				plan, err := Optimize(query)
+				require.NoError(t, err)
+				require.Len(t, plan.LoweringPlan.ExpansionSearchStrategy, 1)
+				decision := plan.LoweringPlan.ExpansionSearchStrategy[0]
+				require.Equal(t, tc.eligible, decision.StructurallyEligible)
+				require.Equal(t, tc.eligible, decision.StaticallyEligible)
+				if !tc.eligible {
+					require.Equal(t, ExpansionSearchFallbackCorrelatedSuffix, decision.FallbackReason)
+					require.Equal(t, ExpansionSearchStepwiseForward, decision.SelectedStrategy)
+				}
+			})
+		}
+	}
+}
 
 func TestSuffixSearchRejectsExternalPredicateDependencies(t *testing.T) {
 	for _, predicate := range []string{"terminal.name = wanted", "head.name = wanted", "boundary.name = wanted", "middle.name = wanted", "terminal.name = head.name", "terminal.name <> head.name", "root.name = wanted", "wanted = 'absent'", "false"} {

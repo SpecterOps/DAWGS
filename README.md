@@ -53,6 +53,10 @@ its generation after successful schema assertion and kind refresh. Stable-snapsh
 only for the current physical connection and schema generation, then reinitialized after reset, closure, or generation
 change. For out-of-band schema changes that affect types or generated SQL, reset or recreate the pool before continuing.
 
+Closed pools are collectable after callers release them.
+The pool/runtime registry and runtime's pool reference are weak, so retaining or reusing `Pool.Config()` does not
+retain closed original pools. `Driver.Close` still releases its state synchronously.
+
 After schema assertion, applications may opt in to pre-prepare selected hot PostgreSQL statements without executing them:
 
 ```go
@@ -144,11 +148,24 @@ depth, including zero hops. Such terminals use ordinary traversal. The shared `b
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
 
 Carried nodes retain the representation materialized before `WITH`, and inline property maps retain the fields their
-expressions read. Leading `UNWIND` and `CREATE` clauses can feed multipart queries; write CTEs remain at PostgreSQL's
-top level. The shared `node_representation_shapes` and `leading_multipart_shapes` templates cover these behaviors.
+expressions read, including function arguments such as `id(source)` and `labels(source)`. `UNWIND` accepts empty lists
+carried through `WITH` aliases, including chained aliases. Leading `UNWIND` and `CREATE` clauses can feed multipart queries.
+
+Execute multipart writes in `WriteTransaction`. PostgreSQL executes each query part after the first write as a separate
+statement in that transaction, materializing its carried rows in temporary relations. Later `MATCH`, `SET`, and `DELETE`
+query parts therefore see earlier writes. Constant projections preserve incoming row counts, filters run before the
+next part's mutations, and entity aliases reflect updates while captured scalar values retain their values.
+Result closure releases the temporary relations; transaction completion also
+drops them. These executions bypass SQL translation retention and temporary-relation statement caching. Translation
+tools must use `translate.TranslatedStatements` and execute every returned statement in the same explicit transaction;
+the single-statement renderer rejects staged writes. The shared `node_representation_shapes`, `leading_multipart_shapes`,
+`empty_list_alias_shapes`, and `multipart_write_visibility_shapes` templates cover these behaviors.
+
 Suffix reverse policies keep predicates correlated with carried values or other suffix bindings on the ordinary
 executor; forced reverse diagnostics reject those shapes. `correlated_suffix_shapes` checks exact paths, duplicate rows,
-and mutation selection. Additional constraints on an already-bound root use ordinary traversal as well.
+and mutation selection. Additional constraints on an already-bound root use ordinary traversal as well. A bound expansion
+boundary, including a repeated root, also retains ordinary traversal; `bound_suffix_boundary_shapes` verifies this across
+zero-hop paths, genuine cycles, aliases, and mutation selection.
 
 The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
 storage maintenance on the `node` and `edge` tables in the following order:
