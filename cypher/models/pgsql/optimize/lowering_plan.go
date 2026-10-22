@@ -210,6 +210,7 @@ func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex i
 		idEqualities := singletonIDEqualityCounts(readingClause.Match.Where)
 		for patternIndex, patternPart := range readingClause.Match.Pattern {
 			steps := traversalStepsForPattern(patternPart)
+			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
 			variableExpansions := 0
 			for _, step := range steps {
 				if step.Relationship != nil && step.Relationship.Range != nil {
@@ -251,7 +252,7 @@ func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex i
 					seedClass = endpointSeedPredicateClass(readingClause.Match.Where, terminalSymbol)
 				}
 				terminalSelective := idSearch || propertySearch
-				terminalCorrelated := symbolDeclared(declaredSymbols, terminalSymbol)
+				terminalCorrelated := symbolDeclared(declaredEndpoints[stepIndex].BeforeRightNode, terminalSymbol)
 				terminalPredicateLocal := predicateTermsForSymbolAreLocal(readingClause.Match.Where, terminalSymbol)
 				relationshipPredicate := step.Relationship.Properties != nil || syntaxDependsOn(readingClause.Match.Where, variableSymbol(step.Relationship.Variable))
 				pathDependentPredicate := patternPart != nil && patternPart.Variable != nil && syntaxDependsOn(readingClause.Match.Where, patternPart.Variable.Symbol)
@@ -514,6 +515,7 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 		for patternIndex, patternPart := range readingClause.Match.Pattern {
 			steps := traversalStepsForPattern(patternPart)
 			deterministicPredicates := !syntaxContainsFunctionInvocation(patternPart) && !syntaxContainsFunctionInvocation(readingClause.Match.Where)
+			declaredEndpoints := declaredSymbolsBeforeStepEndpoints(declaredSymbols, steps)
 			pathDependentPredicate := patternPart != nil && patternPart.Variable != nil && syntaxDependsOn(readingClause.Match.Where, patternPart.Variable.Symbol)
 			for stepIndex, step := range steps {
 				if step.Relationship == nil || step.Relationship.Range == nil {
@@ -553,6 +555,15 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 				}
 				noCrossRegionPredicate := !hasCrossRegionPredicate(readingClause.Match.Where, step, suffixSteps)
 				boundRoot := symbolDeclared(declaredSymbols, variableSymbol(step.LeftNode.Variable))
+				if noCrossRegionPredicate && deterministicPredicates && !pathDependentPredicate {
+					uncorrelatedSuffix = uncorrelatedSuffix && suffixPredicatesAreLocal(readingClause.Match.Where, step, suffixSteps)
+					// The root relation predates this pattern. Reverse execution
+					// cannot assume newly authored constraints were applied there.
+					uncorrelatedSuffix = uncorrelatedSuffix && (!boundRoot || (len(step.LeftNode.Kinds) == 0 && step.LeftNode.Properties == nil))
+				}
+				for suffixIndex := stepIndex + 1; suffixIndex <= suffixEnd; suffixIndex++ {
+					uncorrelatedSuffix = uncorrelatedSuffix && !symbolDeclared(declaredEndpoints[suffixIndex].BeforeRightNode, variableSymbol(steps[suffixIndex].RightNode.Variable))
+				}
 				observation := ExpansionSearchObservationEndpointIDs
 				if patternPart != nil && patternPart.Variable != nil && referencesSourceIdentifier(sourceReferences, patternPart.Variable.Symbol) {
 					observation = ExpansionSearchObservationFullPath
@@ -797,6 +808,56 @@ func hasCrossRegionPredicate(where *cypher.Where, expansion sourceTraversalStep,
 		}
 	}
 	return false
+}
+
+// suffixPredicatesAreLocal keeps correlated suffix expressions on the exact
+// incumbent. Its shared reverse relation cannot read carried rows or bindings
+// materialized in earlier suffix frames.
+func suffixPredicatesAreLocal(where *cypher.Where, expansion sourceTraversalStep, suffix []sourceTraversalStep) bool {
+	local := map[string]struct{}{}
+	addSymbol(local, variableSymbol(expansion.RightNode.Variable))
+	for _, step := range suffix {
+		addSymbol(local, variableSymbol(step.LeftNode.Variable))
+		addSymbol(local, variableSymbol(step.Relationship.Variable))
+		addSymbol(local, variableSymbol(step.RightNode.Variable))
+	}
+	var check func(cypher.Expression) bool
+	check = func(expression cypher.Expression) bool {
+		switch typed := expression.(type) {
+		case *cypher.Parenthetical:
+			return check(typed.Expression)
+		case *cypher.Conjunction:
+			for _, term := range typed.Expressions {
+				if !check(term) {
+					return false
+				}
+			}
+			return true
+		}
+		dependencies := sortedDependencies(expression)
+		// Constant and root-only terms can be consumed as primer predicates,
+		// which the shared reverse suffix relation does not evaluate.
+		if len(dependencies) != 1 {
+			return false
+		}
+		_, found := local[dependencies[0]]
+		return found
+	}
+	if where != nil {
+		for _, expression := range where.Expressions {
+			if !check(expression) {
+				return false
+			}
+		}
+	}
+	for _, step := range suffix {
+		for _, properties := range []cypher.Expression{step.LeftNode.Properties, step.Relationship.Properties, step.RightNode.Properties} {
+			if properties != nil && len(sortedDependencies(properties)) > 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // fixedSuffixLength counts consecutive fixed relationship steps before the next range expansion.

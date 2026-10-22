@@ -1,0 +1,564 @@
+{
+  "families": [
+    {
+      "name": "F4 outbound distinct terminals are not cycles",
+      "template": "{{carried}} MATCH p = (a)-[:F4Prefix]->(mid)-[:F4Expand*{{depth}}]->(a) WHERE a.name = 'shared' {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "mid", "kinds": ["F4Node"], "properties": {"name": "mid"}},
+          {"id": "via", "kinds": ["F4Node"], "properties": {"name": "via"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "decoy"}},
+          {"id": "far", "kinds": ["F4Node"], "properties": {"name": "far"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "mid", "kind": "F4Prefix"},
+          {"start_id": "mid", "end_id": "decoy", "kind": "F4Expand"},
+          {"start_id": "decoy", "end_id": "far", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one and two hops",
+          "vars": {"carried": "", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "recursive terminal",
+          "vars": {"carried": "", "depth": "2..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero depth excludes distinct prefix",
+          "vars": {"carried": "", "depth": "0..0", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero and positive depths",
+          "vars": {"carried": "", "depth": "0..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "terminal carried through WITH",
+          "vars": {"carried": "MATCH (a) WHERE a.name = 'shared' WITH a", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "mutation preserves endpoint selection",
+          "vars": {"carried": "", "depth": "1..2", "update": "WITH DISTINCT a SET a.selected = true", "result": "a"},
+          "assert": {"row_count": 0, "node_records": []},
+          "post_assertions": [{"cypher": "MATCH (n) WHERE n.selected = true RETURN n", "assert": {"node_records": []}}]
+        }
+      ]
+    },
+    {
+      "name": "F4 outbound genuine cycles",
+      "template": "{{carried}} MATCH p = (a)-[:F4Prefix]->(mid)-[:F4Expand*{{depth}}]->(a) WHERE a.name = 'shared' {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "mid", "kinds": ["F4Node"], "properties": {"name": "mid"}},
+          {"id": "via", "kinds": ["F4Node"], "properties": {"name": "via"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "decoy"}},
+          {"id": "far", "kinds": ["F4Node"], "properties": {"name": "far"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "mid", "kind": "F4Prefix"},
+          {"start_id": "mid", "end_id": "decoy", "kind": "F4Expand"},
+          {"start_id": "decoy", "end_id": "far", "kind": "F4Expand"},
+          {"start_id": "mid", "end_id": "source", "kind": "F4Expand"},
+          {"start_id": "mid", "end_id": "via", "kind": "F4Expand"},
+          {"start_id": "via", "end_id": "source", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one and two hops",
+          "vars": {"carried": "", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "recursive terminal",
+          "vars": {"carried": "", "depth": "2..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}],
+            "path_node_ids": [["source", "mid", "via", "source"]],
+            "path_lengths": [3]
+          }
+        },
+        {
+          "name": "zero depth excludes distinct prefix",
+          "vars": {"carried": "", "depth": "0..0", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero and positive depths",
+          "vars": {"carried": "", "depth": "0..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "terminal carried through WITH",
+          "vars": {"carried": "MATCH (a) WHERE a.name = 'shared' WITH a", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "mutation preserves endpoint selection",
+          "vars": {"carried": "", "depth": "1..2", "update": "WITH DISTINCT a SET a.selected = true", "result": "a"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared", "selected": true}}]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {"node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared", "selected": true}}]}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F4 inbound distinct terminals are not cycles",
+      "template": "{{carried}} MATCH p = (a)<-[:F4Prefix]-(mid)<-[:F4Expand*{{depth}}]-(a) WHERE a.name = 'shared' {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "mid", "kinds": ["F4Node"], "properties": {"name": "mid"}},
+          {"id": "via", "kinds": ["F4Node"], "properties": {"name": "via"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "decoy"}},
+          {"id": "far", "kinds": ["F4Node"], "properties": {"name": "far"}}
+        ],
+        "edges": [
+          {"start_id": "mid", "end_id": "source", "kind": "F4Prefix"},
+          {"start_id": "decoy", "end_id": "mid", "kind": "F4Expand"},
+          {"start_id": "far", "end_id": "decoy", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one and two hops",
+          "vars": {"carried": "", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "recursive terminal",
+          "vars": {"carried": "", "depth": "2..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero depth excludes distinct prefix",
+          "vars": {"carried": "", "depth": "0..0", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero and positive depths",
+          "vars": {"carried": "", "depth": "0..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "terminal carried through WITH",
+          "vars": {"carried": "MATCH (a) WHERE a.name = 'shared' WITH a", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "mutation preserves endpoint selection",
+          "vars": {"carried": "", "depth": "1..2", "update": "WITH DISTINCT a SET a.selected = true", "result": "a"},
+          "assert": {"row_count": 0, "node_records": []},
+          "post_assertions": [{"cypher": "MATCH (n) WHERE n.selected = true RETURN n", "assert": {"node_records": []}}]
+        }
+      ]
+    },
+    {
+      "name": "F4 inbound genuine cycles",
+      "template": "{{carried}} MATCH p = (a)<-[:F4Prefix]-(mid)<-[:F4Expand*{{depth}}]-(a) WHERE a.name = 'shared' {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "mid", "kinds": ["F4Node"], "properties": {"name": "mid"}},
+          {"id": "via", "kinds": ["F4Node"], "properties": {"name": "via"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "decoy"}},
+          {"id": "far", "kinds": ["F4Node"], "properties": {"name": "far"}}
+        ],
+        "edges": [
+          {"start_id": "mid", "end_id": "source", "kind": "F4Prefix"},
+          {"start_id": "decoy", "end_id": "mid", "kind": "F4Expand"},
+          {"start_id": "far", "end_id": "decoy", "kind": "F4Expand"},
+          {"start_id": "source", "end_id": "mid", "kind": "F4Expand"},
+          {"start_id": "via", "end_id": "mid", "kind": "F4Expand"},
+          {"start_id": "source", "end_id": "via", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one and two hops",
+          "vars": {"carried": "", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "recursive terminal",
+          "vars": {"carried": "", "depth": "2..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}],
+            "path_node_ids": [["source", "mid", "via", "source"]],
+            "path_lengths": [3]
+          }
+        },
+        {
+          "name": "zero depth excludes distinct prefix",
+          "vars": {"carried": "", "depth": "0..0", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero and positive depths",
+          "vars": {"carried": "", "depth": "0..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "terminal carried through WITH",
+          "vars": {"carried": "MATCH (a) WHERE a.name = 'shared' WITH a", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "mutation preserves endpoint selection",
+          "vars": {"carried": "", "depth": "1..2", "update": "WITH DISTINCT a SET a.selected = true", "result": "a"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared", "selected": true}}]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {"node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared", "selected": true}}]}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F4 undirected prefix distinct terminals are not cycles",
+      "template": "{{carried}} MATCH p = (a)-[:F4Prefix]-(mid)-[:F4Expand*{{depth}}]->(a) WHERE a.name = 'shared' {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "mid", "kinds": ["F4Node"], "properties": {"name": "mid"}},
+          {"id": "via", "kinds": ["F4Node"], "properties": {"name": "via"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "decoy"}},
+          {"id": "far", "kinds": ["F4Node"], "properties": {"name": "far"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "mid", "kind": "F4Prefix"},
+          {"start_id": "mid", "end_id": "decoy", "kind": "F4Expand"},
+          {"start_id": "decoy", "end_id": "far", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one and two hops",
+          "vars": {"carried": "", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "recursive terminal",
+          "vars": {"carried": "", "depth": "2..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero depth excludes distinct prefix",
+          "vars": {"carried": "", "depth": "0..0", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero and positive depths",
+          "vars": {"carried": "", "depth": "0..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "terminal carried through WITH",
+          "vars": {"carried": "MATCH (a) WHERE a.name = 'shared' WITH a", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "mutation preserves endpoint selection",
+          "vars": {"carried": "", "depth": "1..2", "update": "WITH DISTINCT a SET a.selected = true", "result": "a"},
+          "assert": {"row_count": 0, "node_records": []},
+          "post_assertions": [{"cypher": "MATCH (n) WHERE n.selected = true RETURN n", "assert": {"node_records": []}}]
+        }
+      ]
+    },
+    {
+      "name": "F4 undirected prefix genuine cycles",
+      "template": "{{carried}} MATCH p = (a)-[:F4Prefix]-(mid)-[:F4Expand*{{depth}}]->(a) WHERE a.name = 'shared' {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "mid", "kinds": ["F4Node"], "properties": {"name": "mid"}},
+          {"id": "via", "kinds": ["F4Node"], "properties": {"name": "via"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "decoy"}},
+          {"id": "far", "kinds": ["F4Node"], "properties": {"name": "far"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "mid", "kind": "F4Prefix"},
+          {"start_id": "mid", "end_id": "decoy", "kind": "F4Expand"},
+          {"start_id": "decoy", "end_id": "far", "kind": "F4Expand"},
+          {"start_id": "mid", "end_id": "source", "kind": "F4Expand"},
+          {"start_id": "mid", "end_id": "via", "kind": "F4Expand"},
+          {"start_id": "via", "end_id": "source", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "one and two hops",
+          "vars": {"carried": "", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "recursive terminal",
+          "vars": {"carried": "", "depth": "2..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}],
+            "path_node_ids": [["source", "mid", "via", "source"]],
+            "path_lengths": [3]
+          }
+        },
+        {
+          "name": "zero depth excludes distinct prefix",
+          "vars": {"carried": "", "depth": "0..0", "update": "", "result": "a, p"},
+          "assert": {"row_count": 0, "node_records": [], "path_node_ids": [], "path_lengths": []}
+        },
+        {
+          "name": "zero and positive depths",
+          "vars": {"carried": "", "depth": "0..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "terminal carried through WITH",
+          "vars": {"carried": "MATCH (a) WHERE a.name = 'shared' WITH a", "depth": "1..2", "update": "", "result": "a, p"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}},
+              {"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}
+            ],
+            "path_node_ids": [["source", "mid", "source"], ["source", "mid", "via", "source"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "mutation preserves endpoint selection",
+          "vars": {"carried": "", "depth": "1..2", "update": "WITH DISTINCT a SET a.selected = true", "result": "a"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared", "selected": true}}]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {"node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared", "selected": true}}]}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F4 zero depth preserves bound identity",
+      "template": "MATCH p = (a)-[:F4Prefix]->(mid)-[:F4Expand*{{depth}}]->(a) WHERE a.name = 'shared' RETURN a, p",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "other"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "source", "kind": "F4Prefix"},
+          {"start_id": "source", "end_id": "decoy", "kind": "F4Prefix"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "0..0",
+          "vars": {"depth": "0..0"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}],
+            "path_node_ids": [["source", "source"]],
+            "path_lengths": [1]
+          }
+        },
+        {
+          "name": "0..2",
+          "vars": {"depth": "0..2"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "source", "kinds": ["F4Node"], "props": {"name": "shared"}}],
+            "path_node_ids": [["source", "source"]],
+            "path_lengths": [1]
+          }
+        }
+      ]
+    },
+    {
+      "name": "F4 terminal identity remains correlated with each prefix row",
+      "template": "{{carried}} MATCH p = (a)-[:F4Prefix]->(mid)-[:F4Expand*1..2]->(a) RETURN a, p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["F4Node"], "properties": {}},
+          {"id": "b", "kinds": ["F4Node"], "properties": {}},
+          {"id": "mid-a", "kinds": ["F4Node"], "properties": {}},
+          {"id": "mid-b", "kinds": ["F4Node"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "mid-a", "kind": "F4Prefix"},
+          {"start_id": "b", "end_id": "mid-b", "kind": "F4Prefix"},
+          {"start_id": "mid-a", "end_id": "a", "kind": "F4Expand"},
+          {"start_id": "mid-a", "end_id": "b", "kind": "F4Expand"},
+          {"start_id": "mid-b", "end_id": "b", "kind": "F4Expand"},
+          {"start_id": "mid-b", "end_id": "a", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "same pattern",
+          "vars": {"carried": ""},
+          "assert": {
+            "row_count": 2,
+            "node_records": [{"id": "a", "kinds": ["F4Node"], "props": {}}, {"id": "b", "kinds": ["F4Node"], "props": {}}],
+            "path_node_ids": [["a", "mid-a", "a"], ["b", "mid-b", "b"]]
+          }
+        },
+        {
+          "name": "across query parts",
+          "vars": {"carried": "MATCH (a) WITH a"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [{"id": "a", "kinds": ["F4Node"], "props": {}}, {"id": "b", "kinds": ["F4Node"], "props": {}}],
+            "path_node_ids": [["a", "mid-a", "a"], ["b", "mid-b", "b"]]
+          }
+        }
+      ]
+    },
+    {
+      "name": "F4 expansion repeats its root after a fixed prefix",
+      "template": "MATCH p = (a)-[:F4Prefix]->(mid)-[:F4Expand*{{depth}}]->(mid) WHERE a.name = 'shared' RETURN mid, p",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["F4Node"], "properties": {"name": "shared"}},
+          {"id": "mid", "kinds": ["F4Node"], "properties": {"name": "mid"}},
+          {"id": "via", "kinds": ["F4Node"], "properties": {"name": "via"}},
+          {"id": "decoy", "kinds": ["F4Node"], "properties": {"name": "decoy"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "mid", "kind": "F4Prefix"},
+          {"start_id": "mid", "end_id": "mid", "kind": "F4Expand"},
+          {"start_id": "mid", "end_id": "via", "kind": "F4Expand"},
+          {"start_id": "via", "end_id": "mid", "kind": "F4Expand"},
+          {"start_id": "mid", "end_id": "decoy", "kind": "F4Expand"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "0..0",
+          "vars": {"depth": "0..0"},
+          "assert": {
+            "row_count": 1,
+            "node_records": [{"id": "mid", "kinds": ["F4Node"], "props": {"name": "mid"}}],
+            "path_node_ids": [["source", "mid"]],
+            "path_lengths": [1]
+          }
+        },
+        {
+          "name": "1..2",
+          "vars": {"depth": "1..2"},
+          "assert": {
+            "row_count": 2,
+            "node_records": [
+              {"id": "mid", "kinds": ["F4Node"], "props": {"name": "mid"}},
+              {"id": "mid", "kinds": ["F4Node"], "props": {"name": "mid"}}
+            ],
+            "path_node_ids": [["source", "mid", "mid"], ["source", "mid", "via", "mid"]],
+            "path_lengths": [2, 3]
+          }
+        },
+        {
+          "name": "0..2",
+          "vars": {"depth": "0..2"},
+          "assert": {
+            "row_count": 3,
+            "node_records": [
+              {"id": "mid", "kinds": ["F4Node"], "props": {"name": "mid"}},
+              {"id": "mid", "kinds": ["F4Node"], "props": {"name": "mid"}},
+              {"id": "mid", "kinds": ["F4Node"], "props": {"name": "mid"}}
+            ],
+            "path_node_ids": [["source", "mid"], ["source", "mid", "mid"], ["source", "mid", "via", "mid"]],
+            "path_lengths": [1, 2, 3]
+          }
+        }
+      ]
+    }
+  ]
+}

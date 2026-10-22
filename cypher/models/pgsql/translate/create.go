@@ -48,7 +48,7 @@ func (s *Translator) createSourceFromClauses(previousFrame *Frame) []pgsql.FromC
 }
 
 func bindingProjectionExpression(binding *BoundIdentifier, referenceFrame *Frame) pgsql.Expression {
-	if referenceFrame != nil && !referenceFrame.Synthetic {
+	if referenceFrame != nil && !referenceFrame.Synthetic && binding.LastProjection != nil {
 		return pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, binding.Identifier}
 	}
 
@@ -97,10 +97,16 @@ func (s *Translator) buildCreateSourceFrame(idAlias pgsql.Identifier, sequenceTa
 	if currentFrame != nil {
 		carried = currentFrame.Known()
 	}
+	// The multipart frame names this part's eventual output CTE. Until a
+	// clause materializes a source, its input is the preceding query part.
+	inputFrame := currentFrame
+	if inputFrame == s.query.CurrentPart().Frame && inputFrame != nil {
+		inputFrame = inputFrame.Previous
+	}
 
 	// Reserve the database ID before the INSERT CTE runs. This lets later edge
 	// creations in the same Cypher CREATE clause refer to newly-created nodes.
-	sourceProjection, err := buildCarryProjection(s.scope, carried, currentFrame)
+	sourceProjection, err := buildCarryProjection(s.scope, carried, inputFrame)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,7 +126,7 @@ func (s *Translator) buildCreateSourceFrame(idAlias pgsql.Identifier, sequenceTa
 
 	s.addCTE(sourceFrame, pgsql.Select{
 		Projection: sourceProjection,
-		From:       s.createSourceFromClauses(currentFrame),
+		From:       s.createSourceFromClauses(inputFrame),
 	})
 
 	for _, identifier := range carried.Slice() {

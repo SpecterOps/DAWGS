@@ -1172,6 +1172,16 @@ func TestGuardedEndpointSeededExpansionFallbackReasons(t *testing.T) {
 			reason: ExpansionSearchFallbackCorrelatedTerminal,
 		},
 		{
+			name:   "terminal bound by prefix",
+			query:  `MATCH p = (g:Group)-[:HasSession]->(:User)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			reason: ExpansionSearchFallbackCorrelatedTerminal,
+		},
+		{
+			name:   "terminal repeats expansion root",
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(g:Group)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			reason: ExpansionSearchFallbackCorrelatedTerminal,
+		},
+		{
 			name:   "correlated terminal predicate",
 			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND g.tenant = c.tenant RETURN p`,
 			reason: ExpansionSearchFallbackCorrelatedTerminal,
