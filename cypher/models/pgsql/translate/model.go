@@ -1125,14 +1125,24 @@ type Update struct {
 	TargetBinding *BoundIdentifier
 	// UpdateBinding supplies the update binding input to the Update contract.
 	UpdateBinding *BoundIdentifier
-	// Removals supplies the removals input to the Update contract.
-	Removals *graph.IndexedSlice[string, Removal]
-	// PropertyAssignments supplies the property assignments input to the Update contract.
-	PropertyAssignments *graph.IndexedSlice[string, PropertyAssignment]
-	// KindRemovals supplies the kind removals input to the Update contract.
-	KindRemovals graph.Kinds
-	// KindAssignments supplies the kind assignments input to the Update contract.
-	KindAssignments graph.Kinds
+	// operations retains source order, including repeated changes to a field or kind.
+	operations []updateOperation
+}
+
+type updateOperationKind uint8
+
+const (
+	setProperty updateOperationKind = iota
+	removeProperty
+	addKinds
+	removeKinds
+)
+
+type updateOperation struct {
+	kind  updateOperationKind
+	field string
+	value pgsql.Expression
+	kinds graph.Kinds
 }
 
 // Delete groups SQL model state that must remain consistent while translating delete.
@@ -1211,7 +1221,7 @@ func (s *Mutations) AddDeletion(scope *Scope, targetIdentifier pgsql.Identifier,
 	}
 }
 
-// newIdentifierAssignment allocates a distinct update binding and empty assignment collections for targetBinding.
+// newIdentifierAssignment allocates a distinct update binding for targetBinding.
 func (s *Mutations) newIdentifierAssignment(scope *Scope, targetBinding *BoundIdentifier) (*Update, error) {
 	if updateBinding, err := scope.DefineNew(targetBinding.DataType); err != nil {
 		return nil, err
@@ -1219,10 +1229,8 @@ func (s *Mutations) newIdentifierAssignment(scope *Scope, targetBinding *BoundId
 		// Create a unique scope binding for this mutation since there may be assignments that also
 		// target the same identifier later in the query
 		newUpdates := &Update{
-			TargetBinding:       targetBinding,
-			UpdateBinding:       updateBinding,
-			PropertyAssignments: graph.NewIndexedSlice[string, PropertyAssignment](),
-			Removals:            graph.NewIndexedSlice[string, Removal](),
+			TargetBinding: targetBinding,
+			UpdateBinding: updateBinding,
 		}
 
 		s.Updates.Put(targetBinding.Identifier, newUpdates)
@@ -1246,8 +1254,9 @@ func (s *Mutations) AddPropertyRemoval(scope *Scope, propertyLookup PropertyLook
 	if mutation, err := s.getIdentifierMutation(scope, propertyLookup.Reference.Root()); err != nil {
 		return err
 	} else {
-		mutation.Removals.Put(propertyLookup.Field, Removal{
-			Field: propertyLookup.Field,
+		mutation.operations = append(mutation.operations, updateOperation{
+			kind:  removeProperty,
+			field: propertyLookup.Field,
 		})
 	}
 
@@ -1260,10 +1269,10 @@ func (s *Mutations) AddPropertyAssignment(scope *Scope, propertyLookup PropertyL
 	if mutation, err := s.getIdentifierMutation(scope, propertyLookup.Reference.Root()); err != nil {
 		return err
 	} else {
-		mutation.PropertyAssignments.Put(propertyLookup.Field, PropertyAssignment{
-			Field:           propertyLookup.Field,
-			Operator:        operator,
-			ValueExpression: assignmentValueExpression,
+		mutation.operations = append(mutation.operations, updateOperation{
+			kind:  setProperty,
+			field: propertyLookup.Field,
+			value: assignmentValueExpression,
 		})
 	}
 
@@ -1275,7 +1284,7 @@ func (s *Mutations) AddKindAssignment(scope *Scope, targetIdentifier pgsql.Ident
 	if mutation, err := s.getIdentifierMutation(scope, targetIdentifier); err != nil {
 		return err
 	} else {
-		mutation.KindAssignments = append(mutation.KindAssignments, kinds...)
+		mutation.operations = append(mutation.operations, updateOperation{kind: addKinds, kinds: kinds})
 	}
 
 	return nil
@@ -1286,7 +1295,7 @@ func (s *Mutations) AddKindRemoval(scope *Scope, targetIdentifier pgsql.Identifi
 	if mutation, err := s.getIdentifierMutation(scope, targetIdentifier); err != nil {
 		return err
 	} else {
-		mutation.KindRemovals = append(mutation.KindRemovals, kinds...)
+		mutation.operations = append(mutation.operations, updateOperation{kind: removeKinds, kinds: kinds})
 	}
 
 	return nil
