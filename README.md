@@ -108,7 +108,11 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 make test_bdd_integration
 ```
 
-The BDD run also writes a Cucumber results file to `.coverage/opencypher-tck-report.json` and an HTML summary to `.coverage/opencypher-tck-report.html`. The HTML report shows total, passed, and failed scenario counts.
+The BDD run writes Cucumber results to `.coverage/opencypher-tck-results.json` and an HTML summary to `.coverage/opencypher-tck-report.html`.
+
+All untagged scenarios are enforced, including DAWGS features and upstream CREATE scenarios 1–2. Upstream scenarios 3–20 carry `@report-only` while their harness assertions or query semantics remain unsupported. They still execute and retain their failures in both reports, with the HTML identifying enforced and report-only scenarios separately. Remove the tag as each scenario becomes supported; new scenarios are enforced by default.
+
+Enforced failures, empty or invalid reports, runner errors, and ordinary Go-test failures fail the command. Report-only failures do not establish conformance or fail the gate. Run backend BDD checks sequentially because they share report paths.
 
 Integration suites and fixture-loading GraphBench runs delete graph data.
 Existing-graph GraphBench runs reject mutating cases and do not require

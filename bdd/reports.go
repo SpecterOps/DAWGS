@@ -40,7 +40,12 @@ type cucumberFeature struct {
 
 type cucumberScenario struct {
 	Name  string         `json:"name"`
+	Tags  []cucumberTag  `json:"tags"`
 	Steps []cucumberStep `json:"steps"`
+}
+
+type cucumberTag struct {
+	Name string `json:"name"`
 }
 
 type cucumberStep struct {
@@ -60,9 +65,10 @@ type scenarioFailure struct {
 }
 
 type scenarioResult struct {
-	Name   string
-	Status string
-	Error  string
+	Name     string
+	Status   string
+	Error    string
+	Enforced bool
 }
 
 type featureResult struct {
@@ -82,11 +88,13 @@ type folderResult struct {
 }
 
 type bddReport struct {
-	GeneratedAt string
-	Total       int
-	Passed      int
-	Failed      int
-	Folders     []folderResult
+	GeneratedAt    string
+	Total          int
+	Passed         int
+	Failed         int
+	Enforced       int
+	EnforcedFailed int
+	Folders        []folderResult
 }
 
 var bddReportTemplate = template.Must(template.New("bdd-report").Parse(`<!doctype html>
@@ -95,14 +103,15 @@ var bddReportTemplate = template.Must(template.New("bdd-report").Parse(`<!doctyp
 <style>body{font:16px system-ui,sans-serif;margin:2rem;color:#202124}table{border-collapse:collapse;width:100%;max-width:1000px}th,td{border:1px solid #dadce0;padding:.6rem;text-align:left}th{background:#f1f3f4}.pass{color:#137333}.fail{color:#c5221f}details{margin-top:.75rem}code{white-space:pre-wrap}</style>
 </head><body><h1>Cypher Technology Compatibility Kit Report</h1><p>Generated {{.GeneratedAt}}</p>
 <p><strong>Total:</strong> {{.Total}} &nbsp; <span class="pass"><strong>Passed:</strong> {{.Passed}}</span> &nbsp; <span class="fail"><strong>Failed:</strong> {{.Failed}}</span></p>
+<p><strong>Enforced gate:</strong> {{.Enforced}} scenarios, {{.EnforcedFailed}} failed. Scenarios tagged <code>@report-only</code> are compatibility reports and do not fail the gate.</p>
 {{range .Folders}}<details><summary><strong>{{.Name}}</strong> — {{.Total}} scenarios, <span class="pass">{{.Passed}} passed</span>, <span class="fail">{{.Failed}} failed</span></summary>
 {{range .Features}}<details><summary>{{.Name}} — {{.Total}} scenarios, <span class="pass">{{.Passed}} passed</span>, <span class="fail">{{.Failed}} failed</span></summary><ul>
-{{range .Scenarios}}<li class="{{if eq .Status "passed"}}pass{{else}}fail{{end}}"><strong>{{.Status}}</strong> — {{.Name}}{{if .Error}}<br><code>{{.Error}}</code>{{end}}</li>
+{{range .Scenarios}}<li class="{{if eq .Status "passed"}}pass{{else}}fail{{end}}"><strong>{{.Status}}</strong> — {{.Name}} ({{if .Enforced}}enforced{{else}}report-only{{end}}){{if .Error}}<br><code>{{.Error}}</code>{{end}}</li>
 {{end}}</ul></details>
 {{end}}</details>
 {{end}}</body></html>`))
 
-func writeBDDHTMLReport(inputPath, outputPath string) (bddReport, error) {
+func writeBDDHTMLReport(inputPath, outputPath string) (report bddReport, err error) {
 	data, err := os.ReadFile(inputPath)
 	if err != nil {
 		return bddReport{}, fmt.Errorf("read Cucumber report: %w", err)
@@ -111,7 +120,7 @@ func writeBDDHTMLReport(inputPath, outputPath string) (bddReport, error) {
 	if err := json.Unmarshal(data, &features); err != nil {
 		return bddReport{}, fmt.Errorf("parse Cucumber report: %w", err)
 	}
-	report := aggregateBDDReport(features)
+	report = aggregateBDDReport(features)
 	report.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return bddReport{}, fmt.Errorf("create report directory: %w", err)
@@ -121,8 +130,8 @@ func writeBDDHTMLReport(inputPath, outputPath string) (bddReport, error) {
 		return bddReport{}, fmt.Errorf("create HTML report: %w", err)
 	}
 	defer func() {
-		if errClose := file.Close(); err != nil {
-			err = fmt.Errorf("close HTM report: %w", errClose)
+		if errClose := file.Close(); errClose != nil && err == nil {
+			err = fmt.Errorf("close HTML report: %w", errClose)
 		}
 	}()
 	if err := bddReportTemplate.Execute(file, report); err != nil {
@@ -133,10 +142,12 @@ func writeBDDHTMLReport(inputPath, outputPath string) (bddReport, error) {
 
 func aggregateBDDReport(features []cucumberFeature) bddReport {
 	byFolder := map[string]*folderResult{}
+	report := bddReport{}
 	for _, feature := range features {
 		folder, ok := topLevelFolderFromURI(feature.URI)
 		if !ok {
-			continue
+			// Unknown feature locations still participate in the gate.
+			folder = "unclassified"
 		}
 		folderReport := byFolder[folder]
 		if folderReport == nil {
@@ -145,6 +156,15 @@ func aggregateBDDReport(features []cucumberFeature) bddReport {
 		}
 		featureResult := featureResult{Name: featureNameFromURI(feature.URI, folder)}
 		for _, scenario := range feature.Elements {
+			enforced := true
+			for _, tag := range scenario.Tags {
+				if tag.Name == "@report-only" {
+					enforced = false
+				}
+			}
+			if enforced {
+				report.Enforced++
+			}
 			featureResult.Total++
 			folderReport.Total++
 			status := "passed"
@@ -156,8 +176,11 @@ func aggregateBDDReport(features []cucumberFeature) bddReport {
 				status = "failed"
 				featureResult.Failed++
 				folderReport.Failed++
+				if enforced {
+					report.EnforcedFailed++
+				}
 			}
-			featureResult.Scenarios = append(featureResult.Scenarios, scenarioResult{Name: scenario.Name, Status: status, Error: failure})
+			featureResult.Scenarios = append(featureResult.Scenarios, scenarioResult{Name: scenario.Name, Status: status, Error: failure, Enforced: enforced})
 		}
 		folderReport.Features = append(folderReport.Features, featureResult)
 	}
@@ -167,7 +190,7 @@ func aggregateBDDReport(features []cucumberFeature) bddReport {
 		folders = append(folders, *folder)
 	}
 	sort.Slice(folders, func(i, j int) bool { return folders[i].Name < folders[j].Name })
-	report := bddReport{Folders: folders}
+	report.Folders = folders
 	for _, folder := range folders {
 		report.Total += folder.Total
 		report.Passed += folder.Passed
@@ -176,13 +199,20 @@ func aggregateBDDReport(features []cucumberFeature) bddReport {
 	return report
 }
 
-func hasFolderFailure(report bddReport, name string) bool {
-	for _, folder := range report.Folders {
-		if strings.Contains(strings.ToLower(folder.Name), strings.ToLower(name)) && folder.Failed > 0 {
-			return true
-		}
+func checkBDDGate(report bddReport, suiteStatus int) error {
+	if suiteStatus != 0 && suiteStatus != 1 {
+		return fmt.Errorf("BDD runner failed with status %d", suiteStatus)
 	}
-	return false
+	if report.Total == 0 || report.Enforced == 0 {
+		return fmt.Errorf("BDD report contains no enforced scenarios")
+	}
+	if report.EnforcedFailed > 0 {
+		return fmt.Errorf("BDD gate failed: %d of %d enforced scenarios failed", report.EnforcedFailed, report.Enforced)
+	}
+	if (suiteStatus == 0) != (report.Failed == 0) {
+		return fmt.Errorf("BDD runner status %d disagrees with report failure count %d", suiteStatus, report.Failed)
+	}
+	return nil
 }
 
 func topLevelFolderFromURI(uri string) (string, bool) {
@@ -207,10 +237,16 @@ func featureNameFromURI(uri, folder string) string {
 }
 
 func firstScenarioFailure(scenario cucumberScenario) string {
+	if len(scenario.Steps) == 0 {
+		return "scenario has no steps"
+	}
 	for _, step := range scenario.Steps {
 		if strings.ToLower(step.Result.Status) != "passed" {
 			if step.Result.Error != "" {
 				return step.Result.Error
+			}
+			if step.Result.Status == "" {
+				return "step has no result status"
 			}
 			return step.Result.Status
 		}

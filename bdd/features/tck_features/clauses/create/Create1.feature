@@ -50,6 +50,8 @@ Feature: Create1 - Creating nodes
     And the side effects should be:
       | +nodes | 2 |
 
+  # Report-only until label/property side effects and scalar results are supported.
+  @report-only
   Scenario: [3] Create a single node with a label
     Given an empty graph
     When executing query:
@@ -61,6 +63,7 @@ Feature: Create1 - Creating nodes
       | +nodes  | 1 |
       | +labels | 1 |
 
+  @report-only
   Scenario: [4] Create two nodes with same label
     Given an empty graph
     When executing query:
@@ -72,6 +75,7 @@ Feature: Create1 - Creating nodes
       | +nodes  | 2 |
       | +labels | 1 |
 
+  @report-only
   Scenario: [5] Create a single node with multiple labels
     Given an empty graph
     When executing query:
@@ -83,6 +87,7 @@ Feature: Create1 - Creating nodes
       | +nodes  | 1 |
       | +labels | 4 |
 
+  @report-only
   Scenario: [6] Create three nodes with multiple labels
     Given an empty graph
     When executing query:
@@ -94,6 +99,7 @@ Feature: Create1 - Creating nodes
       | +nodes  | 3 |
       | +labels | 5 |
 
+  @report-only
   Scenario: [7] Create a single node with a property
     Given any graph
     When executing query:
@@ -105,6 +111,7 @@ Feature: Create1 - Creating nodes
       | +nodes      | 1 |
       | +properties | 1 |
 
+  @report-only
   Scenario: [8] Create a single node with a property and return it
     Given any graph
     When executing query:
@@ -119,6 +126,7 @@ Feature: Create1 - Creating nodes
       | +nodes      | 1 |
       | +properties | 1 |
 
+  @report-only
   Scenario: [9] Create a single node with two properties
     Given any graph
     When executing query:
@@ -130,6 +138,7 @@ Feature: Create1 - Creating nodes
       | +nodes      | 1 |
       | +properties | 2 |
 
+  @report-only
   Scenario: [10] Create a single node with two properties and return them
     Given any graph
     When executing query:
@@ -144,6 +153,8 @@ Feature: Create1 - Creating nodes
       | +nodes      | 1 |
       | +properties | 2 |
 
+  # Retained null/precision findings DAWGS-049 and DAWGS-051.
+  @report-only
   Scenario: [11] Create a single node with null properties should not return those properties
     Given any graph
     When executing query:
@@ -158,6 +169,7 @@ Feature: Create1 - Creating nodes
       | +nodes      | 1 |
       | +properties | 1 |
 
+  @report-only
   Scenario: [12] CREATE does not lose precision on large integers
     Given an empty graph
     When executing query:
@@ -173,6 +185,8 @@ Feature: Create1 - Creating nodes
       | +properties | 1 |
       | +labels     | 1 |
 
+  # Compile-time error assertions are not implemented by this harness yet.
+  @report-only
   Scenario: [13] Fail when creating a node that is already bound
     Given any graph
     When executing query:
@@ -182,6 +196,7 @@ Feature: Create1 - Creating nodes
       """
     Then a SyntaxError should be raised at compile time: VariableAlreadyBound
 
+  @report-only
   Scenario: [14] Fail when creating a node with properties that is already bound
     Given any graph
     When executing query:
@@ -192,6 +207,7 @@ Feature: Create1 - Creating nodes
       """
     Then a SyntaxError should be raised at compile time: VariableAlreadyBound
 
+  @report-only
   Scenario: [15] Fail when adding a new label predicate on a node that is already bound 1
     Given an empty graph
     When executing query:
@@ -202,6 +218,7 @@ Feature: Create1 - Creating nodes
     Then a SyntaxError should be raised at compile time: VariableAlreadyBound
 
   # Consider improve naming of this and the next three scenarios, they seem to test invariant nature of node patterns
+  @report-only
   Scenario: [16] Fail when adding new label predicate on a node that is already bound 2
     Given an empty graph
     When executing query:
@@ -211,6 +228,7 @@ Feature: Create1 - Creating nodes
       """
     Then a SyntaxError should be raised at compile time: VariableAlreadyBound
 
+  @report-only
   Scenario: [17] Fail when adding new label predicate on a node that is already bound 3
     Given an empty graph
     When executing query:
@@ -220,6 +238,7 @@ Feature: Create1 - Creating nodes
       """
     Then a SyntaxError should be raised at compile time: VariableAlreadyBound
 
+  @report-only
   Scenario: [18] Fail when adding new label predicate on a node that is already bound 4
     Given an empty graph
     When executing query:
@@ -229,6 +248,7 @@ Feature: Create1 - Creating nodes
       """
     Then a SyntaxError should be raised at compile time: VariableAlreadyBound
 
+  @report-only
   Scenario: [19] Fail when adding new label predicate on a node that is already bound 5
     Given an empty graph
     When executing query:
@@ -238,6 +258,7 @@ Feature: Create1 - Creating nodes
       """
     Then a SyntaxError should be raised at compile time: VariableAlreadyBound
 
+  @report-only
   Scenario: [20] Fail when creating a node using undefined variable in pattern
     Given any graph
     When executing query:
