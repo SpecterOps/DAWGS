@@ -16,7 +16,7 @@ import (
 
 const (
 	translationCacheCapacity  = 256
-	translationCacheKeyFormat = 3
+	translationCacheKeyFormat = 4
 	maxCachedCypherBytes      = 64 * 1024
 	translationCachePolicy    = "compiler-v4:optimized"
 )
@@ -25,6 +25,8 @@ type translationCacheKey struct {
 	format           uint8
 	queryDigest      [sha256.Size]byte
 	querySize        int
+	builder          bool
+	builderDigest    [sha256.Size]byte
 	graphID          int32
 	parameterTypes   string
 	policy           string
