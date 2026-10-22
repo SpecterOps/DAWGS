@@ -20,32 +20,16 @@
 package bdd
 
 import (
-	"context"
-	"log"
 	"os"
 	"testing"
 
 	"github.com/cucumber/godog"
-	"github.com/specterops/dawgs/graph"
-	"github.com/specterops/dawgs/integration"
 )
 
 var (
 	bddDawgsFailed   bool
 	bddReportInvalid bool
 )
-
-func InitializeTestSuite(ctxtestsuite *godog.TestSuiteContext, ctx context.Context, c *dbContext) {
-	err := c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		if err := tx.Nodes().Delete(); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		log.Fatalf("Failed to clear database %v", err)
-	}
-}
 
 func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.Before(dbCtx.resetBeforeScenario)
@@ -58,38 +42,29 @@ func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.Step(`^no side effects$`, dbCtx.noSideEffects)
 	ctx.Step(`^the side effects should be:$`, dbCtx.theSideEffectsShouldBe)
 	ctx.Step(`^the result should be empty$`, dbCtx.theResultShouldBeEmpty)
+	ctx.After(dbCtx.closeDBSession)
 }
 
 func TestFeatures(t *testing.T) {
-	backgroundCtx := context.Background()
 	if err := os.MkdirAll(bddReportDir, 0o755); err != nil {
 		t.Fatalf("failed to create BDD report directory: %v", err)
 	}
-	// establish database connection
-	session := integration.Open(t, integration.Options{
-		Schema: &graph.Schema{
-			DefaultGraph: graph.Graph{
-				Name: "dawgs-bdd",
-			},
-		},
-	})
 
-	dbCtx := &dbContext{
-		db:       session.DB,
-		testData: []string{"testdata/binary-tree-1.json", "testdata/binary-tree-2.json"},
-	}
+	dbCtx := &dbContext{}
+
 	suite := godog.TestSuite{
 		Name: "OpenCypher-TCK",
-		TestSuiteInitializer: func(ctx *godog.TestSuiteContext) {
-			InitializeTestSuite(ctx, backgroundCtx, dbCtx)
+		TestSuiteInitializer: func(_ *godog.TestSuiteContext) {
+			dbCtx.testData = []string{"testdata/binary-tree-1.json", "testdata/binary-tree-2.json"}
 		},
 		ScenarioInitializer: func(ctx *godog.ScenarioContext) {
 			InitializeScenario(ctx, dbCtx)
 		},
 		Options: &godog.Options{
-			Format:   "pretty,cucumber:" + bddJSONReportPath,
-			Paths:    []string{"features"},
-			TestingT: t,
+			Format:      "pretty,cucumber:" + bddJSONReportPath,
+			Paths:       []string{"features"},
+			TestingT:    t,
+			Concurrency: 1,
 		},
 	}
 

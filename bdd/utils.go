@@ -30,6 +30,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/integration"
 	"github.com/specterops/dawgs/opengraph"
 )
 
@@ -40,6 +41,7 @@ type graphSnapshot struct {
 
 type dbContext struct {
 	db              graph.Database
+	openSession     func(integration.Options) (*integration.Session, error)
 	testData        []string
 	beforeExecution graphSnapshot
 	afterExecution  graphSnapshot
@@ -50,6 +52,23 @@ type dbContext struct {
 
 // resetBeforeScenario clears persistent graph data and scenario-local result state.
 func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+	openSession := c.openSession
+	if openSession == nil {
+		openSession = integration.OpenSession
+	}
+	session, err := openSession(integration.Options{
+		Schema: &graph.Schema{
+			DefaultGraph: graph.Graph{
+				Name: "dawgs-bdd",
+			},
+		},
+	})
+	if err != nil {
+		return ctx, fmt.Errorf("failed to establish database connection error: %w", err)
+	}
+
+	c.db = session.DB
+
 	if err := c.anEmptyGraph(ctx); err != nil {
 		return ctx, fmt.Errorf("reset graph before scenario: %w", err)
 	}
@@ -59,6 +78,13 @@ func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) 
 	c.rowCount = 0
 	c.actualRows = nil
 
+	return ctx, nil
+}
+
+func (c *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+	if err := c.db.Close(context.Background()); err != nil {
+		return ctx, err
+	}
 	return ctx, nil
 }
 

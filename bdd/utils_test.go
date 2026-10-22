@@ -23,6 +23,7 @@ import (
 	"github.com/cucumber/godog"
 	messages "github.com/cucumber/messages/go/v34"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/integration"
 	"github.com/stretchr/testify/require"
 )
 
@@ -214,28 +215,37 @@ func TestDBContextAnEmptyGraph(t *testing.T) {
 
 func TestDBContextResetBeforeScenario(t *testing.T) {
 	testContext := context.WithValue(context.Background(), struct{}{}, "scenario")
+	oldDatabase := &stubDatabase{}
 	nodeQuery := &stubNodeQuery{}
 	database := &stubDatabase{
 		transaction: &stubTransaction{nodeQuery: nodeQuery},
 	}
 	databaseContext := &dbContext{
-		db: database,
+		db: oldDatabase,
+		openSession: func(opts integration.Options) (*integration.Session, error) {
+			require.Equal(t, &graph.Schema{DefaultGraph: graph.Graph{Name: "dawgs-bdd"}}, opts.Schema)
+			return &integration.Session{DB: database}, nil
+		},
 		beforeExecution: graphSnapshot{
 			NodesCount:         2,
 			RelationshipsCount: 1,
 		},
 		actualResult: &stubResult{},
 		rowCount:     2,
-		actualRows:   [][]string{{"stale"}},
+		actualRows:   [][]string{{}},
+		testData:     []string{"testdata/binary-tree-1.json", "testdata/binary-tree-2.json"},
 	}
 
 	returnedContext, err := databaseContext.resetBeforeScenario(testContext, nil)
 
 	require.NoError(t, err)
 	require.Equal(t, testContext, returnedContext)
+	require.Same(t, database, databaseContext.db)
+	require.False(t, oldDatabase.writeTransactionCalled)
 	require.True(t, database.writeTransactionCalled)
 	require.Equal(t, testContext, database.writeTransactionContext)
 	require.True(t, nodeQuery.deleteCalled)
+	require.Equal(t, []string{"testdata/binary-tree-1.json", "testdata/binary-tree-2.json"}, databaseContext.testData)
 	require.Equal(t, graphSnapshot{}, databaseContext.beforeExecution)
 	require.Nil(t, databaseContext.actualResult)
 	require.Zero(t, databaseContext.rowCount)
@@ -244,17 +254,87 @@ func TestDBContextResetBeforeScenario(t *testing.T) {
 
 func TestDBContextResetBeforeScenarioReturnsCleanupError(t *testing.T) {
 	deleteErr := errors.New("failed to delete nodes")
-	database := &stubDatabase{
-		transaction: &stubTransaction{
-			nodeQuery: &stubNodeQuery{deleteErr: deleteErr},
-		},
+	writeErr := errors.New("failed to open write transaction")
+	tests := []struct {
+		name         string
+		deleteErr    error
+		writeErr     error
+		expectedErr  error
+		expectDelete bool
+	}{
+		{name: "node deletion error", deleteErr: deleteErr, expectedErr: deleteErr, expectDelete: true},
+		{name: "write transaction error", writeErr: writeErr, expectedErr: writeErr},
 	}
-	databaseContext := &dbContext{db: database}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testContext := context.WithValue(context.Background(), struct{}{}, test.name)
+			oldDatabase := &stubDatabase{}
+			nodeQuery := &stubNodeQuery{deleteErr: test.deleteErr}
+			database := &stubDatabase{
+				transaction:         &stubTransaction{nodeQuery: nodeQuery},
+				writeTransactionErr: test.writeErr,
+			}
+			result := &stubResult{}
+			snapshot := graphSnapshot{NodesCount: 2, RelationshipsCount: 1}
+			databaseContext := &dbContext{
+				db: oldDatabase,
+				openSession: func(integration.Options) (*integration.Session, error) {
+					return &integration.Session{DB: database}, nil
+				},
+				beforeExecution: snapshot,
+				actualResult:    result,
+				rowCount:        2,
+				actualRows:      [][]string{{"stale"}},
+			}
 
-	_, err := databaseContext.resetBeforeScenario(context.Background(), nil)
+			returnedContext, err := databaseContext.resetBeforeScenario(testContext, nil)
 
-	require.ErrorIs(t, err, deleteErr)
-	require.ErrorContains(t, err, "reset graph before scenario")
+			require.ErrorIs(t, err, test.expectedErr)
+			require.ErrorContains(t, err, "reset graph before scenario")
+			require.Equal(t, testContext, returnedContext)
+			require.Same(t, database, databaseContext.db)
+			require.False(t, oldDatabase.writeTransactionCalled)
+			require.True(t, database.writeTransactionCalled)
+			require.Equal(t, testContext, database.writeTransactionContext)
+			require.Equal(t, test.expectDelete, nodeQuery.deleteCalled)
+			require.Equal(t, snapshot, databaseContext.beforeExecution)
+			require.Same(t, result, databaseContext.actualResult)
+			require.Equal(t, 2, databaseContext.rowCount)
+			require.Equal(t, [][]string{{"stale"}}, databaseContext.actualRows)
+		})
+	}
+}
+
+func TestDBContextResetBeforeScenarioReturnsSessionError(t *testing.T) {
+	testContext := context.WithValue(context.Background(), struct{}{}, "scenario")
+	openErr := errors.New("failed to open session")
+	database := &stubDatabase{}
+	result := &stubResult{}
+	snapshot := graphSnapshot{NodesCount: 2, RelationshipsCount: 1}
+	databaseContext := &dbContext{
+		db: database,
+		openSession: func(integration.Options) (*integration.Session, error) {
+			return nil, openErr
+		},
+		testData:        []string{"existing fixture"},
+		beforeExecution: snapshot,
+		actualResult:    result,
+		rowCount:        2,
+		actualRows:      [][]string{{"stale"}},
+	}
+
+	returnedContext, err := databaseContext.resetBeforeScenario(testContext, nil)
+
+	require.ErrorIs(t, err, openErr)
+	require.ErrorContains(t, err, "failed to establish database connection error")
+	require.Equal(t, testContext, returnedContext)
+	require.Same(t, database, databaseContext.db)
+	require.False(t, database.writeTransactionCalled)
+	require.Equal(t, []string{"existing fixture"}, databaseContext.testData)
+	require.Equal(t, snapshot, databaseContext.beforeExecution)
+	require.Same(t, result, databaseContext.actualResult)
+	require.Equal(t, 2, databaseContext.rowCount)
+	require.Equal(t, [][]string{{"stale"}}, databaseContext.actualRows)
 }
 
 func TestDBContextExecutingQuery(t *testing.T) {
