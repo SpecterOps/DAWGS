@@ -46,6 +46,22 @@ func unwindFromClauses(clauses []UnwindClause) []pgsql.FromClause {
 	return fromClauses
 }
 
+// concreteEmptyArray supplies a PostgreSQL type before an unconstrained empty
+// array is materialized or passed to a polymorphic function. No element can be
+// observed, so the fallback does not change the list's values.
+func concreteEmptyArray(expression pgsql.Expression) pgsql.Expression {
+	switch typedExpression := expression.(type) {
+	case pgsql.ArrayLiteral:
+		if len(typedExpression.Values) == 0 && typedExpression.CastType == pgsql.AnyArray {
+			typedExpression.CastType = pgsql.Int8Array
+		}
+		return typedExpression
+	case *pgsql.Parenthetical:
+		typedExpression.Expression = concreteEmptyArray(typedExpression.Expression)
+	}
+	return expression
+}
+
 func (s *Translator) translateUnwind(unwind *cypher.Unwind) error {
 	if variableIdentifier, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
@@ -58,12 +74,7 @@ func (s *Translator) translateUnwind(unwind *cypher.Unwind) error {
 	} else if binding, isBound := s.scope.Lookup(identifier); !isBound {
 		return fmt.Errorf("unable to lookup unwind variable binding %s", identifier)
 	} else {
-		if literal, ok := arrayExpression.(pgsql.ArrayLiteral); ok && len(literal.Values) == 0 && literal.CastType == pgsql.AnyArray {
-			// No element can be observed, but PostgreSQL still requires a
-			// concrete array type when resolving unnest's polymorphic input.
-			literal.CastType = pgsql.Int8Array
-			arrayExpression = literal
-		}
+		arrayExpression = concreteEmptyArray(arrayExpression)
 		if s.scope.CurrentFrame() == nil {
 			// A leading UNWIND has no MATCH/CREATE frame to attach to, but
 			// later clauses still need a frame that can export the unwind binding.

@@ -40,12 +40,14 @@ func TestLeadingMultipartClauseSources(t *testing.T) {
 				require.NoError(t, err)
 				translation, err := TranslateWithOptions(context.Background(), query, pgutil.NewInMemoryKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
 				require.NoError(t, err)
-				formatted, err := Translated(translation)
+				statements, err := TranslatedStatements(translation, "leading_test_")
 				require.NoError(t, err)
 				if strings.HasPrefix(queryText, "UNWIND") {
-					require.Equal(t, 1, strings.Count(formatted.Statement, "from s0"), formatted.Statement)
+					require.Len(t, statements, 1)
+					require.Equal(t, 1, strings.Count(statements[0].Statement, "from s0"), statements[0].Statement)
 				} else {
-					require.NotContains(t, formatted.Statement, "as (with", formatted.Statement)
+					require.Len(t, statements, 2)
+					require.NotContains(t, statements[0].Statement, "as (with", statements[0].Statement)
 				}
 			})
 		}

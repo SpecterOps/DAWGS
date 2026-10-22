@@ -72,6 +72,8 @@ type Translator struct {
 	treeTranslator *ExpressionTreeTranslator
 	// query holds the PostgreSQL query model under construction.
 	query *Query
+	// multipartWrites enables mutation boundaries before their later parts are walked.
+	multipartWrites bool
 	// scope tracks translated bindings and their materialization frames.
 	scope *Scope
 	// unwindTargets contains UNWIND variables awaiting source translation.
@@ -262,8 +264,8 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.ReadingClause, *cypher.UnaryAddOrSubtractExpression, *cypher.PropertyLookup,
 		*cypher.Negation, *cypher.Where, *cypher.ListLiteral,
 		*cypher.FunctionInvocation, *cypher.Order, *cypher.RemoveItem, *cypher.SetItem,
-		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete, *cypher.With,
-		*cypher.Return, *cypher.MultiPartQuery, *cypher.Properties, *cypher.KindMatcher,
+		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete,
+		*cypher.Return, *cypher.Properties, *cypher.KindMatcher,
 		*cypher.IDInCollection:
 
 	case *cypher.Quantifier:
@@ -290,6 +292,19 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		currentQueryPart := s.query.CurrentPart()
 		currentQueryPart.currentPattern = &Pattern{}
 		currentQueryPart.isCreating = true
+
+	case *cypher.MultiPartQuery:
+		for _, part := range typedExpression.Parts {
+			s.multipartWrites = s.multipartWrites || (part != nil && len(part.UpdatingClauses) > 0)
+		}
+		if typedExpression.SinglePartQuery != nil {
+			s.multipartWrites = s.multipartWrites || len(typedExpression.SinglePartQuery.UpdatingClauses) > 0
+		}
+
+	case *cypher.With:
+		if err := s.prepareWith(); err != nil {
+			s.SetError(err)
+		}
 
 	case *cypher.MultiPartQueryPart:
 		if err := s.prepareMultiPartQueryPart(typedExpression); err != nil {
@@ -761,6 +776,9 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 type Result struct {
 	// Statement is the translated PostgreSQL AST.
 	Statement pgsql.Statement
+	// Stages preserves statement boundaries after nonfinal multipart mutations.
+	// Staged translations must be formatted and executed in order in one transaction.
+	Stages []QueryStage
 	// Parameters contains SQL parameters generated during translation.
 	Parameters map[string]any
 	// LiteralParameters contains immutable string literals extracted during SQL formatting.

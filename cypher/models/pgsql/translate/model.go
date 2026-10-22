@@ -867,6 +867,8 @@ type QueryPart struct {
 	stashedPattern *Pattern
 	// projections retains the projections while QueryPart is assembled or evaluated.
 	projections *Projections
+	// withInputConstraints preserves MATCH predicates before WITH introduces aliases.
+	withInputConstraints pgsql.Expression
 	// mutations retains the mutations while QueryPart is assembled or evaluated.
 	mutations *Mutations
 	// fromClauses retains the from clauses while QueryPart is assembled or evaluated.
@@ -1299,6 +1301,8 @@ type Projections struct {
 	Frame *Frame
 	// Constraints supplies the constraints input to the Projections contract.
 	Constraints pgsql.Expression
+	// OutputConstraints evaluates a WITH predicate for filtering after its row modifiers.
+	OutputConstraints pgsql.Expression
 	// Items supplies the items input to the Projections contract.
 	Items []*Projection
 	// GroupBy supplies the group by input to the Projections contract.

@@ -3,6 +3,7 @@ package translate
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"maps"
 	"strings"
 
@@ -14,6 +15,9 @@ import (
 
 // Translated renders a translation result as PostgreSQL for its target graph.
 func Translated(translation Result) (format.Formatted, error) {
+	if len(translation.Stages) > 0 {
+		return format.Formatted{}, fmt.Errorf("multipart mutations require TranslatedStatements and sequential transaction execution")
+	}
 	return format.Statement(translation.Statement, format.NewOutputBuilder().WithTargetGraph(translation.GraphID))
 }
 
@@ -56,7 +60,7 @@ func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapp
 
 	if translation, err := Translate(ctx, regularQuery, kindMapper, nil, graphID); err != nil {
 		return format.Formatted{}, err
-	} else if sqlQuery, err := format.Statement(translation.Statement, format.NewOutputBuilder().WithTargetGraph(translation.GraphID)); err != nil {
+	} else if sqlQuery, err := Translated(translation); err != nil {
 		return format.Formatted{}, err
 	} else {
 		output.WriteString(sqlQuery.Statement)

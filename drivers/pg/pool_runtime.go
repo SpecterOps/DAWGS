@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
+	"weak"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,8 +19,9 @@ const poolInitConnectionTimeout = 10 * time.Second
 // poolRuntime owns connection-local state for one pool. It is created together
 // with the pool by NewPool or NewPoolWithRuntimeConfig.
 type poolRuntime struct {
-	// pool leases and manages physical PostgreSQL connections.
-	pool *pgxpool.Pool
+	// pool is weak because copied configuration callbacks can outlive their
+	// original pool. Drivers retain their pools strongly while using them.
+	pool weak.Pointer[pgxpool.Pool]
 
 	// provider owns cache state associated with each physical connection.
 	provider *connectionCacheProvider
@@ -26,29 +29,49 @@ type poolRuntime struct {
 	// warmups supplies the persistent statement warm-up set to new connections.
 	warmups *statementWarmupPolicy
 
+	// initializeConnection retains the composed connection setup hook. The
+	// pool owns this runtime through its bound afterConnect callback.
+	initializeConnection func(context.Context, *pgx.Conn) error
+
 	// closeOnce prevents duplicate pool and provider teardown.
 	closeOnce sync.Once
 }
 
 // poolRuntimes associates a pool constructed by this package with the
-// connection-local state captured by its lifecycle hooks. The association is
-// private: callers continue to exchange the established *pgxpool.Pool API.
-var poolRuntimes sync.Map // map[*pgxpool.Pool]*poolRuntime
+// connection-local state owned by its lifecycle hooks. Both sides are weak so
+// the registry owns neither pools nor runtime state. Directly closed pools can
+// be reclaimed when their callers release them, including pools that never
+// opened a physical connection.
+var poolRuntimes sync.Map // map[weak.Pointer[pgxpool.Pool]]weak.Pointer[poolRuntime]
 
-func registerPoolRuntime(pool *pgxpool.Pool, runtime *poolRuntime) {
-	if pool != nil && runtime != nil {
-		poolRuntimes.Store(pool, runtime)
+func registerPoolRuntime(pool *pgxpool.Pool, owner *poolRuntime) {
+	if pool != nil && owner != nil {
+		key := weak.Make(pool)
+		poolRuntimes.Store(key, weak.Make(owner))
+		// The cleanup and its argument must not retain either side of the
+		// association. Only the weak key survives until collection.
+		runtime.AddCleanup(pool, unregisterPoolRuntime, key)
 	}
+}
+
+func unregisterPoolRuntime(key weak.Pointer[pgxpool.Pool]) {
+	poolRuntimes.Delete(key)
 }
 
 func poolRuntimeFor(pool *pgxpool.Pool) *poolRuntime {
 	if pool == nil {
 		return nil
 	}
-	if runtime, found := poolRuntimes.Load(pool); found {
-		return runtime.(*poolRuntime)
+	if value, found := poolRuntimes.Load(weak.Make(pool)); found {
+		owner := value.(weak.Pointer[poolRuntime]).Value()
+		runtime.KeepAlive(pool)
+		return owner
 	}
 	return nil
+}
+
+func (s *poolRuntime) afterConnect(ctx context.Context, conn *pgx.Conn) error {
+	return s.initializeConnection(ctx, conn)
 }
 
 // statementWarmupPolicy retains only normalized SQL selected by an operator.
@@ -202,6 +225,12 @@ func NewPoolWithRuntimeConfig(ctx context.Context, poolConfig *pgxpool.Config, c
 		provider.close()
 		return nil, err
 	}
+	owner := &poolRuntime{
+		provider:             provider,
+		warmups:              warmups,
+		initializeConnection: configuredPool.AfterConnect,
+	}
+	configuredPool.AfterConnect = owner.afterConnect
 
 	poolCtx, cancel := context.WithTimeout(ctx, poolInitConnectionTimeout)
 	defer cancel()
@@ -210,12 +239,8 @@ func NewPoolWithRuntimeConfig(ctx context.Context, poolConfig *pgxpool.Config, c
 		provider.close()
 		return nil, err
 	}
-	runtime := &poolRuntime{
-		pool:     underlying,
-		provider: provider,
-		warmups:  warmups,
-	}
-	registerPoolRuntime(underlying, runtime)
+	owner.pool = weak.Make(underlying)
+	registerPoolRuntime(underlying, owner)
 	return underlying, nil
 }
 
@@ -223,7 +248,7 @@ func NewPoolWithRuntimeConfig(ctx context.Context, poolConfig *pgxpool.Config, c
 // currently idle connections, and applies it to every subsequently created
 // physical connection. Passing no statements clears the future warm set.
 func (s *poolRuntime) setStatementWarmupPolicy(ctx context.Context, statements ...string) error {
-	if s == nil || s.pool == nil || s.provider == nil || s.warmups == nil {
+	if s == nil || s.pool.Value() == nil || s.provider == nil || s.warmups == nil {
 		return fmt.Errorf("PostgreSQL pool runtime is not initialized")
 	}
 	warmups, err := normalizePreparedStatementWarmups(statements)
@@ -240,10 +265,10 @@ func (s *poolRuntime) close() {
 		return
 	}
 	s.closeOnce.Do(func() {
-		if s.pool != nil {
-			s.pool.Close()
-			poolRuntimes.Delete(s.pool)
+		if pool := s.pool.Value(); pool != nil {
+			pool.Close()
 		}
+		unregisterPoolRuntime(s.pool)
 		if s.provider != nil {
 			s.provider.close()
 		}
@@ -255,8 +280,10 @@ func (s *poolRuntime) close() {
 // Use it after an out-of-band schema change that can affect registered types
 // or generated SQL.
 func (s *poolRuntime) reset() {
-	if s != nil && s.pool != nil {
-		s.pool.Reset()
+	if s != nil {
+		if pool := s.pool.Value(); pool != nil {
+			pool.Reset()
+		}
 	}
 }
 
@@ -265,7 +292,7 @@ func (s *poolRuntime) reset() {
 // assertion, ideally while the pool is otherwise quiescent; newly created
 // connections warm lazily through pgx's normal CacheStatement behavior.
 func (s *poolRuntime) warmStatements(ctx context.Context, statements ...string) error {
-	if s == nil || s.pool == nil || s.provider == nil {
+	if s == nil || s.pool.Value() == nil || s.provider == nil {
 		return fmt.Errorf("PostgreSQL pool runtime is not initialized")
 	}
 	warmups, err := normalizePreparedStatementWarmups(statements)
@@ -280,10 +307,14 @@ func (s *poolRuntime) warmPreparedStatements(ctx context.Context, warmups []prep
 	if len(warmups) == 0 {
 		return nil
 	}
+	pool := s.pool.Value()
+	if pool == nil {
+		return fmt.Errorf("PostgreSQL pool runtime is not initialized")
+	}
 
-	connections := s.pool.AcquireAllIdle(ctx)
+	connections := pool.AcquireAllIdle(ctx)
 	if len(connections) == 0 {
-		connection, err := s.pool.Acquire(ctx)
+		connection, err := pool.Acquire(ctx)
 		if err != nil {
 			return err
 		}

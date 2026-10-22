@@ -91,6 +91,12 @@ type transaction struct {
 	// topologyRouteDecisions is transaction-owned shadow routing state. It is
 	// allocated only after an explicit stable-snapshot transaction begins.
 	topologyRouteDecisions *topologyRouteDecisionCache
+
+	// multipartSequence namespaces temporary boundary relations within this transaction.
+	multipartSequence uint64
+
+	// stagedError prevents publishing earlier stages after a later failure.
+	stagedError error
 }
 
 // newTransactionWrapper configures a graph transaction and optionally begins an explicit PostgreSQL transaction.
@@ -372,6 +378,9 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		return graph.NewErrorResult(err)
 	}
 	policyStarted := time.Now()
+	if hasMultipartWrites(parsedQuery) {
+		return s.queryMultipart(parsedQuery, parameters, graphTarget.ID, profile)
+	}
 	shape := TraversalShape{}
 	if s.schemaManager.shouldClassifyTraversal() {
 		shape, _ = s.schemaManager.classifyTraversalShape(query, parsedQuery)
@@ -534,6 +543,9 @@ func (s *transaction) raw(query string, parameters map[string]any) graph.Result 
 // Commit invalidates route observations and commits the active PostgreSQL transaction.
 func (s *transaction) Commit() error {
 	s.invalidateTopologyRouteDecisions()
+	if s.stagedError != nil {
+		return s.stagedError
+	}
 	if s.tx != nil {
 		return s.tx.Commit(s.ctx)
 	}
