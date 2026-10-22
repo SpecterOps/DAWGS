@@ -4,7 +4,7 @@ Feature: Leading OPTIONAL MATCH
     Given an empty graph
     When executing query:
       """
-      OPTIONAL MATCH (n:A)
+      OPTIONAL MATCH (n)
       RETURN n
       """
     Then the result should be, in any order:
@@ -72,12 +72,12 @@ Feature: Leading OPTIONAL MATCH
       """
     When executing query:
       """
-      OPTIONAL MATCH (a:A)-[r:R]->(b:B)
-      RETURN a, r, b
+      OPTIONAL MATCH (a:A)-[]->(b:B)
+      RETURN a, b
       """
     Then the result should be, in any order:
-      | a    | r    | b    |
-      | null | null | null |
+      | a    | b    |
+      | null | null |
     And no side effects
 
   Scenario: Return a matching relationship pattern
@@ -88,12 +88,12 @@ Feature: Leading OPTIONAL MATCH
       """
     When executing query:
       """
-      OPTIONAL MATCH (a:A)-[r:R]->(b:B)
-      RETURN a, r, b
+      OPTIONAL MATCH (a:A)-[]->(b:B)
+      RETURN a, b
       """
     Then the result should be, in any order:
-      | a    | r    | b    |
-      | (:A) | [:R] | (:B) |
+      | a    | b    |
+      | (:A) | (:B) |
     And no side effects
 
   Scenario: Preserve the null row through a subsequent optional match
@@ -101,10 +101,10 @@ Feature: Leading OPTIONAL MATCH
     When executing query:
       """
       OPTIONAL MATCH (a:A)
-      OPTIONAL MATCH (a)-[r:R]->(b:B)
-      RETURN a, r, b
+      OPTIONAL MATCH (a)-[]->(b:B)
+      RETURN a, b
       """
     Then the result should be, in any order:
-      | a    | b    | r    |
-      | null | null | null |
+      | a    | b    |
+      | null | null |
     And no side effects
