@@ -179,16 +179,46 @@ Current PostgreSQL optimization coverage includes:
   unchanged.
   Materialized bindings keep their input representation across `WITH` and subsequent expansion seeding. Inline node
   and relationship maps count expression references as field consumers, including properties read from intermediate
-  nodes. Shared `node_representation_shapes` templates and explicit optimizer-mode executions verify these cases.
+  nodes. Function arguments inside inline maps are also retained by source-reference pruning, including `id(source)`,
+  `labels(source)`, and relationship identity/type consumers. Shared `node_representation_shapes` templates and explicit
+  optimizer-mode executions verify these cases.
 - Leading `UNWIND` and `CREATE` clauses resolve an empty multipart frame to its actual input. Multipart creation CTEs
   and their dependencies are emitted at the top level, preserving PostgreSQL's data-modifying CTE restrictions.
-  Empty UNWIND literals receive a concrete array type for PostgreSQL resolution. `leading_multipart_shapes` covers
+  Empty lists receive a concrete array type before a `WITH` projection materializes them, keeping aliases and their
+  inferred types consistent. `empty_list_alias_shapes` covers direct, parenthesized, and chained aliases as well as
+  empty mutation inputs. `leading_multipart_shapes` covers
   cardinality, carried properties, repeated query parts, relationship creation, and mutation post-state.
 - Suffix reverse admission declines predicates that read carried values, compare suffix bindings, or repeat a bound
   suffix endpoint. Those queries retain the exact incumbent, including under manifest-authorized topology policies. Forced diagnostics
   reject unsupported shapes. The suffix builder rejects external predicate remainders except generated relationship
   exclusions enforced by pairwise suffix uniqueness and expansion/suffix path disjointness in reverse execution.
   Additional labels/properties on a bound root and WHERE terms consumed as primer predicates also retain the incumbent.
+  Admission checks the expansion boundary itself for previous bindings, including reuse of the root. The shared
+  `bound_suffix_boundary_shapes` cases verify false and true cycles, zero-depth paths, aliases, and exact mutation effects.
+
+## Multipart write visibility
+
+A PostgreSQL statement snapshot cannot read rows inserted by a sibling data-modifying CTE. Multipart writes therefore
+carry a sequential execution plan in `translate.Result.Stages`. Read-only prefixes stay with the first write; each later
+query part is a separate statement in the same explicit write transaction. Nonfinal stages use `CREATE TEMP TABLE ...
+ON COMMIT DROP AS` to materialize carried rows without converting graph composites or scalar types through Go.
+
+`transaction.Query` validates and renders the entire plan before executing it. It uses separate parameter bags for each
+stage, including formatter-extracted literals, and bypasses translation retention and prepared statements containing
+temporary relation OIDs. Final results stream normally. Exhaustion or early closure drains the final server response,
+preserves late errors, and removes stage relations. Rollback and transaction completion also remove them; a recorded
+stage failure prevents commit even if the caller overlooks its result error.
+
+Boundary projections preserve duplicate rows and empty inputs even when they contain only constants. A `WITH` filter
+applies after its projection, ordering, and pagination, before the next query part can mutate its rows. Carried node and
+relationship aliases observe an updated entity by identity; scalar property values captured before the update remain
+unchanged.
+
+`translate.TranslatedStatements(result, uniqueTablePrefix)` is the staged rendering API. Execute all returned statements
+in order in one explicit transaction. `translate.Translated` and `translate.FromCypher` reject staged writes so a
+single-statement consumer cannot silently execute only part of a query. Single-part writes and read-only multipart
+queries retain their ordinary SQL path. `multipart_write_visibility_shapes` checks write/read/update/delete visibility,
+duplicates, empty inputs, ranking, aggregation, parameters, and post-state on both backends.
 
 ## Repeated-query compilation
 

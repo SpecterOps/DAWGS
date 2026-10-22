@@ -172,12 +172,7 @@ func runPostgreSQLTemplateCompilerModes(t *testing.T, corpusName string) {
 								if err != nil {
 									t.Fatal(err)
 								}
-								formatted, err := translate.Translated(translation)
-								if err != nil {
-									t.Fatal(err)
-								}
-								maps.Copy(translation.Parameters, formatted.Parameters)
-								result := tx.Raw(formatted.Statement, translation.Parameters)
+								result := executeTemplateTranslation(t, tx, translation)
 								parseAssertion(t, variant.Assert).checkResult(t, result, newAssertionContext(idMap))
 								result.Close()
 								return runStateAssertions(t, tx, idMap, variant.PostAssertions)
@@ -190,6 +185,33 @@ func runPostgreSQLTemplateCompilerModes(t *testing.T, corpusName string) {
 			}
 		})
 	}
+}
+
+// executeTemplateTranslation preserves statement boundaries for explicit
+// optimizer-mode checks. Fixtures run in an explicit rollback transaction.
+func executeTemplateTranslation(t *testing.T, tx graph.Transaction, translation translate.Result) graph.Result {
+	t.Helper()
+	statements, err := translate.TranslatedStatements(translation, "__dawgs_template_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, statement := range statements {
+		bindings := make(map[string]any, len(translation.Parameters)+len(statement.Parameters))
+		maps.Copy(bindings, translation.Parameters)
+		maps.Copy(bindings, statement.Parameters)
+		result := tx.Raw(statement.Statement, bindings)
+		if index == len(statements)-1 {
+			return result
+		}
+		for result.Next() {
+		}
+		result.Close()
+		if err := result.Error(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Fatal("translation contains no statements")
+	return nil
 }
 
 type livePGKindMapper struct {

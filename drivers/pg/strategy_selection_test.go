@@ -1,6 +1,8 @@
 package pg
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -8,6 +10,55 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTopologySuffixPoliciesKeepBoundExpansionBoundaryOnIncumbent(t *testing.T) {
+	const queryTemplate = `MATCH (root:ExpansionRoot) WHERE root.root_key = $root_key %s MATCH route = (root)-[:Expand*%s]->(%s)-[:EnterSuffix]->(:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(:SuffixTerminal) RETURN route`
+	const depth = "0..16"
+	evidenceQuery := fmt.Sprintf(queryTemplate, "", depth, "boundary")
+	parsed, err := frontend.ParseCypher(frontend.NewContext(), evidenceQuery)
+	require.NoError(t, err)
+	eligibleShape, err := traversalShapeForQuery(parsed)
+	require.NoError(t, err)
+	require.True(t, eligibleShape.Available())
+
+	for _, firstUse := range []bool{false, true} {
+		policy := testTopologyFixedSuffixPolicy(t, evidenceQuery, eligibleShape)
+		if firstUse {
+			policy.EnableTopologyFixedSuffix = false
+			policy.EnableTopologyFixedSuffixFirstUse = true
+			policy = rewriteTestTraversalPolicyManifest(t, policy, func(manifest *traversalPromotionManifest) {
+				manifest.Version = 5
+				manifest.Candidate = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+				manifest.SelectorVersion = string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+				manifest.ExecutionBoundary = "first_use_transaction_retry"
+				manifest.RouteCacheProtocol = "topology-selected-first-use-routing-v1"
+				manifest.Buckets[0].SQLTemplateSHA256 = structuralSQLTemplateSHA256(*manifest, manifest.Buckets[0])
+			})
+		}
+		driver := &Driver{SchemaManager: NewSchemaManager(nil, 0)}
+		require.NoError(t, driver.SetTraversalPolicy(policy))
+		eligiblePolicy, _ := driver.SchemaManager.topologyFixedSuffixPolicyForShape(eligibleShape, pgx.RepeatableRead)
+		require.True(t, eligiblePolicy.enabled(), "distinct unbound boundary remains eligible")
+		for _, query := range []string{
+			fmt.Sprintf(queryTemplate, "", depth, "root"),
+			fmt.Sprintf(queryTemplate, "MATCH (boundary:ExpansionNode) WITH root, boundary", depth, "boundary"),
+		} {
+			t.Run(fmt.Sprintf("%s/first_use=%t/carried=%t", depth, firstUse, strings.Contains(query, "WITH")), func(t *testing.T) {
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+				require.NoError(t, err)
+				shape, err := traversalShapeForQuery(parsed)
+				require.NoError(t, err)
+				require.False(t, shape.Available())
+				topology, identity := driver.SchemaManager.topologyFixedSuffixPolicyForShape(shape, pgx.RepeatableRead)
+				require.False(t, topology.enabled())
+				require.Empty(t, identity)
+				ordinary, identity := driver.SchemaManager.effectiveTraversalPolicyForShape(query, shape, pgx.RepeatableRead)
+				require.False(t, ordinary.enabled())
+				require.Equal(t, "production-incumbent-v1", identity)
+			})
+		}
+	}
+}
 
 func TestTraversalShapeUsesOptimizerFactsWithoutIdentifiersOrValues(t *testing.T) {
 	first, err := frontend.ParseCypher(frontend.NewContext(), "MATCH p = allShortestPaths((s)-[:Edge*1..4]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p")

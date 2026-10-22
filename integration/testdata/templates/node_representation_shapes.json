@@ -478,6 +478,328 @@
           ]
         }
       ]
+    },
+    {
+      "name": "F2 inline map function consumers",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "function-source",
+            "kinds": [
+              "F2FunctionSource"
+            ],
+            "properties": {
+              "name": "source"
+            }
+          },
+          {
+            "id": "function-mid",
+            "kinds": [
+              "F2FunctionMid"
+            ],
+            "properties": {
+              "name": "mid"
+            }
+          },
+          {
+            "id": "function-hit",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "id": "function-miss",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "miss",
+              "x": 9,
+              "source_kinds": [
+                "WrongKind"
+              ],
+              "source_type": "WrongType"
+            }
+          },
+          {
+            "id": "function-wrong-kind",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "id": "function-reversed",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "id": "function-missing",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "missing"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "function-source",
+            "end_id": "function-mid",
+            "kind": "F2FunctionPrefix"
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-hit",
+            "kind": "F2FunctionNext",
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-miss",
+            "kind": "F2FunctionNext",
+            "properties": {
+              "x": 9,
+              "source_kinds": [
+                "WrongKind"
+              ],
+              "source_type": "WrongType"
+            }
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-wrong-kind",
+            "kind": "F2FunctionDecoy",
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "start_id": "function-reversed",
+            "end_id": "function-mid",
+            "kind": "F2FunctionNext",
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-missing",
+            "kind": "F2FunctionNext"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node map id source absent property",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {missing: id(s)}) RETURN e"
+          },
+          "assert": {
+            "row_count": 0,
+            "node_ids": []
+          }
+        },
+        {
+          "name": "node map normalized source id",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {x: id(s) - id(s) + 7}) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "node map source labels",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {source_kinds: labels(s)}) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "node map relationship type",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {source_type: type(r)}) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map normalized source id",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {x: id(s) - id(s) + 7}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map source labels",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {source_kinds: labels(s)}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map normalized relationship id",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {x: id(r) - id(r) + 7}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map relationship type",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {source_type: type(r)}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "node map id consumer selects exact mutation",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {x: id(s) - id(s) + 7}) SET e.function_selected = true RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.function_selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "function-hit",
+                    "kinds": [
+                      "F2FunctionTarget"
+                    ],
+                    "props": {
+                      "name": "hit",
+                      "x": 7,
+                      "source_kinds": [
+                        "F2FunctionSource"
+                      ],
+                      "source_type": "F2FunctionPrefix",
+                      "function_selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship map id consumer selects exact mutation",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {x: id(r) - id(r) + 7}]->(e) SET e.function_selected = true RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.function_selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "function-hit",
+                    "kinds": [
+                      "F2FunctionTarget"
+                    ],
+                    "props": {
+                      "name": "hit",
+                      "x": 7,
+                      "source_kinds": [
+                        "F2FunctionSource"
+                      ],
+                      "source_type": "F2FunctionPrefix",
+                      "function_selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
