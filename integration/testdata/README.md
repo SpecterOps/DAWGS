@@ -49,6 +49,13 @@ alone cannot establish visibility between clauses inside the primary query.
 It also checks constant projection cardinality, entity aliases versus captured
 scalar values, and filters after ordering/pagination but before later mutations.
 
+`update_row_stream_shapes.json` checks fan-out, repeated mutation targets,
+duplicate input values, nullable node and relationship targets, per-row assignment
+expressions, aliases, and empty inputs. It asserts the complete node and relationship
+post-state as well as returned row multiplicity. `update_row_stream_inline.json`
+checks continuation through a later WITH mutation. PostgreSQL also executes the
+template variants with each compiler mode explicitly.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse

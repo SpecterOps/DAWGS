@@ -485,7 +485,8 @@ func (s *Properties) Keys(ignoredKeys map[string]struct{}) []string {
 }
 
 // HashInto returns a hash of the Properties' key-value pairs, ignoring specified keys.
-// It marshals values using JSON and appends them to the hash stream in sorted key order.
+// It frames keys, Go value types and JSON values in sorted key order. The digest is
+// not a stable storage format and changes when the encoding changes.
 func (s *Properties) HashInto(h *xxhash.Digest, ignoredKeys map[string]struct{}) error {
 	keys := s.Keys(ignoredKeys)
 	for _, key := range keys {
@@ -497,13 +498,10 @@ func (s *Properties) HashInto(h *xxhash.Digest, ignoredKeys map[string]struct{})
 	return nil
 }
 
-// writeKeyValueToHash writes a single key and its JSON-encoded value to the given hash.
+// writeKeyValueToHash frames a key, value type and JSON value as one JSON array.
+// Each array is self-delimiting, so adjoining entries cannot erase field boundaries.
 func writeKeyValueToHash(h io.Writer, key string, value any) error {
-	if _, err := h.Write([]byte(key)); err != nil {
-		return fmt.Errorf("writing key to hash: %w", err)
-	}
-
-	encodedValue, err := json.Marshal(value)
+	encodedValue, err := json.Marshal([]any{key, fmt.Sprintf("%T", value), value})
 	if err != nil {
 		return fmt.Errorf("marshaling value for key %q: %w", key, err)
 	}

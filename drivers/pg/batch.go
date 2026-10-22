@@ -42,12 +42,12 @@ func (s *Int2ArrayEncoder) Encode(values []int16) string {
 	return s.buffer.String()
 }
 
-// batch buffers graph mutations and applies them through one PostgreSQL transaction in insertion order.
+// batch buffers graph mutations and flushes each operation group to PostgreSQL.
 type batch struct {
 	// ctx scopes database operations performed while flushing buffered mutations.
 	ctx context.Context
 
-	// innerTransaction owns the PostgreSQL transaction through which every buffered mutation is applied.
+	// innerTransaction provides the connection and graph-selection context for buffered mutations.
 	innerTransaction *transaction
 
 	// schemaManager resolves graph metadata and maps graph kinds to their database identifiers.
@@ -441,12 +441,31 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 		return err
 	}
 
+	for _, update := range updates.Updates {
+		if len(update.Node.DeletedKinds) > 0 {
+			// PostgreSQL batches normally autocommit each flush. The upsert and
+			// its follow-up removal must succeed or fail together within a flush.
+			tx, err := s.innerTransaction.conn.Begin(s.ctx)
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback(s.ctx)
+			if err := s.flushNodeUpsertBatchWithDriver(updates, parameters, tx); err != nil {
+				return err
+			}
+			return tx.Commit(s.ctx)
+		}
+	}
+	return s.flushNodeUpsertBatchWithDriver(updates, parameters, s.innerTransaction.conn)
+}
+
+func (s *batch) flushNodeUpsertBatchWithDriver(updates *sql.NodeUpdateBatch, parameters *NodeUpsertParameters, executor driver) error {
 	if graphTarget, err := s.innerTransaction.getTargetGraph(); err != nil {
 		return err
 	} else {
 		query := sql.FormatNodeUpsert(graphTarget, updates.IdentityProperties)
 
-		if rows, err := s.innerTransaction.conn.Query(s.ctx, query, parameters.Format(graphTarget)...); err != nil {
+		if rows, err := executor.Query(s.ctx, query, parameters.Format(graphTarget)...); err != nil {
 			return err
 		} else {
 			defer rows.Close()
@@ -464,10 +483,29 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 			if err := rows.Err(); err != nil {
 				return err
 			}
+			rows.Close()
 		}
 	}
 
+	if removals := nodeUpsertKindRemovals(updates); len(removals) > 0 {
+		return s.flushNodeUpdateBatchWithDriver(removals, executor)
+	}
 	return nil
+}
+
+// nodeUpsertKindRemovals binds kind-removal intent to the IDs resolved by the
+// upsert. Apply these through the existing update-by-ID path in the same
+// transaction; an upsert's conflict clause only merges properties and kinds.
+func nodeUpsertKindRemovals(updates *sql.NodeUpdateBatch) []*graph.Node {
+	var removals []*graph.Node
+	for _, update := range updates.Updates {
+		if len(update.Node.DeletedKinds) > 0 {
+			node := graph.NewNode(update.IDFuture.Value, graph.NewProperties())
+			node.DeletedKinds = update.Node.DeletedKinds.Copy()
+			removals = append(removals, node)
+		}
+	}
+	return removals
 }
 
 // tryFlushNodeUpdateByBuffer validates, writes, and clears the buffered identity-based node updates.
@@ -484,6 +522,10 @@ func (s *batch) tryFlushNodeUpdateByBuffer() error {
 
 // flushNodeUpdateBatch writes complete node replacements for the supplied nodes.
 func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
+	return s.flushNodeUpdateBatchWithDriver(nodes, s.innerTransaction.conn)
+}
+
+func (s *batch) flushNodeUpdateBatchWithDriver(nodes []*graph.Node, executor driver) error {
 	parameters := NewNodeUpdateParameters(len(nodes))
 
 	if err := parameters.AppendAll(s.ctx, nodes, s.schemaManager, s.kindIDEncoder); err != nil {
@@ -495,7 +537,7 @@ func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
 	} else {
 		query := sql.FormatNodesUpdate(graphTarget)
 
-		if rows, err := s.innerTransaction.conn.Query(s.ctx, query, parameters.Format()...); err != nil {
+		if rows, err := executor.Query(s.ctx, query, parameters.Format()...); err != nil {
 			return err
 		} else {
 			rows.Close()

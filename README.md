@@ -165,6 +165,24 @@ tools must use `translate.TranslatedStatements` and execute every returned state
 the single-statement renderer rejects staged writes. The shared `node_representation_shapes`, `leading_multipart_shapes`,
 `empty_list_alias_shapes`, and `multipart_write_visibility_shapes` templates cover these behaviors.
 
+PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
+Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
+updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared
+`update_row_stream_shapes` templates check row counts, returned values, and exact node and relationship post-state in
+both PostgreSQL optimizer modes and on Neo4j.
+
+Batch identity keys distinguish entity kinds, property names and values, and relationship endpoints. `NodeUpdate.Key`,
+`RelationshipUpdate.Key`, and `Properties.HashInto` produce opaque identities whose encoding is not a stable storage
+format. Key generation leaves caller-owned identity-property slices in their original order.
+
+Neo4j `Batch.UpdateNodes` applies tracked property deletions alongside property and kind additions and removals.
+Different nodes in the same batch retain their own deletion sets. PostgreSQL `Batch.UpdateNodeBy` applies tracked
+kind removals after resolving the upserted node IDs, preserving other kinds and properties.
+
+PostgreSQL batch operations can commit flushed work before the batch delegate returns. A later delegate error does
+not undo completed flushes. Identity-based node upsert flushes containing kind removals apply the upsert and removals
+in one explicit transaction; other flushes keep their existing execution paths.
+
 Suffix reverse policies keep predicates correlated with carried values or other suffix bindings on the ordinary
 executor; forced reverse diagnostics reject those shapes. `correlated_suffix_shapes` checks exact paths, duplicate rows,
 and mutation selection. Additional constraints on an already-bound root use ordinary traversal as well. A bound expansion

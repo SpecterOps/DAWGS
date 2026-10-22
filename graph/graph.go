@@ -2,7 +2,9 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -164,19 +166,39 @@ type NodeUpdate struct {
 	IdentityProperties []string
 }
 
+// Key returns an opaque, deterministic batch identity. Its encoding is not a storage format.
 func (s NodeUpdate) Key() (string, error) {
+	properties, err := identityPropertiesKey(s.Node.Properties, s.IdentityProperties)
+	if err != nil {
+		return "", err
+	}
+	return updateIdentityKey("node", identityKindName(s.IdentityKind), properties), nil
+}
+
+func identityKindName(kind Kind) string {
+	if kind == nil {
+		return ""
+	}
+	return kind.String()
+}
+
+func updateIdentityKey(fields ...string) string {
+	encoded, _ := json.Marshal(fields) // Strings always have a JSON representation.
+	return string(encoded)
+}
+
+func identityPropertiesKey(properties *Properties, fields []string) (string, error) {
 	key := strings.Builder{}
-
-	slices.Sort(s.IdentityProperties)
-
-	for _, identityProperty := range s.IdentityProperties {
-		if propertyValue, err := s.Node.Properties.Get(identityProperty).String(); err != nil {
+	fields = slices.Clone(fields)
+	slices.Sort(fields)
+	for _, field := range fields {
+		if properties == nil || !properties.Exists(field) || properties.Get(field).IsNil() {
+			return "", fmt.Errorf("identity property %s: %w", field, ErrPropertyNotFound)
+		}
+		if err := writeKeyValueToHash(&key, field, properties.Get(field).Any()); err != nil {
 			return "", err
-		} else {
-			key.WriteString(propertyValue)
 		}
 	}
-
 	return key.String(), nil
 }
 
@@ -191,9 +213,9 @@ type RelationshipUpdate struct {
 	EndIdentityProperties   []string
 }
 
+// Key returns an opaque, deterministic batch identity. Its encoding is not a storage format.
 func (s RelationshipUpdate) Key() (string, error) {
 	var (
-		key             = strings.Builder{}
 		startNodeUpdate = NodeUpdate{
 			Node:               s.Start,
 			IdentityKind:       s.StartIdentityKind,
@@ -207,27 +229,16 @@ func (s RelationshipUpdate) Key() (string, error) {
 		}
 	)
 
-	key.WriteString(s.Relationship.Kind.String())
-
 	if startKey, err := startNodeUpdate.Key(); err != nil {
 		return "", err
 	} else if endKey, err := endNodeUpdate.Key(); err != nil {
 		return "", err
 	} else {
-		key.WriteString(startKey)
-
-		slices.Sort(s.IdentityProperties)
-
-		for _, identityProperty := range s.IdentityProperties {
-			if propertyValue, err := s.Relationship.Properties.Get(identityProperty).String(); err != nil {
-				return "", err
-			} else {
-				key.WriteString(propertyValue)
-			}
+		properties, err := identityPropertiesKey(s.Relationship.Properties, s.IdentityProperties)
+		if err != nil {
+			return "", err
 		}
-
-		key.WriteString(endKey)
-		return key.String(), nil
+		return updateIdentityKey("relationship", identityKindName(s.Relationship.Kind), startKey, properties, endKey), nil
 	}
 }
 
