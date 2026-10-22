@@ -70,6 +70,12 @@ missing/null property state, and relationship property. Reuse
 `integration` package for deterministic Go integration cases and large
 cardinality lists.
 
+`cache_kind_identity_shapes.json` provides shared read/mutation controls for matching
+all versus any requested kinds, including exact stored properties on nonmatches.
+The PostgreSQL cache regression reuses its fixture with builder-only empty predicates
+and exclusive/overlapping kind ASTs. It populates the cache in both orders and repeats
+requests with new mutation values to check returned IDs and complete stored properties.
+
 Tagged datetime parameters decode to `time.Time`:
 
 ```json

@@ -139,7 +139,9 @@ make test_bench
 
 The PostgreSQL driver has a bounded, driver-wide Cypher compilation cache for both text Cypher and programmatic graph
 queries. Its default capacity is 256 entries; callers that need a different capacity can use
-`pg.NewDriverWithOptions`. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
+`pg.NewDriverWithOptions`. Builder identities include a bounded typed AST digest, so ASTs that render the same Cypher
+text cannot reuse one another's SQL. Runtime parameter values are rebound on each hit; unsupported fingerprint shapes
+compile without cache reuse. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
 newly started compilations across every PostgreSQL driver in the process. See
 [PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
 
