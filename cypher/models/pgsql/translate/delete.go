@@ -30,12 +30,26 @@ func (s *Translator) translateDelete(scope *Scope, cypherDelete *cypher.Delete) 
 }
 
 func (s *Translator) buildDeletions(scope *Scope) error {
+	deletionFrames := map[*Frame]struct{}{}
+	for _, deletion := range s.query.CurrentPart().mutations.Deletions.Values() {
+		deletionFrames[deletion.Frame] = struct{}{}
+	}
 	for _, identifierDeletion := range s.query.CurrentPart().mutations.Deletions.Values() {
+		sourceFrame, hasSource := s.previousValidFrame(identifierDeletion.Frame)
+		for hasSource {
+			if _, deletionFrame := deletionFrames[sourceFrame]; !deletionFrame {
+				break
+			}
+			sourceFrame, hasSource = s.previousValidFrame(sourceFrame)
+		}
+		if !hasSource {
+			return fmt.Errorf("deletion %s has no input frame", identifierDeletion.TargetBinding.Identifier)
+		}
 		var (
 			sqlDelete = pgsql.Delete{
 				Using: []pgsql.FromClause{{
 					Source: pgsql.TableReference{
-						Name: pgsql.CompoundIdentifier{identifierDeletion.Frame.Previous.Binding.Identifier},
+						Name: pgsql.CompoundIdentifier{sourceFrame.Binding.Identifier},
 					},
 				}},
 			}
@@ -75,7 +89,7 @@ func (s *Translator) buildDeletions(scope *Scope) error {
 
 		s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
 			Alias: pgsql.TableAlias{
-				Name: scope.CurrentFrameBinding().Identifier,
+				Name: identifierDeletion.Frame.Binding.Identifier,
 			},
 			Query: pgsql.Query{
 				Body: sqlDelete,

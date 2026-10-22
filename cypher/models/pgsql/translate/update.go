@@ -100,7 +100,8 @@ func (s *Translator) translateUpdates() error {
 								updateClause.Projection = append(updateClause.Projection, rewrittenProjections...)
 							}
 						} else {
-							updateClause.Projection = append(updateClause.Projection, typedProjection)
+							binding, _ := s.scope.Lookup(typedProjection.Alias.Value)
+							updateClause.Projection = append(updateClause.Projection, refreshUpdatedEntityProjection(typedProjection, binding, updateClause.UpdateBinding))
 						}
 
 					default:
@@ -115,12 +116,47 @@ func (s *Translator) translateUpdates() error {
 	return s.buildUpdates()
 }
 
+// refreshUpdatedEntityProjection updates another name for the mutated entity
+// while preserving unrelated entities and values captured before the mutation.
+func refreshUpdatedEntityProjection(projection *pgsql.AliasedExpression, binding, updated *BoundIdentifier) *pgsql.AliasedExpression {
+	if binding == nil || updated == nil || binding.IDOnly {
+		return projection
+	}
+	family := bindingExpressionType(binding)
+	if family != bindingExpressionType(updated) || (family != pgsql.NodeComposite && family != pgsql.EdgeComposite) {
+		return projection
+	}
+	columns := pgsql.NodeTableColumns
+	if family == pgsql.EdgeComposite {
+		columns = pgsql.EdgeTableColumns
+	}
+	fresh := pgsql.CompositeValue{DataType: family}
+	for _, column := range columns {
+		fresh.Values = append(fresh.Values, pgsql.CompoundIdentifier{updated.Identifier, column})
+	}
+	refreshed := *projection
+	refreshed.Expression = pgsql.Case{
+		Conditions: []pgsql.Expression{pgsql.NewBinaryExpression(
+			pgsql.RowColumnReference{Identifier: projection.Expression, Column: pgsql.ColumnID},
+			pgsql.OperatorEquals,
+			pgsql.CompoundIdentifier{updated.Identifier, pgsql.ColumnID},
+		)},
+		Then: []pgsql.Expression{fresh},
+		Else: projection.Expression,
+	}
+	return &refreshed
+}
+
 func (s *Translator) buildUpdates() error {
 	for _, identifierMutation := range s.query.CurrentPart().mutations.Updates.Values() {
+		sourceFrame, hasSource := s.previousValidFrame(identifierMutation.Frame)
+		if !hasSource {
+			return fmt.Errorf("update %s has no input frame", identifierMutation.TargetBinding.Identifier)
+		}
 		sqlUpdate := pgsql.Update{
 			From: []pgsql.FromClause{{
 				Source: pgsql.TableReference{
-					Name: pgsql.CompoundIdentifier{identifierMutation.Frame.Previous.Binding.Identifier},
+					Name: pgsql.CompoundIdentifier{sourceFrame.Binding.Identifier},
 				}},
 			},
 		}

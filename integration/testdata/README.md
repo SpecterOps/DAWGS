@@ -36,6 +36,19 @@ WITH, including empty inputs, properties, relationship creation, and post-state.
 nodes, and relationships, with ordered path nodes and duplicate row multiplicity.
 PostgreSQL tests also execute these corpora with each compiler mode explicitly.
 
+`bound_suffix_boundary_shapes.json` checks suffixes whose expansion boundary is
+already bound, including root reuse, aliases, cycles, zero hops, and mutation
+selection. `empty_list_alias_shapes.json` checks empty lists materialized through
+WITH and their zero-row mutation effects. Inline-map function references are
+covered in `node_representation_shapes.json`.
+
+`multipart_write_visibility_shapes.json` keeps CREATE followed by MATCH, SET,
+or DELETE in the same primary Cypher query. Post-assertions additionally check
+exact created values/counts and unchanged decoys. Separate post-assertion queries
+alone cannot establish visibility between clauses inside the primary query.
+It also checks constant projection cardinality, entity aliases versus captured
+scalar values, and filters after ordering/pagination but before later mutations.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse

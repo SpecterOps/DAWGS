@@ -1,0 +1,3119 @@
+{
+  "families": [
+    {
+      "name": "multipart writes are visible to later clauses",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "visibility-seed",
+            "kinds": [
+              "VisibilitySeed"
+            ],
+            "properties": {
+              "name": "selected",
+              "enabled": true,
+              "value": 7
+            }
+          },
+          {
+            "id": "visibility-disabled",
+            "kinds": [
+              "VisibilitySeed"
+            ],
+            "properties": {
+              "name": "disabled",
+              "enabled": false,
+              "value": 99
+            }
+          },
+          {
+            "id": "visibility-wrong-kind",
+            "kinds": [
+              "VisibilityDecoy"
+            ],
+            "properties": {
+              "name": "selected",
+              "enabled": true,
+              "value": 99
+            }
+          },
+          {
+            "id": "visibility-missing",
+            "kinds": [
+              "VisibilitySeed"
+            ],
+            "properties": {
+              "name": "missing",
+              "value": 99
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "leading create then set",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n SET n.x = 1 RETURN n.marker, n.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "created",
+                1
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "leading create then match by identity",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n MATCH (m:VisibilityCreated) WHERE id(m) = id(n) RETURN id(m) = id(n), m.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                0
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    0,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "leading create then delete",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 0,
+                "ordered_row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "attached selected seed create then set",
+          "vars": {
+            "query": "MATCH (s:VisibilitySeed) WHERE s.enabled = true WITH s CREATE (n:VisibilityCreated {marker: 'created', x: 0, source: s.name}) WITH s, n SET n.x = s.value RETURN n.source, n.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "selected",
+                7
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    7,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.source",
+              "assert": {
+                "row_values": [
+                  [
+                    "selected"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "attached selected seed create then match",
+          "vars": {
+            "query": "MATCH (s:VisibilitySeed) WHERE s.enabled = true WITH s CREATE (n:VisibilityCreated {marker: 'created', x: 0, source: s.name}) WITH s, n MATCH (m:VisibilityCreated) WHERE id(m) = id(n) RETURN id(m) = id(n), m.source, m.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                "selected",
+                0
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    0,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "attached selected seed create then delete",
+          "vars": {
+            "query": "MATCH (s:VisibilitySeed) WHERE s.enabled = true WITH s CREATE (n:VisibilityCreated {marker: 'created', x: 0, source: s.name}) WITH s, n DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 0,
+                "ordered_row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "distinct string literals through consecutive stages",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'first', x: 0}) WITH n SET n.marker = 'second' WITH n MATCH (m:VisibilityCreated) WHERE id(m) = id(n) RETURN m.marker, m.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "second",
+                0
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "second",
+                    0,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "consecutive updates of the same created node",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n SET n.x = 1 WITH n SET n.x = n.x + 1 WITH n RETURN n.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "consecutive creates visible to final match",
+          "vars": {
+            "query": "CREATE (a:VisibilityCreated {marker: 'first', x: 1}) WITH a CREATE (b:VisibilityCreated {marker: 'second', x: 2}) WITH a, b MATCH (m:VisibilityCreated) WHERE id(m) = id(a) OR id(m) = id(b) RETURN m.marker, m.x ORDER BY m.x"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_row_values": [
+              [
+                "first",
+                1
+              ],
+              [
+                "second",
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "first",
+                    1,
+                    null
+                  ],
+                  [
+                    "second",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "duplicate incoming values retain multiplicity",
+          "vars": {
+            "query": "UNWIND [1, 1, 2] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n SET n.seen = true WITH n RETURN n.x ORDER BY n.x"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1
+              ],
+              [
+                1
+              ],
+              [
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    true
+                  ],
+                  [
+                    "created",
+                    1,
+                    true
+                  ],
+                  [
+                    "created",
+                    2,
+                    true
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty input makes no later writes",
+          "vars": {
+            "query": "UNWIND [] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n SET n.seen = true WITH n MATCH (m:VisibilityCreated) WHERE id(m) = id(n) RETURN m.x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 0,
+                "ordered_row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "aggregation carries scalar into later creation",
+          "vars": {
+            "query": "UNWIND [1, 2, 2] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH count(n) AS total CREATE (summary:VisibilitySummary {total: total}) WITH summary MATCH (m:VisibilitySummary) WHERE id(m) = id(summary) RETURN m.total"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                3
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    3
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "where filters later mutation input",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n WHERE n.x > 1 SET n.seen = true WITH n RETURN n.x ORDER BY n.x"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_row_values": [
+              [
+                2
+              ],
+              [
+                3
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    true
+                  ],
+                  [
+                    "created",
+                    3,
+                    true
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "where eliminates all later mutation rows",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n WHERE n.x > 9 SET n.seen = true WITH n RETURN n.x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "order and limit select the later mutation row",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n ORDER BY n.x DESC LIMIT 1 SET n.seen = true WITH n RETURN n.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                3
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ],
+                  [
+                    "created",
+                    3,
+                    true
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty stage still feeds final aggregation",
+          "vars": {
+            "query": "UNWIND [] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n SET n.x = 1 WITH count(n) AS total RETURN total"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                0
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 0,
+                "ordered_row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "created relationship is visible to fresh match",
+          "vars": {
+            "query": "CREATE (a:VisibilityCreated {marker: 'first', x: 1})-[:VisibilityLink {marker: 'link'}]->(b:VisibilityCreated {marker: 'second', x: 2}) WITH a, b MATCH (fresh:VisibilityCreated)-[r:VisibilityLink]->(target:VisibilityCreated) WHERE id(fresh) = id(a) AND id(target) = id(b) RETURN fresh.marker, r.marker, target.marker"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "first",
+                "link",
+                "second"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "first",
+                    1,
+                    null
+                  ],
+                  [
+                    "second",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:VisibilityLink]->() RETURN r.marker",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    "link"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "nonfinal delete carries rows into aggregation",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n DELETE n WITH count(n) AS deleted RETURN deleted"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 0,
+                "ordered_row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "constant with preserves two incoming rows",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH 1 AS y RETURN count(y)"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "constant with preserves empty incoming pipeline",
+          "vars": {
+            "query": "UNWIND [] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH 1 AS y RETURN y"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 0,
+                "ordered_row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "duplicate node alias observes later update",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n, n AS alias SET n.x = 1 WITH alias RETURN alias.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "fresh same identity binding observes later update",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n MATCH (m:VisibilityCreated) WHERE id(m) = id(n) SET n.x = 1 WITH m RETURN m.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship alias observes later update",
+          "vars": {
+            "query": "CREATE (a:VisibilityCreated {marker: 'first', x: 1})-[r:VisibilityLink {marker: 'link', x: 0}]->(b:VisibilityCreated {marker: 'second', x: 2}) WITH r, r AS alias SET r.x = 1 WITH alias RETURN alias.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "first",
+                    1,
+                    null
+                  ],
+                  [
+                    "second",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:VisibilityLink]->() RETURN r.marker, r.x",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    "link",
+                    1
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "captured scalar keeps pre-update value",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}) WITH n, n.x AS before SET n.x = 1 WITH n, before RETURN n.x, before"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                1,
+                0
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "distinct entity keeps its properties",
+          "vars": {
+            "query": "CREATE (n:VisibilityCreated {marker: 'created', x: 0}), (other:VisibilityCreated {marker: 'other', x: 7}) WITH n, other SET n.x = 1 WITH other RETURN other.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                7
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "other",
+                    7,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "entity alias orders mutation boundary",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n AS ordered ORDER BY ordered.x DESC LIMIT 1 SET ordered.seen = true WITH ordered RETURN ordered.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                3
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ],
+                  [
+                    "created",
+                    3,
+                    true
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "read prefix entity alias orders creation input",
+          "vars": {
+            "query": "MATCH (seed:VisibilitySeed) WITH seed AS selected ORDER BY selected.name ASC LIMIT 1 CREATE (n:VisibilityCreated {marker: 'created', x: toInteger(selected.value), source: selected.name}) WITH n RETURN n.source, n.x"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "disabled",
+                99
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 1,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    99,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.source",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    "disabled"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "computed alias where filters before mutation",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n, n.x AS value WHERE value < 3 SET n.seen = true WITH n RETURN n.x ORDER BY n.x"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    true
+                  ],
+                  [
+                    "created",
+                    2,
+                    true
+                  ],
+                  [
+                    "created",
+                    3,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "computed alias where rejects limited input before mutation",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n, n.x AS value ORDER BY value DESC LIMIT 1 WHERE value < 3 SET n.seen = true WITH n RETURN n.x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ],
+                  [
+                    "created",
+                    3,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "aggregate alias where accepts later creation",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH count(n) AS total WHERE total > 1 CREATE (summary:VisibilitySummary {total: total}) WITH summary RETURN summary.total"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "aggregate alias where rejects later creation",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH count(n) AS total WHERE total > 9 CREATE (summary:VisibilitySummary {total: total}) WITH summary RETURN summary.total"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 2,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "existing binding where rejects limited input before mutation",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n ORDER BY n.x DESC LIMIT 1 WHERE n.x < 3 SET n.seen = true WITH n RETURN n.x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ],
+                  [
+                    "created",
+                    3,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "hidden input where rejects limited projection",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n.x AS value ORDER BY value DESC LIMIT 1 WHERE n.x < 3 RETURN value"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ],
+                  [
+                    "created",
+                    3,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "source scalar where rejects limited input before mutation",
+          "vars": {
+            "query": "UNWIND [1, 2, 3] AS x CREATE (n:VisibilityCreated {marker: 'created', x: x}) WITH n, x ORDER BY x DESC LIMIT 1 WHERE x < 3 SET n.seen = true WITH n RETURN n.x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:VisibilityCreated) RETURN n.marker, n.x, n.seen ORDER BY n.x, n.marker",
+              "assert": {
+                "row_count": 3,
+                "ordered_row_values": [
+                  [
+                    "created",
+                    1,
+                    null
+                  ],
+                  [
+                    "created",
+                    2,
+                    null
+                  ],
+                  [
+                    "created",
+                    3,
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:VisibilitySummary) RETURN n.total",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:VisibilitySeed OR n:VisibilityDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "visibility-seed",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 7
+                    }
+                  },
+                  {
+                    "id": "visibility-disabled",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "disabled",
+                      "enabled": false,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-wrong-kind",
+                    "kinds": [
+                      "VisibilityDecoy"
+                    ],
+                    "props": {
+                      "name": "selected",
+                      "enabled": true,
+                      "value": 99
+                    }
+                  },
+                  {
+                    "id": "visibility-missing",
+                    "kinds": [
+                      "VisibilitySeed"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "value": 99
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

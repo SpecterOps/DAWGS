@@ -1,0 +1,1442 @@
+{
+  "families": [
+    {
+      "name": "bound suffix boundary acyclic",
+      "template": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'bound-suffix-root' {{bindings}} MATCH path = (root)-[:Expand*{{depth}}]->({{boundary}})-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": "bound-suffix-root",
+              "name": "root"
+            }
+          },
+          {
+            "id": "boundary",
+            "kinds": [
+              "ExpansionNode"
+            ],
+            "properties": {
+              "name": "bound"
+            }
+          },
+          {
+            "id": "unreachable-boundary",
+            "kinds": [
+              "ExpansionNode"
+            ],
+            "properties": {
+              "name": "unreachable"
+            }
+          },
+          {
+            "id": "head-distinct",
+            "kinds": [
+              "SuffixHead"
+            ],
+            "properties": {
+              "name": "head-distinct"
+            }
+          },
+          {
+            "id": "middle-distinct",
+            "kinds": [
+              "SuffixMiddle"
+            ],
+            "properties": {
+              "name": "middle-distinct"
+            }
+          },
+          {
+            "id": "terminal-distinct",
+            "kinds": [
+              "SuffixTerminal"
+            ],
+            "properties": {
+              "name": "terminal-distinct"
+            }
+          },
+          {
+            "id": "root-other",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": "other",
+              "name": "root-other"
+            }
+          },
+          {
+            "id": "root-missing",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "name": "root-missing"
+            }
+          },
+          {
+            "id": "root-null",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": null,
+              "name": "root-null"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "boundary",
+            "kind": "Expand"
+          },
+          {
+            "start_id": "boundary",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-distinct",
+            "end_id": "middle-distinct",
+            "kind": "ContinueSuffix"
+          },
+          {
+            "start_id": "middle-distinct",
+            "end_id": "terminal-distinct",
+            "kind": "CompleteSuffix"
+          },
+          {
+            "start_id": "root-other",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root-missing",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root-null",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-distinct",
+            "end_id": "root",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root",
+            "end_id": "head-distinct",
+            "kind": "WrongEnterSuffix"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "repeated root zero and positive depths",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "repeated root positive depths",
+          "vars": {
+            "bindings": "",
+            "depth": "1..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "repeated root zero only",
+          "vars": {
+            "bindings": "",
+            "depth": "0..0",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "repeated root exact recursive depth",
+          "vars": {
+            "bindings": "",
+            "depth": "2..2",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "repeated root carried through WITH",
+          "vars": {
+            "bindings": "WITH root",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "distinct unbound endpoint control",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              4
+            ]
+          }
+        },
+        {
+          "name": "distinct endpoint bound before expansion",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'bound'",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              4
+            ]
+          }
+        },
+        {
+          "name": "distinct endpoint carried through WITH",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'bound' WITH root, boundary",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              4
+            ]
+          }
+        },
+        {
+          "name": "unreachable bound endpoint",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'unreachable'",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "bound alias retains root identity",
+          "vars": {
+            "bindings": "WITH root, root AS boundary",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "mutation selects repeated root terminal",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "WITH DISTINCT terminal SET terminal.selected = true",
+            "result": "terminal"
+          },
+          "assert": {
+            "row_count": 0,
+            "node_records": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_records": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "mutation distinct endpoint control",
+          "vars": {
+            "bindings": "",
+            "depth": "1..1",
+            "boundary": "boundary",
+            "update": "WITH DISTINCT terminal SET terminal.selected = true",
+            "result": "terminal"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_records": [
+              {
+                "id": "terminal-distinct",
+                "kinds": [
+                  "SuffixTerminal"
+                ],
+                "props": {
+                  "name": "terminal-distinct",
+                  "selected": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "terminal-distinct",
+                    "kinds": [
+                      "SuffixTerminal"
+                    ],
+                    "props": {
+                      "name": "terminal-distinct",
+                      "selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bound suffix boundary zero-hop",
+      "template": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'bound-suffix-root' {{bindings}} MATCH path = (root)-[:Expand*{{depth}}]->({{boundary}})-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": "bound-suffix-root",
+              "name": "root"
+            }
+          },
+          {
+            "id": "boundary",
+            "kinds": [
+              "ExpansionNode"
+            ],
+            "properties": {
+              "name": "bound"
+            }
+          },
+          {
+            "id": "unreachable-boundary",
+            "kinds": [
+              "ExpansionNode"
+            ],
+            "properties": {
+              "name": "unreachable"
+            }
+          },
+          {
+            "id": "head-distinct",
+            "kinds": [
+              "SuffixHead"
+            ],
+            "properties": {
+              "name": "head-distinct"
+            }
+          },
+          {
+            "id": "middle-distinct",
+            "kinds": [
+              "SuffixMiddle"
+            ],
+            "properties": {
+              "name": "middle-distinct"
+            }
+          },
+          {
+            "id": "terminal-distinct",
+            "kinds": [
+              "SuffixTerminal"
+            ],
+            "properties": {
+              "name": "terminal-distinct"
+            }
+          },
+          {
+            "id": "root-other",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": "other",
+              "name": "root-other"
+            }
+          },
+          {
+            "id": "root-missing",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "name": "root-missing"
+            }
+          },
+          {
+            "id": "root-null",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": null,
+              "name": "root-null"
+            }
+          },
+          {
+            "id": "head-root",
+            "kinds": [
+              "SuffixHead"
+            ],
+            "properties": {
+              "name": "head-root"
+            }
+          },
+          {
+            "id": "middle-root",
+            "kinds": [
+              "SuffixMiddle"
+            ],
+            "properties": {
+              "name": "middle-root"
+            }
+          },
+          {
+            "id": "terminal-root",
+            "kinds": [
+              "SuffixTerminal"
+            ],
+            "properties": {
+              "name": "terminal-root"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "boundary",
+            "kind": "Expand"
+          },
+          {
+            "start_id": "boundary",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-distinct",
+            "end_id": "middle-distinct",
+            "kind": "ContinueSuffix"
+          },
+          {
+            "start_id": "middle-distinct",
+            "end_id": "terminal-distinct",
+            "kind": "CompleteSuffix"
+          },
+          {
+            "start_id": "root-other",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root-missing",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root-null",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-distinct",
+            "end_id": "root",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root",
+            "end_id": "head-distinct",
+            "kind": "WrongEnterSuffix"
+          },
+          {
+            "start_id": "root",
+            "end_id": "head-root",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-root",
+            "end_id": "middle-root",
+            "kind": "ContinueSuffix"
+          },
+          {
+            "start_id": "middle-root",
+            "end_id": "terminal-root",
+            "kind": "CompleteSuffix"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "repeated root zero and positive depths",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "repeated root positive depths",
+          "vars": {
+            "bindings": "",
+            "depth": "1..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "repeated root zero only",
+          "vars": {
+            "bindings": "",
+            "depth": "0..0",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "repeated root exact recursive depth",
+          "vars": {
+            "bindings": "",
+            "depth": "2..2",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "repeated root carried through WITH",
+          "vars": {
+            "bindings": "WITH root",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "distinct unbound endpoint control",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ],
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              3,
+              4
+            ]
+          }
+        },
+        {
+          "name": "distinct endpoint bound before expansion",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'bound'",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              4
+            ]
+          }
+        },
+        {
+          "name": "distinct endpoint carried through WITH",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'bound' WITH root, boundary",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              4
+            ]
+          }
+        },
+        {
+          "name": "unreachable bound endpoint",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'unreachable'",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "bound alias retains root identity",
+          "vars": {
+            "bindings": "WITH root, root AS boundary",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "mutation selects repeated root terminal",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "WITH DISTINCT terminal SET terminal.selected = true",
+            "result": "terminal"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_records": [
+              {
+                "id": "terminal-root",
+                "kinds": [
+                  "SuffixTerminal"
+                ],
+                "props": {
+                  "name": "terminal-root",
+                  "selected": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "terminal-root",
+                    "kinds": [
+                      "SuffixTerminal"
+                    ],
+                    "props": {
+                      "name": "terminal-root",
+                      "selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mutation distinct endpoint control",
+          "vars": {
+            "bindings": "",
+            "depth": "1..1",
+            "boundary": "boundary",
+            "update": "WITH DISTINCT terminal SET terminal.selected = true",
+            "result": "terminal"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_records": [
+              {
+                "id": "terminal-distinct",
+                "kinds": [
+                  "SuffixTerminal"
+                ],
+                "props": {
+                  "name": "terminal-distinct",
+                  "selected": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "terminal-distinct",
+                    "kinds": [
+                      "SuffixTerminal"
+                    ],
+                    "props": {
+                      "name": "terminal-distinct",
+                      "selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bound suffix boundary cycle",
+      "template": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'bound-suffix-root' {{bindings}} MATCH path = (root)-[:Expand*{{depth}}]->({{boundary}})-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) {{update}} RETURN {{result}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": "bound-suffix-root",
+              "name": "root"
+            }
+          },
+          {
+            "id": "boundary",
+            "kinds": [
+              "ExpansionNode"
+            ],
+            "properties": {
+              "name": "bound"
+            }
+          },
+          {
+            "id": "unreachable-boundary",
+            "kinds": [
+              "ExpansionNode"
+            ],
+            "properties": {
+              "name": "unreachable"
+            }
+          },
+          {
+            "id": "head-distinct",
+            "kinds": [
+              "SuffixHead"
+            ],
+            "properties": {
+              "name": "head-distinct"
+            }
+          },
+          {
+            "id": "middle-distinct",
+            "kinds": [
+              "SuffixMiddle"
+            ],
+            "properties": {
+              "name": "middle-distinct"
+            }
+          },
+          {
+            "id": "terminal-distinct",
+            "kinds": [
+              "SuffixTerminal"
+            ],
+            "properties": {
+              "name": "terminal-distinct"
+            }
+          },
+          {
+            "id": "root-other",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": "other",
+              "name": "root-other"
+            }
+          },
+          {
+            "id": "root-missing",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "name": "root-missing"
+            }
+          },
+          {
+            "id": "root-null",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": null,
+              "name": "root-null"
+            }
+          },
+          {
+            "id": "head-root",
+            "kinds": [
+              "SuffixHead"
+            ],
+            "properties": {
+              "name": "head-root"
+            }
+          },
+          {
+            "id": "middle-root",
+            "kinds": [
+              "SuffixMiddle"
+            ],
+            "properties": {
+              "name": "middle-root"
+            }
+          },
+          {
+            "id": "terminal-root",
+            "kinds": [
+              "SuffixTerminal"
+            ],
+            "properties": {
+              "name": "terminal-root"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "boundary",
+            "kind": "Expand"
+          },
+          {
+            "start_id": "boundary",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-distinct",
+            "end_id": "middle-distinct",
+            "kind": "ContinueSuffix"
+          },
+          {
+            "start_id": "middle-distinct",
+            "end_id": "terminal-distinct",
+            "kind": "CompleteSuffix"
+          },
+          {
+            "start_id": "root-other",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root-missing",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root-null",
+            "end_id": "head-distinct",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-distinct",
+            "end_id": "root",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "root",
+            "end_id": "head-distinct",
+            "kind": "WrongEnterSuffix"
+          },
+          {
+            "start_id": "root",
+            "end_id": "head-root",
+            "kind": "EnterSuffix"
+          },
+          {
+            "start_id": "head-root",
+            "end_id": "middle-root",
+            "kind": "ContinueSuffix"
+          },
+          {
+            "start_id": "middle-root",
+            "end_id": "terminal-root",
+            "kind": "CompleteSuffix"
+          },
+          {
+            "start_id": "boundary",
+            "end_id": "root",
+            "kind": "Expand"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "repeated root zero and positive depths",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ],
+              [
+                "root",
+                "boundary",
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3,
+              5
+            ]
+          }
+        },
+        {
+          "name": "repeated root positive depths",
+          "vars": {
+            "bindings": "",
+            "depth": "1..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              5
+            ]
+          }
+        },
+        {
+          "name": "repeated root zero only",
+          "vars": {
+            "bindings": "",
+            "depth": "0..0",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "repeated root exact recursive depth",
+          "vars": {
+            "bindings": "",
+            "depth": "2..2",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              5
+            ]
+          }
+        },
+        {
+          "name": "repeated root carried through WITH",
+          "vars": {
+            "bindings": "WITH root",
+            "depth": "0..16",
+            "boundary": "root",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ],
+              [
+                "root",
+                "boundary",
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3,
+              5
+            ]
+          }
+        },
+        {
+          "name": "distinct unbound endpoint control",
+          "vars": {
+            "bindings": "",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ],
+              [
+                "root",
+                "boundary",
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ],
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              3,
+              5,
+              4
+            ]
+          }
+        },
+        {
+          "name": "distinct endpoint bound before expansion",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'bound'",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              4
+            ]
+          }
+        },
+        {
+          "name": "distinct endpoint carried through WITH",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'bound' WITH root, boundary",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "boundary",
+                "head-distinct",
+                "middle-distinct",
+                "terminal-distinct"
+              ]
+            ],
+            "path_lengths": [
+              4
+            ]
+          }
+        },
+        {
+          "name": "unreachable bound endpoint",
+          "vars": {
+            "bindings": "MATCH (boundary:ExpansionNode) WHERE boundary.name = 'unreachable'",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "bound alias retains root identity",
+          "vars": {
+            "bindings": "WITH root, root AS boundary",
+            "depth": "0..16",
+            "boundary": "boundary",
+            "update": "",
+            "result": "path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ],
+              [
+                "root",
+                "boundary",
+                "root",
+                "head-root",
+                "middle-root",
+                "terminal-root"
+              ]
+            ],
+            "path_lengths": [
+              3,
+              5
+            ]
+          }
+        },
+        {
+          "name": "mutation selects repeated root terminal",
+          "vars": {
+            "bindings": "",
+            "depth": "1..16",
+            "boundary": "root",
+            "update": "WITH DISTINCT terminal SET terminal.selected = true",
+            "result": "terminal"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_records": [
+              {
+                "id": "terminal-root",
+                "kinds": [
+                  "SuffixTerminal"
+                ],
+                "props": {
+                  "name": "terminal-root",
+                  "selected": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "terminal-root",
+                    "kinds": [
+                      "SuffixTerminal"
+                    ],
+                    "props": {
+                      "name": "terminal-root",
+                      "selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mutation distinct endpoint control",
+          "vars": {
+            "bindings": "",
+            "depth": "1..1",
+            "boundary": "boundary",
+            "update": "WITH DISTINCT terminal SET terminal.selected = true",
+            "result": "terminal"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_records": [
+              {
+                "id": "terminal-distinct",
+                "kinds": [
+                  "SuffixTerminal"
+                ],
+                "props": {
+                  "name": "terminal-distinct",
+                  "selected": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "terminal-distinct",
+                    "kinds": [
+                      "SuffixTerminal"
+                    ],
+                    "props": {
+                      "name": "terminal-distinct",
+                      "selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

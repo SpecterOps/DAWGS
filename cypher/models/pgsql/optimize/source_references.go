@@ -254,7 +254,7 @@ func newSourceReferenceCollector() *sourceReferenceCollector {
 	}
 }
 
-// addVariable records a referenced variable unless it is part of the declaration currently being traversed.
+// addVariable records a variable occurrence that consumes a source binding.
 func (s *sourceReferenceCollector) addVariable(variable *cypher.Variable) {
 	if variable != nil && variable.Symbol != "" {
 		s.referencedIdentifiers[variable.Symbol] = struct{}{}
@@ -318,9 +318,10 @@ func (s *sourceReferenceCollector) Enter(node cypher.SyntaxNode) {
 		}
 
 	case *cypher.Variable:
-		if s.matchPatternDeclarationDepth == 0 {
-			s.addVariable(typedNode)
-		}
+		// The expression walker skips declaration variables themselves. Any
+		// variable visited inside a pattern belongs to an inline expression,
+		// including function arguments that have no property lookup wrapper.
+		s.addVariable(typedNode)
 	}
 }
 

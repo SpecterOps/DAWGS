@@ -64,6 +64,12 @@ func (s *Translator) buildSinglePartQuery(singlePartQuery *cypher.SinglePartQuer
 }
 
 func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery) error {
+	for index, part := range s.query.Parts[:len(s.query.Parts)-1] {
+		if queryPartHasWrites(part) {
+			return s.buildStagedMultiPartQuery(index)
+		}
+	}
+
 	var multipartCTEChain []pgsql.CommonTableExpression
 
 	for _, part := range s.query.Parts[:len(s.query.Parts)-1] {
@@ -87,17 +93,15 @@ func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery
 
 		if inlineSelect, err := s.buildInlineProjection(part); err != nil {
 			return err
+		} else if s.multipartWrites {
+			if query, err := multipartBoundaryQuery(part, nextCTE.Query, inlineSelect); err != nil {
+				return err
+			} else {
+				nextCTE.Query = query
+			}
 		} else {
 			nextCTE.Query.Body = inlineSelect
 		}
-		if part.mutations != nil && (part.HasMutations() || part.HasDeletions() || part.mutations.Creations.Len() > 0 || part.mutations.EdgeCreations.Len() > 0) && part.Model.CommonTableExpressions != nil {
-			// PostgreSQL permits data-modifying CTEs only in the top-level
-			// WITH. Keep their globally unique dependency chain beside the
-			// multipart projection boundary instead of nesting it inside.
-			multipartCTEChain = append(multipartCTEChain, part.Model.CommonTableExpressions.Expressions...)
-			nextCTE.Query.CommonTableExpressions = nil
-		}
-
 		multipartCTEChain = append(multipartCTEChain, nextCTE)
 	}
 
