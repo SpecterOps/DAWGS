@@ -448,12 +448,21 @@ lowering changes.
 The PostgreSQL driver keeps one bounded, driver-wide compilation cache with a default capacity of 256 rendered SQL
 statements. It serves both `Transaction.Query` and the legacy programmatic query builder used by relationship and node
 queries. A warm builder hit avoids optimization, lowering-plan construction, PostgreSQL AST construction, and SQL
-rendering; it still builds the request AST, deterministically names its runtime parameters, renders the canonical
-Cypher cache identity, and assembles its debug comment.
+rendering; it still builds the request AST, deterministically names its runtime parameters, fingerprints the typed
+AST, renders its Cypher text, and assembles its debug comment.
 
 Entries are partitioned by the SHA-256 digest of trimmed Cypher text, target graph ID, sorted parameter names and PostgreSQL type shapes, a
 translation-key format/policy identity, and the schema generation. Caller parameter values are never retained or used as key
-material, and the cache key does not retain the source text. The retained data is limited to the SQL string, formatter-extracted literal bindings, and generated-parameter-to-Cypher-parameter source names;
+material, and the cache key does not retain the source text. Builder entries additionally use a separate identity domain
+and a SHA-256 digest of the typed AST, including field/container boundaries, literal types and values, and source order.
+Parameter names and values are excluded from this digest because compilation assigns them deterministic names;
+the existing parameter-type key and binding provenance still apply. This preserves distinctions such as an empty kind
+matcher versus an empty conjunction and exclusive versus overlapping kind matching even when formatted text is equal.
+Fingerprinting streams at most 64 KiB with a depth limit of 128. Unsupported shapes (including external struct values)
+or exceeded limits compile normally without cache lookup or retention. This identity change does not repair lossy
+Cypher formatting or change cold translation semantics.
+
+The retained data is limited to the SQL string, formatter-extracted literal bindings, and generated-parameter-to-Cypher-parameter source names;
 the cache does not retain caller maps or values, ASTs, contexts, transactions, connections, rows, or connection
 strings. Structural literals remain part of the cache identity. Generated parameters that are neither formatter-extracted literals nor reconstructible from
 request-local named sources, translation errors, disabled/closed cache state, and source text over 64 KiB bypass
