@@ -328,6 +328,46 @@
         "query": "match (n:RegressionKind31) where n.objectid in $object_ids detach delete n",
         "fitness": 7
       }
+    },
+    {
+      "name": "DAWGS-041 fan-out node updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[r:EdgeKind1]->(y:NodeKind2) set x.src = true, y.dst = true return x, y",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-041 mixed node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[r:EdgeKind1]->(y:NodeKind2) set x.src = true, r.visited = true, y.marker = r.marker return x, y, r",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-041 nullable node target before a required target",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1) optional match (x)-[r:EdgeKind1]->(y:NodeKind2) set y.dst = true, x.src = true return x, y",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-041 nullable relationship target before a required target",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1) optional match (x)-[r:EdgeKind1]->(y:NodeKind2) set r.visited = true, x.src = true return x, r",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-041 fan-out updates followed by a WITH mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[r:EdgeKind1]->(y:NodeKind2) set x.src = true, y.dst = true with x, y set y.seen = x.src return y",
+        "fitness": 2
+      }
     }
   ]
 }
