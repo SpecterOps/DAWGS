@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -152,6 +153,118 @@ func TestCompileRegularQueryCachesBuilderShapeAndRebindsValues(t *testing.T) {
 	require.Equal(t, int64(1), stats.Misses)
 	require.Equal(t, int64(1), stats.Hits)
 	require.Equal(t, int64(1), stats.Insertions)
+}
+
+func TestCompileRegularQuerySeparatesLossyFormattedASTs(t *testing.T) {
+	for _, mutation := range []bool{false, true} {
+		for _, reverse := range []bool{false, true} {
+			t.Run(fmt.Sprintf("mutation=%t/reverse=%t", mutation, reverse), func(t *testing.T) {
+				setOptimizedTranslationForTest(t, true)
+				prepare := func(predicate graph.Criteria) preparedRegularQuery {
+					builder := query.NewBuilder(nil)
+					builder.Apply(query.Where(predicate), query.Returning(query.Node()))
+					if mutation {
+						builder.Apply(query.Updatef(func() graph.Criteria {
+							return query.SetProperties(query.Node(), map[string]any{"marked": true})
+						}))
+					}
+					return compilePreparedBuilderQuery(t, builder)
+				}
+				first, second := prepare(query.KindIn(query.Node())), prepare(query.And())
+				require.Equal(t, first.source, second.source, "regression must exercise identical formatter output")
+				if reverse {
+					first, second = second, first
+				}
+				warm := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 8})
+				cold := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 0})
+				firstSQL, _, err := warm.compileRegularQuery(context.Background(), first, 7)
+				require.NoError(t, err)
+				warmSQL, warmBindings, err := warm.compileRegularQuery(context.Background(), second, 7)
+				require.NoError(t, err)
+				coldSQL, coldBindings, err := cold.compileRegularQuery(context.Background(), second, 7)
+				require.NoError(t, err)
+				require.NotEqual(t, firstSQL, coldSQL, "the ASTs must have distinct SQL semantics")
+				require.Equal(t, coldSQL, warmSQL)
+				require.Equal(t, coldBindings, warmBindings)
+				_, _, err = warm.compileRegularQuery(context.Background(), first, 7)
+				require.NoError(t, err)
+				require.Equal(t, int64(2), warm.compilationCache.Stats().Misses)
+				require.Equal(t, int64(1), warm.compilationCache.Stats().Hits)
+			})
+		}
+	}
+}
+
+func TestCompileRegularQuerySeparatesTextAndExclusiveKindASTs(t *testing.T) {
+	for _, reverse := range []bool{false, true} {
+		t.Run(fmt.Sprint(reverse), func(t *testing.T) {
+			setOptimizedTranslationForTest(t, true)
+			kinds := graph.Kinds{graph.StringKind("A"), graph.StringKind("B")}
+			builder := query.NewBuilder(nil)
+			builder.Apply(query.Where(cypher.NewKindMatcher(query.Node(), kinds, true)), query.Returning(query.Node()))
+			prepared := compilePreparedBuilderQuery(t, builder)
+			manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 8})
+			manager.kindsByID[kinds[0]], manager.kindsByID[kinds[1]] = 1, 2
+			compileBuilder := func() string {
+				sql, _, err := manager.compileRegularQuery(context.Background(), prepared, 7)
+				require.NoError(t, err)
+				require.Contains(t, sql, "@>")
+				require.Contains(t, sql, "array [1, 2]")
+				return sql
+			}
+			compileText := func() string {
+				sql, _, err := manager.compileText(context.Background(), prepared.source, nil, 7)
+				require.NoError(t, err)
+				require.Contains(t, sql, " or ")
+				return sql
+			}
+			first, second := compileBuilder, compileText
+			if reverse {
+				first, second = second, first
+			}
+			firstSQL, secondSQL := first(), second()
+			require.NotEqual(t, firstSQL, secondSQL)
+			require.Equal(t, firstSQL, first())
+			require.Equal(t, secondSQL, second())
+			require.Equal(t, int64(2), manager.compilationCache.Stats().Misses)
+			require.Equal(t, int64(2), manager.compilationCache.Stats().Hits)
+		})
+	}
+}
+
+// An external Kind may derive its spelling from state hidden behind methods.
+// Such shapes compile normally but cannot reuse a structural cache identity.
+type cacheIdentityExternalKind struct{ name string }
+
+func (s cacheIdentityExternalKind) String() string { return s.name }
+func (s cacheIdentityExternalKind) Is(others ...graph.Kind) bool {
+	for _, other := range others {
+		if other.String() == s.name {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCompileRegularQueryUnsupportedIdentityBypassesCache(t *testing.T) {
+	setOptimizedTranslationForTest(t, true)
+	kind := cacheIdentityExternalKind{name: "A"}
+	builder := query.NewBuilder(nil)
+	builder.Apply(query.Where(query.KindIn(query.Node(), kind)), query.Returning(query.Node()))
+	prepared := compilePreparedBuilderQuery(t, builder)
+	require.False(t, prepared.identity.valid)
+	manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 8})
+	manager.kindsByID[kind] = 1
+	firstSQL, _, err := manager.compileRegularQuery(context.Background(), prepared, 7)
+	require.NoError(t, err)
+	secondSQL, _, err := manager.compileRegularQuery(context.Background(), prepared, 7)
+	require.NoError(t, err)
+	require.Equal(t, firstSQL, secondSQL)
+	stats := manager.compilationCache.Stats()
+	require.Equal(t, int64(2), stats.Bypasses)
+	require.Zero(t, stats.Hits)
+	require.Zero(t, stats.Misses)
+	require.Zero(t, stats.Size)
 }
 
 func compilePreparedBuilderQuery(t *testing.T, builder *query.Builder) preparedRegularQuery {

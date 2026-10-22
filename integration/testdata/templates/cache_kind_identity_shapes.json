@@ -1,0 +1,256 @@
+{
+  "families": [
+    {
+      "name": "typed builder cache semantic controls",
+      "template": "MATCH (n) WHERE {{predicate}} {{action}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "both",
+            "kinds": [
+              "IdentityA",
+              "IdentityB"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "a",
+            "kinds": [
+              "IdentityA"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "IdentityB"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "neither",
+            "kinds": [
+              "IdentityOther"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "all kinds read",
+          "vars": {
+            "predicate": "n:IdentityA AND n:IdentityB",
+            "action": "RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "both"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "IdentityA",
+                      "IdentityB"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "IdentityA"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "IdentityB"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "IdentityOther"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "all kinds mutation",
+          "vars": {
+            "predicate": "n:IdentityA AND n:IdentityB",
+            "action": "SET n.marked = true RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "both"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "IdentityA",
+                      "IdentityB"
+                    ],
+                    "props": {
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "IdentityA"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "IdentityB"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "IdentityOther"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "any kind read",
+          "vars": {
+            "predicate": "n:IdentityA OR n:IdentityB",
+            "action": "RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "both",
+              "a",
+              "b"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "IdentityA",
+                      "IdentityB"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "IdentityA"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "IdentityB"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "IdentityOther"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "any kind mutation",
+          "vars": {
+            "predicate": "n:IdentityA OR n:IdentityB",
+            "action": "SET n.marked = true RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "both",
+              "a",
+              "b"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "IdentityA",
+                      "IdentityB"
+                    ],
+                    "props": {
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "IdentityA"
+                    ],
+                    "props": {
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "IdentityB"
+                    ],
+                    "props": {
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "IdentityOther"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
