@@ -90,7 +90,9 @@ Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j 
 PostgreSQL integration tests require `pg_stat_statements` in `shared_preload_libraries`
 before the server starts. The CI PostgreSQL integration service configures this through
 `POSTGRES_INITDB_ARGS="--set=shared_preload_libraries=pg_stat_statements"` when initializing
-its fresh PostgreSQL 18 cluster. The tests create the extension as needed.
+its fresh PostgreSQL 18 cluster. The tests attempt to create the extension as needed. If the test role lacks extension
+installation privileges, an administrator must first run `CREATE EXTENSION IF NOT EXISTS pg_stat_statements` in the
+selected test database.
 
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
@@ -136,6 +138,17 @@ newly started compilations across every PostgreSQL driver in the process. See
 Aggregate traversal counts use ordinary traversal when the second `MATCH` labels the source or reuses it as the
 terminal. The shared `aggregate_traversal_count_shapes` integration templates verify source labels, cycle counts,
 ranking, and mutation effects; PostgreSQL coverage executes these cases with the optimizer enabled and disabled.
+
+Variable-length traversals that reuse a node bound by a fixed prefix retain that node's identity at every returned
+depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
+templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
+
+Carried nodes retain the representation materialized before `WITH`, and inline property maps retain the fields their
+expressions read. Leading `UNWIND` and `CREATE` clauses can feed multipart queries; write CTEs remain at PostgreSQL's
+top level. The shared `node_representation_shapes` and `leading_multipart_shapes` templates cover these behaviors.
+Suffix reverse policies keep predicates correlated with carried values or other suffix bindings on the ordinary
+executor; forced reverse diagnostics reject those shapes. `correlated_suffix_shapes` checks exact paths, duplicate rows,
+and mutation selection. Additional constraints on an already-bound root use ordinary traversal as well.
 
 The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
 storage maintenance on the `node` and `edge` tables in the following order:

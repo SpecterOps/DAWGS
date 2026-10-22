@@ -772,13 +772,13 @@ func (s *Translator) buildInlineProjection(part *QueryPart) (pgsql.Select, error
 		// there was a projection between this CTE and the previous multipart query part
 		hasCTEs := part.Model.CommonTableExpressions != nil && len(part.Model.CommonTableExpressions.Expressions) > 0
 
-		if part.Frame.Previous == nil || hasCTEs {
+		sourceFrame := part.projections.Frame
+		if sourceFrame == part.Frame || (part.Frame.Previous != nil && !hasCTEs) {
+			sourceFrame = part.Frame.Previous
+		}
+		if sourceFrame != nil {
 			sqlSelect.From = []pgsql.FromClause{{
-				Source: part.projections.Frame.Binding.Identifier,
-			}}
-		} else {
-			sqlSelect.From = []pgsql.FromClause{{
-				Source: part.Frame.Previous.Binding.Identifier,
+				Source: sourceFrame.Binding.Identifier,
 			}}
 		}
 	}

@@ -2,6 +2,7 @@ package translate
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
@@ -886,14 +887,20 @@ func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep
 	if expansionStep.Expansion != nil {
 		boundaryConstraint = expansionStep.Expansion.TerminalNodeConstraints
 	}
-	localBoundaryConstraint, _ := partitionConstraintByLocality(boundaryConstraint, localScope)
+	localBoundaryConstraint, externalBoundaryConstraint := partitionConstraintByLocality(boundaryConstraint, localScope)
+	if externalBoundaryConstraint != nil {
+		return pgsql.CommonTableExpression{}, fmt.Errorf("fixed suffix boundary predicate is not local")
+	}
 	where := localBoundaryConstraint
 	suffixRelationships := make([]pgsql.Identifier, 0, len(suffix))
-	for _, step := range suffix {
+	for stepIndex, step := range suffix {
 		suffixRelationships = append(suffixRelationships, step.Edge.Identifier)
-		localLeftConstraint, _ := partitionConstraintByLocality(step.LeftNodeConstraints, localScope)
-		localEdgeConstraint, _ := partitionConstraintByLocality(step.EdgeConstraints.Expression, localScope)
-		localRightConstraint, _ := partitionConstraintByLocality(step.RightNodeConstraints, localScope)
+		localLeftConstraint, externalLeftConstraint := partitionConstraintByLocality(step.LeftNodeConstraints, localScope)
+		localEdgeConstraint, externalEdgeConstraint := partitionConstraintByLocality(step.EdgeConstraints.Expression, localScope)
+		localRightConstraint, externalRightConstraint := partitionConstraintByLocality(step.RightNodeConstraints, localScope)
+		if externalLeftConstraint != nil || externalRightConstraint != nil || !fixedSuffixRemainderIsRelationshipUniqueness(externalEdgeConstraint, expansionStep, suffix[:stepIndex], step) {
+			return pgsql.CommonTableExpression{}, fmt.Errorf("fixed suffix predicate is not local")
+		}
 		where = pgsql.OptionalAnd(where, localLeftConstraint)
 		where = pgsql.OptionalAnd(where, localEdgeConstraint)
 		where = pgsql.OptionalAnd(where, localRightConstraint)
@@ -920,6 +927,39 @@ func (s *Translator) buildFixedSuffixCTEWithOptions(expansionStep *TraversalStep
 		},
 		Query: query,
 	}, nil
+}
+
+// Reverse execution enforces these generated exclusions through pairwise
+// suffix edge uniqueness and expansion/suffix path disjointness. Every other
+// external remainder must be rejected rather than silently discarded.
+func fixedSuffixRemainderIsRelationshipUniqueness(remainder pgsql.Expression, expansion *TraversalStep, previous []*TraversalStep, step *TraversalStep) bool {
+	if remainder == nil {
+		return true
+	}
+	if step.Frame == nil || step.Frame.Previous == nil {
+		return false
+	}
+	frameID := step.Frame.Previous.Binding.Identifier
+	edgeID := pgsql.CompoundIdentifier{step.Edge.Identifier, pgsql.ColumnID}
+	var expected []pgsql.Expression
+	if expansion.Expansion != nil && expansion.Expansion.PathBinding != nil {
+		expected = append(expected, relationshipIDNotInPath(edgeID, pgsql.CompoundIdentifier{frameID, expansion.Expansion.PathBinding.Identifier}))
+	}
+	for _, prior := range previous {
+		binding := prior.Edge.Copy()
+		binding.LastProjection = step.Frame.Previous
+		expected = append(expected, pgsql.NewBinaryExpression(edgeID, pgsql.OperatorNotEquals, relationshipIDReference(&Scope{}, binding)))
+	}
+	for _, term := range flattenConjunction(remainder) {
+		matched := false
+		for _, exclusion := range expected {
+			matched = matched || reflect.DeepEqual(term, exclusion)
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 // buildSuffixSeededReverseCTE recursively walks from suffix boundaries back toward bound roots without reusing edges.

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -336,6 +337,85 @@ RETURN path`
 	require.Equal(t, uint64(1), stats.TraversalRouteDecision.ShadowMiss)
 	require.Equal(t, uint64(1), stats.TraversalRouteDecision.CandidateHit)
 	require.Equal(t, uint64(1), stats.StrategySelection.TopologySelected)
+}
+
+// Even an allowlisted manifest cannot enroll a correlated suffix outside the
+// compiler's exact reverse envelope. Both policy versions must use the incumbent.
+func TestV2TopologyFixedSuffixKeepsCorrelatedPredicatesOnIncumbent(t *testing.T) {
+	for _, firstUse := range []bool{false, true} {
+		t.Run(fmt.Sprint(firstUse), func(t *testing.T) {
+			driver := newV2IntegrationDriver(t, 1, 8, nil)
+			fixture := setUpV2IntegrationGraph(t, driver)
+			ctx := context.Background()
+			require.NoError(t, driver.WriteTransaction(ctx, func(tx graph.Transaction) error {
+				middle, err := tx.CreateNode(graph.NewProperties().Set("name", "middle"), v2IntegrationNodeKind)
+				if err != nil {
+					return err
+				}
+				terminal, err := tx.CreateNode(graph.NewProperties().Set("name", "wrong"), v2IntegrationNodeKind)
+				if err != nil {
+					return err
+				}
+				if _, err := tx.CreateRelationshipByIDs(fixture.end, middle.ID, v2IntegrationEdgeKind, graph.NewProperties()); err != nil {
+					return err
+				}
+				_, err = tx.CreateRelationshipByIDs(middle.ID, terminal.ID, v2IntegrationEdgeKind, graph.NewProperties())
+				return err
+			}))
+			_, err := driver.RefreshTraversalTopologySynopsis(ctx, v2IntegrationSchema.DefaultGraph)
+			require.NoError(t, err)
+			query := `MATCH (root:PGV2IntegrationNode) WHERE root.name = 'start'
+WITH root, $wanted AS wanted
+MATCH path = (root)-[:PGV2IntegrationEdge*0..16]->()-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(:PGV2IntegrationNode)-[:PGV2IntegrationEdge]->(terminal:PGV2IntegrationNode)
+WHERE terminal.name = wanted RETURN path`
+			shape := TraversalShape{Version: TraversalFixedSuffixShapeVersion, Family: "fixed_suffix_expansion", Direction: "outbound", ObservationMode: "full_path", MinimumDepth: 0, MaximumDepth: 16, SuffixLength: 3, CandidateStrategy: string(optimize.ExpansionSearchSuffixSeededReverse)}
+			shape.Fingerprint = TraversalShapeFingerprint(shape)
+			policy := v2TopologyFixedSuffixPolicy(t, query, shape)
+			if firstUse {
+				policy.EnableTopologyFixedSuffix = false
+				policy.EnableTopologyFixedSuffixFirstUse = true
+				var manifest map[string]any
+				require.NoError(t, json.Unmarshal(policy.PromotionManifestJSON, &manifest))
+				candidate := string(optimize.ExpansionSearchPolicyTopologyFixedSuffixFirstUseV1)
+				manifest["version"], manifest["candidate"], manifest["selector_version"] = 5, candidate, candidate
+				manifest["execution_boundary"] = "first_use_transaction_retry"
+				manifest["route_cache_protocol"] = "topology-selected-first-use-routing-v1"
+				for _, value := range manifest["buckets"].([]any) {
+					value.(map[string]any)["sql_template_sha256"] = TraversalSQLTemplateSHA256(candidate, candidate, "first_use_transaction_retry", shape)
+				}
+				policy.PromotionManifestJSON, err = json.Marshal(manifest)
+				require.NoError(t, err)
+				sum := sha256.Sum256(policy.PromotionManifestJSON)
+				policy.PromotionManifestSHA256 = hex.EncodeToString(sum[:])
+			}
+			require.NoError(t, driver.SetTraversalPolicy(policy))
+			require.NoError(t, driver.ReadTransaction(ctx, func(tx graph.Transaction) error {
+				for _, wanted := range []string{"wanted", "wrong"} {
+					for range 2 {
+						result := tx.Query(query, map[string]any{"wanted": wanted})
+						count := 0
+						for result.Next() {
+							var path graph.Path
+							require.NoError(t, result.Scan(&path))
+							require.Len(t, path.Edges, 3)
+							count++
+						}
+						result.Close()
+						require.NoError(t, result.Error())
+						if wanted == "wanted" {
+							require.Zero(t, count)
+						} else {
+							require.Equal(t, 1, count)
+						}
+					}
+				}
+				return nil
+			}, OptionSetTransactionIsolation(pgx.RepeatableRead)))
+			stats := driver.TranslationCacheStats()
+			require.Zero(t, stats.TraversalRouteDecision.CandidateHit)
+			require.Zero(t, stats.StrategySelection.TopologySelected)
+		})
+	}
 }
 
 func TestV2TopologyFixedSuffixFirstUseExecutesWithinStableSnapshot(t *testing.T) {

@@ -31,6 +31,12 @@ Current PostgreSQL optimization coverage includes:
   `size(relationships(p))`, `startNode`, `endNode`, and `type`.
 - Recursive traversal optimizations for endpoint kind/property predicates, relationship type predicates, bound-node
   filters, traversal direction selection, and limit pushdown where ordering and distinct semantics permit it.
+  Ordinary expansions after a fixed prefix correlate completed states with an already-bound terminal independently
+  of terminal predicates. The equality applies to zero-hop, primer, and recursive results. Endpoint-seeded reverse
+  admission rejects terminals bound earlier in the same pattern as well as earlier clauses. Shared
+  `bound_expansion_endpoint_shapes` templates cover false and genuine cycles, exact node/path identities, and mutation
+  post-state; PostgreSQL differential coverage selects each optimizer mode explicitly. Without a field-requirement
+  plan, translation retains node composites so the disabled-mode baseline can safely return intermediate nodes and paths.
 - Static shortest-path executor selection for one read-only, uncorrelated, directed traversal with one ID equality per
   endpoint and no observed relationship/path predicate. Distance observations use scalar `SP-S3-U-D` state, with deep
   physical-inbound searches sent to `SP-S4-C-D`. Bounded directed single-kind one-path witnesses use
@@ -171,6 +177,18 @@ Current PostgreSQL optimization coverage includes:
   traversal steps. Property, full-entity, path, cross-pattern, and mutation consumers retain composite bindings;
   ID-only expansion endpoints still join the graph-scoped node partition so orphan filtering and multiplicity remain
   unchanged.
+  Materialized bindings keep their input representation across `WITH` and subsequent expansion seeding. Inline node
+  and relationship maps count expression references as field consumers, including properties read from intermediate
+  nodes. Shared `node_representation_shapes` templates and explicit optimizer-mode executions verify these cases.
+- Leading `UNWIND` and `CREATE` clauses resolve an empty multipart frame to its actual input. Multipart creation CTEs
+  and their dependencies are emitted at the top level, preserving PostgreSQL's data-modifying CTE restrictions.
+  Empty UNWIND literals receive a concrete array type for PostgreSQL resolution. `leading_multipart_shapes` covers
+  cardinality, carried properties, repeated query parts, relationship creation, and mutation post-state.
+- Suffix reverse admission declines predicates that read carried values, compare suffix bindings, or repeat a bound
+  suffix endpoint. Those queries retain the exact incumbent, including under manifest-authorized topology policies. Forced diagnostics
+  reject unsupported shapes. The suffix builder rejects external predicate remainders except generated relationship
+  exclusions enforced by pairwise suffix uniqueness and expansion/suffix path disjointness in reverse execution.
+  Additional labels/properties on a bound root and WHERE terms consumed as primer predicates also retain the incumbent.
 
 ## Repeated-query compilation
 

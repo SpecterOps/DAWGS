@@ -57,3 +57,21 @@ func TestScalarContinuationFieldRequirementRetainsFullEntityForMutation(t *testi
 
 	require.Contains(t, decision.Fields, FieldRequirementFullEntity)
 }
+
+func TestInlineMapFieldRequirements(t *testing.T) {
+	for _, query := range []string{
+		`MATCH (s)-[]->(m)-[]->(e {x: m.x}) RETURN id(e)`,
+		`MATCH (s)-[]->(m)-[{x: m.x}]->(e) RETURN id(e)`,
+		`MATCH (s)-[]->(m)-[]->(e {x: id(m)}) RETURN id(e)`,
+	} {
+		t.Run(query, func(t *testing.T) {
+			decision := fieldRequirementForSymbol(t, query, "m")
+			require.Contains(t, decision.Fields, FieldRequirementEntityID)
+			if query != `MATCH (s)-[]->(m)-[]->(e {x: id(m)}) RETURN id(e)` {
+				require.Contains(t, decision.Fields, FieldRequirementProperties)
+			} else {
+				require.NotContains(t, decision.Fields, FieldRequirementFullEntity)
+			}
+		})
+	}
+}

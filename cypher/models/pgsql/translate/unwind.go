@@ -58,6 +58,12 @@ func (s *Translator) translateUnwind(unwind *cypher.Unwind) error {
 	} else if binding, isBound := s.scope.Lookup(identifier); !isBound {
 		return fmt.Errorf("unable to lookup unwind variable binding %s", identifier)
 	} else {
+		if literal, ok := arrayExpression.(pgsql.ArrayLiteral); ok && len(literal.Values) == 0 && literal.CastType == pgsql.AnyArray {
+			// No element can be observed, but PostgreSQL still requires a
+			// concrete array type when resolving unnest's polymorphic input.
+			literal.CastType = pgsql.Int8Array
+			arrayExpression = literal
+		}
 		if s.scope.CurrentFrame() == nil {
 			// A leading UNWIND has no MATCH/CREATE frame to attach to, but
 			// later clauses still need a frame that can export the unwind binding.
