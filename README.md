@@ -169,7 +169,10 @@ PostgreSQL SET and REMOVE preserve the incoming row stream when several matches 
 Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
 updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared
 `update_row_stream_shapes` templates check row counts, returned values, and exact node and relationship post-state in
-both PostgreSQL optimizer modes and on Neo4j.
+both PostgreSQL optimizer modes and on Neo4j. Property and kind additions/removals on each mutation target retain
+source order, including alternating SET/REMOVE of the same key or label. The `update_clause_order_shapes` templates
+check exact final state, untouched decoys, fan-out and null targets. Assignment expressions retain their existing
+input-frame evaluation; expressions that depend on earlier writes should use a `WITH` boundary between clauses.
 
 Batch identity keys distinguish entity kinds, property names and values, and relationship endpoints. `NodeUpdate.Key`,
 `RelationshipUpdate.Key`, and `Properties.HashInto` produce opaque identities whose encoding is not a stable storage

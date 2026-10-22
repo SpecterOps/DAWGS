@@ -1,0 +1,755 @@
+{
+  "families": [
+    {
+      "name": "ordered property and kind changes",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "properties": {"objectid": "source", "x": 0, "keep": "source"}},
+          {"id": "one", "kinds": ["OrderTarget"], "properties": {"objectid": "one", "x": 10}},
+          {"id": "two", "kinds": ["OrderTarget"], "properties": {"objectid": "two", "x": 20}},
+          {"id": "isolated", "kinds": ["OrderSource"], "properties": {"objectid": "isolated", "x": 30}},
+          {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "properties": {"objectid": "source", "x": 40}},
+          {"id": "property-decoy", "kinds": ["OrderSource"], "properties": {"objectid": "other", "x": 50}},
+          {"id": "missing-decoy", "kinds": ["OrderSource"], "properties": {"keep": "missing"}},
+          {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "properties": {"objectid": "edge-property-decoy", "x": 60}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "one", "kind": "OrderLink", "properties": {"eligible": true, "x": 1}},
+          {"start_id": "source", "end_id": "two", "kind": "OrderLink", "properties": {"eligible": true, "x": 2}},
+          {"start_id": "source", "end_id": "kind-decoy", "kind": "OrderLink", "properties": {"eligible": true, "x": 3}},
+          {"start_id": "source", "end_id": "one", "kind": "OrderOtherLink", "properties": {"eligible": true, "x": 4}},
+          {"start_id": "one", "end_id": "source", "kind": "OrderLink", "properties": {"eligible": true, "x": 5}},
+          {"start_id": "source", "end_id": "edge-property-decoy", "kind": "OrderLink", "properties": {"eligible": false, "x": 6}},
+          {"start_id": "property-decoy", "end_id": "one", "kind": "OrderLink", "properties": {"eligible": true, "x": 7}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "node set then remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n.x = 1 REMOVE n.x RETURN n.x"},
+          "assert": {"row_count": 1, "ordered_row_values": [[null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node remove then set",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) REMOVE n.x SET n.x = 2 RETURN n.x"},
+          "assert": {"row_count": 1, "ordered_row_values": [[2]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 2, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node set remove set",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n.x = 1 REMOVE n.x SET n.x = 3 RETURN n.x"},
+          "assert": {"row_count": 1, "ordered_row_values": [[3]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 3, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node remove set remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) REMOVE n.x SET n.x = 2 REMOVE n.x RETURN n.x"},
+          "assert": {"row_count": 1, "ordered_row_values": [[null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node repeated set before remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n.x = 1 SET n.x = 2 REMOVE n.x RETURN n.x"},
+          "assert": {"row_count": 1, "ordered_row_values": [[null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node missing property set then remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n.fresh = 1 REMOVE n.fresh RETURN n.fresh"},
+          "assert": {"row_count": 1, "ordered_row_values": [[null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship set then remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'})-[r:OrderLink {eligible: true}]->(m:OrderTarget) SET r.x = 1 REMOVE r.x RETURN m.objectid, r.x ORDER BY m.objectid"},
+          "assert": {"row_count": 2, "ordered_row_values": [["one", null], ["two", null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship remove then set",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'})-[r:OrderLink {eligible: true}]->(m:OrderTarget) REMOVE r.x SET r.x = 2 RETURN m.objectid, r.x ORDER BY m.objectid"},
+          "assert": {"row_count": 2, "ordered_row_values": [["one", 2], ["two", 2]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship set remove set",
+          "vars": {
+            "query": "MATCH (n:OrderSource {objectid: 'source'})-[r:OrderLink {eligible: true}]->(m:OrderTarget) SET r.x = 1 REMOVE r.x SET r.x = 3 RETURN m.objectid, r.x ORDER BY m.objectid"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["one", 3], ["two", 3]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship remove set remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'})-[r:OrderLink {eligible: true}]->(m:OrderTarget) REMOVE r.x SET r.x = 2 REMOVE r.x RETURN m.objectid, r.x ORDER BY m.objectid"},
+          "assert": {"row_count": 2, "ordered_row_values": [["one", null], ["two", null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "label set then remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n:OrderAdded REMOVE n:OrderAdded RETURN n.objectid"},
+          "assert": {"row_count": 1, "ordered_row_values": [["source"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "label remove then set",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) REMOVE n:OrderKeep SET n:OrderKeep RETURN n.objectid"},
+          "assert": {"row_count": 1, "ordered_row_values": [["source"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "label set remove set",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n:OrderAdded REMOVE n:OrderAdded SET n:OrderAdded RETURN n.objectid"},
+          "assert": {"row_count": 1, "ordered_row_values": [["source"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep", "OrderAdded"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "label remove set remove",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) REMOVE n:OrderKeep SET n:OrderKeep REMOVE n:OrderKeep RETURN n.objectid"},
+          "assert": {"row_count": 1, "ordered_row_values": [["source"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "overlapping label lists",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n:OrderAdded:OrderOther REMOVE n:OrderAdded:OrderKeep SET n:OrderKeep RETURN n.objectid"},
+          "assert": {"row_count": 1, "ordered_row_values": [["source"]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep", "OrderOther"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mixed properties and kinds",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n.x = 1, n.y = 2, n:OrderAdded REMOVE n.x, n:OrderAdded, n:OrderKeep SET n.y = 3, n:OrderKeep RETURN n.x, n.y"},
+          "assert": {"row_count": 1, "ordered_row_values": [[null, 3]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "keep": "source", "y": 3}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "fan out retains duplicate source rows",
+          "vars": {
+            "query": "MATCH (n:OrderSource {objectid: 'source'})-[r:OrderLink {eligible: true}]->(m:OrderTarget) SET n.x = 1, r.x = 8 REMOVE n.x, r.x RETURN m.objectid, n.x, r.x ORDER BY m.objectid"
+          },
+          "assert": {"row_count": 2, "ordered_row_values": [["one", null, null], ["two", null, null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty input has no effects",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'absent'}) SET n.x = 1 REMOVE n.x RETURN n.x"},
+          "assert": {"row_count": 0, "ordered_row_values": []},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "null relationship retains input rows",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'isolated'}) OPTIONAL MATCH (n)-[r:OrderOtherLink]->() SET r.x = 1 REMOVE r.x RETURN n.objectid, r.x"},
+          "assert": {"row_count": 1, "ordered_row_values": [["isolated", null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "x": 0, "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ordered changes cross WITH boundary",
+          "vars": {"query": "MATCH (n:OrderSource {objectid: 'source'}) SET n.x = 1 REMOVE n.x WITH n SET n.x = 4 REMOVE n.x RETURN n.x"},
+          "assert": {"row_count": 1, "ordered_row_values": [[null]]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["OrderSource", "OrderKeep"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "one", "kinds": ["OrderTarget"], "props": {"objectid": "one", "x": 10}},
+                  {"id": "two", "kinds": ["OrderTarget"], "props": {"objectid": "two", "x": 20}},
+                  {"id": "isolated", "kinds": ["OrderSource"], "props": {"objectid": "isolated", "x": 30}},
+                  {"id": "kind-decoy", "kinds": ["OrderOther", "OrderAdded"], "props": {"objectid": "source", "x": 40}},
+                  {"id": "property-decoy", "kinds": ["OrderSource"], "props": {"objectid": "other", "x": 50}},
+                  {"id": "missing-decoy", "kinds": ["OrderSource"], "props": {"keep": "missing"}},
+                  {"id": "edge-property-decoy", "kinds": ["OrderTarget"], "props": {"objectid": "edge-property-decoy", "x": 60}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 1}},
+                  {"start": "source", "end": "two", "kind": "OrderLink", "props": {"eligible": true, "x": 2}},
+                  {"start": "source", "end": "kind-decoy", "kind": "OrderLink", "props": {"eligible": true, "x": 3}},
+                  {"start": "source", "end": "one", "kind": "OrderOtherLink", "props": {"eligible": true, "x": 4}},
+                  {"start": "one", "end": "source", "kind": "OrderLink", "props": {"eligible": true, "x": 5}},
+                  {"start": "source", "end": "edge-property-decoy", "kind": "OrderLink", "props": {"eligible": false, "x": 6}},
+                  {"start": "property-decoy", "end": "one", "kind": "OrderLink", "props": {"eligible": true, "x": 7}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
