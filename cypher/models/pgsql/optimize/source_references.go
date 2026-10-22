@@ -32,8 +32,6 @@ type fieldRequirementCollector struct {
 	queryPartIndex int
 	// ordinal orders binding uses in traversal order.
 	ordinal int
-	// patternDepth tracks whether the visitor is currently inside a pattern declaration.
-	patternDepth int
 	// propertyDepth tracks nested property lookups so their base binding is classified once.
 	propertyDepth int
 	// functionStack identifies the function consuming a visited expression.
@@ -130,7 +128,6 @@ func (s *fieldRequirementCollector) addGreedyProjectionBindings() {
 func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 	switch typedNode := node.(type) {
 	case *cypher.PatternPart:
-		s.patternDepth++
 		if symbol := patternVariableSymbol(typedNode.Variable); symbol != "" {
 			s.bindingKinds[symbol] = "path"
 			s.add(symbol, true, FieldRequirementOrderedPathEdgeIDs)
@@ -177,9 +174,8 @@ func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 		s.functionStack = append(s.functionStack, typedNode)
 
 	case *cypher.Variable:
-		if s.patternDepth > 0 {
-			return
-		}
+		// The expression walker omits pattern declaration variables, but
+		// visits consumers inside their inline property maps.
 		if typedNode.Symbol == cypher.TokenLiteralAsterisk {
 			s.addGreedyProjectionBindings()
 			return
@@ -214,11 +210,9 @@ func (s *fieldRequirementCollector) Enter(node cypher.SyntaxNode) {
 // Visit performs no leaf-specific work because Enter classifies every relevant node.
 func (s *fieldRequirementCollector) Visit(cypher.SyntaxNode) {}
 
-// Exit unwinds pattern, property, and function nesting after visiting a syntax node's children.
+// Exit unwinds property and function nesting after visiting a syntax node's children.
 func (s *fieldRequirementCollector) Exit(node cypher.SyntaxNode) {
 	switch node.(type) {
-	case *cypher.PatternPart:
-		s.patternDepth--
 	case *cypher.PropertyLookup:
 		s.propertyDepth--
 	case *cypher.FunctionInvocation:

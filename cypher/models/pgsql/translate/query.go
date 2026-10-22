@@ -90,6 +90,13 @@ func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery
 		} else {
 			nextCTE.Query.Body = inlineSelect
 		}
+		if part.mutations != nil && (part.HasMutations() || part.HasDeletions() || part.mutations.Creations.Len() > 0 || part.mutations.EdgeCreations.Len() > 0) && part.Model.CommonTableExpressions != nil {
+			// PostgreSQL permits data-modifying CTEs only in the top-level
+			// WITH. Keep their globally unique dependency chain beside the
+			// multipart projection boundary instead of nesting it inside.
+			multipartCTEChain = append(multipartCTEChain, part.Model.CommonTableExpressions.Expressions...)
+			nextCTE.Query.CommonTableExpressions = nil
+		}
 
 		multipartCTEChain = append(multipartCTEChain, nextCTE)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
@@ -27,6 +28,46 @@ func translateSuffixReverseGuard(t *testing.T, query string, options ToolOptions
 	require.NoError(t, err)
 	maps.Copy(translation.Parameters, formatted.Parameters)
 	return translation, formatted.Statement
+}
+
+func TestSuffixReverseRejectsCarriedPredicate(t *testing.T) {
+	queryText := strings.Replace(guardedSuffixOrientationQuery, "MATCH path", "WITH root, 'wanted' AS wanted MATCH path", 1)
+	queryText = strings.Replace(queryText, "RETURN path", "WHERE terminal.name = wanted RETURN path", 1)
+	for name, options := range map[string]ToolOptions{
+		"guard":       {EnableExpansionSuffixReverseGuard: true},
+		"retry":       {EnableExpansionSuffixReverseRetry: true},
+		"component":   {EnableExpansionSuffixRouteComponent: true},
+		"orientation": {EnableExpansionOrientationTournament: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			query, err := frontend.ParseCypher(frontend.NewContext(), queryText)
+			require.NoError(t, err)
+			_, err = TranslateForTool(context.Background(), query, optimizerSafetyKindMapper(), map[string]any{"root_key": "root"}, DefaultGraphID, options)
+			require.Error(t, err, "correlated predicates must remain on the incumbent")
+		})
+	}
+}
+
+func TestFixedSuffixBuilderRejectsExternalRemainders(t *testing.T) {
+	for _, position := range []string{"boundary", "left", "edge", "right"} {
+		t.Run(position, func(t *testing.T) {
+			external := pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{"carried", "wanted"}, pgsql.OperatorEquals, pgsql.NewLiteral("wanted", pgsql.Text))
+			expansion := &TraversalStep{Expansion: &Expansion{}}
+			step := &TraversalStep{LeftNode: &BoundIdentifier{Identifier: "head"}, RightNode: &BoundIdentifier{Identifier: "terminal"}, Edge: &BoundIdentifier{Identifier: "edge"}, EdgeConstraints: &Constraint{}}
+			switch position {
+			case "boundary":
+				expansion.Expansion.TerminalNodeConstraints = external
+			case "left":
+				step.LeftNodeConstraints = external
+			case "edge":
+				step.EdgeConstraints.Expression = external
+			case "right":
+				step.RightNodeConstraints = external
+			}
+			_, err := (&Translator{}).buildFixedSuffixCTEWithOptions(expansion, []*TraversalStep{step}, newSuffixSeededIdentifiers("final"), false, false, 0)
+			require.ErrorContains(t, err, "predicate is not local")
+		})
+	}
 }
 
 // TestSuffixReverseGuardEmitsStaticFullPathDualArm verifies that the tool-only
