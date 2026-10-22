@@ -26,11 +26,6 @@ import (
 	"github.com/cucumber/godog"
 )
 
-var (
-	bddDawgsFailed   bool
-	bddReportInvalid bool
-)
-
 func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.Before(dbCtx.resetBeforeScenario)
 	ctx.Step(`^an empty graph$`, dbCtx.anEmptyGraph)
@@ -63,33 +58,25 @@ func TestFeatures(t *testing.T) {
 		Options: &godog.Options{
 			Format:      "pretty,cucumber:" + bddJSONReportPath,
 			Paths:       []string{"features"},
-			TestingT:    t,
+			Strict:      true,
 			Concurrency: 1,
 		},
 	}
 
-	// delete staled reports
-	_ = os.Remove(bddJSONReportPath)
-	suite.Run()
+	if err := os.Remove(bddJSONReportPath); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("failed to remove stale BDD report: %v", err)
+	}
+	// Do not pass TestingT: report-only compatibility failures are evaluated
+	// separately from the enforced scenarios below.
+	status := suite.Run()
 	report, err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath)
 	if err != nil {
-		bddReportInvalid = true
 		t.Errorf("failed to write BDD HTML report: %v", err)
 		return
 	}
-	if len(report.Folders) == 0 {
-		bddReportInvalid = true
-		t.Errorf("BDD report is empty")
-		return
+	t.Logf("BDD gate: %d enforced, %d failed; compatibility reporting: %d scenarios, %d failed",
+		report.Enforced, report.EnforcedFailed, report.Total-report.Enforced, report.Failed-report.EnforcedFailed)
+	if err := checkBDDGate(report, status); err != nil {
+		t.Error(err)
 	}
-	bddDawgsFailed = hasFolderFailure(report, "dawgs")
-}
-
-func TestMain(m *testing.M) {
-	m.Run()
-	// Only DAWGS feature failures and invalid reports should fail the BDD command.
-	if bddDawgsFailed || bddReportInvalid {
-		os.Exit(1)
-	}
-	os.Exit(0)
 }
