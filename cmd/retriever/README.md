@@ -236,6 +236,22 @@ Pseudonyms are derived directly from the stable salt, so full scrub does not
 retain a graph-wide identifier registry or perform a node observation pre-pass.
 Scrub state is isolated per selected graph.
 
+Full scrub applies the property classifier recursively to JSON-like maps and
+maps inside arrays. Nested passwords and free text are redacted, timestamps
+are shifted, and other nonempty strings are pseudonymized. Explicit
+`classifier.preserve_keys` entries preserve the entire value, including a
+container's descendants; graph-reference string rules still take precedence.
+A redacted parent removes its contents even when a child key is preserved.
+Numbers, booleans, and nulls keep their normal scalar policy.
+
+Action counts describe top-level property plans, without counting descendants
+again. The `scrub_nested` action identifies containers visited recursively;
+arrays classified for pseudonymization or timestamp shifting retain that
+outer action while their map fields receive individual classification.
+Manifests and checkpoints identify this policy as `retriever-scrub-v3`.
+Checkpoints from earlier scrub rules cannot be resumed; start a new dump in a
+new output directory to apply the recursive policy to every fragment.
+
 Classifier and graph-identifier settings can be overridden with `-config`; see
 `../../retriever/defaults.toml` for the supported TOML shape.
 
@@ -264,6 +280,21 @@ overriding graph names. Direct archive loads decrypt and perform integrity-only
 unpack validation in a temporary collection directory, then run the same
 semantic preflight as directory loads before schema assertion or database
 writes.
+
+JSON integer property tokens are loaded as exact signed 64-bit integers, including
+inside arrays and nested maps. Integer tokens outside `[-9223372036854775808,
+9223372036854775807]` are rejected during preflight. Decimal and exponent tokens
+use `float64` with ordinary binary floating-point rounding; overflow is rejected.
+Numeric-looking strings remain strings. Neo4j's property-shape restrictions still
+apply (for example, nested maps cannot be persisted as node properties).
+
+Manifest fragment paths must be clean relative paths with slash separators, such
+as `graphs/default/nodes-000001.jsonl.zst`. Empty paths, absolute paths, `.` or `..`
+components, backslashes and Windows drive prefixes are rejected. Checksum checks,
+preflight and load reads open fragments beneath the collection root and require
+regular files. Directory loads allow relative symlinks whose resolution stays
+inside that root; escaping or absolute symlink targets are rejected at each open.
+Encrypted TAR packaging and extraction retain their existing symlink restrictions.
 
 `-batch-size` bounds both node and relationship writes. PostgreSQL uses a
 correlated bulk insert and Neo4j uses grouped `UNWIND` creates; generated node

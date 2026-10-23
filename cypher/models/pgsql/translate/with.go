@@ -6,14 +6,57 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+func (s *Translator) prepareWith() error {
+	if !s.multipartWrites {
+		return nil
+	}
+	constraint, err := s.treeTranslator.ConsumeAllConstraints()
+	if err != nil {
+		return err
+	}
+	resolved, err := resolvePathCompositeFieldReferences(s.scope, constraint.Expression)
+	if err != nil {
+		return err
+	}
+	if err := RewriteFrameBindings(s.scope, resolved); err != nil {
+		return err
+	}
+	s.query.CurrentPart().withInputConstraints = resolved
+	return nil
+}
+
+// translateWith closes the current query part, projects WITH items, and opens the scope consumed by the next part.
 func (s *Translator) translateWith() error {
 	currentPart := s.query.CurrentPart()
+	if s.multipartWrites && currentPart.projections.Frame == nil {
+		// Literal projections still consume the incoming row stream. The
+		// placeholder frame of a leading WITH resolves to no physical source.
+		currentPart.projections.Frame = s.scope.CurrentFrame()
+	}
+	if currentPart.HasDeletions() {
+		if err := s.buildDeletions(s.scope); err != nil {
+			return err
+		}
+		// DELETE has no RETURNING relation. WITH continues with the input
+		// rows while the top-level data-modifying CTE performs the deletion.
+		deletionFrames := map[*Frame]struct{}{}
+		for _, deletion := range currentPart.mutations.Deletions.Values() {
+			deletionFrames[deletion.Frame] = struct{}{}
+		}
+		for currentPart.projections.Frame != nil {
+			if _, deletionFrame := deletionFrames[currentPart.projections.Frame]; !deletionFrame {
+				break
+			}
+			currentPart.projections.Frame = currentPart.projections.Frame.Previous
+		}
+	}
 
 	if !currentPart.HasProjections() {
 		currentPart.Frame.Exported.Clear()
 	} else {
 		var (
 			projectedItems = pgsql.NewIdentifierSet()
+			materialized   []*BoundIdentifier
 
 			// aggregatedItems contains a set of symbols of projected aggregate functions.
 			aggregatedItems = pgsql.NewSymbolTable()
@@ -55,7 +98,9 @@ func (s *Translator) translateWith() error {
 		if s.query.CurrentPart().quantifierIdentifiers != nil && s.query.CurrentPart().quantifierIdentifiers.Len() > 0 {
 			set = set.MergeSet(s.query.CurrentPart().quantifierIdentifiers)
 		}
-		if projectionConstraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
+		if s.multipartWrites {
+			currentPart.projections.Constraints = currentPart.withInputConstraints
+		} else if projectionConstraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
 			return err
 		} else if resolvedConstraint, err := resolvePathCompositeFieldReferences(s.scope, projectionConstraint.Expression); err != nil {
 			return err
@@ -80,7 +125,7 @@ func (s *Translator) translateWith() error {
 					)
 
 					if projectionItem.Alias.Set {
-						if aliasBinding, aliasBound := s.scope.AliasedLookup(projectionItem.Alias.Value); !aliasBound || aliasBinding.Identifier != binding.Identifier {
+						if aliasBinding, aliasBound := s.scope.AliasedLookup(projectionItem.Alias.Value); !aliasBound || (aliasBinding.Identifier != binding.Identifier && aliasBinding.LastProjection != nil) {
 							var err error
 
 							if projectedBinding, err = s.scope.DefineNew(binding.DataType); err != nil {
@@ -124,8 +169,11 @@ func (s *Translator) translateWith() error {
 						currentPart.projections.Items[idx].Alias = pgsql.AsOptionalIdentifier(projectedBinding.Identifier)
 					}
 
-					// Assign the frame to the binding's last projection backref
-					projectedBinding.MaterializedBy(currentPart.Frame)
+					// Delay the back-reference update until every select item has
+					// been built. Path projections may depend on node bindings that
+					// appear earlier in a greedy WITH projection, and those
+					// dependencies must still reference the input frame here.
+					materialized = append(materialized, projectedBinding)
 
 					// Reveal and export the identifier in the current multipart query part's frame
 					currentPart.Frame.Reveal(projectedBinding.Identifier)
@@ -143,8 +191,7 @@ func (s *Translator) translateWith() error {
 						// Track this projected item for scope pruning
 						projectedItems.Add(binding.Identifier)
 
-						// Assign the frame to the binding's last projection backref
-						binding.LastProjection = currentPart.Frame
+						materialized = append(materialized, binding)
 
 						// Reveal and export the identifier in the current multipart query part's frame
 						currentPart.Frame.Reveal(binding.Identifier)
@@ -155,6 +202,35 @@ func (s *Translator) translateWith() error {
 					}
 				}
 			}
+		}
+		if s.multipartWrites {
+			constraint, err := s.treeTranslator.ConsumeAllConstraints()
+			if err != nil {
+				return err
+			}
+			resolved, err := resolvePathCompositeFieldReferences(s.scope, constraint.Expression)
+			if err != nil {
+				return err
+			}
+			if err := RewriteFrameBindings(s.scope, resolved); err != nil {
+				return err
+			}
+			if resolved != nil {
+				aliases := map[pgsql.Identifier]pgsql.Expression{}
+				for _, projection := range currentPart.projections.Items {
+					if projection.Alias.Set {
+						aliases[projection.Alias.Value] = projection.SelectItem
+					}
+				}
+				resolved, err = multipartInputPredicate(s.kindMapper, currentPart.Frame, aliases, resolved)
+				if err != nil {
+					return err
+				}
+			}
+			currentPart.projections.OutputConstraints = resolved
+		}
+		for _, binding := range materialized {
+			binding.MaterializedBy(currentPart.Frame)
 		}
 
 		if !aggregatedItems.IsEmpty() {

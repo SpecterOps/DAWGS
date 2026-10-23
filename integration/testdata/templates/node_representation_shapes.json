@@ -1,0 +1,805 @@
+{
+  "families": [
+    {
+      "name": "F1 carried node identity and integer consumers",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "F1Node"
+            ],
+            "properties": {
+              "name": "source"
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "F1Node"
+            ],
+            "properties": {
+              "name": "target"
+            }
+          },
+          {
+            "id": "far",
+            "kinds": [
+              "F1Node"
+            ],
+            "properties": {
+              "name": "far"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "target",
+            "kind": "F1Edge"
+          },
+          {
+            "start_id": "target",
+            "end_id": "far",
+            "kind": "F1Edge"
+          }
+        ]
+      },
+      "node_params": {
+        "source": "source",
+        "target": "target"
+      },
+      "variants": [
+        {
+          "name": "fixed",
+          "vars": {
+            "query": "MATCH (a) WHERE a.name = 'source' WITH a MATCH (a)-[:F1Edge]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "fixed alias",
+          "vars": {
+            "query": "MATCH (original) WHERE original.name = 'source' WITH original AS a MATCH (a)-[:F1Edge]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "one hop",
+          "vars": {
+            "query": "MATCH (a) WHERE a.name = 'source' WITH a MATCH (a)-[:F1Edge*1..1]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "one hop alias",
+          "vars": {
+            "query": "MATCH (original) WHERE original.name = 'source' WITH original AS a MATCH (a)-[:F1Edge*1..1]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "variable",
+          "vars": {
+            "query": "MATCH (a) WHERE a.name = 'source' WITH a MATCH (a)-[:F1Edge*1..2]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                true,
+                true
+              ],
+              [
+                true,
+                false
+              ]
+            ]
+          }
+        },
+        {
+          "name": "variable alias",
+          "vars": {
+            "query": "MATCH (original) WHERE original.name = 'source' WITH original AS a MATCH (a)-[:F1Edge*1..2]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                true,
+                true
+              ],
+              [
+                true,
+                false
+              ]
+            ]
+          }
+        },
+        {
+          "name": "zero",
+          "vars": {
+            "query": "MATCH (a) WHERE a.name = 'source' WITH a MATCH (a)-[:F1Edge*0..0]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                false
+              ]
+            ]
+          }
+        },
+        {
+          "name": "zero alias",
+          "vars": {
+            "query": "MATCH (original) WHERE original.name = 'source' WITH original AS a MATCH (a)-[:F1Edge*0..0]->(b) RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true,
+                false
+              ]
+            ]
+          }
+        },
+        {
+          "name": "mutation preserves carried entity",
+          "vars": {
+            "query": "MATCH (a) WHERE a.name = 'source' WITH a MATCH (a)-[:F1Edge]->(b) SET b.selected = true RETURN id(a) = $source, id(b) = $target"
+          },
+          "assert": {
+            "row_values": [
+              [
+                true,
+                true
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "target"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F2 node inline map expression consumers",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "source",
+              "x": 0
+            }
+          },
+          {
+            "id": "mid",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "mid",
+              "x": 7
+            }
+          },
+          {
+            "id": "match",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "match",
+              "x": 7
+            }
+          },
+          {
+            "id": "miss",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "miss",
+              "x": 9
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "mid",
+            "kind": "F2Prefix"
+          },
+          {
+            "start_id": "mid",
+            "end_id": "match",
+            "kind": "F2Next",
+            "properties": {
+              "x": 7
+            }
+          },
+          {
+            "start_id": "mid",
+            "end_id": "miss",
+            "kind": "F2Next",
+            "properties": {
+              "x": 9
+            }
+          }
+        ]
+      },
+      "node_params": {
+        "matching": "match"
+      },
+      "variants": [
+        {
+          "name": "m.x",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next]->(e {x: m.x}) RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "m.x + 2",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next]->(e {x: m.x + 2}) RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                false
+              ]
+            ]
+          }
+        },
+        {
+          "name": "m.x + 1",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next]->(e {x: m.x + 1}) RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "mutation filters matching endpoint",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next]->(e {x: m.x}) SET e.selected = true RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_values": [
+              [
+                true
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "match"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F2 relationship inline map expression consumers",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "source",
+              "x": 0
+            }
+          },
+          {
+            "id": "mid",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "mid",
+              "x": 7
+            }
+          },
+          {
+            "id": "match",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "match",
+              "x": 7
+            }
+          },
+          {
+            "id": "miss",
+            "kinds": [
+              "F2Node"
+            ],
+            "properties": {
+              "name": "miss",
+              "x": 9
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "mid",
+            "kind": "F2Prefix"
+          },
+          {
+            "start_id": "mid",
+            "end_id": "match",
+            "kind": "F2Next",
+            "properties": {
+              "x": 7
+            }
+          },
+          {
+            "start_id": "mid",
+            "end_id": "miss",
+            "kind": "F2Next",
+            "properties": {
+              "x": 9
+            }
+          }
+        ]
+      },
+      "node_params": {
+        "matching": "match"
+      },
+      "variants": [
+        {
+          "name": "m.x",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next {x: m.x}]->(e) RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "m.x + 2",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next {x: m.x + 2}]->(e) RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                false
+              ]
+            ]
+          }
+        },
+        {
+          "name": "m.x + 1",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next {x: m.x + 1}]->(e) RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "mutation filters matching endpoint",
+          "vars": {
+            "query": "MATCH (s)-[:F2Prefix]->(m)-[:F2Next {x: m.x}]->(e) SET e.selected = true RETURN id(e) = $matching"
+          },
+          "assert": {
+            "row_values": [
+              [
+                true
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "match"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F2 inline map function consumers",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "function-source",
+            "kinds": [
+              "F2FunctionSource"
+            ],
+            "properties": {
+              "name": "source"
+            }
+          },
+          {
+            "id": "function-mid",
+            "kinds": [
+              "F2FunctionMid"
+            ],
+            "properties": {
+              "name": "mid"
+            }
+          },
+          {
+            "id": "function-hit",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "id": "function-miss",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "miss",
+              "x": 9,
+              "source_kinds": [
+                "WrongKind"
+              ],
+              "source_type": "WrongType"
+            }
+          },
+          {
+            "id": "function-wrong-kind",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "id": "function-reversed",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "id": "function-missing",
+            "kinds": [
+              "F2FunctionTarget"
+            ],
+            "properties": {
+              "name": "missing"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "function-source",
+            "end_id": "function-mid",
+            "kind": "F2FunctionPrefix"
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-hit",
+            "kind": "F2FunctionNext",
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-miss",
+            "kind": "F2FunctionNext",
+            "properties": {
+              "x": 9,
+              "source_kinds": [
+                "WrongKind"
+              ],
+              "source_type": "WrongType"
+            }
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-wrong-kind",
+            "kind": "F2FunctionDecoy",
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "start_id": "function-reversed",
+            "end_id": "function-mid",
+            "kind": "F2FunctionNext",
+            "properties": {
+              "name": "hit",
+              "x": 7,
+              "source_kinds": [
+                "F2FunctionSource"
+              ],
+              "source_type": "F2FunctionPrefix"
+            }
+          },
+          {
+            "start_id": "function-mid",
+            "end_id": "function-missing",
+            "kind": "F2FunctionNext"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node map id source absent property",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {missing: id(s)}) RETURN e"
+          },
+          "assert": {
+            "row_count": 0,
+            "node_ids": []
+          }
+        },
+        {
+          "name": "node map normalized source id",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {x: id(s) - id(s) + 7}) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "node map source labels",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {source_kinds: labels(s)}) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "node map relationship type",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {source_type: type(r)}) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map normalized source id",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {x: id(s) - id(s) + 7}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map source labels",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {source_kinds: labels(s)}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map normalized relationship id",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {x: id(r) - id(r) + 7}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "relationship map relationship type",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {source_type: type(r)}]->(e) RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          }
+        },
+        {
+          "name": "node map id consumer selects exact mutation",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext]->(e {x: id(s) - id(s) + 7}) SET e.function_selected = true RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.function_selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "function-hit",
+                    "kinds": [
+                      "F2FunctionTarget"
+                    ],
+                    "props": {
+                      "name": "hit",
+                      "x": 7,
+                      "source_kinds": [
+                        "F2FunctionSource"
+                      ],
+                      "source_type": "F2FunctionPrefix",
+                      "function_selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship map id consumer selects exact mutation",
+          "vars": {
+            "query": "MATCH (s)-[r:F2FunctionPrefix]->(m)-[:F2FunctionNext {x: id(r) - id(r) + 7}]->(e) SET e.function_selected = true RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "node_ids": [
+              "function-hit"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.function_selected = true RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "function-hit",
+                    "kinds": [
+                      "F2FunctionTarget"
+                    ],
+                    "props": {
+                      "name": "hit",
+                      "x": 7,
+                      "source_kinds": [
+                        "F2FunctionSource"
+                      ],
+                      "source_type": "F2FunctionPrefix",
+                      "function_selected": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

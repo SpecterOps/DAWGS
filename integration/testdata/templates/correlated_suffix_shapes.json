@@ -1,0 +1,456 @@
+{
+  "families": [
+    {
+      "name": "F3 carried suffix predicates",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "ExpansionRoot"
+            ],
+            "properties": {
+              "root_key": "root",
+              "name": "wanted"
+            }
+          },
+          {
+            "id": "head-good",
+            "kinds": [
+              "SuffixHead"
+            ],
+            "properties": {
+              "name": "wanted"
+            }
+          },
+          {
+            "id": "middle-good",
+            "kinds": [
+              "SuffixMiddle"
+            ],
+            "properties": {
+              "name": "wanted"
+            }
+          },
+          {
+            "id": "terminal-good",
+            "kinds": [
+              "SuffixTerminal"
+            ],
+            "properties": {
+              "name": "wanted"
+            }
+          },
+          {
+            "id": "head-bad",
+            "kinds": [
+              "SuffixHead"
+            ],
+            "properties": {
+              "name": "wrong"
+            }
+          },
+          {
+            "id": "middle-bad",
+            "kinds": [
+              "SuffixMiddle"
+            ],
+            "properties": {
+              "name": "wrong"
+            }
+          },
+          {
+            "id": "terminal-bad",
+            "kinds": [
+              "SuffixTerminal"
+            ],
+            "properties": {
+              "name": "wrong"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "head-good",
+            "kind": "EnterSuffix",
+            "properties": {
+              "name": "wanted"
+            }
+          },
+          {
+            "start_id": "head-good",
+            "end_id": "middle-good",
+            "kind": "ContinueSuffix",
+            "properties": {
+              "name": "wanted"
+            }
+          },
+          {
+            "start_id": "middle-good",
+            "end_id": "terminal-good",
+            "kind": "CompleteSuffix",
+            "properties": {
+              "name": "wanted"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "head-bad",
+            "kind": "EnterSuffix",
+            "properties": {
+              "name": "wrong"
+            }
+          },
+          {
+            "start_id": "head-bad",
+            "end_id": "middle-bad",
+            "kind": "ContinueSuffix",
+            "properties": {
+              "name": "wrong"
+            }
+          },
+          {
+            "start_id": "middle-bad",
+            "end_id": "terminal-bad",
+            "kind": "CompleteSuffix",
+            "properties": {
+              "name": "wrong"
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "terminal wanted",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE terminal.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "terminal absent",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'absent' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE terminal.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "head wanted",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE head.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "head absent",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'absent' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE head.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "middle wanted",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE middle.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ]
+            ],
+            "path_lengths": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "middle absent",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'absent' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE middle.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "boundary wanted",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE boundary.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ],
+              [
+                "root",
+                "head-bad",
+                "middle-bad",
+                "terminal-bad"
+              ]
+            ],
+            "path_lengths": [
+              3,
+              3
+            ]
+          }
+        },
+        {
+          "name": "boundary absent",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'absent' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE boundary.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": [],
+            "path_lengths": []
+          }
+        },
+        {
+          "name": "duplicate carried rows preserve path multiplicity",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root UNWIND ['wanted', 'wanted', 'absent'] AS wanted WITH root, wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE terminal.name = wanted RETURN path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ],
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "relationship map wanted",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix {name: wanted}]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "relationship map absent",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'absent' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix {name: wanted}]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "cross suffix predicate =",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE terminal.name = head.name RETURN path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ],
+              [
+                "root",
+                "head-bad",
+                "middle-bad",
+                "terminal-bad"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "cross suffix predicate <>",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE terminal.name <> head.name RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "cross suffix inline map",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal {name: head.name}) RETURN path"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "root",
+                "head-good",
+                "middle-good",
+                "terminal-good"
+              ],
+              [
+                "root",
+                "head-bad",
+                "middle-bad",
+                "terminal-bad"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "mutation selection retains correlated predicate",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE terminal.name = wanted SET terminal.selected = true RETURN terminal"
+          },
+          "assert": {
+            "node_ids": [
+              "terminal-good"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.selected = true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "terminal-good"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "bound root filter",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE root.name = 'absent' RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "carried scalar filter",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE wanted = 'absent' RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "constant filter",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE false RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "constant conjunct",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE false AND terminal.name = 'wanted' RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "parenthesized constant conjunct",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root, 'wanted' AS wanted MATCH path = (root)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) WHERE (false AND terminal.name = 'wanted') RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "bound root extra label",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root MATCH path = (root:SuffixTerminal)-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        },
+        {
+          "name": "bound root inline filter",
+          "vars": {
+            "query": "MATCH (root:ExpansionRoot) WHERE root.root_key = 'root' WITH root MATCH path = (root {name: 'absent'})-[:Expand*0..16]->(boundary)-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(middle:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal) RETURN path"
+          },
+          "assert": {
+            "row_count": 0,
+            "path_node_ids": []
+          }
+        }
+      ]
+    }
+  ]
+}

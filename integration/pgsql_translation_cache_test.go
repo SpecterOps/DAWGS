@@ -3,15 +3,98 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/opengraph"
 	"github.com/specterops/dawgs/ops"
 	"github.com/specterops/dawgs/query"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPostgreSQLBuilderCachePreservesDistinctASTSemantics(t *testing.T) {
+	previous := pg.SetOptimizedTranslation(true)
+	t.Cleanup(func() { pg.SetOptimizedTranslation(previous) })
+	kindA, kindB := graph.StringKind("IdentityA"), graph.StringKind("IdentityB")
+	source, err := os.ReadFile("testdata/templates/cache_kind_identity_shapes.json")
+	require.NoError(t, err)
+	var corpus cypherTemplateFile
+	require.NoError(t, json.Unmarshal(source, &corpus))
+	fixture := corpus.Families[0].Fixture
+	nodeKinds, _ := fixture.Kinds()
+	for _, shape := range []string{"empty predicates", "exclusive kinds"} {
+		for _, mutation := range []bool{false, true} {
+			for _, reverse := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/mutation=%t/reverse=%t", shape, mutation, reverse), func(t *testing.T) {
+					session := Open(t, Options{RequireDriver: pg.DriverName, SkipIfDriverMismatch: true, ExtraNodeKinds: nodeKinds, CleanupMode: CleanupGraph})
+					require.NoError(t, session.WithRollbackFixture(t, fixture, true, func(tx graph.Transaction, ids opengraph.IDMap) error {
+						predicates := []graph.Criteria{query.KindIn(query.Node()), query.And()}
+						want := [][]string{{}, {"a", "b", "both", "neither"}}
+						if shape == "exclusive kinds" {
+							predicates = []graph.Criteria{cypher.NewKindMatcher(query.Node(), graph.Kinds{kindA, kindB}, true), query.KindIn(query.Node(), kindA, kindB)}
+							want = [][]string{{"both"}, {"a", "b", "both"}}
+						}
+						if reverse {
+							predicates[0], predicates[1] = predicates[1], predicates[0]
+							want[0], want[1] = want[1], want[0]
+						}
+						marked := map[graph.ID]string{}
+						// Repeat both requests to exercise real cache hits after the
+						// distinct identities have each been populated.
+						for step := range 4 {
+							idx, marker := step%2, fmt.Sprint(step)
+							criteria := []graph.Criteria{}
+							if mutation {
+								criteria = append(criteria, query.Updatef(func() graph.Criteria {
+									return query.SetProperties(query.Node(), map[string]any{"marked": marker})
+								}))
+							}
+							var got []graph.ID
+							if err := tx.Nodes().Filter(predicates[idx]).Fetch(func(cursor graph.Cursor[*graph.Node]) error {
+								for node := range cursor.Chan() {
+									got = append(got, node.ID)
+								}
+								return cursor.Error()
+							}, criteria...); err != nil {
+								return err
+							}
+							expectedIDs := []graph.ID{}
+							for _, name := range want[idx] {
+								expectedIDs = append(expectedIDs, ids[name])
+								if mutation {
+									marked[ids[name]] = marker
+								}
+							}
+							require.ElementsMatch(t, expectedIDs, got)
+							result := tx.Query("MATCH (n) RETURN n", nil)
+							count := 0
+							for result.Next() {
+								var node graph.Node
+								require.NoError(t, result.Scan(&node))
+								properties := map[string]any{}
+								if value, found := marked[node.ID]; found {
+									properties["marked"] = value
+								}
+								require.Equal(t, properties, node.Properties.MapOrEmpty())
+								count++
+							}
+							err := result.Error()
+							result.Close()
+							require.NoError(t, err)
+							require.Equal(t, len(ids), count)
+						}
+						return nil
+					}))
+				})
+			}
+		}
+	}
+}
 
 func TestPostgreSQLFetchStartNodesUsesBuilderCompilationCache(t *testing.T) {
 	previous := pg.SetOptimizedTranslation(true)
@@ -56,7 +139,7 @@ func TestPostgreSQLFetchStartNodesUsesBuilderCompilationCache(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		firstNodes, err := ops.FetchStartNodes(tx.Relationships().Filter(query.InIDs(query.Start(), first.ID)))
 		if err != nil {
@@ -75,7 +158,7 @@ func TestPostgreSQLFetchStartNodesUsesBuilderCompilationCache(t *testing.T) {
 		return nil
 	}))
 
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 }
@@ -123,7 +206,7 @@ func TestPostgreSQLFetchStartNodesUnoptimizedBypassesCache(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		if _, err := ops.FetchStartNodes(tx.Relationships().Filter(query.InIDs(query.Start(), first.ID))); err != nil {
 			return err
@@ -132,7 +215,7 @@ func TestPostgreSQLFetchStartNodesUnoptimizedBypassesCache(t *testing.T) {
 		return err
 	}))
 
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Hits, after.Hits)
 	require.Equal(t, before.Misses, after.Misses)
 	require.Equal(t, before.Insertions, after.Insertions)
@@ -170,7 +253,7 @@ func TestPostgreSQLRawCypherQueryRebindsCachedParameters(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.TranslationCacheStats().Aggregate
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		firstID, err := rawCypherNodeID(tx, "first")
 		if err != nil {
@@ -186,12 +269,12 @@ func TestPostgreSQLRawCypherQueryRebindsCachedParameters(t *testing.T) {
 		return nil
 	}))
 
-	after := driver.TranslationCacheStats()
+	after := driver.TranslationCacheStats().Aggregate
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 }
 
-func TestPostgreSQLRawCypherQueryUnoptimizedBypassesCache(t *testing.T) {
+func TestPostgreSQLRawCypherQueryUsesConnectionCacheWhenCompilerOptimizationDisabled(t *testing.T) {
 	previous := pg.SetOptimizedTranslation(false)
 	t.Cleanup(func() {
 		pg.SetOptimizedTranslation(previous)
@@ -208,7 +291,7 @@ func TestPostgreSQLRawCypherQueryUnoptimizedBypassesCache(t *testing.T) {
 	driver, ok := session.DB.(*pg.Driver)
 	require.True(t, ok)
 
-	before := driver.TranslationCacheStats()
+	before := driver.TranslationCacheStats().Aggregate
 	require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
 		for _, name := range []string{"first", "second"} {
 			result := tx.Query("RETURN $name", map[string]any{"name": name})
@@ -221,11 +304,10 @@ func TestPostgreSQLRawCypherQueryUnoptimizedBypassesCache(t *testing.T) {
 		return nil
 	}))
 
-	after := driver.TranslationCacheStats()
-	require.Equal(t, before.Hits, after.Hits)
-	require.Equal(t, before.Misses, after.Misses)
-	require.Equal(t, before.Bypasses+2, after.Bypasses)
-	require.Equal(t, before.UnoptimizedCompilations+2, after.UnoptimizedCompilations)
+	after := driver.TranslationCacheStats().Aggregate
+	require.Equal(t, before.Misses+1, after.Misses)
+	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
+	require.Equal(t, before.Insertions+1, after.Insertions)
 }
 
 func rawCypherNodeID(tx graph.Transaction, name string) (graph.ID, error) {
@@ -272,7 +354,7 @@ func TestPostgreSQLNodeUpdateRebindsCachedBuilderParameters(t *testing.T) {
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
 		firstProperties := graph.NewProperties().Set("name", "after-first")
 		if err := tx.Nodes().Filter(query.InIDs(query.Node(), first.ID)).Update(firstProperties); err != nil {
@@ -282,7 +364,7 @@ func TestPostgreSQLNodeUpdateRebindsCachedBuilderParameters(t *testing.T) {
 		secondProperties := graph.NewProperties().Set("name", "after-second")
 		return tx.Nodes().Filter(query.InIDs(query.Node(), second.ID)).Update(secondProperties)
 	}))
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 
@@ -353,14 +435,14 @@ func TestPostgreSQLRelationshipUpdateRebindsCachedBuilderParameters(t *testing.T
 		return err
 	}))
 
-	before := driver.TranslationCacheStats()
+	before := driver.CompilationCacheStats()
 	require.NoError(t, session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
 		if err := tx.Relationships().Filter(query.InIDs(query.Relationship(), first.ID)).Update(graph.NewProperties().Set("name", "after-first")); err != nil {
 			return err
 		}
 		return tx.Relationships().Filter(query.InIDs(query.Relationship(), second.ID)).Update(graph.NewProperties().Set("name", "after-second"))
 	}))
-	after := driver.TranslationCacheStats()
+	after := driver.CompilationCacheStats()
 	require.Equal(t, before.Misses+1, after.Misses)
 	require.GreaterOrEqual(t, after.Hits, before.Hits+1)
 

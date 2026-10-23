@@ -59,296 +59,241 @@ func (s *Translator) translateUpdates() error {
 	}
 
 	for _, updateClause := range currentQueryPart.mutations.Updates.Values() {
-		if stepFrame, err := s.scope.PushFrame(); err != nil {
+		writeBinding, err := s.scope.DefineNew(pgsql.Scope)
+		if err != nil {
 			return err
-		} else {
-			updateClause.Frame = stepFrame
-
-			joinConstraint := &Constraint{
-				Dependencies: pgsql.AsIdentifierSet(updateClause.TargetBinding.Identifier, updateClause.UpdateBinding.Identifier),
-				Expression: pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{updateClause.TargetBinding.Identifier, pgsql.ColumnID},
-					pgsql.OperatorEquals,
-					pgsql.CompoundIdentifier{updateClause.UpdateBinding.Identifier, pgsql.ColumnID},
-				),
-			}
-
-			if err := RewriteFrameBindings(s.scope, joinConstraint.Expression); err != nil {
-				return err
-			}
-
-			updateClause.JoinConstraint = joinConstraint.Expression
-
-			if boundProjections, err := buildVisibleProjections(s.scope); err != nil {
-				return err
-			} else {
-				// Zip through all projected identifiers and update their last projected frame
-				for _, binding := range boundProjections.Bindings {
-					binding.MaterializedBy(stepFrame)
-				}
-
-				for _, selectItem := range boundProjections.Items {
-					switch typedProjection := selectItem.(type) {
-					case *pgsql.AliasedExpression:
-						if !typedProjection.Alias.Set {
-							return fmt.Errorf("expected aliased expression to have an alias set")
-						} else if typedProjection.Alias.Value == updateClause.TargetBinding.Identifier {
-							// This is the projection being replaced by the assignment
-							if rewrittenProjections, err := buildProjection(updateClause.TargetBinding.Identifier, updateClause.UpdateBinding, s.scope, s.scope.ReferenceFrame()); err != nil {
-								return err
-							} else {
-								updateClause.Projection = append(updateClause.Projection, rewrittenProjections...)
-							}
-						} else {
-							updateClause.Projection = append(updateClause.Projection, typedProjection)
-						}
-
-					default:
-						return fmt.Errorf("expected aliased expression as projection but got: %T", selectItem)
-					}
-				}
-			}
-
 		}
-	}
-
-	return s.buildUpdates()
-}
-
-func (s *Translator) buildUpdates() error {
-	for _, identifierMutation := range s.query.CurrentPart().mutations.Updates.Values() {
-		sqlUpdate := pgsql.Update{
-			From: []pgsql.FromClause{{
-				Source: pgsql.TableReference{
-					Name: pgsql.CompoundIdentifier{identifierMutation.Frame.Previous.Binding.Identifier},
-				}},
-			},
+		stepFrame, err := s.scope.PushFrame()
+		if err != nil {
+			return err
+		}
+		updateClause.Frame = stepFrame
+		sourceFrame, hasSource := s.previousValidFrame(stepFrame)
+		if !hasSource {
+			return fmt.Errorf("update %s has no input frame", updateClause.TargetBinding.Identifier)
 		}
 
-		switch identifierMutation.UpdateBinding.DataType {
-		case pgsql.NodeComposite:
-			sqlUpdate.Table = pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
-				Binding: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
-			}
-
-		case pgsql.EdgeComposite:
-			sqlUpdate.Table = pgsql.TableReference{
-				Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
-				Binding: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
-			}
-
-		default:
-			return fmt.Errorf("invalid identifier data type for update: %s", identifierMutation.UpdateBinding.Identifier)
-		}
-
-		var (
-			kindAssignments      pgsql.Expression
-			kindRemovals         pgsql.Expression
-			propertyAssignments  pgsql.Expression
-			propertyRemovals     pgsql.Expression
-			kindColumnIdentifier = pgsql.ColumnKindID
+		updateClause.JoinConstraint = pgsql.NewBinaryExpression(
+			pgsql.CompoundIdentifier{updateClause.TargetBinding.Identifier, pgsql.ColumnID},
+			pgsql.OperatorEquals,
+			pgsql.CompoundIdentifier{updateClause.UpdateBinding.Identifier, pgsql.ColumnID},
 		)
-
-		if identifierMutation.UpdateBinding.DataType.MatchesOneOf(pgsql.NodeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode) {
-			kindColumnIdentifier = pgsql.ColumnKindIDs
+		if err := RewriteFrameBindings(s.scope, updateClause.JoinConstraint); err != nil {
+			return err
+		}
+		boundProjections, err := buildVisibleProjections(s.scope)
+		if err != nil {
+			return err
 		}
 
-		if len(identifierMutation.KindAssignments) > 0 {
-			if kindIDs, err := s.kindMapper.MapKinds(identifierMutation.KindAssignments); err != nil {
-				s.SetError(fmt.Errorf("failed to translate kinds: %w", err))
-			} else {
-				arrayLiteral := pgsql.ArrayLiteral{
-					Values:   make([]pgsql.Expression, len(kindIDs)),
-					CastType: pgsql.Int2Array,
-				}
-
-				for idx, kindID := range kindIDs {
-					arrayLiteral.Values[idx] = pgsql.NewLiteral(kindID, pgsql.Int2)
-				}
-
-				kindAssignments = arrayLiteral.AsExpression()
+		// RETURNING has one row per physical target, not per input row. Only
+		// return the updated entity, then attach it to the original row stream.
+		// A left join also retains rows whose mutation target is null.
+		fresh := pgsql.CompoundIdentifier{writeBinding.Identifier, updateClause.UpdateBinding.Identifier}
+		for _, selectItem := range boundProjections.Items {
+			projection, ok := selectItem.(*pgsql.AliasedExpression)
+			if !ok || !projection.Alias.Set {
+				return fmt.Errorf("expected aliased update projection but got: %T", selectItem)
 			}
+			binding, _ := s.scope.Lookup(projection.Alias.Value)
+			updateClause.Projection = append(updateClause.Projection, refreshUpdatedEntityProjection(projection, binding, updateClause.UpdateBinding, fresh))
 		}
 
-		if len(identifierMutation.KindRemovals) > 0 {
-			if kindIDs, err := s.kindMapper.MapKinds(identifierMutation.KindRemovals); err != nil {
-				s.SetError(fmt.Errorf("failed to translate kinds: %w", err))
-			} else {
-				arrayLiteral := pgsql.ArrayLiteral{
-					Values:   make([]pgsql.Expression, len(kindIDs)),
-					CastType: pgsql.Int2Array,
-				}
-
-				for idx, kindID := range kindIDs {
-					arrayLiteral.Values[idx] = pgsql.NewLiteral(kindID, pgsql.Int2)
-				}
-
-				kindRemovals = arrayLiteral.AsExpression()
-			}
+		// Resolve assignment expressions before advancing the bindings to the
+		// projection frame, so each target reads the complete preceding stream.
+		if err := s.buildUpdate(updateClause, sourceFrame, writeBinding); err != nil {
+			return err
 		}
-
-		if identifierMutation.PropertyAssignments.Len() > 0 {
-			jsonObjectFunction := pgsql.FunctionCall{
-				Function: pgsql.FunctionJSONBBuildObject,
-				CastType: pgsql.JSONB,
-			}
-
-			for _, propertyAssignment := range identifierMutation.PropertyAssignments.Values() {
-				if err := RewriteFrameBindings(s.scope, propertyAssignment.ValueExpression); err != nil {
-					return err
-				}
-
-				if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(propertyAssignment.ValueExpression); isPropertyLookup {
-					// Ensure that property lookups in JSONB build functions use the JSONB field type
-					propertyLookup.Operator = pgsql.OperatorJSONField
-				}
-
-				jsonObjectFunction.Parameters = append(jsonObjectFunction.Parameters,
-					pgsql.NewLiteral(propertyAssignment.Field, pgsql.Text),
-					propertyAssignment.ValueExpression,
-				)
-			}
-
-			propertyAssignments = jsonObjectFunction.AsExpression()
-		}
-
-		if identifierMutation.Removals.Len() > 0 {
-			fieldRemovalArray := pgsql.ArrayLiteral{
-				CastType: pgsql.TextArray,
-			}
-
-			for _, propertyRemoval := range identifierMutation.Removals.Values() {
-				fieldRemovalArray.Values = append(fieldRemovalArray.Values, pgsql.NewLiteral(propertyRemoval.Field, pgsql.Text))
-			}
-
-			propertyRemovals = fieldRemovalArray.AsExpression()
-		}
-
-		if kindAssignments != nil {
-			if err := RewriteFrameBindings(s.scope, kindAssignments); err != nil {
-				return err
-			}
-
-			if kindRemovals != nil {
-				sqlUpdate.Assignments = append(sqlUpdate.Assignments,
-					pgsql.NewBinaryExpression(
-						kindColumnIdentifier,
-						pgsql.OperatorAssignment,
-						pgsql.FunctionCall{
-							Function: pgsql.FunctionIntArrayUnique,
-							Parameters: []pgsql.Expression{
-								pgsql.FunctionCall{
-									Function: pgsql.FunctionIntArraySort,
-									Parameters: []pgsql.Expression{
-										pgsql.NewBinaryExpression(
-											pgsql.NewBinaryExpression(
-												pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, kindColumnIdentifier},
-												pgsql.OperatorSubtract,
-												kindRemovals,
-											),
-											pgsql.OperatorConcatenate,
-											kindAssignments,
-										),
-									},
-									CastType: pgsql.Int2Array,
-								},
-							},
-							CastType: pgsql.Int2Array,
-						},
-					),
-				)
-			} else {
-				sqlUpdate.Assignments = append(sqlUpdate.Assignments,
-					pgsql.NewBinaryExpression(
-						kindColumnIdentifier,
-						pgsql.OperatorAssignment,
-						pgsql.FunctionCall{
-							Function: pgsql.FunctionIntArrayUnique,
-							Parameters: []pgsql.Expression{
-								pgsql.FunctionCall{
-									Function: pgsql.FunctionIntArraySort,
-									Parameters: []pgsql.Expression{
-										pgsql.NewBinaryExpression(
-											pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, kindColumnIdentifier},
-											pgsql.OperatorConcatenate,
-											kindAssignments,
-										),
-									},
-									CastType: pgsql.Int2Array,
-								},
-							},
-							CastType: pgsql.Int2Array,
-						},
-					),
-				)
-			}
-		} else if kindRemovals != nil {
-			sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
-				kindColumnIdentifier,
-				pgsql.OperatorAssignment,
-				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, kindColumnIdentifier},
-					pgsql.OperatorSubtract,
-					kindRemovals,
-				),
-			))
-		}
-
-		if propertyAssignments != nil {
-			if err := RewriteFrameBindings(s.scope, propertyAssignments); err != nil {
-				return err
-			}
-
-			if propertyRemovals != nil {
-				sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
-					pgsql.ColumnProperties,
-					pgsql.OperatorAssignment,
-					pgsql.NewBinaryExpression(
-						pgsql.NewBinaryExpression(
-							pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties},
-							pgsql.OperatorSubtract,
-							propertyRemovals,
+		s.addCTE(stepFrame, pgsql.Select{
+			Projection: updateClause.Projection,
+			From: []pgsql.FromClause{{
+				Source: sourceFrame.Binding.Identifier,
+				Joins: []pgsql.Join{{
+					Table: writeBinding.Identifier,
+					JoinOperator: pgsql.JoinOperator{
+						JoinType: pgsql.JoinTypeLeftOuter,
+						Constraint: pgsql.NewBinaryExpression(
+							pgsql.RowColumnReference{Identifier: pgsql.CompoundIdentifier{sourceFrame.Binding.Identifier, updateClause.TargetBinding.Identifier}, Column: pgsql.ColumnID},
+							pgsql.OperatorEquals,
+							pgsql.RowColumnReference{Identifier: fresh, Column: pgsql.ColumnID},
 						),
-						pgsql.OperatorConcatenate,
-						propertyAssignments,
-					),
-				))
-			} else {
-				sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
-					pgsql.ColumnProperties,
-					pgsql.OperatorAssignment,
-					pgsql.NewBinaryExpression(
-						pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties},
-						pgsql.OperatorConcatenate,
-						propertyAssignments,
-					),
-				))
-			}
-		} else if propertyRemovals != nil {
-			sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(
-				pgsql.ColumnProperties,
-				pgsql.OperatorAssignment,
-				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties},
-					pgsql.OperatorSubtract,
-					propertyRemovals,
-				),
-			))
-		}
-
-		sqlUpdate.Returning = identifierMutation.Projection
-		sqlUpdate.Where = identifierMutation.JoinConstraint
-
-		s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
-			Alias: pgsql.TableAlias{
-				Name: identifierMutation.Frame.Binding.Identifier,
-			},
-			Query: pgsql.Query{
-				Body: sqlUpdate,
-			},
+					},
+				}},
+			}},
 		})
+		for _, binding := range boundProjections.Bindings {
+			binding.MaterializedBy(stepFrame)
+		}
 	}
 
 	return nil
+}
+
+// refreshUpdatedEntityProjection updates every name for the mutated entity
+// while preserving unrelated entities and values captured before the mutation.
+func refreshUpdatedEntityProjection(projection *pgsql.AliasedExpression, binding, updated *BoundIdentifier, fresh pgsql.Expression) *pgsql.AliasedExpression {
+	if binding == nil || updated == nil || binding.IDOnly {
+		return projection
+	}
+	family := bindingExpressionType(binding)
+	if family != bindingExpressionType(updated) || (family != pgsql.NodeComposite && family != pgsql.EdgeComposite) {
+		return projection
+	}
+	refreshed := *projection
+	refreshed.Expression = pgsql.Case{
+		Conditions: []pgsql.Expression{pgsql.NewBinaryExpression(
+			pgsql.RowColumnReference{Identifier: projection.Expression, Column: pgsql.ColumnID},
+			pgsql.OperatorEquals,
+			pgsql.RowColumnReference{Identifier: fresh, Column: pgsql.ColumnID},
+		)},
+		Then: []pgsql.Expression{fresh},
+		Else: projection.Expression,
+	}
+	return &refreshed
+}
+
+func (s *Translator) buildUpdate(identifierMutation *Update, sourceFrame *Frame, writeBinding *BoundIdentifier) error {
+	sqlUpdate := pgsql.Update{
+		From: []pgsql.FromClause{{
+			Source: pgsql.TableReference{
+				Name: pgsql.CompoundIdentifier{sourceFrame.Binding.Identifier},
+			}},
+		},
+	}
+
+	switch identifierMutation.UpdateBinding.DataType {
+	case pgsql.NodeComposite:
+		sqlUpdate.Table = pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableNode},
+			Binding: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
+		}
+
+	case pgsql.EdgeComposite:
+		sqlUpdate.Table = pgsql.TableReference{
+			Name:    pgsql.CompoundIdentifier{pgsql.TableEdge},
+			Binding: models.OptionalValue(identifierMutation.UpdateBinding.Identifier),
+		}
+
+	default:
+		return fmt.Errorf("invalid identifier data type for update: %s", identifierMutation.UpdateBinding.Identifier)
+	}
+
+	var (
+		properties pgsql.Expression
+		kinds      pgsql.Expression
+		addsKinds  bool
+	)
+	kindColumn := pgsql.ColumnKindID
+	if identifierMutation.UpdateBinding.DataType == pgsql.NodeComposite {
+		kindColumn = pgsql.ColumnKindIDs
+	}
+
+	for _, operation := range identifierMutation.operations {
+		switch operation.kind {
+		case setProperty:
+			if err := RewriteFrameBindings(s.scope, operation.value); err != nil {
+				return err
+			}
+			if propertyLookup, ok := expressionToPropertyLookupBinaryExpression(operation.value); ok {
+				// Copy property values as JSONB, preserving their value types.
+				propertyLookup.Operator = pgsql.OperatorJSONField
+			}
+			assignment := pgsql.FunctionCall{
+				Function: pgsql.FunctionJSONBBuildObject,
+				CastType: pgsql.JSONB,
+				Parameters: []pgsql.Expression{
+					pgsql.NewLiteral(operation.field, pgsql.Text), operation.value,
+				},
+			}
+			properties = appendUpdateOperation(properties, identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties, pgsql.OperatorConcatenate, assignment)
+
+		case removeProperty:
+			removal := pgsql.ArrayLiteral{
+				CastType: pgsql.TextArray,
+				Values:   []pgsql.Expression{pgsql.NewLiteral(operation.field, pgsql.Text)},
+			}
+			properties = appendUpdateOperation(properties, identifierMutation.UpdateBinding.Identifier, pgsql.ColumnProperties, pgsql.OperatorSubtract, removal)
+
+		case addKinds, removeKinds:
+			kindIDs, err := s.kindMapper.MapKinds(operation.kinds)
+			if err != nil {
+				return fmt.Errorf("failed to translate kinds: %w", err)
+			}
+			values := pgsql.ArrayLiteral{CastType: pgsql.Int2Array}
+			for _, kindID := range kindIDs {
+				values.Values = append(values.Values, pgsql.NewLiteral(kindID, pgsql.Int2))
+			}
+			operator := pgsql.OperatorSubtract
+			if operation.kind == addKinds {
+				operator = pgsql.OperatorConcatenate
+				addsKinds = true
+			}
+			kinds = appendUpdateOperation(kinds, identifierMutation.UpdateBinding.Identifier, kindColumn, operator, values)
+		}
+	}
+
+	if kinds != nil {
+		if addsKinds {
+			kinds = pgsql.FunctionCall{
+				Function: pgsql.FunctionIntArrayUnique,
+				Parameters: []pgsql.Expression{pgsql.FunctionCall{
+					Function:   pgsql.FunctionIntArraySort,
+					Parameters: []pgsql.Expression{kinds},
+					CastType:   pgsql.Int2Array,
+				}},
+				CastType: pgsql.Int2Array,
+			}
+		}
+		sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(kindColumn, pgsql.OperatorAssignment, kinds))
+	}
+	if properties != nil {
+		sqlUpdate.Assignments = append(sqlUpdate.Assignments, pgsql.NewBinaryExpression(pgsql.ColumnProperties, pgsql.OperatorAssignment, properties))
+	}
+
+	returning, err := buildProjection(identifierMutation.UpdateBinding.Identifier, identifierMutation.UpdateBinding, s.scope, nil)
+	if err != nil {
+		return err
+	}
+	sqlUpdate.Returning = returning
+	sqlUpdate.Where = identifierMutation.JoinConstraint
+
+	s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{
+			Name: writeBinding.Identifier,
+		},
+		Query: pgsql.Query{
+			Body: sqlUpdate,
+		},
+	})
+
+	return nil
+}
+
+// appendUpdateOperation folds operations from left to right. Parentheses keep
+// PostgreSQL operator precedence from reordering concatenation and subtraction.
+func appendUpdateOperation(previous pgsql.Expression, binding, column pgsql.Identifier, operator pgsql.Operator, value pgsql.Expression) pgsql.Expression {
+	if previous == nil {
+		previous = pgsql.CompoundIdentifier{binding, column}
+	} else {
+		// Keep consecutive assignments/removals in one JSON object or array.
+		// A change of operator creates a boundary that must remain ordered.
+		if binary, ok := previous.(*pgsql.BinaryExpression); ok && binary.Operator == operator {
+			switch right := binary.ROperand.(type) {
+			case pgsql.FunctionCall:
+				if next, ok := value.(pgsql.FunctionCall); ok && right.Function == next.Function {
+					right.Parameters = append(right.Parameters, next.Parameters...)
+					binary.ROperand = right
+					return binary
+				}
+			case pgsql.ArrayLiteral:
+				if next, ok := value.(pgsql.ArrayLiteral); ok && right.CastType == next.CastType {
+					right.Values = append(right.Values, next.Values...)
+					binary.ROperand = right
+					return binary
+				}
+			}
+		}
+		previous = pgsql.NewParenthetical(previous)
+	}
+	return pgsql.NewBinaryExpression(previous, operator, value)
 }

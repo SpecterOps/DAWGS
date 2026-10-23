@@ -1,0 +1,671 @@
+{
+  "families": [
+    {
+      "name": "F5 additional source label excludes ineligible sources",
+      "template": "MATCH (s:User) MATCH {{pattern}} WITH s, count({{count}}) AS c {{update}} RETURN s AS source, c AS total ORDER BY total DESC LIMIT {{limit}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "user-only",
+            "kinds": [
+              "User"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "user-only",
+            "end_id": "target",
+            "kind": "MemberOf",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "F5 missing label terminal count",
+          "vars": {
+            "pattern": "(s:Group)-[:MemberOf*1..2]->(t)",
+            "count": "t",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "row_count": 0,
+            "ordered_node_ids": [],
+            "ordered_column_values": {
+              "total": []
+            }
+          }
+        },
+        {
+          "name": "F5 missing label row count",
+          "vars": {
+            "pattern": "(s:Group)-[:MemberOf*1..2]->(t)",
+            "count": "*",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "row_count": 0,
+            "ordered_node_ids": [],
+            "ordered_column_values": {
+              "total": []
+            }
+          }
+        },
+        {
+          "name": "F5 mutation cannot select missing label",
+          "vars": {
+            "pattern": "(s:Group)-[:MemberOf*1..2]->(t)",
+            "count": "t",
+            "limit": "10",
+            "update": "SET s.selected = true"
+          },
+          "assert": {
+            "row_count": 0,
+            "ordered_node_ids": [],
+            "ordered_column_values": {
+              "total": []
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (s) WHERE s.selected = true RETURN s",
+              "assert": {
+                "node_id_set": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F5 labels counts aliases and ranking",
+      "template": "MATCH (s:User) MATCH {{pattern}} WITH s, count({{count}}) AS c {{update}} RETURN s AS source, c AS total ORDER BY total DESC LIMIT {{limit}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "user-only",
+            "kinds": [
+              "User"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "both-high",
+            "kinds": [
+              "User",
+              "Group"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "both-low",
+            "kinds": [
+              "User",
+              "Group"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "group-only",
+            "kinds": [
+              "Group"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "mid",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "extra",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "user-only",
+            "end_id": "mid",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "user-only",
+            "end_id": "target",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "user-only",
+            "end_id": "extra",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "both-high",
+            "end_id": "mid",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "mid",
+            "end_id": "target",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "both-low",
+            "end_id": "target",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "group-only",
+            "end_id": "target",
+            "kind": "MemberOf",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "F5 eligible sources retain counts",
+          "vars": {
+            "pattern": "(s:Group)-[:MemberOf*1..2]->(t)",
+            "count": "t",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 2,
+            "ordered_node_ids": [
+              "both-high",
+              "both-low"
+            ],
+            "ordered_column_values": {
+              "total": [
+                2,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "F5 top rank excludes higher count decoy",
+          "vars": {
+            "pattern": "(s:Group)-[:MemberOf*1..2]->(t)",
+            "count": "*",
+            "limit": "1",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 1,
+            "ordered_node_ids": [
+              "both-high"
+            ],
+            "ordered_column_values": {
+              "total": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "F5 repeated source label",
+          "vars": {
+            "pattern": "(s:User)-[:MemberOf*1..2]->(t)",
+            "count": "t",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 3,
+            "ordered_node_ids": [
+              "user-only",
+              "both-high",
+              "both-low"
+            ],
+            "ordered_column_values": {
+              "total": [
+                4,
+                2,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "ordinary count remains eligible for fast path",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*1..2]->(t)",
+            "count": "t",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 3,
+            "ordered_node_ids": [
+              "user-only",
+              "both-high",
+              "both-low"
+            ],
+            "ordered_column_values": {
+              "total": [
+                4,
+                2,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "F5 mutation selects exactly eligible sources",
+          "vars": {
+            "pattern": "(s:Group)-[:MemberOf*1..2]->(t)",
+            "count": "t",
+            "limit": "10",
+            "update": "SET s.selected = true"
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 2,
+            "ordered_node_ids": [
+              "both-high",
+              "both-low"
+            ],
+            "ordered_column_values": {
+              "total": [
+                2,
+                1
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (s) WHERE s.selected = true RETURN s",
+              "assert": {
+                "node_id_set": [
+                  "both-high",
+                  "both-low"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F6 distinct outgoing and incoming endpoints are not cycles",
+      "template": "MATCH (s:User) MATCH {{pattern}} WITH s, count({{count}}) AS c {{update}} RETURN s AS source, c AS total ORDER BY total DESC LIMIT {{limit}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "User"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "incoming",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "target",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "incoming",
+            "end_id": "source",
+            "kind": "MemberOf",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "F6 outgoing noncycle",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*1..2]->(s)",
+            "count": "s",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "row_count": 0,
+            "ordered_node_ids": [],
+            "ordered_column_values": {
+              "total": []
+            }
+          }
+        },
+        {
+          "name": "F6 row count noncycle",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*1..2]->(s)",
+            "count": "*",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "row_count": 0,
+            "ordered_node_ids": [],
+            "ordered_column_values": {
+              "total": []
+            }
+          }
+        },
+        {
+          "name": "F6 inbound noncycle",
+          "vars": {
+            "pattern": "(s)<-[:MemberOf*1..2]-(s)",
+            "count": "s",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "row_count": 0,
+            "ordered_node_ids": [],
+            "ordered_column_values": {
+              "total": []
+            }
+          }
+        },
+        {
+          "name": "F6 zero depth alone matches source",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*0..0]->(s)",
+            "count": "s",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 1,
+            "ordered_node_ids": [
+              "source"
+            ],
+            "ordered_column_values": {
+              "total": [
+                1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "F6 genuine cycles preserve path length counts and ranking",
+      "template": "MATCH (s:User) MATCH {{pattern}} WITH s, count({{count}}) AS c {{update}} RETURN s AS source, c AS total ORDER BY total DESC LIMIT {{limit}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "two-cycles",
+            "kinds": [
+              "User"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "one-cycle",
+            "kinds": [
+              "User"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "noncycle",
+            "kinds": [
+              "User"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "mid",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "Computer"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "two-cycles",
+            "end_id": "two-cycles",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "two-cycles",
+            "end_id": "mid",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "mid",
+            "end_id": "two-cycles",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "one-cycle",
+            "end_id": "one-cycle",
+            "kind": "MemberOf",
+            "properties": {}
+          },
+          {
+            "start_id": "noncycle",
+            "end_id": "target",
+            "kind": "MemberOf",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "F6 one and two hop cycles",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*1..2]->(s)",
+            "count": "s",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 2,
+            "ordered_node_ids": [
+              "two-cycles",
+              "one-cycle"
+            ],
+            "ordered_column_values": {
+              "total": [
+                2,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "F6 top cyclic source",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*1..2]->(s)",
+            "count": "*",
+            "limit": "1",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 1,
+            "ordered_node_ids": [
+              "two-cycles"
+            ],
+            "ordered_column_values": {
+              "total": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "F6 two hop cycle only",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*2..2]->(s)",
+            "count": "s",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 1,
+            "ordered_node_ids": [
+              "two-cycles"
+            ],
+            "ordered_column_values": {
+              "total": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "F6 inbound cycle counts",
+          "vars": {
+            "pattern": "(s)<-[:MemberOf*1..2]-(s)",
+            "count": "s",
+            "limit": "10",
+            "update": ""
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 2,
+            "ordered_node_ids": [
+              "two-cycles",
+              "one-cycle"
+            ],
+            "ordered_column_values": {
+              "total": [
+                2,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "F6 mutation selects exactly cyclic sources",
+          "vars": {
+            "pattern": "(s)-[:MemberOf*1..2]->(s)",
+            "count": "s",
+            "limit": "10",
+            "update": "SET s.selected = true"
+          },
+          "assert": {
+            "keys": [
+              "source",
+              "total"
+            ],
+            "row_count": 2,
+            "ordered_node_ids": [
+              "two-cycles",
+              "one-cycle"
+            ],
+            "ordered_column_values": {
+              "total": [
+                2,
+                1
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (s) WHERE s.selected = true RETURN s",
+              "assert": {
+                "node_id_set": [
+                  "two-cycles",
+                  "one-cycle"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -35,6 +35,8 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/opengraph"
+	"github.com/stretchr/testify/require"
 )
 
 const liveAggregateTraversalCypher = `
@@ -50,6 +52,167 @@ RETURN u
 ORDER BY adminCount DESC
 LIMIT 100
 `
+
+// TestPostgreSQLAggregateTraversalCountBindingSemantics runs the shared F5/F6
+// cases against both compiler modes, including exact counts and mutation state.
+func TestPostgreSQLAggregateTraversalCountBindingSemantics(t *testing.T) {
+	runPostgreSQLTemplateCompilerModes(t, "aggregate_traversal_count_shapes")
+}
+
+// TestPostgreSQLExpansionBoundTerminalSemantics checks exact endpoint identities,
+// paths, and mutation effects with each optimizer mode.
+func TestPostgreSQLExpansionBoundTerminalSemantics(t *testing.T) {
+	runPostgreSQLTemplateCompilerModes(t, "bound_expansion_endpoint_shapes")
+}
+
+func TestPostgreSQLNodeRepresentationSemantics(t *testing.T) {
+	runPostgreSQLTemplateCompilerModes(t, "node_representation_shapes")
+}
+
+func TestPostgreSQLLeadingMultipartSemantics(t *testing.T) {
+	runPostgreSQLTemplateCompilerModes(t, "leading_multipart_shapes")
+}
+
+func TestPostgreSQLCorrelatedSuffixSemantics(t *testing.T) {
+	runPostgreSQLTemplateCompilerModes(t, "correlated_suffix_shapes")
+}
+
+func TestPostgreSQLCarriedNodeIntegerIDs(t *testing.T) {
+	var corpus cypherTemplateFile
+	for _, file := range loadCypherTemplateFiles(t) {
+		if strings.HasSuffix(file.path, "/node_representation_shapes.json") {
+			corpus = file
+			break
+		}
+	}
+	require.NotEmpty(t, corpus.Families)
+	nodeKinds, edgeKinds := cypherTemplateKinds([]cypherTemplateFile{corpus})
+	session := Open(t, Options{RequireDriver: pg.DriverName, SkipIfNoConnection: true, SkipIfDriverMismatch: true, CleanupMode: CleanupGraph, ExtraNodeKinds: nodeKinds, ExtraEdgeKinds: edgeKinds})
+	pgDriver := session.DB.(*pg.Driver)
+	defaultGraph, ok := pgDriver.DefaultGraph()
+	require.True(t, ok)
+	for _, mode := range []translate.OptimizerMode{translate.OptimizerEnabled, translate.OptimizerDisabled} {
+		for _, hops := range []string{"", "*1..2"} {
+			t.Run(string(mode)+"/"+hops, func(t *testing.T) {
+				require.NoError(t, session.WithRollbackFixture(t, corpus.Families[0].Fixture, false, func(tx graph.Transaction, ids opengraph.IDMap) error {
+					parsed, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (a) WHERE a.name = 'source' WITH a MATCH (a)-[:F1Edge`+hops+`]->(b) RETURN id(a), id(b)`)
+					require.NoError(t, err)
+					translation, err := translate.TranslateWithOptions(session.Ctx, parsed, pgDriver.KindMapper(), nil, defaultGraph.ID, translate.Options{OptimizerMode: mode})
+					require.NoError(t, err)
+					formatted, err := translate.Translated(translation)
+					require.NoError(t, err)
+					maps.Copy(translation.Parameters, formatted.Parameters)
+					result := tx.Raw(formatted.Statement, translation.Parameters)
+					defer result.Close()
+					var got [][2]int64
+					for result.Next() {
+						values := result.Values()
+						require.Len(t, values, 2)
+						require.IsType(t, int64(0), values[0])
+						require.IsType(t, int64(0), values[1])
+						got = append(got, [2]int64{values[0].(int64), values[1].(int64)})
+					}
+					require.NoError(t, result.Error())
+					want := [][2]int64{{ids["source"].Int64(), ids["target"].Int64()}}
+					if hops != "" {
+						want = append(want, [2]int64{ids["source"].Int64(), ids["far"].Int64()})
+					}
+					require.ElementsMatch(t, want, got)
+					return nil
+				}))
+			})
+		}
+	}
+}
+
+// runPostgreSQLTemplateCompilerModes executes a shared template corpus using
+// explicit compiler options; the raw query API does not honor the driver switch.
+func runPostgreSQLTemplateCompilerModes(t *testing.T, corpusName string) {
+	t.Helper()
+	var corpus cypherTemplateFile
+	for _, file := range loadCypherTemplateFiles(t) {
+		if strings.HasSuffix(file.path, "/"+corpusName+".json") {
+			corpus = file
+			break
+		}
+	}
+	if len(corpus.Families) == 0 {
+		t.Fatalf("template corpus %q is missing", corpusName)
+	}
+	nodeKinds, edgeKinds := cypherTemplateKinds([]cypherTemplateFile{corpus})
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		CleanupMode:          CleanupGraph,
+		ExtraNodeKinds:       nodeKinds,
+		ExtraEdgeKinds:       edgeKinds,
+	})
+	ClearGraph(t, session.DB, session.Ctx)
+	pgDriver := session.DB.(*pg.Driver)
+	defaultGraph, ok := pgDriver.DefaultGraph()
+	if !ok {
+		t.Fatal("default graph is missing")
+	}
+
+	for _, mode := range []translate.OptimizerMode{translate.OptimizerEnabled, translate.OptimizerDisabled} {
+		t.Run(string(mode), func(t *testing.T) {
+			for _, family := range corpus.Families {
+				t.Run(family.Name, func(t *testing.T) {
+					for _, variant := range family.Variants {
+						t.Run(variant.Name, func(t *testing.T) {
+							query := renderCypherTemplate(t, family.Template, variant.Vars)
+							parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if err := session.WithRollbackFixture(t, family.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
+								params := resolveFixtureParams(t, mergeParams(family.Params, variant.Params), mergeStringMap(family.NodeParams, variant.NodeParams), mergeStringListMap(family.NodeListParams, variant.NodeListParams), idMap)
+								translation, err := translate.TranslateWithOptions(session.Ctx, parsed, pgDriver.KindMapper(), params, defaultGraph.ID, translate.Options{OptimizerMode: mode})
+								if err != nil {
+									t.Fatal(err)
+								}
+								result := executeTemplateTranslation(t, tx, translation)
+								parseAssertion(t, variant.Assert).checkResult(t, result, newAssertionContext(idMap))
+								result.Close()
+								return runStateAssertions(t, tx, idMap, variant.PostAssertions)
+							}); err != nil {
+								t.Fatal(err)
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+// executeTemplateTranslation preserves statement boundaries for explicit
+// optimizer-mode checks. Fixtures run in an explicit rollback transaction.
+func executeTemplateTranslation(t *testing.T, tx graph.Transaction, translation translate.Result) graph.Result {
+	t.Helper()
+	statements, err := translate.TranslatedStatements(translation, "__dawgs_template_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, statement := range statements {
+		bindings := make(map[string]any, len(translation.Parameters)+len(statement.Parameters))
+		maps.Copy(bindings, translation.Parameters)
+		maps.Copy(bindings, statement.Parameters)
+		result := tx.Raw(statement.Statement, bindings)
+		if index == len(statements)-1 {
+			return result
+		}
+		for result.Next() {
+		}
+		result.Close()
+		if err := result.Error(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Fatal("translation contains no statements")
+	return nil
+}
 
 type livePGKindMapper struct {
 	pool *pgxpool.Pool

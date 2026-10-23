@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,20 +13,24 @@ import (
 )
 
 const (
+	// DriverName is the connection-string scheme registered by the PostgreSQL
+	// driver.
 	DriverName = "pg"
 
 	// defaultBatchWriteSize is currently set to 2k. This is meant to strike a balance between the cost of thousands
 	// of round-trips against the cost of locking tables for too long.
-	defaultBatchWriteSize     = 2_000
-	poolInitConnectionTimeout = time.Second * 10
+	defaultBatchWriteSize = 2_000
 )
 
+// AfterPooledConnectionEstablished loads and registers the driver's owned graph composite types on a new pooled connection.
 func AfterPooledConnectionEstablished(ctx context.Context, conn *pgx.Conn) error {
 	for _, dataType := range pgsql.CompositeTypes {
 		if definition, err := conn.LoadType(ctx, dataType.String()); err != nil {
 			if !StateObjectDoesNotExist.ErrorMatches(err) {
 				return fmt.Errorf("failed to match composite type %s to database: %w", dataType, err)
 			}
+		} else if err := installOwnedCompositeCodec(dataType, definition); err != nil {
+			return fmt.Errorf("failed to configure composite type %s: %w", dataType, err)
 		} else {
 			conn.TypeMap().RegisterType(definition)
 		}
@@ -49,27 +52,10 @@ func AfterPooledConnectionRelease(conn *pgx.Conn) bool {
 	return true
 }
 
-// pgx pool config
+// NewPool constructs the default PostgreSQL pool. The returned bare pgx pool
+// carries all DAWGS lifecycle hooks and is safe to pass through dawgs.Config.
 func NewPool(poolCfg *pgxpool.Config) (*pgxpool.Pool, error) {
-	poolCtx, done := context.WithTimeout(context.Background(), poolInitConnectionTimeout)
-	defer done()
-
-	// TODO: Min and Max connections for the pool should be configurable
-	poolCfg.MinConns = 5
-	poolCfg.MaxConns = 50
-
-	// Bind functions to the AfterConnect and AfterRelease hooks to ensure that composite type registration occurs.
-	// Without composite type registration, the pgx connection type will not be able to marshal PG OIDs to their
-	// respective Golang structs.
-	poolCfg.AfterConnect = AfterPooledConnectionEstablished
-	poolCfg.AfterRelease = AfterPooledConnectionRelease
-
-	pool, err := pgxpool.NewWithConfig(poolCtx, poolCfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return pool, nil
+	return NewPoolWithRuntimeConfig(context.Background(), poolCfg, DefaultRuntimeConfig())
 }
 
 func init() {
