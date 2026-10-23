@@ -488,6 +488,14 @@ examples.
 Full scrub recursively classifies nested map properties, including maps inside arrays. Explicit
 `preserve_keys` overrides preserve whole values. The `retriever-scrub-v3` policy records recursive container
 plans as `scrub_nested` in top-level action counts and rejects resume checkpoints from earlier scrub rules.
+Retriever JSONL loads and OpenGraph document imports preserve integer tokens as exact signed
+64-bit values, including inside arrays and nested maps. Decimal and exponent tokens use
+`float64` with ordinary binary floating-point rounding. Out-of-range integer tokens and
+floating-point overflow are rejected before import writes; backend property-shape limits still apply.
+`opengraph.ParseDocument` now returns `int64` for integer tokens instead of `float64`.
+Collection fragment paths must be clean relative paths with slash separators. Checksum,
+preflight and load reads resolve files beneath the collection root; escaping paths and
+symlinks are rejected, while contained relative symlinks are supported for directory loads.
 The same import/export functionality is available to library consumers from
 `github.com/specterops/dawgs/retriever`; callers provide an already-open
 `graph.Database`, and archive helpers support both path-based and stream-based
