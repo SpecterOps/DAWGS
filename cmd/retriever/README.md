@@ -236,6 +236,22 @@ Pseudonyms are derived directly from the stable salt, so full scrub does not
 retain a graph-wide identifier registry or perform a node observation pre-pass.
 Scrub state is isolated per selected graph.
 
+Full scrub applies the property classifier recursively to JSON-like maps and
+maps inside arrays. Nested passwords and free text are redacted, timestamps
+are shifted, and other nonempty strings are pseudonymized. Explicit
+`classifier.preserve_keys` entries preserve the entire value, including a
+container's descendants; graph-reference string rules still take precedence.
+A redacted parent removes its contents even when a child key is preserved.
+Numbers, booleans, and nulls keep their normal scalar policy.
+
+Action counts describe top-level property plans, without counting descendants
+again. The `scrub_nested` action identifies containers visited recursively;
+arrays classified for pseudonymization or timestamp shifting retain that
+outer action while their map fields receive individual classification.
+Manifests and checkpoints identify this policy as `retriever-scrub-v3`.
+Checkpoints from earlier scrub rules cannot be resumed; start a new dump in a
+new output directory to apply the recursive policy to every fragment.
+
 Classifier and graph-identifier settings can be overridden with `-config`; see
 `../../retriever/defaults.toml` for the supported TOML shape.
 

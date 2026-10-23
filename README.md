@@ -485,6 +485,9 @@ dumps as single HPKE/ML-KEM encrypted TAR archives. See
 [cmd/retriever/README.md](cmd/retriever/README.md) for dump, Parquet sidecar,
 encrypted archive, load, scrubbed dump, metrics verification, and benchmark
 examples.
+Full scrub recursively classifies nested map properties, including maps inside arrays. Explicit
+`preserve_keys` overrides preserve whole values. The `retriever-scrub-v3` policy records recursive container
+plans as `scrub_nested` in top-level action counts and rejects resume checkpoints from earlier scrub rules.
 The same import/export functionality is available to library consumers from
 `github.com/specterops/dawgs/retriever`; callers provide an already-open
 `graph.Database`, and archive helpers support both path-based and stream-based
