@@ -159,6 +159,10 @@ Variable-length traversals that reuse a node bound by a fixed prefix retain that
 depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
 
+Predicates comparing variable-length traversal endpoints remain active when a fixed hop follows the expansion.
+The shared `expansion_endpoint_predicate_shapes` templates check filters, path multiplicity, zero hops, inbound
+traversals and exact node/relationship mutation selection on both backends and in both PostgreSQL compiler modes.
+
 Carried nodes retain the representation materialized before `WITH`, and inline property maps retain the fields their
 expressions read, including function arguments such as `id(source)` and `labels(source)`. `UNWIND` accepts empty lists
 carried through `WITH` aliases, including chained aliases. Leading `UNWIND` and `CREATE` clauses can feed multipart queries.
