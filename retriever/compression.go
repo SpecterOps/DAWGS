@@ -297,18 +297,12 @@ func readCompressedJSONLines[T any](path string, codec CompressionCodec, handle 
 	return readCompressedJSONLinesFromReader(file, codec, handle)
 }
 
-func readVerifiedCompressedJSONLines[T any](path string, codec CompressionCodec, expectedSHA256 string, expectedCompressedBytes int64, handle func(T) error) (int, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, fmt.Errorf("open fragment: %w", err)
-	}
-	defer file.Close()
-
+func readVerifiedCompressedJSONLinesFromReader[T any](path string, reader io.Reader, codec CompressionCodec, expectedSHA256 string, expectedCompressedBytes int64, handle func(T) error) (int, error) {
 	hasher := sha256.New()
 	compressedCounter := &countingWriter{
 		writer: hasher,
 	}
-	trackedReader := io.TeeReader(file, compressedCounter)
+	trackedReader := io.TeeReader(reader, compressedCounter)
 
 	count, decodeErr := readCompressedJSONLinesFromReader(trackedReader, codec, handle)
 	if _, err := io.Copy(io.Discard, trackedReader); err != nil {
@@ -345,6 +339,7 @@ func readCompressedJSONLinesFromReader[T any](reader io.Reader, codec Compressio
 
 		var record T
 		decoder := json.NewDecoder(bytes.NewReader(line))
+		decoder.UseNumber()
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&record); err != nil {
 			decodeErr = fmt.Errorf("decode JSONL record %d: %w", count+1, err)
@@ -386,8 +381,12 @@ func verifyChecksum(path string, expectedSHA256 string, expectedCompressedBytes 
 	}
 	defer file.Close()
 
+	return verifyChecksumFromReader(path, file, expectedSHA256, expectedCompressedBytes)
+}
+
+func verifyChecksumFromReader(path string, reader io.Reader, expectedSHA256 string, expectedCompressedBytes int64) error {
 	hasher := sha256.New()
-	copied, err := copyHash(hasher, file)
+	copied, err := copyHash(hasher, reader)
 	if err != nil {
 		return fmt.Errorf("hash checksum target: %w", err)
 	}
