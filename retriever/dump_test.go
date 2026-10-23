@@ -1,12 +1,121 @@
 package retriever
 
 import (
+	"context"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/parquet-go/parquet-go"
+	"github.com/specterops/dawgs/graph"
 )
+
+func TestDumpNestedScrubOutput(t *testing.T) {
+	for _, mode := range []ScrubMode{ScrubNone, ScrubFull} {
+		t.Run(string(mode), func(t *testing.T) {
+			payload := map[string]any{
+				"email":      "alice@example.com",
+				"password":   "nested-secret",
+				"created_at": "2026-01-01T00:00:00Z",
+				"kind":       "User",
+				"enabled":    true,
+			}
+			nodeProperties := map[string]any{"extra": payload}
+			edgeProperties := map[string]any{"extra": []any{payload}}
+			database := &checkpointTestDatabase{
+				nodes: []*graph.Node{
+					graph.NewNode(1, graph.AsProperties(nodeProperties), graph.StringKind("User")),
+					graph.NewNode(2, graph.AsProperties(nodeProperties), graph.StringKind("User")),
+				},
+				relationships: []*graph.Relationship{
+					graph.NewRelationship(3, 1, 2, graph.AsProperties(edgeProperties), graph.StringKind("Owns")),
+				},
+			}
+			options := DefaultDumpOptions(t.TempDir())
+			options.Scrub = mode
+			options.Salt = "test-salt"
+			options.Parquet = true
+			options.BatchSize = 1
+			options.ShardSize = 1
+			result, err := Dump(context.Background(), database, "test", []GraphTarget{{Name: "default"}}, options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifest, err := ReadManifest(options.OutputDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := VerifyManifestFiles(options.OutputDir, manifest); err != nil {
+				t.Fatal(err)
+			}
+			wantPayload := payload
+			if mode == ScrubFull {
+				if manifest.Scrub.RulesVersion != "retriever-scrub-v3" {
+					t.Fatalf("scrub rules version = %q", manifest.Scrub.RulesVersion)
+				}
+				wantPayload = map[string]any{
+					"email":      "user-144497604961@example.invalid",
+					"password":   "[REDACTED]",
+					"created_at": "2026-01-18T00:00:00Z",
+					"kind":       "User",
+					"enabled":    true,
+				}
+				for _, counts := range []map[string]int{manifest.Scrub.NodeActionCounts, manifest.Graphs[0].NodeActionCounts} {
+					if !reflect.DeepEqual(counts, map[string]int{"scrub_nested": 2}) {
+						t.Fatalf("node counts = %v", counts)
+					}
+				}
+				for _, counts := range []map[string]int{manifest.Scrub.EdgeActionCounts, manifest.Graphs[0].EdgeActionCounts} {
+					if !reflect.DeepEqual(counts, map[string]int{"scrub_nested": 1}) {
+						t.Fatalf("edge counts = %v", counts)
+					}
+				}
+			}
+			var nodes []FragmentNode
+			var edges []FragmentEdge
+			for _, file := range manifest.Graphs[0].Files {
+				if mode == ScrubFull && !reflect.DeepEqual(file.ActionCounts, map[string]int{"scrub_nested": 1}) {
+					t.Fatalf("file counts = %v", file.ActionCounts)
+				}
+				partner := assertCheckpointParquetPartnerReadable(t, options.OutputDir, file)
+				if file.Phase == PhaseNodes {
+					_, err = readNodeFragmentFile(options.OutputDir, manifest.Compression, file, func(item FragmentNode) error {
+						nodes = append(nodes, item)
+						return nil
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					rows, readErr := parquet.ReadFile[parquetNodeRow](filepath.Join(options.OutputDir, partner))
+					if readErr != nil || len(rows) != 1 || !reflect.DeepEqual(rows[0].Properties, map[string]any{"extra": wantPayload}) {
+						t.Fatalf("node Parquet output = %#v, error %v", rows, readErr)
+					}
+				} else {
+					_, err = readEdgeFragmentFile(options.OutputDir, manifest.Compression, file, func(item FragmentEdge) error {
+						edges = append(edges, item)
+						return nil
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					rows, readErr := parquet.ReadFile[parquetEdgeRow](filepath.Join(options.OutputDir, partner))
+					if readErr != nil || len(rows) != 1 || !reflect.DeepEqual(rows[0].Properties, map[string]any{"extra": []any{wantPayload}}) {
+						t.Fatalf("edge Parquet output = %#v, error %v", rows, readErr)
+					}
+				}
+			}
+			if !reflect.DeepEqual(nodes, []FragmentNode{
+				{ID: "1", Kinds: []string{"User"}, Properties: map[string]any{"extra": wantPayload}},
+				{ID: "2", Kinds: []string{"User"}, Properties: map[string]any{"extra": wantPayload}},
+			}) || !reflect.DeepEqual(edges, []FragmentEdge{{StartID: "1", EndID: "2", Kind: "Owns", Properties: map[string]any{"extra": []any{wantPayload}}}}) {
+				t.Fatalf("dump topology or JSONL properties changed: nodes %#v, edges %#v", nodes, edges)
+			}
+			if result.NodeCount != 2 || result.EdgeCount != 1 || payload["password"] != "nested-secret" {
+				t.Fatalf("dump counts or source properties changed: %+v, %#v", result, payload)
+			}
+		})
+	}
+}
 
 func TestFragmentPath(t *testing.T) {
 	nodePath, err := fragmentPath("graph/name", PhaseNodes, 7, CompressionZstd)
