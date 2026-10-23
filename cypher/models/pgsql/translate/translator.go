@@ -708,21 +708,21 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.Disjunction:
-		for idx := 0; idx < typedExpression.Len()-1; idx++ {
+		for remaining := booleanOperandCount(typedExpression) - 1; remaining > 0; remaining-- {
 			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorOr); err != nil {
 				s.SetError(err)
 			}
 		}
 
 	case *cypher.ExclusiveDisjunction:
-		for idx := 0; idx < typedExpression.Len()-1; idx++ {
+		for remaining := booleanOperandCount(typedExpression) - 1; remaining > 0; remaining-- {
 			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorNotEquals); err != nil {
 				s.SetError(err)
 			}
 		}
 
 	case *cypher.Conjunction:
-		for idx := 0; idx < typedExpression.Len()-1; idx++ {
+		for remaining := booleanOperandCount(typedExpression) - 1; remaining > 0; remaining-- {
 			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorAnd); err != nil {
 				s.SetError(err)
 			}

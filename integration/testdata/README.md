@@ -63,6 +63,11 @@ WITH. Each variant checks complete node and relationship post-state, including d
 PostgreSQL runs the same variants with each compiler mode explicitly. These constant-value
 assignments do not establish sequential evaluation of expressions that read earlier writes.
 
+`boolean_value_shapes.json` checks conjunctions in `RETURN`, `WITH`, function arguments and node/relationship
+assignments. It covers mixed Boolean operators, separate projections, parameters, missing properties, explicit
+WHERE filtering and continuation after writes. Mutation variants assert complete node and relationship post-state,
+including untouched decoys. PostgreSQL runs every variant with each compiler mode explicitly.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse
