@@ -68,6 +68,13 @@ assignments. It covers mixed Boolean operators, separate projections, parameters
 WHERE filtering and continuation after writes. Mutation variants assert complete node and relationship post-state,
 including untouched decoys. PostgreSQL runs every variant with each compiler mode explicitly.
 
+`expansion_endpoint_predicate_shapes.json` checks predicates comparing expansion endpoints before a fixed suffix,
+including disjunction, conjunction, negation, equality, missing properties, parameters, zero hops, fixed prefixes,
+inbound expansion, bound suffix endpoints, duplicate input rows and exact path multiplicity. Mutation variants check
+complete node and relationship records, including direction, kind, root identity and property decoys. PostgreSQL runs
+every variant with each compiler mode explicitly. The undirected suffix case restricts its terminal kind to isolate
+predicate retention from the separately tracked undirected endpoint-reuse behavior.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse

@@ -456,6 +456,38 @@
         "query": "match (n:NodeKind1) set n.mid = n.k > 0 and n.k < 2 with n, n.k > 0 and n.k < 2 as mid return n, mid",
         "fitness": 5
       }
+    },
+    {
+      "name": "DAWGS-028 node mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:EdgeKind1*1..2]->(g)-[:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set d.selected = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-028 relationship mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:EdgeKind1*1..2]->(g)-[t:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set t.selected = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-028 zero hop mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:EdgeKind1*0..2]->(g)-[:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set d.selected = true return d",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-028 inbound mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (g)<-[:EdgeKind1*1..2]-(s)-[:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set d.selected = true return d",
+        "fitness": 1
+      }
     }
   ]
 }
