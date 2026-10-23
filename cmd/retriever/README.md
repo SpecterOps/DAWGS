@@ -281,6 +281,21 @@ unpack validation in a temporary collection directory, then run the same
 semantic preflight as directory loads before schema assertion or database
 writes.
 
+JSON integer property tokens are loaded as exact signed 64-bit integers, including
+inside arrays and nested maps. Integer tokens outside `[-9223372036854775808,
+9223372036854775807]` are rejected during preflight. Decimal and exponent tokens
+use `float64` with ordinary binary floating-point rounding; overflow is rejected.
+Numeric-looking strings remain strings. Neo4j's property-shape restrictions still
+apply (for example, nested maps cannot be persisted as node properties).
+
+Manifest fragment paths must be clean relative paths with slash separators, such
+as `graphs/default/nodes-000001.jsonl.zst`. Empty paths, absolute paths, `.` or `..`
+components, backslashes and Windows drive prefixes are rejected. Checksum checks,
+preflight and load reads open fragments beneath the collection root and require
+regular files. Directory loads allow relative symlinks whose resolution stays
+inside that root; escaping or absolute symlink targets are rejected at each open.
+Encrypted TAR packaging and extraction retain their existing symlink restrictions.
+
 `-batch-size` bounds both node and relationship writes. PostgreSQL uses a
 correlated bulk insert and Neo4j uses grouped `UNWIND` creates; generated node
 IDs are returned in stable input-ordinal order before relationship endpoints
