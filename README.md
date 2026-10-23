@@ -149,6 +149,12 @@ Aggregate traversal counts use ordinary traversal when the second `MATCH` labels
 terminal. The shared `aggregate_traversal_count_shapes` integration templates verify source labels, cycle counts,
 ranking, and mutation effects; PostgreSQL coverage executes these cases with the optimizer enabled and disabled.
 
+`algo.ReachabilityCache` retains complete reach sets for requested components in separate bounded inbound and outbound
+caches. A traversal reuses complete cached results and visits each remaining component at most once, using one local
+reach bitmap. Warming an ancestor does not prewarm intermediate components; querying a new component can require another
+traversal. Cache capacity limits entries per direction (minimum one), rather than bitmap bytes. Reach results include
+the origin and its strongly connected component; `DirectionBoth` computes weak connectivity without caching that result.
+
 Variable-length traversals that reuse a node bound by a fixed prefix retain that node's identity at every returned
 depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
