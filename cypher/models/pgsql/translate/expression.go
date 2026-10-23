@@ -354,6 +354,16 @@ func rewritePropertyLookupOperands(kindMapper *contextAwareKindMapper, expressio
 		rightPropertyLookup, hasRightPropertyLookup = expressionToPropertyLookupBinaryExpression(expression.ROperand)
 	)
 
+	if expression.Operator == pgsql.OperatorAnd || expression.Operator == pgsql.OperatorOr {
+		if hasLeftPropertyLookup {
+			expression.LOperand = rewritePropertyLookupOperator(leftPropertyLookup, pgsql.Boolean)
+		}
+		if hasRightPropertyLookup {
+			expression.ROperand = rewritePropertyLookupOperator(rightPropertyLookup, pgsql.Boolean)
+		}
+		return nil
+	}
+
 	// Ensure that direct property comparisons prefer JSONB - JSONB. Non-comparison operators must keep their
 	// property lookups text-oriented until rewriteBinaryExpression has enough context to disambiguate them.
 	if hasLeftPropertyLookup && hasRightPropertyLookup &&
@@ -535,11 +545,8 @@ type ExpressionTreeTranslator struct {
 	UserConstraints        *ConstraintTracker
 	TranslationConstraints *ConstraintTracker
 
-	treeBuilder        *Builder
-	kindMapper         *contextAwareKindMapper
-	parentheticalDepth int
-	disjunctionDepth   int
-	conjunctionDepth   int
+	treeBuilder *Builder
+	kindMapper  *contextAwareKindMapper
 }
 
 func NewExpressionTreeTranslator(kindMapper *contextAwareKindMapper) *ExpressionTreeTranslator {
@@ -624,15 +631,31 @@ func (s *ExpressionTreeTranslator) PopOperand() (pgsql.Expression, error) {
 func (s *ExpressionTreeTranslator) popOperandAsUserConstraint() error {
 	if nextExpression, err := s.PopOperand(); err != nil {
 		return err
-	} else if identifierDeps, err := ExtractSyntaxNodeReferences(nextExpression); err != nil {
+	} else {
+		return s.constrainExpression(nextExpression)
+	}
+}
+
+// constrainExpression splits only a predicate's outer conjunction. Boolean expressions
+// inside parentheses, function calls and other value expressions remain intact.
+func (s *ExpressionTreeTranslator) constrainExpression(expression pgsql.Expression) error {
+	if conjunction, ok := expression.(*pgsql.BinaryExpression); ok && conjunction.Operator == pgsql.OperatorAnd {
+		// Consume right to left, preserving the constraint ordering used by the tracker.
+		if err := s.constrainExpression(conjunction.ROperand); err != nil {
+			return err
+		}
+		return s.constrainExpression(conjunction.LOperand)
+	}
+
+	if identifierDeps, err := ExtractSyntaxNodeReferences(expression); err != nil {
 		return err
 	} else {
-		if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(nextExpression); isPropertyLookup {
+		if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
 			// If this is a bare property lookup rewrite it with the intended type of boolean
-			nextExpression = rewritePropertyLookupOperator(propertyLookup, pgsql.Boolean)
+			expression = rewritePropertyLookupOperator(propertyLookup, pgsql.Boolean)
 		}
 
-		return s.AddUserConstraint(identifierDeps, nextExpression)
+		return s.AddUserConstraint(identifierDeps, expression)
 	}
 }
 
@@ -1492,12 +1515,9 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 
 func (s *ExpressionTreeTranslator) PushParenthetical() {
 	s.PushOperand(&pgsql.Parenthetical{})
-	s.parentheticalDepth += 1
 }
 
 func (s *ExpressionTreeTranslator) PopParenthetical() (*pgsql.Parenthetical, error) {
-	s.parentheticalDepth -= 1
-
 	if operand, err := s.treeBuilder.PopOperand(s.kindMapper); err != nil {
 		return nil, err
 	} else if parentheticalExpr, typeOK := operand.(*pgsql.Parenthetical); !typeOK {
@@ -1507,34 +1527,35 @@ func (s *ExpressionTreeTranslator) PopParenthetical() (*pgsql.Parenthetical, err
 	}
 }
 
-func (s *ExpressionTreeTranslator) VisitOperator(operator pgsql.Operator) {
-	// Track this operator for expression tree extraction
-	switch operator {
-	case pgsql.OperatorAnd:
-		s.conjunctionDepth += 1
+// VisitOperator is retained for callers that visit operators before their operands.
+// Operators are assembled on completion; only explicit predicate extraction adds constraints.
+func (s *ExpressionTreeTranslator) VisitOperator(operator pgsql.Operator) {}
 
-	case pgsql.OperatorOr:
-		s.disjunctionDepth += 1
+// booleanOperandCount preserves the builder's omission of empty Boolean groups.
+// Parsed Cypher always has operands, but builders can nest query.And() placeholders.
+func booleanOperandCount(expressions cypher.ExpressionList) int {
+	count := 0
+	for _, expression := range expressions.GetAll() {
+		switch typedExpression := expression.(type) {
+		case *cypher.Conjunction:
+			if booleanOperandCount(typedExpression) == 0 {
+				continue
+			}
+		case *cypher.Disjunction:
+			if booleanOperandCount(typedExpression) == 0 {
+				continue
+			}
+		case *cypher.ExclusiveDisjunction:
+			if booleanOperandCount(typedExpression) == 0 {
+				continue
+			}
+		}
+		count++
 	}
+	return count
 }
 
 func (s *ExpressionTreeTranslator) CompleteBinaryExpression(scope *Scope, operator pgsql.Operator) error {
-	switch operator {
-	case pgsql.OperatorAnd:
-		if s.parentheticalDepth == 0 && s.disjunctionDepth == 0 {
-			return s.ConstrainConjoinedOperandPair()
-		}
-
-		s.conjunctionDepth -= 1
-
-	case pgsql.OperatorOr:
-		if s.parentheticalDepth == 0 && s.conjunctionDepth == 0 {
-			return s.ConstrainDisjointOperandPair()
-		}
-
-		s.disjunctionDepth -= 1
-	}
-
 	if newExpression, err := s.PopBinaryExpression(operator); err != nil {
 		return err
 	} else if err := rewriteIdentityOperands(scope, newExpression); err != nil {

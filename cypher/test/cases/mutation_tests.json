@@ -424,6 +424,38 @@
         "query": "match (n:NodeKind1) set n.x = 1 remove n.x with n set n.x = 2 remove n.x return n",
         "fitness": -1
       }
+    },
+    {
+      "name": "Boolean node assignment retains conjunction",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.mid = n.k > 0 and n.k < 2 return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Boolean relationship assignment retains conjunction",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() set r.mid = r.k > 0 and r.k < 2 return r",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Boolean function argument in assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.mid = coalesce(n.k > 0 and n.k < 2, false) return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Boolean projection after assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.mid = n.k > 0 and n.k < 2 with n, n.k > 0 and n.k < 2 as mid return n, mid",
+        "fitness": 5
+      }
     }
   ]
 }

@@ -1,0 +1,495 @@
+{
+  "families": [
+    {
+      "name": "Boolean values and predicate boundaries",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "0", "kinds": ["BooleanValue"], "properties": {"k": 0, "keep": "value"}},
+          {"id": "1", "kinds": ["BooleanValue"], "properties": {"k": 1, "keep": "value"}},
+          {"id": "2", "kinds": ["BooleanValue"], "properties": {"k": 2, "keep": "value"}},
+          {"id": "3", "kinds": ["BooleanValue"], "properties": {"k": 3, "keep": "value"}},
+          {"id": "missing", "kinds": ["BooleanValue"], "properties": {"keep": "missing"}}
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "direct unwind projection",
+          "vars": {"query": "UNWIND [1,2,3] AS x RETURN x, x > 1 AND x < 3 AS mid ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, false],
+              [2, true],
+              [3, false]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "three conjoined terms",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x RETURN x, x > 0 AND x < 3 AND x <> 1 AS mid ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, false],
+              [2, true],
+              [3, false]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "mixed conjunction and disjunction",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x RETURN x, x = 1 OR x > 1 AND x < 3 AS mid ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, true],
+              [2, true],
+              [3, false]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "separate Boolean projection items",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x RETURN x, x > 1 AND x < 3 AS mid, x = 1 OR x = 3 AS outer ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, false, true],
+              [2, true, false],
+              [3, false, true]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "parenthesized conjunction",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x RETURN x, (x > 1 AND x < 3) AS mid ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, false],
+              [2, true],
+              [3, false]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "function argument",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x RETURN x, coalesce(x > 1 AND x < 3, false) AS mid ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, false],
+              [2, true],
+              [3, false]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "parameter conjunction",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x RETURN x, x > $low AND x < $high AS mid ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, false],
+              [2, true],
+              [3, false]
+            ],
+            "row_count": 3
+          },
+          "params": {"low": 1, "high": 3}
+        },
+        {
+          "name": "with value then filter",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x, x > 1 AND x < 3 AS mid WHERE x >= 1 AND x <= 3 RETURN x, mid ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1, false],
+              [2, true],
+              [3, false]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "where function argument",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x WHERE coalesce(x > 1 AND x < 3, false) RETURN x ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [2]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "where conjunction and disjunction",
+          "vars": {"query": "UNWIND [1,2,3] AS x WITH x WHERE x > 0 AND (x = 1 OR x = 3) RETURN x ORDER BY x"},
+          "assert": {
+            "ordered_row_values": [
+              [1],
+              [3]
+            ],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "missing property Boolean values",
+          "vars": {"query": "MATCH (n:BooleanValue) RETURN n.k AS k, n.k > 0 AND n.k < 2 AS mid ORDER BY k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, false],
+              [1, true],
+              [2, false],
+              [3, false],
+              [null, null]
+            ],
+            "row_count": 5
+          }
+        },
+        {
+          "name": "false with missing property",
+          "vars": {"query": "MATCH (n:BooleanValue) RETURN n.k AS k, false AND n.k < 2 AS mid ORDER BY k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, false],
+              [1, false],
+              [2, false],
+              [3, false],
+              [null, false]
+            ],
+            "row_count": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "Boolean assignments preserve all targets",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["BooleanSource"], "properties": {"objectid": "source", "keep": "source"}},
+          {"id": "low", "kinds": ["BooleanTarget"], "properties": {"k": 0, "keep": "low"}},
+          {"id": "mid", "kinds": ["BooleanTarget"], "properties": {"k": 1, "keep": "mid"}},
+          {"id": "high", "kinds": ["BooleanTarget"], "properties": {"k": 2, "keep": "high"}},
+          {"id": "other-source", "kinds": ["BooleanSource"], "properties": {"objectid": "other"}},
+          {"id": "wrong-kind", "kinds": ["BooleanOther"], "properties": {"k": 1}},
+          {"id": "wrong-property", "kinds": ["BooleanTarget"], "properties": {"k": 1}},
+          {"id": "missing", "kinds": ["BooleanSource"], "properties": {"keep": "missing"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "low", "kind": "BooleanLink", "properties": {"k": 0, "eligible": true}},
+          {"start_id": "source", "end_id": "mid", "kind": "BooleanLink", "properties": {"k": 1, "eligible": true}},
+          {"start_id": "source", "end_id": "high", "kind": "BooleanLink", "properties": {"k": 2, "eligible": true}},
+          {"start_id": "source", "end_id": "wrong-kind", "kind": "BooleanLink", "properties": {"k": 1, "eligible": true}},
+          {"start_id": "source", "end_id": "mid", "kind": "BooleanOtherLink", "properties": {"k": 1, "eligible": true}},
+          {"start_id": "mid", "end_id": "source", "kind": "BooleanLink", "properties": {"k": 1, "eligible": true}},
+          {"start_id": "source", "end_id": "wrong-property", "kind": "BooleanLink", "properties": {"k": 1, "eligible": false}},
+          {"start_id": "other-source", "end_id": "mid", "kind": "BooleanLink", "properties": {"k": 1, "eligible": true}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "node assignment conjunction",
+          "vars": {"query": "MATCH (s:BooleanSource)-[r:BooleanLink]->(n:BooleanTarget) WHERE s.objectid = 'source' AND r.eligible = true SET n.mid = n.k > 0 AND n.k < 2 RETURN n.k, n.mid ORDER BY n.k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, false],
+              [1, true],
+              [2, false]
+            ],
+            "row_count": 3
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["BooleanSource"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "low", "kinds": ["BooleanTarget"], "props": {"k": 0, "keep": "low", "mid": false}},
+                  {"id": "mid", "kinds": ["BooleanTarget"], "props": {"k": 1, "keep": "mid", "mid": true}},
+                  {"id": "high", "kinds": ["BooleanTarget"], "props": {"k": 2, "keep": "high", "mid": false}},
+                  {"id": "other-source", "kinds": ["BooleanSource"], "props": {"objectid": "other"}},
+                  {"id": "wrong-kind", "kinds": ["BooleanOther"], "props": {"k": 1}},
+                  {"id": "wrong-property", "kinds": ["BooleanTarget"], "props": {"k": 1}},
+                  {"id": "missing", "kinds": ["BooleanSource"], "props": {"keep": "missing"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "low", "kind": "BooleanLink", "props": {"k": 0, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "high", "kind": "BooleanLink", "props": {"k": 2, "eligible": true}},
+                  {"start": "source", "end": "wrong-kind", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanOtherLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "mid", "end": "source", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "wrong-property", "kind": "BooleanLink", "props": {"k": 1, "eligible": false}},
+                  {"start": "other-source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship assignment conjunction",
+          "vars": {"query": "MATCH (s:BooleanSource)-[r:BooleanLink]->(n:BooleanTarget) WHERE s.objectid = 'source' AND r.eligible = true SET r.mid = r.k > 0 AND r.k < 2 RETURN r.k, r.mid ORDER BY r.k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, false],
+              [1, true],
+              [2, false]
+            ],
+            "row_count": 3
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["BooleanSource"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "low", "kinds": ["BooleanTarget"], "props": {"k": 0, "keep": "low"}},
+                  {"id": "mid", "kinds": ["BooleanTarget"], "props": {"k": 1, "keep": "mid"}},
+                  {"id": "high", "kinds": ["BooleanTarget"], "props": {"k": 2, "keep": "high"}},
+                  {"id": "other-source", "kinds": ["BooleanSource"], "props": {"objectid": "other"}},
+                  {"id": "wrong-kind", "kinds": ["BooleanOther"], "props": {"k": 1}},
+                  {"id": "wrong-property", "kinds": ["BooleanTarget"], "props": {"k": 1}},
+                  {"id": "missing", "kinds": ["BooleanSource"], "props": {"keep": "missing"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "low", "kind": "BooleanLink", "props": {"k": 0, "eligible": true, "mid": false}},
+                  {"start": "source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true, "mid": true}},
+                  {"start": "source", "end": "high", "kind": "BooleanLink", "props": {"k": 2, "eligible": true, "mid": false}},
+                  {"start": "source", "end": "wrong-kind", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanOtherLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "mid", "end": "source", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "wrong-property", "kind": "BooleanLink", "props": {"k": 1, "eligible": false}},
+                  {"start": "other-source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mixed assignments and returned conjunction",
+          "vars": {"query": "MATCH (s:BooleanSource)-[r:BooleanLink]->(n:BooleanTarget) WHERE s.objectid = 'source' AND r.eligible = true SET n.mid = n.k > 0 AND n.k < 2, r.outer = r.k = 0 OR r.k = 2 RETURN n.k, n.mid AND r.outer AS both ORDER BY n.k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, false],
+              [1, false],
+              [2, false]
+            ],
+            "row_count": 3
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["BooleanSource"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "low", "kinds": ["BooleanTarget"], "props": {"k": 0, "keep": "low", "mid": false}},
+                  {"id": "mid", "kinds": ["BooleanTarget"], "props": {"k": 1, "keep": "mid", "mid": true}},
+                  {"id": "high", "kinds": ["BooleanTarget"], "props": {"k": 2, "keep": "high", "mid": false}},
+                  {"id": "other-source", "kinds": ["BooleanSource"], "props": {"objectid": "other"}},
+                  {"id": "wrong-kind", "kinds": ["BooleanOther"], "props": {"k": 1}},
+                  {"id": "wrong-property", "kinds": ["BooleanTarget"], "props": {"k": 1}},
+                  {"id": "missing", "kinds": ["BooleanSource"], "props": {"keep": "missing"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "low", "kind": "BooleanLink", "props": {"k": 0, "eligible": true, "outer": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true, "outer": false}},
+                  {"start": "source", "end": "high", "kind": "BooleanLink", "props": {"k": 2, "eligible": true, "outer": true}},
+                  {"start": "source", "end": "wrong-kind", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanOtherLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "mid", "end": "source", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "wrong-property", "kind": "BooleanLink", "props": {"k": 1, "eligible": false}},
+                  {"start": "other-source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "assignment with function argument",
+          "vars": {"query": "MATCH (s:BooleanSource)-[r:BooleanLink]->(n:BooleanTarget) WHERE s.objectid = 'source' AND r.eligible = true SET n.mid = coalesce(n.k > 0 AND n.k < 2, false) RETURN n.k, n.mid ORDER BY n.k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, false],
+              [1, true],
+              [2, false]
+            ],
+            "row_count": 3
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["BooleanSource"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "low", "kinds": ["BooleanTarget"], "props": {"k": 0, "keep": "low", "mid": false}},
+                  {"id": "mid", "kinds": ["BooleanTarget"], "props": {"k": 1, "keep": "mid", "mid": true}},
+                  {"id": "high", "kinds": ["BooleanTarget"], "props": {"k": 2, "keep": "high", "mid": false}},
+                  {"id": "other-source", "kinds": ["BooleanSource"], "props": {"objectid": "other"}},
+                  {"id": "wrong-kind", "kinds": ["BooleanOther"], "props": {"k": 1}},
+                  {"id": "wrong-property", "kinds": ["BooleanTarget"], "props": {"k": 1}},
+                  {"id": "missing", "kinds": ["BooleanSource"], "props": {"keep": "missing"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "low", "kind": "BooleanLink", "props": {"k": 0, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "high", "kind": "BooleanLink", "props": {"k": 2, "eligible": true}},
+                  {"start": "source", "end": "wrong-kind", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanOtherLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "mid", "end": "source", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "wrong-property", "kind": "BooleanLink", "props": {"k": 1, "eligible": false}},
+                  {"start": "other-source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "with continuation after assignment",
+          "vars": {"query": "MATCH (s:BooleanSource)-[r:BooleanLink]->(n:BooleanTarget) WHERE s.objectid = 'source' AND r.eligible = true SET n.mid = n.k > 0 AND n.k < 2 WITH n SET n.outer = NOT n.mid RETURN n.k, n.mid, n.outer ORDER BY n.k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, false, true],
+              [1, true, false],
+              [2, false, true]
+            ],
+            "row_count": 3
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["BooleanSource"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "low", "kinds": ["BooleanTarget"], "props": {"k": 0, "keep": "low", "mid": false, "outer": true}},
+                  {"id": "mid", "kinds": ["BooleanTarget"], "props": {"k": 1, "keep": "mid", "mid": true, "outer": false}},
+                  {"id": "high", "kinds": ["BooleanTarget"], "props": {"k": 2, "keep": "high", "mid": false, "outer": true}},
+                  {"id": "other-source", "kinds": ["BooleanSource"], "props": {"objectid": "other"}},
+                  {"id": "wrong-kind", "kinds": ["BooleanOther"], "props": {"k": 1}},
+                  {"id": "wrong-property", "kinds": ["BooleanTarget"], "props": {"k": 1}},
+                  {"id": "missing", "kinds": ["BooleanSource"], "props": {"keep": "missing"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "low", "kind": "BooleanLink", "props": {"k": 0, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "high", "kind": "BooleanLink", "props": {"k": 2, "eligible": true}},
+                  {"start": "source", "end": "wrong-kind", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanOtherLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "mid", "end": "source", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "wrong-property", "kind": "BooleanLink", "props": {"k": 1, "eligible": false}},
+                  {"start": "other-source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node assignment without return",
+          "vars": {"query": "MATCH (s:BooleanSource)-[r:BooleanLink]->(n:BooleanTarget) WHERE s.objectid = 'source' AND r.eligible = true SET n.mid = n.k > 0 AND n.k < 2"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["BooleanSource"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "low", "kinds": ["BooleanTarget"], "props": {"k": 0, "keep": "low", "mid": false}},
+                  {"id": "mid", "kinds": ["BooleanTarget"], "props": {"k": 1, "keep": "mid", "mid": true}},
+                  {"id": "high", "kinds": ["BooleanTarget"], "props": {"k": 2, "keep": "high", "mid": false}},
+                  {"id": "other-source", "kinds": ["BooleanSource"], "props": {"objectid": "other"}},
+                  {"id": "wrong-kind", "kinds": ["BooleanOther"], "props": {"k": 1}},
+                  {"id": "wrong-property", "kinds": ["BooleanTarget"], "props": {"k": 1}},
+                  {"id": "missing", "kinds": ["BooleanSource"], "props": {"keep": "missing"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "low", "kind": "BooleanLink", "props": {"k": 0, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "high", "kind": "BooleanLink", "props": {"k": 2, "eligible": true}},
+                  {"start": "source", "end": "wrong-kind", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanOtherLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "mid", "end": "source", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "wrong-property", "kind": "BooleanLink", "props": {"k": 1, "eligible": false}},
+                  {"start": "other-source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "bare Boolean disjunction",
+          "vars": {"query": "MATCH (s:BooleanSource)-[r:BooleanLink]->(n:BooleanTarget) WHERE s.objectid = 'source' AND r.eligible = true SET n.mid = n.k > 0 AND n.k < 2, r.outer = r.k = 0 OR r.k = 2 RETURN n.k, n.mid OR r.outer AS either ORDER BY n.k"},
+          "assert": {
+            "ordered_row_values": [
+              [0, true],
+              [1, true],
+              [2, true]
+            ],
+            "row_count": 3
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["BooleanSource"], "props": {"objectid": "source", "keep": "source"}},
+                  {"id": "low", "kinds": ["BooleanTarget"], "props": {"k": 0, "keep": "low", "mid": false}},
+                  {"id": "mid", "kinds": ["BooleanTarget"], "props": {"k": 1, "keep": "mid", "mid": true}},
+                  {"id": "high", "kinds": ["BooleanTarget"], "props": {"k": 2, "keep": "high", "mid": false}},
+                  {"id": "other-source", "kinds": ["BooleanSource"], "props": {"objectid": "other"}},
+                  {"id": "wrong-kind", "kinds": ["BooleanOther"], "props": {"k": 1}},
+                  {"id": "wrong-property", "kinds": ["BooleanTarget"], "props": {"k": 1}},
+                  {"id": "missing", "kinds": ["BooleanSource"], "props": {"keep": "missing"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "low", "kind": "BooleanLink", "props": {"k": 0, "eligible": true, "outer": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true, "outer": false}},
+                  {"start": "source", "end": "high", "kind": "BooleanLink", "props": {"k": 2, "eligible": true, "outer": true}},
+                  {"start": "source", "end": "wrong-kind", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "mid", "kind": "BooleanOtherLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "mid", "end": "source", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}},
+                  {"start": "source", "end": "wrong-property", "kind": "BooleanLink", "props": {"k": 1, "eligible": false}},
+                  {"start": "other-source", "end": "mid", "kind": "BooleanLink", "props": {"k": 1, "eligible": true}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
