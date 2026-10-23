@@ -412,6 +412,8 @@ func checkpointActionCounts(files []FileManifest, phase Phase) scrubActionCounts
 				result.redact += count
 			case actionShiftTimestamp:
 				result.shift += count
+			case actionScrubNested:
+				result.nested += count
 			}
 		}
 	}

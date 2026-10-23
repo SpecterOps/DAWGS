@@ -134,7 +134,7 @@ func TestDumpResumesFromLastCommittedFragment(t *testing.T) {
 	edgeKind := graph.StringKind("Edge")
 	database := &checkpointTestDatabase{
 		nodes: []*graph.Node{
-			graph.NewNode(1, graph.AsProperties(map[string]any{"name": "one"}), nodeKind),
+			graph.NewNode(1, graph.AsProperties(map[string]any{"name": "one", "extra": map[string]any{"password": "secret"}}), nodeKind),
 			graph.NewNode(2, graph.AsProperties(map[string]any{"name": "two"}), nodeKind),
 			graph.NewNode(3, graph.AsProperties(map[string]any{"name": "three"}), nodeKind),
 			graph.NewNode(4, graph.AsProperties(map[string]any{"name": "four"}), nodeKind),
@@ -194,7 +194,7 @@ func TestDumpResumesFromLastCommittedFragment(t *testing.T) {
 	if result.NodeCount != 5 || result.EdgeCount != 3 {
 		t.Fatalf("unexpected resumed counts: %+v", result)
 	}
-	if result.Manifest.Scrub.NodeActionCounts[string(actionPseudonymize)] != 5 {
+	if !reflect.DeepEqual(result.Manifest.Scrub.NodeActionCounts, map[string]int{"pseudonymize": 5, "scrub_nested": 1}) {
 		t.Fatalf("resumed scrub action counts = %v", result.Manifest.Scrub.NodeActionCounts)
 	}
 	if _, err := os.Stat(filepath.Join(outputDir, dumpCheckpointFileName)); !os.IsNotExist(err) {
@@ -282,6 +282,36 @@ func TestDumpResumeRejectsIncompatibleIdentityAndUnexpectedFiles(t *testing.T) {
 	}
 	if _, err := loadCompatibleDumpCheckpoint(outputDir, identity, 1); err == nil {
 		t.Fatal("expected unexpected checkpoint file rejection")
+	}
+}
+
+func TestDumpResumeRejectsPreviousScrubRules(t *testing.T) {
+	options := DefaultDumpOptions(t.TempDir())
+	options.Scrub = ScrubFull
+	options.Salt = "test-salt"
+	options.Resume = true
+	scrubber, err := newScrubber(nil, options.Salt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := []GraphTarget{{Name: "default"}}
+	identity, err := newDumpCheckpointIdentity("test", targets, options, scrubber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.ScrubRulesVersion != "retriever-scrub-v3" {
+		t.Fatalf("checkpoint scrub rules = %q", identity.ScrubRulesVersion)
+	}
+	identity.ScrubRulesVersion = "retriever-scrub-v2"
+	if err := writeDumpCheckpoint(options.OutputDir, dumpCheckpoint{
+		Identity: identity,
+		Manifest: newManifest("test", options.Compression, options.ZstdLevel, scrubber.metadata(), 1),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// No database access should occur before rejecting an old policy.
+	if _, err := Dump(context.Background(), nil, "test", targets, options); err == nil || !strings.Contains(err.Error(), "incompatible") {
+		t.Fatalf("expected scrub rules mismatch rejection, got %v", err)
 	}
 }
 
