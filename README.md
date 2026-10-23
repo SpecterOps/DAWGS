@@ -182,6 +182,11 @@ source order, including alternating SET/REMOVE of the same key or label. The `up
 check exact final state, untouched decoys, fan-out and null targets. Assignment expressions retain their existing
 input-frame evaluation; expressions that depend on earlier writes should use a `WITH` boundary between clauses.
 
+PostgreSQL keeps `AND` operands within expressions in `RETURN`, `WITH`, function arguments and `SET`, preserving input
+rows. At `WHERE`, outer conjunctions become filter predicates. The shared `boolean_value_shapes` templates check
+Boolean values, missing properties, node/relationship assignments and exact stored state on both backends and in both
+PostgreSQL compiler modes.
+
 Batch identity keys distinguish entity kinds, property names and values, and relationship endpoints. `NodeUpdate.Key`,
 `RelationshipUpdate.Key`, and `Properties.HashInto` produce opaque identities whose encoding is not a stable storage
 format. Key generation leaves caller-owned identity-property slices in their original order.
