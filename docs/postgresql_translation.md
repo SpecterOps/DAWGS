@@ -27,6 +27,9 @@ Current PostgreSQL optimization coverage includes:
   so both source constraints and endpoint identity are preserved.
 - Predicate placement accounting for binding-scope predicates pushed into fixed traversal steps, expansion seeds,
   expansion edges, expansion terminal checks, and eligible pattern predicates.
+  Predicates over both expansion endpoints that remain pending during recursion are retained by subsequent fixed
+  steps and evaluated against their materialized input frame. Shared `expansion_endpoint_predicate_shapes`
+  templates cover reads, duplicate paths, and exact mutation selection with each compiler mode.
 - Shared and late path materialization for path functions such as `nodes(p)`, `relationships(p)`,
   `size(relationships(p))`, `startNode`, `endNode`, and `type`.
 - Recursive traversal optimizations for endpoint kind/property predicates, relationship type predicates, bound-node

@@ -668,7 +668,12 @@ func (s *Translator) buildTraversalPatternStep(partFrame *Frame, traversalStep *
 		})
 	}
 
-	// Append only edge constraints to the where clause.
+	// Constraints over previously materialized bindings belong in WHERE. A
+	// cross-endpoint predicate deferred by an expansion can first become
+	// consumable at this continuation step.
+	nextSelect.Where = pgsql.OptionalAnd(traversalStep.LeftNodeConstraints, nextSelect.Where)
+
+	// Append edge constraints to the where clause.
 	//
 	// For an inner join, PostgreSQL's optimizer can push start and end predicates into the join if they're part
 	// of the where clause below, but it requires additional planning work and may not do so reliably when multiple
@@ -1172,27 +1177,28 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 
 		s.recordPredicatePlacementConsumption(part, stepIndex, traversalStep, constraints)
 
-		if isFirstTraversalStep {
-			hasPreviousFrame := traversalStep.Frame.Previous != nil
-
-			if hasPreviousFrame {
-				// Pull the implicitly joined result set's visibility to avoid violating SQL expectation on explicit vs
-				// implicit join order
-				for _, knownIdentifier := range traversalStep.Frame.Known().Slice() {
-					if binding, bound := s.scope.Lookup(knownIdentifier); !bound {
-						return errors.New("unknown traversal step identifier: " + knownIdentifier.String())
-					} else if binding.LastProjection == traversalStep.Frame.Previous {
-						traversalStep.Frame.Stash(binding.Identifier)
-					}
+		hasPreviousFrame := isFirstTraversalStep && traversalStep.Frame.Previous != nil
+		if hasPreviousFrame {
+			// Pull the implicitly joined result set's visibility to avoid violating SQL expectation on explicit vs
+			// implicit join order
+			for _, knownIdentifier := range traversalStep.Frame.Known().Slice() {
+				if binding, bound := s.scope.Lookup(knownIdentifier); !bound {
+					return errors.New("unknown traversal step identifier: " + knownIdentifier.String())
+				} else if binding.LastProjection == traversalStep.Frame.Previous {
+					traversalStep.Frame.Stash(binding.Identifier)
 				}
 			}
+		}
 
-			if err := RewriteFrameBindings(s.scope, constraints.LeftNode.Expression); err != nil {
-				return err
-			} else {
-				traversalStep.LeftNodeConstraints = constraints.LeftNode.Expression
-			}
+		// Every step can consume predicates over already visible bindings,
+		// including both endpoints of a preceding variable-length expansion.
+		if err := RewriteFrameBindings(s.scope, constraints.LeftNode.Expression); err != nil {
+			return err
+		} else {
+			traversalStep.LeftNodeConstraints = constraints.LeftNode.Expression
+		}
 
+		if isFirstTraversalStep {
 			if leftNodeJoinCondition, err := leftNodeTraversalStepConstraint(traversalStep); err != nil {
 				return err
 			} else if err := RewriteFrameBindings(s.scope, leftNodeJoinCondition); err != nil {
@@ -1200,10 +1206,10 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 			} else {
 				traversalStep.LeftNodeJoinCondition = leftNodeJoinCondition
 			}
+		}
 
-			if hasPreviousFrame {
-				traversalStep.Frame.RestoreStashed()
-			}
+		if hasPreviousFrame {
+			traversalStep.Frame.RestoreStashed()
 		}
 
 		traversalStep.Frame.Export(traversalStep.Edge.Identifier)
