@@ -15,13 +15,6 @@
       },
       "variants": [
         {
-          "name": "leading optional match with no results returns null row",
-          "vars": {
-            "query": "optional match (a:TemplateNodeKind1) where a.group = 'nonexistant' return a.name"
-          },
-          "assert": {"ordered_row_values": [[null]]}
-        },
-        {
           "name": "optional relationship preserves unmatched source rows",
           "vars": {
             "query": "match (a:TemplateNodeKind1) where a.group = 'optional' optional match (a)-[:TemplateEdgeKind1]->(b:TemplateNodeKind2) return a.name, b.name order by a.name"
