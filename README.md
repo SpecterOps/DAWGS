@@ -190,6 +190,11 @@ endpoint and path identities, duplicate rows, local property/kind constraints an
 both backends and in both PostgreSQL compiler modes. Relationship-list reuse and uniqueness across separate pattern
 parts remain separate support boundaries.
 
+Undirected fixed continuations pair the near and far endpoints for each relationship orientation. A non-loop edge
+therefore reaches its opposite endpoint; a self-loop still returns the same node once. The shared
+`undirected_continuation_shapes` templates check both orientations, duplicate paths, carried bindings, expansion
+prefixes and exact downstream write state on both backends and in both PostgreSQL compiler modes.
+
 PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
 Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
 updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared

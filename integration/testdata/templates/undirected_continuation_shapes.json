@@ -1,0 +1,405 @@
+{
+  "families": [
+    {
+      "name": "Undirected continuation orientation",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["UndirSource"], "properties": {"name": "a"}},
+          {"id": "other", "kinds": ["UndirSource"], "properties": {"name": "other"}},
+          {"id": "b", "kinds": ["UndirNode"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["UndirNode"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["UndirNode"], "properties": {"name": "d"}},
+          {"id": "z", "kinds": ["UndirEnd"], "properties": {"name": "z"}},
+          {"id": "decoy", "kinds": ["UndirNode"], "properties": {"name": "decoy"}},
+          {"id": "isolated", "kinds": ["UndirNode"], "properties": {"name": "isolated"}},
+          {"id": "wrong", "kinds": ["UndirDecoy"], "properties": {"name": "wrong"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "UndirPrefix", "properties": {"marker": "prefix"}},
+          {"start_id": "other", "end_id": "b", "kind": "UndirPrefix", "properties": {"marker": "other"}},
+          {"start_id": "b", "end_id": "c", "kind": "UndirTail", "properties": {"marker": "yes"}},
+          {"start_id": "c", "end_id": "b", "kind": "UndirTail", "properties": {"marker": "parallel"}},
+          {"start_id": "d", "end_id": "b", "kind": "UndirTail", "properties": {"marker": "yes"}},
+          {"start_id": "b", "end_id": "decoy", "kind": "UndirTail", "properties": {"marker": "no"}},
+          {"start_id": "b", "end_id": "wrong", "kind": "OtherUndirTail", "properties": {"marker": "yes"}},
+          {"start_id": "b", "end_id": "b", "kind": "UndirLoop", "properties": {"marker": "loop"}},
+          {"start_id": "c", "end_id": "z", "kind": "UndirNext", "properties": {"marker": "next"}},
+          {"start_id": "d", "end_id": "z", "kind": "UndirNext", "properties": {"marker": "next"}},
+          {"start_id": "b", "end_id": "z", "kind": "UndirNext", "properties": {"marker": "near"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "non-loop far endpoints",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN c ORDER BY c.name"},
+          "assert": {"ordered_node_ids": ["c", "d"], "row_count": 2}
+        },
+        {
+          "name": "scalar endpoint count",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "parallel edges retain multiplicity",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail]-(c) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["c"], ["d"], ["decoy"]], "row_count": 4}
+        },
+        {
+          "name": "incoming prefix",
+          "vars": {"query": "MATCH (a:UndirEnd {name:'z'})<-[:UndirNext]-(b {name:'b'})-[r:UndirTail {marker:'yes'}]-(c) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}
+        },
+        {
+          "name": "undirected prefix",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]-(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}
+        },
+        {
+          "name": "relationship properties preserve orientation",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN c.name, r.marker ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c", "yes"], ["d", "yes"]], "row_count": 2}
+        },
+        {
+          "name": "far node inline properties",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail]-(c {name:'c'}) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["c"]], "row_count": 2}
+        },
+        {
+          "name": "far node kind decoy",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:OtherUndirTail]-(c:UndirDecoy) RETURN c.name"},
+          "assert": {"ordered_row_values": [["wrong"]], "row_count": 1}
+        },
+        {
+          "name": "parameterized far predicate",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail]-(c) WHERE c.name = $name RETURN c.name"},
+          "assert": {"ordered_row_values": [["d"]], "row_count": 1},
+          "params": {"name": "d"}
+        },
+        {
+          "name": "near endpoint equality rejects non-loops",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) WHERE c = b RETURN c"},
+          "assert": "empty"
+        },
+        {
+          "name": "self-loop emits one row",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirLoop]-(c) RETURN c.name"},
+          "assert": {"ordered_row_values": [["b"]], "row_count": 1}
+        },
+        {
+          "name": "bound near endpoint rejects non-loops",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(b) RETURN b"},
+          "assert": "empty"
+        },
+        {
+          "name": "bound cycle reaches root",
+          "vars": {"query": "MATCH (a:UndirNode {name:'c'})-[:UndirTail {marker:'parallel'}]->(b)-[r:UndirTail {marker:'yes'}]-(a) RETURN a.name"},
+          "assert": {"ordered_row_values": [["c"]], "row_count": 1}
+        },
+        {
+          "name": "third hop preserves exact paths",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c)-[:UndirNext]->(d) RETURN c.name, d.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c", "z"], ["d", "z"]], "row_count": 2}
+        },
+        {
+          "name": "consecutive undirected continuations",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c)-[:UndirNext]-(d) RETURN c.name, d.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c", "z"], ["d", "z"]], "row_count": 2}
+        },
+        {
+          "name": "returned path nodes and length",
+          "vars": {"query": "MATCH p = (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN p"},
+          "assert": {"path_node_ids": [["a", "b", "c"], ["a", "b", "d"]], "path_lengths": [2, 2], "row_count": 2}
+        },
+        {
+          "name": "duplicate input rows",
+          "vars": {"query": "UNWIND [1, 1, 1] AS x WITH x MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN x, c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [[1, "c"], [1, "c"], [1, "c"], [1, "d"], [1, "d"], [1, "d"]], "row_count": 6}
+        },
+        {
+          "name": "with aliases before continuation",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'}) WITH a AS source MATCH (source)-[:UndirPrefix]->(b)-[:UndirTail {marker:'yes'}]-(c) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}
+        },
+        {
+          "name": "optional continuation",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'}) OPTIONAL MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}
+        },
+        {
+          "name": "optional near-only filter yields null",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'}) OPTIONAL MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) WHERE c = b RETURN c"},
+          "assert": {"ordered_row_values": [[null]], "row_count": 1}
+        },
+        {
+          "name": "pattern predicate rejects near reuse",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b) WHERE (a)-[:UndirPrefix]->(b)-[:UndirTail {marker:'yes'}]-(b) RETURN a"},
+          "assert": "empty"
+        },
+        {
+          "name": "expansion prefix",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix*1..2]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}
+        },
+        {
+          "name": "zero-hop expansion prefix",
+          "vars": {"query": "MATCH (a:UndirNode {name:'b'})-[:UndirPrefix*0..1]->(b)-[r:UndirTail {marker:'yes'}]-(c) RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}
+        },
+        {
+          "name": "directional continuation control",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]->(c) RETURN c.name"},
+          "assert": {"ordered_row_values": [["c"]], "row_count": 1}
+        },
+        {
+          "name": "node and relationship updates",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) SET c.visited = true, r.visited = true RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UndirSource"], "props": {"name": "a"}},
+                  {"id": "other", "kinds": ["UndirSource"], "props": {"name": "other"}},
+                  {"id": "b", "kinds": ["UndirNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UndirNode"], "props": {"name": "c", "visited": true}},
+                  {"id": "d", "kinds": ["UndirNode"], "props": {"name": "d", "visited": true}},
+                  {"id": "z", "kinds": ["UndirEnd"], "props": {"name": "z"}},
+                  {"id": "decoy", "kinds": ["UndirNode"], "props": {"name": "decoy"}},
+                  {"id": "isolated", "kinds": ["UndirNode"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UndirDecoy"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UndirPrefix", "props": {"marker": "prefix"}},
+                  {"start": "other", "end": "b", "kind": "UndirPrefix", "props": {"marker": "other"}},
+                  {"start": "b", "end": "c", "kind": "UndirTail", "props": {"marker": "yes", "visited": true}},
+                  {"start": "c", "end": "b", "kind": "UndirTail", "props": {"marker": "parallel"}},
+                  {"start": "d", "end": "b", "kind": "UndirTail", "props": {"marker": "yes", "visited": true}},
+                  {"start": "b", "end": "decoy", "kind": "UndirTail", "props": {"marker": "no"}},
+                  {"start": "b", "end": "wrong", "kind": "OtherUndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "b", "kind": "UndirLoop", "props": {"marker": "loop"}},
+                  {"start": "c", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "d", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "b", "end": "z", "kind": "UndirNext", "props": {"marker": "near"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node update without return",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) SET c.visited = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UndirSource"], "props": {"name": "a"}},
+                  {"id": "other", "kinds": ["UndirSource"], "props": {"name": "other"}},
+                  {"id": "b", "kinds": ["UndirNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UndirNode"], "props": {"name": "c", "visited": true}},
+                  {"id": "d", "kinds": ["UndirNode"], "props": {"name": "d", "visited": true}},
+                  {"id": "z", "kinds": ["UndirEnd"], "props": {"name": "z"}},
+                  {"id": "decoy", "kinds": ["UndirNode"], "props": {"name": "decoy"}},
+                  {"id": "isolated", "kinds": ["UndirNode"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UndirDecoy"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UndirPrefix", "props": {"marker": "prefix"}},
+                  {"start": "other", "end": "b", "kind": "UndirPrefix", "props": {"marker": "other"}},
+                  {"start": "b", "end": "c", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "b", "kind": "UndirTail", "props": {"marker": "parallel"}},
+                  {"start": "d", "end": "b", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "decoy", "kind": "UndirTail", "props": {"marker": "no"}},
+                  {"start": "b", "end": "wrong", "kind": "OtherUndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "b", "kind": "UndirLoop", "props": {"marker": "loop"}},
+                  {"start": "c", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "d", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "b", "end": "z", "kind": "UndirNext", "props": {"marker": "near"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "false near match cannot mutate",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) WHERE c = b SET c.visited = true, r.visited = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UndirSource"], "props": {"name": "a"}},
+                  {"id": "other", "kinds": ["UndirSource"], "props": {"name": "other"}},
+                  {"id": "b", "kinds": ["UndirNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UndirNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UndirNode"], "props": {"name": "d"}},
+                  {"id": "z", "kinds": ["UndirEnd"], "props": {"name": "z"}},
+                  {"id": "decoy", "kinds": ["UndirNode"], "props": {"name": "decoy"}},
+                  {"id": "isolated", "kinds": ["UndirNode"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UndirDecoy"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UndirPrefix", "props": {"marker": "prefix"}},
+                  {"start": "other", "end": "b", "kind": "UndirPrefix", "props": {"marker": "other"}},
+                  {"start": "b", "end": "c", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "b", "kind": "UndirTail", "props": {"marker": "parallel"}},
+                  {"start": "d", "end": "b", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "decoy", "kind": "UndirTail", "props": {"marker": "no"}},
+                  {"start": "b", "end": "wrong", "kind": "OtherUndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "b", "kind": "UndirLoop", "props": {"marker": "loop"}},
+                  {"start": "c", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "d", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "b", "end": "z", "kind": "UndirNext", "props": {"marker": "near"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "continuation across mutation boundary",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) WITH c SET c.visited = true RETURN c.name ORDER BY c.name"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UndirSource"], "props": {"name": "a"}},
+                  {"id": "other", "kinds": ["UndirSource"], "props": {"name": "other"}},
+                  {"id": "b", "kinds": ["UndirNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UndirNode"], "props": {"name": "c", "visited": true}},
+                  {"id": "d", "kinds": ["UndirNode"], "props": {"name": "d", "visited": true}},
+                  {"id": "z", "kinds": ["UndirEnd"], "props": {"name": "z"}},
+                  {"id": "decoy", "kinds": ["UndirNode"], "props": {"name": "decoy"}},
+                  {"id": "isolated", "kinds": ["UndirNode"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UndirDecoy"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UndirPrefix", "props": {"marker": "prefix"}},
+                  {"start": "other", "end": "b", "kind": "UndirPrefix", "props": {"marker": "other"}},
+                  {"start": "b", "end": "c", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "b", "kind": "UndirTail", "props": {"marker": "parallel"}},
+                  {"start": "d", "end": "b", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "decoy", "kind": "UndirTail", "props": {"marker": "no"}},
+                  {"start": "b", "end": "wrong", "kind": "OtherUndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "b", "kind": "UndirLoop", "props": {"marker": "loop"}},
+                  {"start": "c", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "d", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "b", "end": "z", "kind": "UndirNext", "props": {"marker": "near"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create cardinality with return",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) CREATE (audit:UndirAudit {target:c.name}) RETURN audit.target ORDER BY audit.target"},
+          "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2},
+          "post_assertions": [
+            {"cypher": "MATCH (n:UndirAudit) RETURN n.target ORDER BY n.target", "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}},
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UndirAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UndirSource"], "props": {"name": "a"}},
+                  {"id": "other", "kinds": ["UndirSource"], "props": {"name": "other"}},
+                  {"id": "b", "kinds": ["UndirNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UndirNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UndirNode"], "props": {"name": "d"}},
+                  {"id": "z", "kinds": ["UndirEnd"], "props": {"name": "z"}},
+                  {"id": "decoy", "kinds": ["UndirNode"], "props": {"name": "decoy"}},
+                  {"id": "isolated", "kinds": ["UndirNode"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UndirDecoy"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UndirPrefix", "props": {"marker": "prefix"}},
+                  {"start": "other", "end": "b", "kind": "UndirPrefix", "props": {"marker": "other"}},
+                  {"start": "b", "end": "c", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "b", "kind": "UndirTail", "props": {"marker": "parallel"}},
+                  {"start": "d", "end": "b", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "decoy", "kind": "UndirTail", "props": {"marker": "no"}},
+                  {"start": "b", "end": "wrong", "kind": "OtherUndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "b", "kind": "UndirLoop", "props": {"marker": "loop"}},
+                  {"start": "c", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "d", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "b", "end": "z", "kind": "UndirNext", "props": {"marker": "near"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create cardinality without return",
+          "vars": {"query": "MATCH (a:UndirSource {name:'a'})-[:UndirPrefix]->(b)-[r:UndirTail {marker:'yes'}]-(c) CREATE (audit:UndirAudit {target:c.name})"},
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n:UndirAudit) RETURN n.target ORDER BY n.target", "assert": {"ordered_row_values": [["c"], ["d"]], "row_count": 2}},
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UndirAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UndirSource"], "props": {"name": "a"}},
+                  {"id": "other", "kinds": ["UndirSource"], "props": {"name": "other"}},
+                  {"id": "b", "kinds": ["UndirNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UndirNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UndirNode"], "props": {"name": "d"}},
+                  {"id": "z", "kinds": ["UndirEnd"], "props": {"name": "z"}},
+                  {"id": "decoy", "kinds": ["UndirNode"], "props": {"name": "decoy"}},
+                  {"id": "isolated", "kinds": ["UndirNode"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UndirDecoy"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UndirPrefix", "props": {"marker": "prefix"}},
+                  {"start": "other", "end": "b", "kind": "UndirPrefix", "props": {"marker": "other"}},
+                  {"start": "b", "end": "c", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "b", "kind": "UndirTail", "props": {"marker": "parallel"}},
+                  {"start": "d", "end": "b", "kind": "UndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "decoy", "kind": "UndirTail", "props": {"marker": "no"}},
+                  {"start": "b", "end": "wrong", "kind": "OtherUndirTail", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "b", "kind": "UndirLoop", "props": {"marker": "loop"}},
+                  {"start": "c", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "d", "end": "z", "kind": "UndirNext", "props": {"marker": "next"}},
+                  {"start": "b", "end": "z", "kind": "UndirNext", "props": {"marker": "near"}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -52,3 +52,8 @@ relationships, WITH aliases, directions, bound endpoints, paths, continuations,
 pattern predicates, OPTIONAL MATCH updates and CREATE without RETURN. The related
 property-constrained pattern predicate in `stepwise_traversal.sql` keeps its
 property condition inside the correlated predicate.
+
+`undirected_continuation.sql` covers paired near/far endpoint orientations after
+outbound, inbound, undirected and variable-length prefixes, returned paths,
+consecutive undirected steps, updates and CREATE without RETURN. Pairing is
+applied before frame binding so scalar IDs and composite nodes stay qualified.
