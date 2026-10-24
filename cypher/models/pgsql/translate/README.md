@@ -31,6 +31,12 @@ kind/property constraints use the fresh scan; frame rewriting qualifies the orig
 frame. This also keeps property constraints inside a correlated pattern predicate. Bound paths record the fresh
 edge as a dependency so that path construction includes every hop.
 
+An undirected fixed continuation pairs both endpoint orientations in the terminal
+node join: `(near = start AND far = end) OR (far = start AND near = end)`.
+Frame rewriting qualifies the near endpoint before the new step is materialized,
+preserving both scalar-ID and composite representations. This excludes a false
+return to the near node while retaining self-loops and duplicate input paths.
+
 Consider the following openCypher query:
 
 ```cypher

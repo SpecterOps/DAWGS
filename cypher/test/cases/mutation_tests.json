@@ -552,6 +552,38 @@
         "query": "match (a)-[r:EdgeKind1]->(b) optional match (a)-[r]->(c) set c.visited = true return c",
         "fitness": -1
       }
+    },
+    {
+      "name": "DAWGS-027 node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b)-[r:EdgeKind2]-(c) set c.visited = true, r.visited = true return c",
+        "fitness": -6
+      }
+    },
+    {
+      "name": "DAWGS-027 create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b)-[:EdgeKind2]-(c) create (:NodeKind1 {target: c.name})",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DAWGS-027 expansion continuation update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1*0..2]->(b)-[:EdgeKind2]-(c) set c.visited = true return c",
+        "fitness": -8
+      }
+    },
+    {
+      "name": "DAWGS-027 bound endpoint mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b)-[r:EdgeKind2]-(b) set b.visited = true return b",
+        "fitness": -6
+      }
     }
   ]
 }
