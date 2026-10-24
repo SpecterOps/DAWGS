@@ -202,6 +202,11 @@ therefore reaches its opposite endpoint; a self-loop still returns the same node
 `undirected_continuation_shapes` templates check both orientations, duplicate paths, carried bindings, expansion
 prefixes and exact downstream write state on both backends and in both PostgreSQL compiler modes.
 
+An undirected pattern with a repeated endpoint, `(x)-[r]-(x)`, matches only self-loops and returns each matching
+relationship once per input row. A newly introduced `x` remains local to that pattern even when unrelated input rows
+already exist. The shared `undirected_self_reference_shapes` templates check loop identities, duplicate and empty inputs,
+optional matches, returned paths and exact SET/CREATE state on both backends and in both PostgreSQL compiler modes.
+
 PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
 Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
 updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared

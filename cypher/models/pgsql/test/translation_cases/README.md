@@ -63,3 +63,9 @@ patterns, consecutive expansions, retained anonymous relationship state, node-on
 intervening parts, OPTIONAL MATCH, updates and CREATE without RETURN. Existing
 cases in `pattern_expansion.sql` and `stepwise_traversal.sql` also enforce
 cross-segment disjointness and cross-part fixed relationship inequality.
+
+`undirected_self_reference.sql` covers repeated endpoints constrained to both ends
+of a self-loop, constraints on the right occurrence, paths, counts, duplicate and
+unrelated inputs, OPTIONAL MATCH, bound endpoints, SET and CREATE without RETURN.
+New local endpoints retain unrelated input rows without referencing a node from
+the previous frame.
