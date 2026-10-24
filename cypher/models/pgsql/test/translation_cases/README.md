@@ -69,3 +69,9 @@ of a self-loop, constraints on the right occurrence, paths, counts, duplicate an
 unrelated inputs, OPTIONAL MATCH, bound endpoints, SET and CREATE without RETURN.
 New local endpoints retain unrelated input rows without referencing a node from
 the previous frame.
+
+`exact_expansion_length.sql` covers normalized `*k` bounds, zero hops, short
+fixed-step lowering, ordinary traversal above 15 hops, incoming traversal, paths,
+SET and CREATE without RETURN. Shortest/all-shortest fixtures check that the
+harness receives the normalized maximum; compiler tests compare complete SQL and
+parameters for the exact shorthand and explicit range in both optimizer modes.

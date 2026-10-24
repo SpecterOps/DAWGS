@@ -1,0 +1,729 @@
+{
+  "families": [
+    {
+      "name": "DAWGS-020 exact relationship expansion lengths",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "n0", "kinds": ["ExactNode", "ExactRoot"], "properties": {"name": "n0", "eligible": true}},
+          {"id": "n1", "kinds": ["ExactNode"], "properties": {"name": "n1", "eligible": true}},
+          {"id": "n2", "kinds": ["ExactNode"], "properties": {"name": "n2", "eligible": true}},
+          {"id": "n3", "kinds": ["ExactNode"], "properties": {"name": "n3", "eligible": true}},
+          {"id": "n4", "kinds": ["ExactNode"], "properties": {"name": "n4", "eligible": true}},
+          {"id": "n5", "kinds": ["ExactNode"], "properties": {"name": "n5", "eligible": true}},
+          {"id": "n6", "kinds": ["ExactNode"], "properties": {"name": "n6", "eligible": true}},
+          {"id": "n7", "kinds": ["ExactNode"], "properties": {"name": "n7", "eligible": true}},
+          {"id": "n8", "kinds": ["ExactNode"], "properties": {"name": "n8", "eligible": true}},
+          {"id": "n9", "kinds": ["ExactNode"], "properties": {"name": "n9", "eligible": true}},
+          {"id": "n10", "kinds": ["ExactNode"], "properties": {"name": "n10", "eligible": true}},
+          {"id": "n11", "kinds": ["ExactNode"], "properties": {"name": "n11", "eligible": true}},
+          {"id": "n12", "kinds": ["ExactNode"], "properties": {"name": "n12", "eligible": true}},
+          {"id": "n13", "kinds": ["ExactNode"], "properties": {"name": "n13", "eligible": true}},
+          {"id": "n14", "kinds": ["ExactNode"], "properties": {"name": "n14", "eligible": true}},
+          {"id": "n15", "kinds": ["ExactNode"], "properties": {"name": "n15", "eligible": true}},
+          {"id": "n16", "kinds": ["ExactNode"], "properties": {"name": "n16", "eligible": true}},
+          {"id": "n17", "kinds": ["ExactNode"], "properties": {"name": "n17", "eligible": true}},
+          {"id": "wrong-kind", "kinds": ["ExactOther"], "properties": {"name": "wrong-kind", "eligible": true}},
+          {"id": "wrong-prop", "kinds": ["ExactNode"], "properties": {"name": "wrong-prop", "eligible": false}},
+          {"id": "missing-prop", "kinds": ["ExactNode"], "properties": {"name": "missing-prop"}},
+          {"id": "reverse", "kinds": ["ExactNode"], "properties": {"name": "reverse", "eligible": true}},
+          {"id": "other", "kinds": ["ExactNode"], "properties": {"name": "other", "eligible": true}},
+          {"id": "wrong-root", "kinds": ["ExactRoot", "ExactNode"], "properties": {"name": "wrong-root", "eligible": true}},
+          {"id": "audit-seed", "kinds": ["ExactAudit"], "properties": {"name": "audit-seed"}}
+        ],
+        "edges": [
+          {"start_id": "n0", "end_id": "n1", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n1", "end_id": "n2", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n2", "end_id": "n3", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n3", "end_id": "n4", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n4", "end_id": "n5", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n5", "end_id": "n6", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n6", "end_id": "n7", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n7", "end_id": "n8", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n8", "end_id": "n9", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n9", "end_id": "n10", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n10", "end_id": "n11", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n11", "end_id": "n12", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n12", "end_id": "n13", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n13", "end_id": "n14", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n14", "end_id": "n15", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n15", "end_id": "n16", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n16", "end_id": "n17", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n15", "end_id": "wrong-kind", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n15", "end_id": "wrong-prop", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n15", "end_id": "missing-prop", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "reverse", "end_id": "n15", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n15", "end_id": "other", "kind": "ExactOtherStep", "properties": {"marker": "yes"}},
+          {"start_id": "wrong-root", "end_id": "n1", "kind": "ExactStep", "properties": {"marker": "yes"}},
+          {"start_id": "n16", "end_id": "n17", "kind": "ExactSuffix", "properties": {"marker": "yes"}},
+          {"start_id": "n15", "end_id": "n16", "kind": "ExactSuffix", "properties": {"marker": "yes"}},
+          {"start_id": "n17", "end_id": "n16", "kind": "ExactSuffix", "properties": {"marker": "yes"}},
+          {"start_id": "n16", "end_id": "n15", "kind": "ExactSuffix", "properties": {"marker": "no"}},
+          {"start_id": "n16", "end_id": "wrong-kind", "kind": "ExactSuffix", "properties": {"marker": "yes"}},
+          {"start_id": "n16", "end_id": "wrong-prop", "kind": "ExactSuffix", "properties": {"marker": "yes"}},
+          {"start_id": "n16", "end_id": "missing-prop", "kind": "ExactSuffix", "properties": {}},
+          {"start_id": "reverse", "end_id": "n16", "kind": "ExactSuffix", "properties": {"marker": "yes"}},
+          {"start_id": "n16", "end_id": "other", "kind": "ExactOtherSuffix", "properties": {"marker": "yes"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "exact endpoint 0",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*0]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n0"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 0..0",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*0..0]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n0"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 1",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*1]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n1"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 1..1",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*1..1]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n1"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 2",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*2]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n2"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 2..2",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*2..2]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n2"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 15",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*15]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n15"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 15..15",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*15..15]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n15"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 16",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n16"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 16..16",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16..16]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n16"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 17",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*17]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n17"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact endpoint 17..17",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*17..17]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n17"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact path above default cap",
+          "vars": {"query": "MATCH p = (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true}) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["n0", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10", "n11", "n12", "n13", "n14", "n15", "n16"]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "zero length path",
+          "vars": {"query": "MATCH p = (a:ExactRoot {name:'n0'})-[:ExactStep*0]->(b) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["n0"]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "incoming exact length",
+          "vars": {"query": "MATCH (b:ExactNode {eligible:true})<-[:ExactStep*16]-(a:ExactRoot {name:'n0'}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n16"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "fixed prefix with exact continuation",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep]->(b)-[:ExactStep*16]->(c:ExactNode {eligible:true}) RETURN c"},
+          "assert": {
+            "ordered_node_ids": ["n17"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact length with fixed suffix",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true})-[:ExactSuffix {marker:'yes'}]->(c:ExactNode {eligible:true}) RETURN c"},
+          "assert": {
+            "ordered_node_ids": ["n17"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "duplicate input rows",
+          "vars": {"query": "UNWIND [1, 1] AS row MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n16", "n16"],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "bound exact endpoint",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'}), (b:ExactNode {name:'n16'}) MATCH p = (a)-[:ExactStep*16]->(b) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["n0", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10", "n11", "n12", "n13", "n14", "n15", "n16"]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "optional exact match",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'}) OPTIONAL MATCH (a)-[:ExactStep*16]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n16"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "optional absent exact length",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'}) OPTIONAL MATCH (a)-[:ExactStep*18]->(b:ExactNode {eligible:true}) RETURN b.name"},
+          "assert": {
+            "ordered_row_values": [
+              [null]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact length with spaces",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep* 16 ]->(b:ExactNode {eligible:true}) RETURN b"},
+          "assert": {
+            "ordered_node_ids": ["n16"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "explicit bounded range above cap",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16..17]->(b:ExactNode {eligible:true}) RETURN b ORDER BY b.name"},
+          "assert": {
+            "ordered_node_ids": ["n16", "n17"],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "explicit upper only range",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*..2]->(b:ExactNode {eligible:true}) RETURN b ORDER BY b.name"},
+          "assert": {
+            "ordered_node_ids": ["n1", "n2"],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "explicit lower and upper range",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*2..4]->(b:ExactNode {eligible:true}) RETURN b ORDER BY b.name"},
+          "assert": {
+            "ordered_node_ids": ["n2", "n3", "n4"],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "shortest exact one hop",
+          "vars": {"query": "MATCH p = shortestPath((a:ExactRoot {name:'n0'})-[:ExactStep*1]->(b:ExactNode {name:'n1'})) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["n0", "n1"]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "all shortest exact one hop",
+          "vars": {"query": "MATCH p = allShortestPaths((a:ExactRoot {name:'n0'})-[:ExactStep*1]->(b:ExactNode {name:'n1'})) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["n0", "n1"]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "short exact update excludes longer paths",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*2]->(b:ExactNode {eligible:true}) SET b.selected = true"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.name IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "n0", "kinds": ["ExactNode", "ExactRoot"], "props": {"name": "n0", "eligible": true}},
+                  {"id": "n1", "kinds": ["ExactNode"], "props": {"name": "n1", "eligible": true}},
+                  {"id": "n2", "kinds": ["ExactNode"], "props": {"name": "n2", "eligible": true, "selected": true}},
+                  {"id": "n3", "kinds": ["ExactNode"], "props": {"name": "n3", "eligible": true}},
+                  {"id": "n4", "kinds": ["ExactNode"], "props": {"name": "n4", "eligible": true}},
+                  {"id": "n5", "kinds": ["ExactNode"], "props": {"name": "n5", "eligible": true}},
+                  {"id": "n6", "kinds": ["ExactNode"], "props": {"name": "n6", "eligible": true}},
+                  {"id": "n7", "kinds": ["ExactNode"], "props": {"name": "n7", "eligible": true}},
+                  {"id": "n8", "kinds": ["ExactNode"], "props": {"name": "n8", "eligible": true}},
+                  {"id": "n9", "kinds": ["ExactNode"], "props": {"name": "n9", "eligible": true}},
+                  {"id": "n10", "kinds": ["ExactNode"], "props": {"name": "n10", "eligible": true}},
+                  {"id": "n11", "kinds": ["ExactNode"], "props": {"name": "n11", "eligible": true}},
+                  {"id": "n12", "kinds": ["ExactNode"], "props": {"name": "n12", "eligible": true}},
+                  {"id": "n13", "kinds": ["ExactNode"], "props": {"name": "n13", "eligible": true}},
+                  {"id": "n14", "kinds": ["ExactNode"], "props": {"name": "n14", "eligible": true}},
+                  {"id": "n15", "kinds": ["ExactNode"], "props": {"name": "n15", "eligible": true}},
+                  {"id": "n16", "kinds": ["ExactNode"], "props": {"name": "n16", "eligible": true}},
+                  {"id": "n17", "kinds": ["ExactNode"], "props": {"name": "n17", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["ExactOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["ExactNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing-prop", "kinds": ["ExactNode"], "props": {"name": "missing-prop"}},
+                  {"id": "reverse", "kinds": ["ExactNode"], "props": {"name": "reverse", "eligible": true}},
+                  {"id": "other", "kinds": ["ExactNode"], "props": {"name": "other", "eligible": true}},
+                  {"id": "wrong-root", "kinds": ["ExactRoot", "ExactNode"], "props": {"name": "wrong-root", "eligible": true}},
+                  {"id": "audit-seed", "kinds": ["ExactAudit"], "props": {"name": "audit-seed"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "n0", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n1", "end": "n2", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n2", "end": "n3", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n3", "end": "n4", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n4", "end": "n5", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n5", "end": "n6", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n6", "end": "n7", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n7", "end": "n8", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n8", "end": "n9", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n9", "end": "n10", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n10", "end": "n11", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n11", "end": "n12", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n12", "end": "n13", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n13", "end": "n14", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n14", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-kind", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "missing-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "reverse", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "other", "kind": "ExactOtherStep", "props": {"marker": "yes"}},
+                  {"start": "wrong-root", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n17", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n15", "kind": "ExactSuffix", "props": {"marker": "no"}},
+                  {"start": "n16", "end": "wrong-kind", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "wrong-prop", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "missing-prop", "kind": "ExactSuffix", "props": {}},
+                  {"start": "reverse", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "other", "kind": "ExactOtherSuffix", "props": {"marker": "yes"}}
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "long exact node and relationship update",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true})-[r:ExactSuffix {marker:'yes'}]->(c:ExactNode {eligible:true}) SET b.selected = true, c.selected = true, r.selected = true"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.name IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "n0", "kinds": ["ExactNode", "ExactRoot"], "props": {"name": "n0", "eligible": true}},
+                  {"id": "n1", "kinds": ["ExactNode"], "props": {"name": "n1", "eligible": true}},
+                  {"id": "n2", "kinds": ["ExactNode"], "props": {"name": "n2", "eligible": true}},
+                  {"id": "n3", "kinds": ["ExactNode"], "props": {"name": "n3", "eligible": true}},
+                  {"id": "n4", "kinds": ["ExactNode"], "props": {"name": "n4", "eligible": true}},
+                  {"id": "n5", "kinds": ["ExactNode"], "props": {"name": "n5", "eligible": true}},
+                  {"id": "n6", "kinds": ["ExactNode"], "props": {"name": "n6", "eligible": true}},
+                  {"id": "n7", "kinds": ["ExactNode"], "props": {"name": "n7", "eligible": true}},
+                  {"id": "n8", "kinds": ["ExactNode"], "props": {"name": "n8", "eligible": true}},
+                  {"id": "n9", "kinds": ["ExactNode"], "props": {"name": "n9", "eligible": true}},
+                  {"id": "n10", "kinds": ["ExactNode"], "props": {"name": "n10", "eligible": true}},
+                  {"id": "n11", "kinds": ["ExactNode"], "props": {"name": "n11", "eligible": true}},
+                  {"id": "n12", "kinds": ["ExactNode"], "props": {"name": "n12", "eligible": true}},
+                  {"id": "n13", "kinds": ["ExactNode"], "props": {"name": "n13", "eligible": true}},
+                  {"id": "n14", "kinds": ["ExactNode"], "props": {"name": "n14", "eligible": true}},
+                  {"id": "n15", "kinds": ["ExactNode"], "props": {"name": "n15", "eligible": true}},
+                  {"id": "n16", "kinds": ["ExactNode"], "props": {"name": "n16", "eligible": true, "selected": true}},
+                  {"id": "n17", "kinds": ["ExactNode"], "props": {"name": "n17", "eligible": true, "selected": true}},
+                  {"id": "wrong-kind", "kinds": ["ExactOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["ExactNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing-prop", "kinds": ["ExactNode"], "props": {"name": "missing-prop"}},
+                  {"id": "reverse", "kinds": ["ExactNode"], "props": {"name": "reverse", "eligible": true}},
+                  {"id": "other", "kinds": ["ExactNode"], "props": {"name": "other", "eligible": true}},
+                  {"id": "wrong-root", "kinds": ["ExactRoot", "ExactNode"], "props": {"name": "wrong-root", "eligible": true}},
+                  {"id": "audit-seed", "kinds": ["ExactAudit"], "props": {"name": "audit-seed"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "n0", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n1", "end": "n2", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n2", "end": "n3", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n3", "end": "n4", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n4", "end": "n5", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n5", "end": "n6", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n6", "end": "n7", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n7", "end": "n8", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n8", "end": "n9", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n9", "end": "n10", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n10", "end": "n11", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n11", "end": "n12", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n12", "end": "n13", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n13", "end": "n14", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n14", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-kind", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "missing-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "reverse", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "other", "kind": "ExactOtherStep", "props": {"marker": "yes"}},
+                  {"start": "wrong-root", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactSuffix", "props": {"marker": "yes", "selected": true}},
+                  {"start": "n15", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n17", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n15", "kind": "ExactSuffix", "props": {"marker": "no"}},
+                  {"start": "n16", "end": "wrong-kind", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "wrong-prop", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "missing-prop", "kind": "ExactSuffix", "props": {}},
+                  {"start": "reverse", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "other", "kind": "ExactOtherSuffix", "props": {"marker": "yes"}}
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "long exact update through with",
+          "vars": {"query": "MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true}) SET b.selected = true WITH b SET b.selected = true RETURN b"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.name IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "n0", "kinds": ["ExactNode", "ExactRoot"], "props": {"name": "n0", "eligible": true}},
+                  {"id": "n1", "kinds": ["ExactNode"], "props": {"name": "n1", "eligible": true}},
+                  {"id": "n2", "kinds": ["ExactNode"], "props": {"name": "n2", "eligible": true}},
+                  {"id": "n3", "kinds": ["ExactNode"], "props": {"name": "n3", "eligible": true}},
+                  {"id": "n4", "kinds": ["ExactNode"], "props": {"name": "n4", "eligible": true}},
+                  {"id": "n5", "kinds": ["ExactNode"], "props": {"name": "n5", "eligible": true}},
+                  {"id": "n6", "kinds": ["ExactNode"], "props": {"name": "n6", "eligible": true}},
+                  {"id": "n7", "kinds": ["ExactNode"], "props": {"name": "n7", "eligible": true}},
+                  {"id": "n8", "kinds": ["ExactNode"], "props": {"name": "n8", "eligible": true}},
+                  {"id": "n9", "kinds": ["ExactNode"], "props": {"name": "n9", "eligible": true}},
+                  {"id": "n10", "kinds": ["ExactNode"], "props": {"name": "n10", "eligible": true}},
+                  {"id": "n11", "kinds": ["ExactNode"], "props": {"name": "n11", "eligible": true}},
+                  {"id": "n12", "kinds": ["ExactNode"], "props": {"name": "n12", "eligible": true}},
+                  {"id": "n13", "kinds": ["ExactNode"], "props": {"name": "n13", "eligible": true}},
+                  {"id": "n14", "kinds": ["ExactNode"], "props": {"name": "n14", "eligible": true}},
+                  {"id": "n15", "kinds": ["ExactNode"], "props": {"name": "n15", "eligible": true}},
+                  {"id": "n16", "kinds": ["ExactNode"], "props": {"name": "n16", "eligible": true, "selected": true}},
+                  {"id": "n17", "kinds": ["ExactNode"], "props": {"name": "n17", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["ExactOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["ExactNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing-prop", "kinds": ["ExactNode"], "props": {"name": "missing-prop"}},
+                  {"id": "reverse", "kinds": ["ExactNode"], "props": {"name": "reverse", "eligible": true}},
+                  {"id": "other", "kinds": ["ExactNode"], "props": {"name": "other", "eligible": true}},
+                  {"id": "wrong-root", "kinds": ["ExactRoot", "ExactNode"], "props": {"name": "wrong-root", "eligible": true}},
+                  {"id": "audit-seed", "kinds": ["ExactAudit"], "props": {"name": "audit-seed"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "n0", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n1", "end": "n2", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n2", "end": "n3", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n3", "end": "n4", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n4", "end": "n5", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n5", "end": "n6", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n6", "end": "n7", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n7", "end": "n8", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n8", "end": "n9", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n9", "end": "n10", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n10", "end": "n11", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n11", "end": "n12", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n12", "end": "n13", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n13", "end": "n14", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n14", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-kind", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "missing-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "reverse", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "other", "kind": "ExactOtherStep", "props": {"marker": "yes"}},
+                  {"start": "wrong-root", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n17", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n15", "kind": "ExactSuffix", "props": {"marker": "no"}},
+                  {"start": "n16", "end": "wrong-kind", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "wrong-prop", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "missing-prop", "kind": "ExactSuffix", "props": {}},
+                  {"start": "reverse", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "other", "kind": "ExactOtherSuffix", "props": {"marker": "yes"}}
+                ]
+              }
+            }
+          ],
+          "assert": {
+            "ordered_node_ids": ["n16"],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "exact create cardinality without return",
+          "vars": {"query": "UNWIND [1, 1] AS row MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true}) CREATE (audit:ExactAudit {target:b.name})"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.name IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "n0", "kinds": ["ExactNode", "ExactRoot"], "props": {"name": "n0", "eligible": true}},
+                  {"id": "n1", "kinds": ["ExactNode"], "props": {"name": "n1", "eligible": true}},
+                  {"id": "n2", "kinds": ["ExactNode"], "props": {"name": "n2", "eligible": true}},
+                  {"id": "n3", "kinds": ["ExactNode"], "props": {"name": "n3", "eligible": true}},
+                  {"id": "n4", "kinds": ["ExactNode"], "props": {"name": "n4", "eligible": true}},
+                  {"id": "n5", "kinds": ["ExactNode"], "props": {"name": "n5", "eligible": true}},
+                  {"id": "n6", "kinds": ["ExactNode"], "props": {"name": "n6", "eligible": true}},
+                  {"id": "n7", "kinds": ["ExactNode"], "props": {"name": "n7", "eligible": true}},
+                  {"id": "n8", "kinds": ["ExactNode"], "props": {"name": "n8", "eligible": true}},
+                  {"id": "n9", "kinds": ["ExactNode"], "props": {"name": "n9", "eligible": true}},
+                  {"id": "n10", "kinds": ["ExactNode"], "props": {"name": "n10", "eligible": true}},
+                  {"id": "n11", "kinds": ["ExactNode"], "props": {"name": "n11", "eligible": true}},
+                  {"id": "n12", "kinds": ["ExactNode"], "props": {"name": "n12", "eligible": true}},
+                  {"id": "n13", "kinds": ["ExactNode"], "props": {"name": "n13", "eligible": true}},
+                  {"id": "n14", "kinds": ["ExactNode"], "props": {"name": "n14", "eligible": true}},
+                  {"id": "n15", "kinds": ["ExactNode"], "props": {"name": "n15", "eligible": true}},
+                  {"id": "n16", "kinds": ["ExactNode"], "props": {"name": "n16", "eligible": true}},
+                  {"id": "n17", "kinds": ["ExactNode"], "props": {"name": "n17", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["ExactOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["ExactNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing-prop", "kinds": ["ExactNode"], "props": {"name": "missing-prop"}},
+                  {"id": "reverse", "kinds": ["ExactNode"], "props": {"name": "reverse", "eligible": true}},
+                  {"id": "other", "kinds": ["ExactNode"], "props": {"name": "other", "eligible": true}},
+                  {"id": "wrong-root", "kinds": ["ExactRoot", "ExactNode"], "props": {"name": "wrong-root", "eligible": true}},
+                  {"id": "audit-seed", "kinds": ["ExactAudit"], "props": {"name": "audit-seed"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "n0", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n1", "end": "n2", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n2", "end": "n3", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n3", "end": "n4", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n4", "end": "n5", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n5", "end": "n6", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n6", "end": "n7", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n7", "end": "n8", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n8", "end": "n9", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n9", "end": "n10", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n10", "end": "n11", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n11", "end": "n12", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n12", "end": "n13", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n13", "end": "n14", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n14", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-kind", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "missing-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "reverse", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "other", "kind": "ExactOtherStep", "props": {"marker": "yes"}},
+                  {"start": "wrong-root", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n17", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n15", "kind": "ExactSuffix", "props": {"marker": "no"}},
+                  {"start": "n16", "end": "wrong-kind", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "wrong-prop", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "missing-prop", "kind": "ExactSuffix", "props": {}},
+                  {"start": "reverse", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "other", "kind": "ExactOtherSuffix", "props": {"marker": "yes"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:ExactAudit) WHERE n.target IS NOT NULL RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [
+                  ["n16"],
+                  ["n16"]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(*) AS c",
+              "assert": {
+                "exact_int": 27
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "exact create cardinality with return",
+          "vars": {"query": "UNWIND [1, 1] AS row MATCH (a:ExactRoot {name:'n0'})-[:ExactStep*16]->(b:ExactNode {eligible:true}) CREATE (audit:ExactAudit {target:b.name}) RETURN b"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.name IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "n0", "kinds": ["ExactNode", "ExactRoot"], "props": {"name": "n0", "eligible": true}},
+                  {"id": "n1", "kinds": ["ExactNode"], "props": {"name": "n1", "eligible": true}},
+                  {"id": "n2", "kinds": ["ExactNode"], "props": {"name": "n2", "eligible": true}},
+                  {"id": "n3", "kinds": ["ExactNode"], "props": {"name": "n3", "eligible": true}},
+                  {"id": "n4", "kinds": ["ExactNode"], "props": {"name": "n4", "eligible": true}},
+                  {"id": "n5", "kinds": ["ExactNode"], "props": {"name": "n5", "eligible": true}},
+                  {"id": "n6", "kinds": ["ExactNode"], "props": {"name": "n6", "eligible": true}},
+                  {"id": "n7", "kinds": ["ExactNode"], "props": {"name": "n7", "eligible": true}},
+                  {"id": "n8", "kinds": ["ExactNode"], "props": {"name": "n8", "eligible": true}},
+                  {"id": "n9", "kinds": ["ExactNode"], "props": {"name": "n9", "eligible": true}},
+                  {"id": "n10", "kinds": ["ExactNode"], "props": {"name": "n10", "eligible": true}},
+                  {"id": "n11", "kinds": ["ExactNode"], "props": {"name": "n11", "eligible": true}},
+                  {"id": "n12", "kinds": ["ExactNode"], "props": {"name": "n12", "eligible": true}},
+                  {"id": "n13", "kinds": ["ExactNode"], "props": {"name": "n13", "eligible": true}},
+                  {"id": "n14", "kinds": ["ExactNode"], "props": {"name": "n14", "eligible": true}},
+                  {"id": "n15", "kinds": ["ExactNode"], "props": {"name": "n15", "eligible": true}},
+                  {"id": "n16", "kinds": ["ExactNode"], "props": {"name": "n16", "eligible": true}},
+                  {"id": "n17", "kinds": ["ExactNode"], "props": {"name": "n17", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["ExactOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["ExactNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing-prop", "kinds": ["ExactNode"], "props": {"name": "missing-prop"}},
+                  {"id": "reverse", "kinds": ["ExactNode"], "props": {"name": "reverse", "eligible": true}},
+                  {"id": "other", "kinds": ["ExactNode"], "props": {"name": "other", "eligible": true}},
+                  {"id": "wrong-root", "kinds": ["ExactRoot", "ExactNode"], "props": {"name": "wrong-root", "eligible": true}},
+                  {"id": "audit-seed", "kinds": ["ExactAudit"], "props": {"name": "audit-seed"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "n0", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n1", "end": "n2", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n2", "end": "n3", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n3", "end": "n4", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n4", "end": "n5", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n5", "end": "n6", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n6", "end": "n7", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n7", "end": "n8", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n8", "end": "n9", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n9", "end": "n10", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n10", "end": "n11", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n11", "end": "n12", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n12", "end": "n13", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n13", "end": "n14", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n14", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-kind", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "wrong-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "missing-prop", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "reverse", "end": "n15", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "other", "kind": "ExactOtherStep", "props": {"marker": "yes"}},
+                  {"start": "wrong-root", "end": "n1", "kind": "ExactStep", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n17", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n15", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n17", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "n15", "kind": "ExactSuffix", "props": {"marker": "no"}},
+                  {"start": "n16", "end": "wrong-kind", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "wrong-prop", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "missing-prop", "kind": "ExactSuffix", "props": {}},
+                  {"start": "reverse", "end": "n16", "kind": "ExactSuffix", "props": {"marker": "yes"}},
+                  {"start": "n16", "end": "other", "kind": "ExactOtherSuffix", "props": {"marker": "yes"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:ExactAudit) WHERE n.target IS NOT NULL RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [
+                  ["n16"],
+                  ["n16"]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(*) AS c",
+              "assert": {
+                "exact_int": 27
+              }
+            }
+          ],
+          "assert": {
+            "ordered_node_ids": ["n16", "n16"],
+            "row_count": 2
+          }
+        }
+      ]
+    }
+  ]
+}
