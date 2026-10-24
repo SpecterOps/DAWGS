@@ -211,6 +211,31 @@ func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingRes
 	)
 
 	if bindingResult.AlreadyBound {
+		if boundEdge := bindingResult.Binding; boundEdge.DataType == pgsql.EdgeComposite {
+			// Each occurrence scans its own edge alias. Keep the Cypher variable
+			// bound to the original value and correlate this scan by identity;
+			// otherwise frame rewriting redirects every join to the carried
+			// composite and leaves the new edge table unconstrained.
+			if scannedEdge, err := s.scope.DefineNew(pgsql.EdgeComposite); err != nil {
+				return nil, err
+			} else if err := s.treeTranslator.AddTranslationConstraint(
+				pgsql.AsIdentifierSet(scannedEdge.Identifier, boundEdge.Identifier),
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{scannedEdge.Identifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{boundEdge.Identifier, pgsql.ColumnID},
+				),
+			); err != nil {
+				return nil, err
+			} else {
+				bindingResult.Binding = scannedEdge
+			}
+		}
+
+		if part.PatternBinding != nil {
+			part.PatternBinding.DependOn(bindingResult.Binding)
+		}
+
 		if isContinuation {
 			// This is a traversal continuation so copy the right node identifier of the preceding step and then
 			// add the new step

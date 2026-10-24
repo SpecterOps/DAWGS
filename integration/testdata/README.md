@@ -83,6 +83,13 @@ staged pagination and continuation, and CREATE cardinality with and without RETU
 variant with each compiler mode explicitly. Read-only WITH pagination remains the separate DAWGS-040 finding;
 the pagination case uses the supported staged-write boundary.
 
+`reused_relationship_shapes.json` checks fixed relationship identity across MATCH clauses, WITH aliases,
+OPTIONAL MATCH and pattern predicates. It covers bound/unbound endpoints, directed and undirected roots,
+fixed continuations, self-loops, paths, duplicate inputs, null relationships, local property/kind constraints,
+wildcard continuation and reuse after expansion. Mutations check complete node/relationship post-state and
+CREATE cardinality with and without RETURN, including untouched decoys. PostgreSQL executes each variant
+with both compiler modes. Relationship-list reuse and uniqueness across separate pattern parts are separate findings.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse

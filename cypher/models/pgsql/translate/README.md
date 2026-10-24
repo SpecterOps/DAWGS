@@ -25,6 +25,12 @@ Translation requires some amount of query planning and result dependency negotia
 openCypher query plans as an incrementally named variable in the SQL translation as `sN` where `N` is the scope's
 frame.
 
+A fixed relationship pattern that reuses a named relationship gets a fresh SQL edge binding, constrained by ID
+to the original binding. The Cypher alias continues to refer to the original value. Endpoint joins and inline
+kind/property constraints use the fresh scan; frame rewriting qualifies the original value through its carried
+frame. This also keeps property constraints inside a correlated pattern predicate. Bound paths record the fresh
+edge as a dependency so that path construction includes every hop.
+
 Consider the following openCypher query:
 
 ```cypher
