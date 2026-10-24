@@ -83,6 +83,12 @@ staged pagination and continuation, and CREATE cardinality with and without RETU
 variant with each compiler mode explicitly. Read-only WITH pagination remains the separate DAWGS-040 finding;
 the pagination case uses the supported staged-write boundary.
 
+`undirected_continuation_shapes.json` checks paired endpoint orientations after fixed and variable-length prefixes,
+including incoming and undirected prefixes, opposite-direction parallel edges, self-loops, bound endpoints, paths,
+duplicate inputs, aliases, optional matches, property/kind filters and consecutive undirected hops. Mutations check
+complete node/relationship state, untouched decoys and CREATE cardinality with and without RETURN. PostgreSQL executes
+every variant with each compiler mode explicitly. The fixture uses distinct directed triples supported by both backends.
+
 `reused_relationship_shapes.json` checks fixed relationship identity across MATCH clauses, WITH aliases,
 OPTIONAL MATCH and pattern predicates. It covers bound/unbound endpoints, directed and undirected roots,
 fixed continuations, self-loops, paths, duplicate inputs, null relationships, local property/kind constraints,

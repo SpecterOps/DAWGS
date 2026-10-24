@@ -1240,9 +1240,22 @@ func (s *Translator) translateTraversalPatternPartWithoutExpansion(part *Pattern
 			traversalStep.RightNodeConstraints = constraints.RightNode.Expression
 		}
 
-		if rightNodeJoinCondition, err := rightNodeTraversalStepJoinCondition(traversalStep); err != nil {
+		rightNodeJoinCondition, err := rightNodeTraversalStepJoinCondition(traversalStep)
+		if err != nil {
 			return err
-		} else if err := RewriteFrameBindings(s.scope, rightNodeJoinCondition); err != nil {
+		}
+		if !isFirstTraversalStep && traversalStep.Direction == graph.DirectionBoth {
+			// Pair each far endpoint with the near endpoint's orientation.
+			// Independent endpoint ORs also admit the near node on a
+			// non-loop edge. Bind both references before materializing this
+			// step so carried composites and scalar IDs retain their scope.
+			rightNodeJoinCondition = buildDirectionlessPairwiseEdgeConstraintForRefs(
+				pgsql.CompoundIdentifier{traversalStep.LeftNode.Identifier, pgsql.ColumnID},
+				pgsql.CompoundIdentifier{traversalStep.RightNode.Identifier, pgsql.ColumnID},
+				traversalStep.Edge.Identifier,
+			)
+		}
+		if err := RewriteFrameBindings(s.scope, rightNodeJoinCondition); err != nil {
 			return err
 		} else {
 			traversalStep.RightNodeJoinCondition = rightNodeJoinCondition
