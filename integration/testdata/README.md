@@ -96,6 +96,12 @@ wildcard continuation and reuse after expansion. Mutations check complete node/r
 CREATE cardinality with and without RETURN, including untouched decoys. PostgreSQL executes each variant
 with both compiler modes. Relationship-list reuse is a separate finding.
 
+`undirected_self_reference_shapes.json` checks that `(x)-[r]-(x)` selects only genuine self-loops, including local
+constraints on either occurrence, relationship/path identities, duplicate and empty independent inputs, unrelated
+prior matches, aliases, OPTIONAL MATCH, pattern predicates and fixed continuations. Mutation variants check complete
+node/relationship state, unchanged incident-edge and kind/property/missing-property decoys, WITH continuation and
+CREATE cardinality with and without RETURN. PostgreSQL executes every variant with both compiler modes.
+
 `relationship_uniqueness_shapes.json` checks relationship uniqueness across comma-separated patterns and consecutive
 expansions, including mixed fixed/variable steps, node-only intervening parts, incoming/undirected fixed patterns,
 self-loops, zero hops, exact path multisets, duplicate inputs, OPTIONAL MATCH nulls and separate clause/predicate scopes.

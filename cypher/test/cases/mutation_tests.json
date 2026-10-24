@@ -616,6 +616,38 @@
         "query": "match (a)-[:EdgeKind1*0..2]->(b), (a)-[:EdgeKind1*0..2]->(c) set c.visited = true with c set c.confirmed = true return c",
         "fitness": -5
       }
+    },
+    {
+      "name": "DAWGS-033 self loop node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (x)-[r:EdgeKind1]-(x) set x.visited = true, r.visited = true return x",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "DAWGS-033 self loop create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[:EdgeKind1]-(x) create (:NodeKind2 {target: x.name})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-033 self loop independent input mutation",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1] as row with row match (x)-[r:EdgeKind1]-(x) set x.visited = true return row, x",
+        "fitness": -5
+      }
+    },
+    {
+      "name": "DAWGS-033 optional local self loop mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (seed:NodeKind1) optional match (x)-[r:EdgeKind1]-(x) set x.visited = true return seed, x",
+        "fitness": -1
+      }
     }
   ]
 }
