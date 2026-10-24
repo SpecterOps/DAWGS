@@ -108,7 +108,7 @@ type Expansion struct {
 	PrimerNodeJoinCondition pgsql.Expression
 	// EdgeConstraints restricts relationships admitted into the expansion.
 	EdgeConstraints pgsql.Expression
-	// PreviousRelationshipUniqueness rejects relationships already traversed by preceding fixed steps.
+	// PreviousRelationshipUniqueness rejects relationships already traversed in this MATCH.
 	PreviousRelationshipUniqueness pgsql.Expression
 	// EdgeJoinCondition joins a relationship to the current traversal frontier.
 	EdgeJoinCondition pgsql.Expression
@@ -752,6 +752,10 @@ type PatternPart struct {
 	Constraints *ConstraintTracker
 	// nextSourceStep retains the next source step while PatternPart is assembled or evaluated.
 	nextSourceStep int
+	// previousMatchSteps contains earlier comma-separated traversals in this MATCH only.
+	previousMatchSteps []*TraversalStep
+	// hasFollowingMatchTraversal retains relationship state needed by later comma-separated parts.
+	hasFollowingMatchTraversal bool
 }
 
 // nextSourceTarget returns the optimizer coordinates for the next traversal step and advances the step cursor.

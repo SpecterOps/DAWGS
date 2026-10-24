@@ -22,7 +22,16 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 		}
 	}
 
-	for _, part := range currentQueryPart.ConsumeCurrentPattern().Parts {
+	pattern := currentQueryPart.ConsumeCurrentPattern()
+	remainingSteps := 0
+	for _, part := range pattern.Parts {
+		remainingSteps += len(part.TraversalSteps)
+	}
+	var previousSteps []*TraversalStep
+	for _, part := range pattern.Parts {
+		remainingSteps -= len(part.TraversalSteps)
+		part.previousMatchSteps = previousSteps
+		part.hasFollowingMatchTraversal = remainingSteps > 0
 		if !part.IsTraversal {
 			if err := s.translateNonTraversalPatternPart(part); err != nil {
 				return err
@@ -42,6 +51,7 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 		if part.PatternBinding != nil {
 			s.scope.Declare(part.PatternBinding.Identifier)
 		}
+		previousSteps = append(previousSteps, part.TraversalSteps...)
 	}
 
 	if err := s.buildPatternPredicates(); err != nil {

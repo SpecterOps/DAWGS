@@ -4755,7 +4755,7 @@ func (s *Translator) buildExpansionProjectionConstraints(traversalStepContext Tr
 		)
 	}
 
-	// Exclude expansion paths that reuse a relationship consumed by a preceding fixed step.
+	// Exclude expansion paths that overlap any preceding relationship step in this MATCH.
 	if expansionModel.PreviousRelationshipUniqueness != nil {
 		projectionConstraints = pgsql.OptionalAnd(projectionConstraints, expansionModel.PreviousRelationshipUniqueness)
 	}
@@ -4819,9 +4819,8 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 		expansionModel.Frame = expansionFrame
 	}
 
-	// Enforce relationship uniqueness against any preceding fixed steps. The expansion's own path
-	// array already excludes edges reused within the recursion; this additionally excludes edges
-	// consumed by fixed steps that precede the expansion (e.g. after a pattern reversal).
+	// The recursive path excludes internal reuse; completed paths must also be disjoint
+	// from fixed and variable-length steps already consumed in this MATCH.
 	expansionModel.PreviousRelationshipUniqueness = expansionPreviousRelationshipUniquenessConstraint(s.scope, part, stepIndex, traversalStep)
 
 	if expansionModel.TerminalNodeConstraints != nil {

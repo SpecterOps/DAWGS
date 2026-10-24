@@ -57,3 +57,9 @@ property condition inside the correlated predicate.
 outbound, inbound, undirected and variable-length prefixes, returned paths,
 consecutive undirected steps, updates and CREATE without RETURN. Pairing is
 applied before frame binding so scalar IDs and composite nodes stay qualified.
+
+`relationship_uniqueness.sql` covers comma-separated fixed and variable-length
+patterns, consecutive expansions, retained anonymous relationship state, node-only
+intervening parts, OPTIONAL MATCH, updates and CREATE without RETURN. Existing
+cases in `pattern_expansion.sql` and `stepwise_traversal.sql` also enforce
+cross-segment disjointness and cross-part fixed relationship inequality.

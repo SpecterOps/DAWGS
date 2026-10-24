@@ -584,6 +584,38 @@
         "query": "match (a)-[:EdgeKind1]->(b)-[r:EdgeKind2]-(b) set b.visited = true return b",
         "fitness": -6
       }
+    },
+    {
+      "name": "DAWGS-031 comma node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b), (a)-[r:EdgeKind1]->(c) set c.visited = true, r.visited = true return c",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-031 consecutive expansion create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1*1..2]->(b)-[:EdgeKind1*1..2]->(c) create (:NodeKind1 {target: c.name})",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-031 optional comma mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (a) optional match (a)-[:EdgeKind1]->(b), (a)-[:EdgeKind1]->(c) where b = c set a.visited = true return a",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-031 comma expansion mutation through WITH",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1*0..2]->(b), (a)-[:EdgeKind1*0..2]->(c) set c.visited = true with c set c.confirmed = true return c",
+        "fitness": -5
+      }
     }
   ]
 }

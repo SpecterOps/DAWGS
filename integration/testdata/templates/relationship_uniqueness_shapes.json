@@ -1,0 +1,637 @@
+{
+  "families": [
+    {
+      "name": "MATCH relationship uniqueness",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["UniqueRoot"], "properties": {"name": "a"}},
+          {"id": "b", "kinds": ["UniqueNode"], "properties": {"name": "b"}},
+          {"id": "c", "kinds": ["UniqueNode"], "properties": {"name": "c"}},
+          {"id": "d", "kinds": ["UniqueNode"], "properties": {"name": "d"}},
+          {"id": "incoming", "kinds": ["UniqueNode"], "properties": {"name": "incoming"}},
+          {"id": "other", "kinds": ["UniqueRoot"], "properties": {"name": "other"}},
+          {"id": "isolated", "kinds": ["UniqueRoot"], "properties": {"name": "isolated"}},
+          {"id": "wrong", "kinds": ["UniqueNode"], "properties": {"name": "wrong"}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "a", "end_id": "c", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "b", "end_id": "a", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "b", "end_id": "c", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "c", "end_id": "a", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "c", "end_id": "c", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "a", "end_id": "d", "kind": "UniqueR", "properties": {"marker": "no"}},
+          {"start_id": "incoming", "end_id": "a", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "other", "end_id": "b", "kind": "UniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "a", "end_id": "wrong", "kind": "OtherUniqueR", "properties": {"marker": "yes"}},
+          {"start_id": "b", "end_id": "d", "kind": "UniqueR", "properties": {}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "comma fixed ordered pairs",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) RETURN x.name, y.name ORDER BY x.name, y.name"},
+          "assert": {
+            "ordered_row_values": [["b", "c"], ["c", "b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "comma anonymous relationships",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(), (a)-[:UniqueR {marker:'yes'}]->() RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "comma distinct endpoints constraint",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) WHERE x = y RETURN count(*) AS c"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "three comma parts",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y), (a)-[:UniqueR {marker:'yes'}]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "unconnected comma parts",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (b:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "node-only part between traversals",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (n:UniqueNode {name:'d'}), (a)-[:UniqueR {marker:'yes'}]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "mixed direction and parallel edges",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)<-[:UniqueR {marker:'yes'}]-(y) RETURN x.name, y.name ORDER BY x.name, y.name"},
+          "assert": {
+            "ordered_row_values": [["b", "b"], ["b", "c"], ["b", "incoming"], ["c", "b"], ["c", "c"], ["c", "incoming"]],
+            "row_count": 6
+          }
+        },
+        {
+          "name": "undirected comma relationships",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]-(x), (a)-[:UniqueR {marker:'yes'}]-(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 20}
+        },
+        {
+          "name": "empty comma input",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'isolated'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "separate matches allow edge reuse",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x) MATCH (a)-[:UniqueR {marker:'yes'}]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 4}
+        },
+        {
+          "name": "with resets relationship uniqueness",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x) WITH a, x MATCH (a)-[:UniqueR {marker:'yes'}]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 4}
+        },
+        {
+          "name": "carried relationship participates in new clause uniqueness",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[r:UniqueR {marker:'yes'}]->(x) MATCH (a)-[r]->(y), (a)-[s:UniqueR {marker:'yes'}]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "duplicate input rows",
+          "vars": {"query": "UNWIND [1, 1, 1] AS value WITH value MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) RETURN value, x.name, y.name ORDER BY x.name, y.name"},
+          "assert": {
+            "ordered_row_values": [[1, "b", "c"], [1, "b", "c"], [1, "b", "c"], [1, "c", "b"], [1, "c", "b"], [1, "c", "b"]],
+            "row_count": 6
+          }
+        },
+        {
+          "name": "distinct still collapses equal user values",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) WITH DISTINCT a RETURN count(*) AS c"},
+          "assert": {"exact_int": 1}
+        },
+        {
+          "name": "consecutive expansions",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(y)-[:UniqueR*1..2]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 29}
+        },
+        {
+          "name": "consecutive expansion exact path multiset",
+          "vars": {"query": "MATCH p = (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(y)-[:UniqueR*1..2]->(z) RETURN p"},
+          "assert": {
+            "path_node_ids": [["a", "b", "a"], ["a", "b", "a", "c"], ["a", "b", "a", "d"], ["a", "b", "c"], ["a", "b", "c", "a"], ["a", "b", "c", "c"], ["a", "b", "d"], ["a", "b", "a", "c"], ["a", "b", "a", "c", "a"], ["a", "b", "a", "c", "c"], ["a", "b", "a", "d"], ["a", "b", "c", "a"], ["a", "b", "c", "a", "c"], ["a", "b", "c", "a", "d"], ["a", "b", "c", "c"], ["a", "b", "c", "c", "a"], ["a", "c", "a"], ["a", "c", "a", "b"], ["a", "c", "a", "d"], ["a", "c", "c"], ["a", "c", "c", "a"], ["a", "c", "a", "b"], ["a", "c", "a", "b", "a"], ["a", "c", "a", "b", "c"], ["a", "c", "a", "b", "d"], ["a", "c", "a", "d"], ["a", "c", "c", "a"], ["a", "c", "c", "a", "b"], ["a", "c", "c", "a", "d"]],
+            "path_lengths": [2, 3, 3, 2, 3, 3, 2, 3, 4, 4, 3, 3, 4, 4, 3, 4, 2, 3, 3, 2, 3, 3, 4, 4, 4, 3, 3, 4, 4],
+            "row_count": 29
+          }
+        },
+        {
+          "name": "consecutive inbound expansions",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})<-[:UniqueR*1..2]-(y)<-[:UniqueR*1..2]-(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 32}
+        },
+        {
+          "name": "zero-hop consecutive expansions",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*0..2]->(y)-[:UniqueR*0..2]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 46}
+        },
+        {
+          "name": "three consecutive expansions",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(x)-[:UniqueR*1..2]->(y)-[:UniqueR*1..2]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 69}
+        },
+        {
+          "name": "separate expansions allow relationship reuse",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(y) MATCH (y)-[:UniqueR*1..2]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 42}
+        },
+        {
+          "name": "comma expansions",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(x), (a)-[:UniqueR*1..2]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 38}
+        },
+        {
+          "name": "comma fixed then expansion",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR*1..2]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 9}
+        },
+        {
+          "name": "comma expansion then fixed",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 9}
+        },
+        {
+          "name": "fixed expansion fixed chain",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x)-[:UniqueR*0..2]->(y)-[:UniqueR {marker:'yes'}]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 16}
+        },
+        {
+          "name": "self-loop cannot be reused by expansions",
+          "vars": {"query": "MATCH (a:UniqueNode {name:'c'})-[:UniqueR*1..1]->(a)-[:UniqueR*1..1]->(a) RETURN count(*) AS c"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "self-loop comma reuse rejected",
+          "vars": {"query": "MATCH (a:UniqueNode {name:'c'})-[r:UniqueR]->(a), (a)-[s:UniqueR]->(a) RETURN count(*) AS c"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "self-loop zero-hop expansion allowed",
+          "vars": {"query": "MATCH (a:UniqueNode {name:'c'})-[:UniqueR*0..1]->(a)-[:UniqueR*0..1]->(a) RETURN count(*) AS c"},
+          "assert": {"exact_int": 3}
+        },
+        {
+          "name": "optional comma preserves unmatched input",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'}) OPTIONAL MATCH (a)-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) WHERE x = y RETURN x, y"},
+          "assert": {
+            "ordered_row_values": [[null, null]],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "optional comma preserves duplicate rows",
+          "vars": {"query": "UNWIND [1, 1] AS v WITH v MATCH (a:UniqueRoot {name:'a'}) OPTIONAL MATCH (a)-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) WHERE x = y RETURN v, x, y"},
+          "assert": {
+            "ordered_row_values": [[1, null, null], [1, null, null]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "optional separate scope permits reuse",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x) OPTIONAL MATCH (a)-[:UniqueR {marker:'yes'}]->(y) RETURN count(*) AS c"},
+          "assert": {"exact_int": 4}
+        },
+        {
+          "name": "comma mutation with return",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(b {name:'b'}), (a)-[r:UniqueR {marker:'yes'}]->(c) SET c.visited = true, r.visited = true RETURN c.name"},
+          "assert": {
+            "ordered_row_values": [["c"]],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c", "visited": true}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes", "visited": true}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "comma mutation without return",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(b {name:'b'}), (a)-[r:UniqueR {marker:'yes'}]->(c) SET c.visited = true, r.visited = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c", "visited": true}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes", "visited": true}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "invalid comma matches cannot write",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) WHERE x = y SET x.visited = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "consecutive expansion mutation",
+          "vars": {"query": "MATCH (a:UniqueNode {name:'c'})-[:UniqueR*1..1]->(a)-[:UniqueR*1..1]->(a) SET a.visited = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create cardinality with return",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) CREATE (audit:UniqueAudit {target:x.name + y.name}) RETURN audit.target ORDER BY audit.target"},
+          "assert": {
+            "ordered_row_values": [["bc"], ["cb"]],
+            "row_count": 2
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:UniqueAudit) RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [["bc"], ["cb"]],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UniqueAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create cardinality without return",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y) CREATE (audit:UniqueAudit {target:x.name + y.name})"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:UniqueAudit) RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [["bc"], ["cb"]],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UniqueAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "comma update with continuation",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(b {name:'b'}), (a)-[r:UniqueR {marker:'yes'}]->(c) SET c.visited = true WITH c SET c.confirmed = true RETURN c.name"},
+          "assert": {
+            "ordered_row_values": [["c"]],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c", "visited": true, "confirmed": true}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "comma part with two fixed steps",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x)-[:UniqueR {marker:'yes'}]->(y), (a)-[:UniqueR {marker:'yes'}]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 4}
+        },
+        {
+          "name": "later comma part with fixed continuation",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x), (a)-[:UniqueR {marker:'yes'}]->(y)-[:UniqueR {marker:'yes'}]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 4}
+        },
+        {
+          "name": "earlier comma part with expansion and fixed suffix",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(x)-[:UniqueR {marker:'yes'}]->(y), (a)-[:UniqueR {marker:'yes'}]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 7}
+        },
+        {
+          "name": "duplicate input expansion paths",
+          "vars": {"query": "UNWIND [1, 1] AS v WITH v MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(y)-[:UniqueR*1..2]->(z) RETURN count(*) AS c"},
+          "assert": {"exact_int": 58}
+        },
+        {
+          "name": "pattern predicate has separate uniqueness scope",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR {marker:'yes'}]->(x) WHERE (a)-[:UniqueR {marker:'yes'}]->(x) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "optional consecutive expansions unmatched",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'}) OPTIONAL MATCH (a)-[:UniqueR*1..2]->(y)-[:UniqueR*1..2]->(z) WHERE z.name = 'absent' RETURN z"},
+          "assert": {
+            "ordered_row_values": [[null]],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "expansion create with return",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(y)-[:UniqueR*1..2]->(z) CREATE (audit:UniqueAudit {target:z.name}) RETURN audit.target ORDER BY audit.target"},
+          "assert": {
+            "ordered_row_values": [["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["b"], ["b"], ["b"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"]],
+            "row_count": 29
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:UniqueAudit) RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["b"], ["b"], ["b"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"]],
+                "row_count": 29
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UniqueAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "expansion create without return",
+          "vars": {"query": "MATCH (a:UniqueRoot {name:'a'})-[:UniqueR*1..2]->(y)-[:UniqueR*1..2]->(z) CREATE (audit:UniqueAudit {target:z.name})"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:UniqueAudit) RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["a"], ["b"], ["b"], ["b"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["c"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"], ["d"]],
+                "row_count": 29
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UniqueAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "a", "kinds": ["UniqueRoot"], "props": {"name": "a"}},
+                  {"id": "b", "kinds": ["UniqueNode"], "props": {"name": "b"}},
+                  {"id": "c", "kinds": ["UniqueNode"], "props": {"name": "c"}},
+                  {"id": "d", "kinds": ["UniqueNode"], "props": {"name": "d"}},
+                  {"id": "incoming", "kinds": ["UniqueNode"], "props": {"name": "incoming"}},
+                  {"id": "other", "kinds": ["UniqueRoot"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["UniqueRoot"], "props": {"name": "isolated"}},
+                  {"id": "wrong", "kinds": ["UniqueNode"], "props": {"name": "wrong"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "a", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "c", "end": "c", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "d", "kind": "UniqueR", "props": {"marker": "no"}},
+                  {"start": "incoming", "end": "a", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "b", "kind": "UniqueR", "props": {"marker": "yes"}},
+                  {"start": "a", "end": "wrong", "kind": "OtherUniqueR", "props": {"marker": "yes"}},
+                  {"start": "b", "end": "d", "kind": "UniqueR", "props": {}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
