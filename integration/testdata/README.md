@@ -75,6 +75,14 @@ complete node and relationship records, including direction, kind, root identity
 every variant with each compiler mode explicitly. The undirected suffix case restricts its terminal kind to isolate
 predicate retention from the separately tracked undirected endpoint-reuse behavior.
 
+`optional_row_identity_shapes.json` checks repeated OPTIONAL MATCH inputs, fan-out, no matches, mixed source rows,
+leading and pending UNWIND, empty inputs, WITH aliases, DISTINCT/aggregation, null scalar and entity bindings,
+chained optionals, multiple pattern parts, uncorrelated matches, WHERE filters, bound endpoints, variable-length
+and zero-hop paths, incoming paths and wildcard projection. Mutation cases check exact node/relationship state,
+staged pagination and continuation, and CREATE cardinality with and without RETURN. PostgreSQL executes every
+variant with each compiler mode explicitly. Read-only WITH pagination remains the separate DAWGS-040 finding;
+the pagination case uses the supported staged-write boundary.
+
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
 missing/null property state, and relationship property. Reuse

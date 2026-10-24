@@ -177,6 +177,12 @@ tools must use `translate.TranslatedStatements` and execute every returned state
 the single-statement renderer rejects staged writes. The shared `node_representation_shapes`, `leading_multipart_shapes`,
 `empty_list_alias_shapes`, and `multipart_write_visibility_shapes` templates cover these behaviors.
 
+PostgreSQL `OPTIONAL MATCH` preserves the identity of each incoming row, including repeated values and pending
+`UNWIND` rows. Matches join back to their own input row; an unmatched row is retained once. PostgreSQL numbers
+the input in a materialized relation and removes that internal identity after the join. The shared
+`optional_row_identity_shapes` templates check fan-out, chained optional clauses, null bindings, aggregation,
+wildcards, variable-length paths and downstream writes on both backends and in both PostgreSQL compiler modes.
+
 PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
 Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
 updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared

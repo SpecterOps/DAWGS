@@ -13,25 +13,13 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 	// Note the current frame before adding frames from the match
 	// so we can use this point for optional match outer joins
 	joinFrame := s.scope.CurrentFrame()
-
-	// if there's no prior frame (this was a leading optional match),
-	// build out an initial "null" frame to join to
-	if match.Optional && joinFrame == nil {
-		seedFrame, err := s.scope.PushFrame()
+	var rowIdentity pgsql.Identifier
+	if match.Optional && joinFrame != nil {
+		var err error
+		joinFrame, rowIdentity, err = s.buildOptionalMatchInput(joinFrame)
 		if err != nil {
 			return err
 		}
-
-		s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
-			Alias: pgsql.TableAlias{Name: seedFrame.Binding.Identifier},
-			Query: pgsql.Query{
-				Body: pgsql.Select{
-					Projection: pgsql.Projection{pgsql.NullLiteral()},
-				},
-			},
-		})
-
-		joinFrame = seedFrame
 	}
 
 	for _, part := range currentQueryPart.ConsumeCurrentPattern().Parts {
@@ -63,21 +51,81 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 		return err
 	}
 
+	// If there is no valid previous frame, skip translating an `OPTIONAL MATCH`/treat as plain `MATCH`
 	if match.Optional {
-		return s.translateOptionalMatch(joinFrame)
+		if joinFrame != nil {
+			return s.translateOptionalMatch(joinFrame, rowIdentity)
+		}
 	}
 
 	return nil
 }
 
-func (s *Translator) translateOptionalMatch(joinFrame *Frame) error {
+// buildOptionalMatchInput numbers the incoming stream before deriving matches from it.
+// The materialized CTE gives both sides of the eventual outer join the same row
+// identities, including duplicate values and pending UNWIND rows.
+func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.Identifier, error) {
+	inputFrame, err := s.scope.PushFrame()
+	if err != nil {
+		return nil, "", err
+	}
+	identity, err := s.scope.DefineNew(pgsql.Int8)
+	if err != nil {
+		return nil, "", err
+	}
+
+	unwinds := s.query.CurrentPart().ConsumeUnwindClauses()
+	unwindIdentifiers := pgsql.NewIdentifierSet()
+	for _, unwind := range unwinds {
+		unwindIdentifiers.Add(unwind.Binding.Identifier)
+	}
+
+	var projection pgsql.Projection
+	for _, exported := range originFrame.Exported.Slice() {
+		var expression pgsql.Expression = pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported}
+		if unwindIdentifiers.Contains(exported) {
+			expression = exported
+		}
+		projection = append(projection, &pgsql.AliasedExpression{
+			Expression: expression,
+			Alias:      pgsql.AsOptionalIdentifier(exported),
+		})
+		binding, found := s.scope.Lookup(exported)
+		if !found {
+			return nil, "", fmt.Errorf("missing OPTIONAL MATCH input binding: %s", exported)
+		}
+		binding.MaterializedBy(inputFrame)
+	}
+	projection = append(projection, &pgsql.AliasedExpression{
+		Expression: pgsql.FormattingLiteral("row_number() over ()"),
+		Alias:      pgsql.AsOptionalIdentifier(identity.Identifier),
+	})
+	inputFrame.Export(identity.Identifier)
+	identity.MaterializedBy(inputFrame)
+
+	var from []pgsql.FromClause
+	if !originFrame.Synthetic {
+		from = append(from, pgsql.FromClause{Source: pgsql.TableReference{
+			Name: pgsql.CompoundIdentifier{originFrame.Binding.Identifier},
+		}})
+	}
+	from = append(from, unwindFromClauses(unwinds)...)
+	s.query.CurrentPart().Model.AddCTE(pgsql.CommonTableExpression{
+		Alias:        pgsql.TableAlias{Name: inputFrame.Binding.Identifier},
+		Materialized: &pgsql.Materialized{Materialized: true},
+		Query:        pgsql.Query{Body: pgsql.Select{Projection: projection, From: from}},
+	})
+	return inputFrame, identity.Identifier, nil
+}
+
+func (s *Translator) translateOptionalMatch(joinFrame *Frame, rowIdentity pgsql.Identifier) error {
 	// Building this aggregation step requires pushing another frame onto the scope
 	aggrFrame, err := s.scope.PushFrame()
 	if err != nil {
 		return err
 	}
 
-	query, err := s.buildOptionalMatchAggregationStep(aggrFrame, joinFrame)
+	query, err := s.buildOptionalMatchAggregationStep(aggrFrame, joinFrame, rowIdentity)
 	if err != nil {
 		return err
 	}
@@ -102,44 +150,30 @@ func (s *Translator) translateOptionalMatch(joinFrame *Frame) error {
 	return nil
 }
 
-// buildOptionalMatchAggregationStep constructs a "merge" frame to insert after an `OPTIONAL MATCH`,
-// which requires a subsequent "aggregation" step to collate the optional match to the initial result set.
-func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, originFrame *Frame) (pgsql.Query, error) {
-	// An "aggregation" frame like this will only be triggered after an OPTIONAL MATCH, which should only
-	// take place AFTER `n>=1` previous MATCH expressions. To properly base the aggregation, we need to
-	// join to the origin frame (prior to the OPTIONAL MATCH) based on the OPTIONAL MATCH's frame.
-	var (
-		optMatchFrame = aggregationFrame.Previous
-	)
+// buildOptionalMatchAggregationStep merges derived matches back into the numbered
+// input stream, preserving one null-extended row for each unmatched input.
+func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, originFrame *Frame, rowIdentity pgsql.Identifier) (pgsql.Query, error) {
+	optMatchFrame := aggregationFrame.Previous
 
+	// Leading OPTIONAL MATCH without an input frame follows the existing MATCH
+	// path and does not enter this merge.
 	if originFrame == nil {
 		return pgsql.Query{}, fmt.Errorf("could not get origin frame prior to OPTIONAL MATCH")
 	}
 
-	// Construct the join condition based on exports from the "origin" frame
-	// We expect the OPTIONAL MATCH frame to also export the same, so that becomes
-	// our join anchor between the two CTEs
-	var joinConstraints pgsql.Expression
-	for _, exported := range originFrame.Exported.Slice() {
-		// Note using this operator will match Null=Null. This is needed to handle OPTIONAL MATCH
-		// correctly. It assumes exports will always have appropriate non-null join keys.
-		joinConstraints = pgsql.OptionalAnd(
-			pgsql.NewParenthetical(
-				pgsql.NewBinaryExpression(
-					pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported},
-					pgsql.OperatorIsNotDistinctFrom,
-					pgsql.CompoundIdentifier{optMatchFrame.Binding.Identifier, exported},
-				),
-			),
-			joinConstraints,
-		)
-	}
+	// Match each derived row only to the exact input row that produced it.
+	// Equal user-visible values do not establish row identity.
+	joinConstraints := pgsql.NewBinaryExpression(
+		pgsql.CompoundIdentifier{originFrame.Binding.Identifier, rowIdentity},
+		pgsql.OperatorEquals,
+		pgsql.CompoundIdentifier{optMatchFrame.Binding.Identifier, rowIdentity},
+	)
 
-	// if prior frame had no exports (for instance, for a leading optional join)
-	// we need to just set TRUE as the join constraint
-	if joinConstraints == nil {
-		joinConstraints = pgsql.NewLiteral(true, pgsql.Boolean)
-	}
+	// The identity is local to this OPTIONAL MATCH. A later optional clause
+	// numbers its own input after any fan-out, and DISTINCT/aggregation sees
+	// only the Cypher values.
+	aggregationFrame.Unexport(rowIdentity)
+	aggregationFrame.Visible.Remove(rowIdentity)
 
 	// Construct the projection for this frame. Just take all of the exports for the "origin" frame
 	// and optional match frame and re-export them
@@ -150,6 +184,9 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 	)
 
 	for _, exported := range originFrame.Exported.Slice() {
+		if exported == rowIdentity {
+			continue
+		}
 		projection = append(projection, &pgsql.AliasedExpression{
 			Expression: pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported},
 			Alias:      pgsql.AsOptionalIdentifier(exported),
@@ -158,6 +195,9 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 		aggregationFrame.Export(exported)
 	}
 	for _, exported := range optMatchFrame.Exported.Slice() {
+		if exported == rowIdentity {
+			continue
+		}
 		// Optional match frame would shadow the origin frame's export with a filtered
 		// view of the origin's exports, so make sure not to shadow them
 		if _, ok := originIDExclusions[exported.String()]; ok {

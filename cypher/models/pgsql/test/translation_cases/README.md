@@ -41,3 +41,8 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0
 select s0.n0 as s
 from s0;
 ```
+
+`optional_row_identity.sql` covers OPTIONAL MATCH correlation for duplicate inputs,
+pending/leading UNWIND, chained optionals, variable-length expansion, DISTINCT,
+updates and CREATE without RETURN. Related existing optional cases in `nodes.sql`,
+`multipart.sql` and `update.sql` also retain the materialized input row identity.
