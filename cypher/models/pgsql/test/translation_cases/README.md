@@ -46,3 +46,9 @@ from s0;
 pending/leading UNWIND, chained optionals, variable-length expansion, DISTINCT,
 updates and CREATE without RETURN. Related existing optional cases in `nodes.sql`,
 `multipart.sql` and `update.sql` also retain the materialized input row identity.
+
+`reused_relationship.sql` covers identity-constrained scans of reused fixed
+relationships, WITH aliases, directions, bound endpoints, paths, continuations,
+pattern predicates, OPTIONAL MATCH updates and CREATE without RETURN. The related
+property-constrained pattern predicate in `stepwise_traversal.sql` keeps its
+property condition inside the correlated predicate.

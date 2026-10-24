@@ -183,6 +183,13 @@ the input in a materialized relation and removes that internal identity after th
 `optional_row_identity_shapes` templates check fan-out, chained optional clauses, null bindings, aggregation,
 wildcards, variable-length paths and downstream writes on both backends and in both PostgreSQL compiler modes.
 
+Fixed relationship patterns that reuse a bound relationship retain its identity across MATCH clauses, WITH aliases,
+OPTIONAL MATCH and pattern predicates. Each SQL edge scan correlates its ID to the carried relationship; unrelated
+edges cannot multiply the input rows or downstream writes. The shared `reused_relationship_shapes` templates check
+endpoint and path identities, duplicate rows, local property/kind constraints and complete mutation post-state on
+both backends and in both PostgreSQL compiler modes. Relationship-list reuse and uniqueness across separate pattern
+parts remain separate support boundaries.
+
 PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
 Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
 updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared

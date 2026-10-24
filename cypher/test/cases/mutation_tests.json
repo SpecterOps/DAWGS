@@ -520,6 +520,38 @@
         "query": "unwind [1, 1, 1] as x match (a:NodeKind1) optional match (a)-[:EdgeKind1]->(b:NodeKind2) optional match (b)-[:EdgeKind2]->(c:NodeKind1) with a, b, c, x set c.visited = true return x, c",
         "fitness": 0
       }
+    },
+    {
+      "name": "DAWGS-026 reused relationship node and edge updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) match (a)-[r]->(c) set c.visited = true, r.visited = true return c",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-026 reused relationship create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) match (a)-[r]->(c) create (audit:NodeKind1 {target: c.name})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-026 relationship alias through WITH",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) with a, r as carried match (a)-[carried]->(c) set c.visited = true return c",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "DAWGS-026 optional reused relationship mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) optional match (a)-[r]->(c) set c.visited = true return c",
+        "fitness": -1
+      }
     }
   ]
 }

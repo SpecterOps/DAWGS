@@ -213,7 +213,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1
 
 -- case: match (s)-[r:EdgeKind1]->() where (s)-[r {prop: 'a'}]->() return s
 -- pgsql_params:{"__strlit0":"string","__strlit1":"a"}
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where (jsonb_typeof((e0.properties -> E'prop')) = @__strlit0::text and (e0.properties ->> E'prop') = @__strlit1::text) and e0.kind_id = any (array [3]::int2[])) select s0.n0 as s from s0 where ((with s1 as (select s0.e0 as e0, s0.n0 as n0 from edge e0 join node n2 on n2.id = (s0.e0).end_id where (s0.n0).id = (s0.e0).start_id) select count(*) > 0 from s1));
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[])) select s0.n0 as s from s0 where ((with s1 as (select s0.e0 as e0, (e1.id, e1.start_id, e1.end_id, e1.kind_id, e1.properties)::edgecomposite as e1, s0.n0 as n0 from edge e1 join node n2 on n2.id = e1.end_id where e1.id = (s0.e0).id and (jsonb_typeof((e1.properties -> E'prop')) = @__strlit0::text and (e1.properties ->> E'prop') = @__strlit1::text) and (s0.n0).id = e1.start_id) select count(*) > 0 from s1));
 
 -- case: match (s)-[r:EdgeKind1]->(e) where not (s.system_tags contains 'admin_tier_0') and id(e) = 1 return id(s), labels(s), id(r), type(r)
 -- pgsql_params:{"__strlit0":"","__strlit1":"%admin\\_tier\\_0%"}
