@@ -7,6 +7,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
+	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -956,9 +957,9 @@ func relationshipIDNotInPath(edgeID, pathIDs pgsql.Expression) pgsql.Expression 
 	)
 }
 
-// previousRelationshipUniquenessConstraint excludes a relationship ID already used by a prior fixed step.
+// previousRelationshipUniquenessConstraint excludes relationships used by preceding steps in this MATCH.
 func previousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, stepIndex int, traversalStep *TraversalStep) pgsql.Expression {
-	if scope == nil || part == nil || stepIndex <= 0 || traversalStep == nil || traversalStep.Edge == nil {
+	if scope == nil || part == nil || traversalStep == nil || traversalStep.Edge == nil {
 		return nil
 	}
 
@@ -967,42 +968,41 @@ func previousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, s
 		constraint    pgsql.Expression
 	)
 
-	for _, previousStep := range part.TraversalSteps[:stepIndex] {
-		if previousStep == nil || previousStep.Edge == nil {
-			continue
-		}
-
-		if previousStep.Expansion != nil {
-			if previousStep.Expansion.PathBinding != nil {
-				constraint = pgsql.OptionalAnd(
-					constraint,
-					relationshipIDNotInPath(currentEdgeID, pathBindingReference(scope, previousStep.Expansion.PathBinding)),
-				)
+	for _, steps := range [][]*TraversalStep{part.previousMatchSteps, part.TraversalSteps[:stepIndex]} {
+		for _, previousStep := range steps {
+			if previousStep == nil || previousStep.Edge == nil {
+				continue
 			}
 
-			continue
-		}
+			if previousStep.Expansion != nil {
+				if previousStep.Expansion.PathBinding != nil {
+					constraint = pgsql.OptionalAnd(
+						constraint,
+						relationshipIDNotInPath(currentEdgeID, pathBindingReference(scope, previousStep.Expansion.PathBinding)),
+					)
+				}
 
-		constraint = pgsql.OptionalAnd(
-			constraint,
-			pgsql.NewBinaryExpression(
-				currentEdgeID,
-				pgsql.OperatorNotEquals,
-				relationshipIDReference(scope, previousStep.Edge),
-			),
-		)
+				continue
+			}
+
+			constraint = pgsql.OptionalAnd(
+				constraint,
+				pgsql.NewBinaryExpression(
+					currentEdgeID,
+					pgsql.OperatorNotEquals,
+					relationshipIDReference(scope, previousStep.Edge),
+				),
+			)
+		}
 	}
 
 	return constraint
 }
 
-// expansionPreviousRelationshipUniquenessConstraint enforces Cypher relationship uniqueness for an
-// expansion step against any preceding fixed steps. Where previousRelationshipUniquenessConstraint
-// handles a fixed step that follows an expansion, this handles the mirrored ordering (a fixed step
-// that precedes an expansion, e.g. after the optimizer reverses a pattern) by requiring that none
-// of the preceding fixed relationships appear in the expansion's accumulated path.
+// expansionPreviousRelationshipUniquenessConstraint excludes overlap with fixed or variable-length
+// steps already consumed in this MATCH, including earlier comma-separated parts.
 func expansionPreviousRelationshipUniquenessConstraint(scope *Scope, part *PatternPart, stepIndex int, traversalStep *TraversalStep) pgsql.Expression {
-	if scope == nil || part == nil || stepIndex <= 0 || traversalStep == nil ||
+	if scope == nil || part == nil || traversalStep == nil ||
 		traversalStep.Expansion == nil || traversalStep.Expansion.Frame == nil {
 		return nil
 	}
@@ -1013,15 +1013,27 @@ func expansionPreviousRelationshipUniquenessConstraint(scope *Scope, part *Patte
 		constraint pgsql.Expression
 	)
 
-	for _, previousStep := range part.TraversalSteps[:stepIndex] {
-		if previousStep == nil || previousStep.Edge == nil || previousStep.Expansion != nil {
-			continue
-		}
+	for _, steps := range [][]*TraversalStep{part.previousMatchSteps, part.TraversalSteps[:stepIndex]} {
+		for _, previousStep := range steps {
+			if previousStep == nil || previousStep.Edge == nil {
+				continue
+			}
+			if previousStep.Expansion != nil {
+				if previousStep.Expansion.PathBinding != nil {
+					constraint = pgsql.OptionalAnd(constraint, pgd.Not(pgsql.NewBinaryExpression(
+						pathIDs,
+						pgsql.OperatorArrayOverlap,
+						pathBindingReference(scope, previousStep.Expansion.PathBinding),
+					)))
+				}
+				continue
+			}
 
-		constraint = pgsql.OptionalAnd(
-			constraint,
-			relationshipIDNotInPath(relationshipIDReference(scope, previousStep.Edge), pathIDs),
-		)
+			constraint = pgsql.OptionalAnd(
+				constraint,
+				relationshipIDNotInPath(relationshipIDReference(scope, previousStep.Edge), pathIDs),
+			)
+		}
 	}
 
 	return constraint
@@ -1136,7 +1148,7 @@ func pruneTraversalStepProjectionExports(part *PatternPart, stepIndex int, trave
 	var applied bool
 
 	applied = unexportPrunedNodeBinding(traversalStep, traversalStep.ProjectionPruning.LeftNode) || applied
-	if traversalStep.ProjectionPruning.Relationship != nil && !traversalStepHasContinuation(part, stepIndex) {
+	if traversalStep.ProjectionPruning.Relationship != nil && !traversalStepHasContinuation(part, stepIndex) && !part.hasFollowingMatchTraversal {
 		applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.Relationship.Identifier) || applied
 	}
 	applied = unexportPrunedNodeBinding(traversalStep, traversalStep.ProjectionPruning.RightNode) || applied
@@ -1155,7 +1167,7 @@ func pruneExpansionStepProjectionExports(part *PatternPart, stepIndex int, trave
 		applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.Relationship.Identifier) || applied
 	}
 
-	if traversalStep.ProjectionPruning.PathBinding != nil && !traversalStepHasContinuation(part, stepIndex) {
+	if traversalStep.ProjectionPruning.PathBinding != nil && !traversalStepHasContinuation(part, stepIndex) && !part.hasFollowingMatchTraversal {
 		applied = unexportFrameBinding(traversalStep.Frame, traversalStep.ProjectionPruning.PathBinding.Identifier) || applied
 	}
 

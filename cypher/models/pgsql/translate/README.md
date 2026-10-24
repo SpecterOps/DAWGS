@@ -37,6 +37,17 @@ Frame rewriting qualifies the near endpoint before the new step is materialized,
 preserving both scalar-ID and composite representations. This excludes a false
 return to the near node while retaining self-loops and duplicate input paths.
 
+Relationship uniqueness spans all comma-separated parts of an ordinary MATCH.
+Each part retains preceding traversal steps from that clause, and projection
+pruning keeps fixed relationship IDs and expansion path arrays needed by later
+parts. Fixed steps compare IDs or exclude membership in earlier paths;
+completed expansions exclude preceding fixed IDs and reject overlap with earlier
+edge-ID arrays. These are row predicates, preserving valid path and input-row
+multiplicity. Separate MATCH clauses and pattern predicates start fresh scopes;
+OPTIONAL MATCH applies uniqueness before merging null-extended input rows.
+Checks compare preceding step pairs and expansion arrays after traversal;
+they do not prune recursive search using the preceding paths.
+
 Consider the following openCypher query:
 
 ```cypher

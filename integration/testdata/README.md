@@ -94,7 +94,14 @@ OPTIONAL MATCH and pattern predicates. It covers bound/unbound endpoints, direct
 fixed continuations, self-loops, paths, duplicate inputs, null relationships, local property/kind constraints,
 wildcard continuation and reuse after expansion. Mutations check complete node/relationship post-state and
 CREATE cardinality with and without RETURN, including untouched decoys. PostgreSQL executes each variant
-with both compiler modes. Relationship-list reuse and uniqueness across separate pattern parts are separate findings.
+with both compiler modes. Relationship-list reuse is a separate finding.
+
+`relationship_uniqueness_shapes.json` checks relationship uniqueness across comma-separated patterns and consecutive
+expansions, including mixed fixed/variable steps, node-only intervening parts, incoming/undirected fixed patterns,
+self-loops, zero hops, exact path multisets, duplicate inputs, OPTIONAL MATCH nulls and separate clause/predicate scopes.
+Mutations check complete node/relationship records and CREATE cardinality with and without RETURN, including untouched
+direction, kind, property and identity decoys. PostgreSQL executes every variant with both compiler modes. Expansion
+variants use relationship kinds; inline maps on variable-length relationships remain a separate translation limitation.
 
 Every new reconciliation or post-processing mutation fixture must contain a
 positive match and applicable decoys for direction, kind, property, fixture ID,
