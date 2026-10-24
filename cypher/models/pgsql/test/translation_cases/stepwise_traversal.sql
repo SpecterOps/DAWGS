@@ -41,7 +41,7 @@ with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::e
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0), s1 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, s0.n0 as n0 from s0, edge e0 join node n1 on n1.id = e0.start_id join node n2 on n2.id = e0.end_id) select s1.n0 as n, s1.e0 as r from s1;
 
 -- case: match ()-[r]->(), ()-[e]->() return r, e
-with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id), s1 as (select s0.e0 as e0, (e1.id, e1.start_id, e1.end_id, e1.kind_id, e1.properties)::edgecomposite as e1 from s0, edge e1 join node n2 on n2.id = e1.start_id join node n3 on n3.id = e1.end_id) select s1.e0 as r, s1.e1 as e from s1;
+with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id), s1 as (select s0.e0 as e0, (e1.id, e1.start_id, e1.end_id, e1.kind_id, e1.properties)::edgecomposite as e1 from s0, edge e1 join node n2 on n2.id = e1.start_id join node n3 on n3.id = e1.end_id where e1.id != (s0.e0).id) select s1.e0 as r, s1.e1 as e from s1;
 
 -- case: match p = (:NodeKind1)-[:EdgeKind1|EdgeKind2]->(c:NodeKind2) where '123' in c.prop2 or '243' in c.prop2 or size(c.prop2) = 0 return p limit 10
 -- pgsql_params:{"__strlit0":"123","__strlit1":"243","__strlit2":"array"}

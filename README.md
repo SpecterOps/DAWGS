@@ -187,8 +187,15 @@ Fixed relationship patterns that reuse a bound relationship retain its identity 
 OPTIONAL MATCH and pattern predicates. Each SQL edge scan correlates its ID to the carried relationship; unrelated
 edges cannot multiply the input rows or downstream writes. The shared `reused_relationship_shapes` templates check
 endpoint and path identities, duplicate rows, local property/kind constraints and complete mutation post-state on
-both backends and in both PostgreSQL compiler modes. Relationship-list reuse and uniqueness across separate pattern
-parts remain separate support boundaries.
+both backends and in both PostgreSQL compiler modes. Relationship-list reuse remains a separate support boundary.
+
+Within an ordinary MATCH clause, relationships remain unique across comma-separated patterns and consecutive
+variable-length segments. PostgreSQL compares fixed relationship IDs and rejects overlap between segment edge-ID
+arrays, retaining intermediate IDs until later patterns have checked them. Duplicate input rows and valid paths
+retain their multiplicity. Separate MATCH clauses, WITH boundaries, and pattern predicates have their own uniqueness
+scope. The shared `relationship_uniqueness_shapes` templates check exact paths, counts, optional nulls and stored
+mutation state on both backends and in both PostgreSQL compiler modes. PostgreSQL fan-out tests additionally check
+closed-form counts and report diagnostic EXPLAIN timings.
 
 Undirected fixed continuations pair the near and far endpoints for each relationship orientation. A non-loop edge
 therefore reaches its opposite endpoint; a self-loop still returns the same node once. The shared

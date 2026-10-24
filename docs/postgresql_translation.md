@@ -148,6 +148,12 @@ Current PostgreSQL optimization coverage includes:
   `properties ->> key = value`, preserving JSON scalar semantics while allowing existing text expression indexes on
   selective fields such as `objectid` and `name`.
 - Typed relationship count plans that can use the narrow `kind_id` edge index for filtering.
+- Relationship uniqueness across comma-separated ordinary MATCH patterns and consecutive variable-length segments.
+  Fixed steps exclude earlier relationship IDs; completed expansions reject overlapping edge-ID arrays. Projection
+  pruning retains the relationship state needed by later parts, preserving duplicate inputs and valid path counts.
+  Separate MATCH clauses and pattern predicates start independent uniqueness scopes. Shared
+  `relationship_uniqueness_shapes` templates check exact paths, optional nulls and mutation state in both compiler modes;
+  PostgreSQL fan-out tests verify closed-form counts and report diagnostic EXPLAIN timings.
 - Correlated relationship `EXISTS` lowering for typed pattern predicates when relationship types and endpoint
   correlations are sufficient.
 - Membership-only `collect(entity)` ID-array lowering with `id = any(...)` membership predicates.
