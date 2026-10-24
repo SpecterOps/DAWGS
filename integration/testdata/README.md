@@ -28,6 +28,15 @@ complete returned node records and ordered path node IDs. Direction coverage
 includes outbound/inbound expansions and undirected fixed prefixes; fully
 undirected variable expansions are currently unsupported by the translator.
 
+`exact_expansion_length_shapes.json` checks `*k` against `*k..k` at zero, one,
+two, 15, 16 and 17 hops. It covers exact paths, inbound traversal, fixed prefixes
+and suffixes, bound endpoints, duplicate rows, OPTIONAL MATCH, spaced ranges and
+explicit non-exact range controls. Mutations check complete node/relationship
+state, unchanged decoys, WITH continuation and CREATE cardinality with and without
+RETURN. PostgreSQL executes every variant with both compiler modes. Shortest-path
+live controls use exact one-hop bounds; SQL tests additionally check normalized
+bounds and parameterized harness statements at larger depths.
+
 `node_representation_shapes.json` checks carried node IDs, aliases, inline node
 and relationship map expressions, and exact mutation selection.
 `leading_multipart_shapes.json` checks leading/attached UNWIND and CREATE across

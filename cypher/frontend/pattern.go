@@ -124,6 +124,9 @@ func (s *RelationshipPatternVisitor) EnterOC_RangeLiteral(ctx *parser.OC_RangeLi
 			case TokenTypeRange:
 				state = stateSecondIndex
 
+			case parser.CypherLexerSP:
+				// Whitespace and comments do not change which bound follows.
+
 			default:
 				s.ctx.AddErrors(fmt.Errorf("unexpected token in pattern range: %s", typedTokenLeaf.GetText()))
 			}
@@ -144,6 +147,12 @@ func (s *RelationshipPatternVisitor) EnterOC_RangeLiteral(ctx *parser.OC_RangeLi
 				}
 			}
 		}
+	}
+
+	if state == stateFirstIndex && s.RelationshipPattern.Range.StartIndex != nil {
+		// Without a range separator, *k denotes exactly k relationships.
+		value := *s.RelationshipPattern.Range.StartIndex
+		s.RelationshipPattern.Range.EndIndex = &value
 	}
 }
 

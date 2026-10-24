@@ -159,6 +159,12 @@ Variable-length traversals that reuse a node bound by a fixed prefix retain that
 depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
 
+Relationship expansions written as `*k` normalize to the exact range `*k..k`, including zero and explicit lengths
+above 15. Formatting preserves that exact range, and PostgreSQL uses the requested upper bound. Whitespace and
+comments within ranges are accepted. The shared `exact_expansion_length_shapes` templates check exact lengths,
+paths and mutation selection on both backends and in both PostgreSQL compiler modes. Open-ended PostgreSQL
+traversals still use the existing effective maximum depth of 15.
+
 Predicates comparing variable-length traversal endpoints remain active when a fixed hop follows the expansion.
 The shared `expansion_endpoint_predicate_shapes` templates check filters, path multiplicity, zero hops, inbound
 traversals and exact node/relationship mutation selection on both backends and in both PostgreSQL compiler modes.
