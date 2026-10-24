@@ -648,6 +648,42 @@
         "query": "match (seed:NodeKind1) optional match (x)-[r:EdgeKind1]-(x) set x.visited = true return seed, x",
         "fitness": -1
       }
+    },
+    {
+      "name": "DAWGS-020 short exact node update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*2]->(b:NodeKind2) set b.selected = true",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*2\\.\\.2\\]\\->\\(b:NodeKind2\\) set b\\.selected = true$",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-020 long exact node and edge update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*16]->(b)-[r:EdgeKind2]->(c:NodeKind2) set b.selected = true, r.selected = true",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*16\\.\\.16\\]\\->\\(b\\)\\-\\[r:EdgeKind2\\]\\->\\(c:NodeKind2\\) set b\\.selected = true, r\\.selected = true$",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-020 long exact create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*16]->(b) create (:NodeKind2 {target: b.name})",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*16\\.\\.16\\]\\->\\(b\\) create \\(:NodeKind2 \\{target: b\\.name\\}\\)$",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "DAWGS-020 zero exact update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*0]->(b) set b.selected = true return b",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*0\\.\\.0\\]\\->\\(b\\) set b\\.selected = true return b$",
+        "fitness": 3
+      }
     }
   ]
 }
