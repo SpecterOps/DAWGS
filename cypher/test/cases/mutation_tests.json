@@ -488,6 +488,38 @@
         "query": "match (g)<-[:EdgeKind1*1..2]-(s)-[:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set d.selected = true return d",
         "fitness": 1
       }
+    },
+    {
+      "name": "Optional duplicate origins feed node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 1] as x match (a:NodeKind1) optional match (a)-[r:EdgeKind1]->(b:NodeKind2) set b.visited = true, r.visited = true return x, b",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Optional repeated origins feed create without return",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 1] as x match (a:NodeKind1) optional match (a)-[:EdgeKind1]->(b:NodeKind2) create (audit:NodeKind1 {item: x})",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "Optional null targets preserve origin updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) unwind [1, 1, 1] as x optional match (a)-[r:EdgeKind1]->(b:NodeKind2) where b.name = 'absent' set a.visited = true return x, a",
+        "fitness": 11
+      }
+    },
+    {
+      "name": "Chained optional rows cross a with mutation boundary",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 1] as x match (a:NodeKind1) optional match (a)-[:EdgeKind1]->(b:NodeKind2) optional match (b)-[:EdgeKind2]->(c:NodeKind1) with a, b, c, x set c.visited = true return x, c",
+        "fitness": 0
+      }
     }
   ]
 }
