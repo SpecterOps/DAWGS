@@ -153,6 +153,10 @@ func (s *EFSet) MustAppend(value uint64) {
 }
 
 func (s *EFSet) Find(target uint64) (uint, bool) {
+	if s.len == 0 {
+		return 0, false
+	}
+
 	var (
 		lowEntry  uint = 0
 		highEntry      = s.len - 1
@@ -166,6 +170,13 @@ func (s *EFSet) Find(target uint64) (uint, bool) {
 		} else if nextValue < target {
 			lowEntry = midEntry + 1
 		} else {
+			// The entry at rank zero is the minimum stored value; a target
+			// below it cannot be present. Decrementing an unsigned midEntry of
+			// zero would underflow and feed out-of-range ranks to Lookup.
+			if midEntry == 0 {
+				break
+			}
+
 			highEntry = midEntry - 1
 		}
 	}
