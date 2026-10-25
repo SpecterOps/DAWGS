@@ -164,6 +164,9 @@ above 15. Formatting preserves that exact range, and PostgreSQL uses the request
 comments within ranges are accepted. The shared `exact_expansion_length_shapes` templates check exact lengths,
 paths and mutation selection on both backends and in both PostgreSQL compiler modes. Open-ended PostgreSQL
 traversals still use the existing effective maximum depth of 15.
+The selected [open-ended traversal policy](docs/open_ended_traversal_policy.md) requires complete query semantics or
+an explicit error when resources are exhausted. Work on the compiler, SQL harnesses and resource accounting remains
+open; the current cap can omit longer matches and downstream writes without an error.
 
 Predicates comparing variable-length traversal endpoints remain active when a fixed hop follows the expansion.
 The shared `expansion_endpoint_predicate_shapes` templates check filters, path multiplicity, zero hops, inbound
