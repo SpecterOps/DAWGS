@@ -161,6 +161,11 @@ concurrent cross-wrapper operations, self-operations, and merges between wrapped
 deadlock or silent drops. A snapshot reflects the other wrapper only at the moment it is taken; each operation is atomic
 for its receiver alone. Delegates passed to `Each` must not call back into the same wrapper.
 
+Bitmap `And` and `AndNot` with a non-native Duplex operand (a thread-safe wrapper or a custom implementation) copy the
+operand's values into a native bitmap and apply the native roaring operation. The receiver is never modified while it is
+being iterated, so intersections and differences with such operands are exact on both bitmap widths; native bitmap
+operands keep their direct native paths.
+
 Variable-length traversals that reuse a node bound by a fixed prefix retain that node's identity at every returned
 depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
