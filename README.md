@@ -166,6 +166,11 @@ operand's values into a native bitmap and apply the native roaring operation. Th
 being iterated, so intersections and differences with such operands are exact on both bitmap widths; native bitmap
 operands keep their direct native paths.
 
+`container.PackedMap` keeps every key/value association across repeated compactions: merging pending entries with a
+compacted bucket stores the merged values with the merged key set. `container.EFSet.Find` terminates without a match for
+targets below the stored minimum and for empty sets instead of underflowing its unsigned binary-search bound; a miss
+returns `(0, false)`.
+
 Variable-length traversals that reuse a node bound by a fixed prefix retain that node's identity at every returned
 depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
