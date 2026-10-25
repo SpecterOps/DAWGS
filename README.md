@@ -155,6 +155,12 @@ reach bitmap. Warming an ancestor does not prewarm intermediate components; quer
 traversal. Cache capacity limits entries per direction (minimum one), rather than bitmap bytes. Reach results include
 the origin and its strongly connected component; `DirectionBoth` computes weak connectivity without caching that result.
 
+`cardinality.ThreadSafeDuplex` and `cardinality.ThreadSafeSimplex` synchronize every operation of their wrapped provider.
+Binary operations (`Or`, `And`, `Xor`, `AndNot`) snapshot another thread-safe wrapper before locking the receiver, so
+concurrent cross-wrapper operations, self-operations, and merges between wrapped HyperLogLog sketches complete without
+deadlock or silent drops. A snapshot reflects the other wrapper only at the moment it is taken; each operation is atomic
+for its receiver alone. Delegates passed to `Each` must not call back into the same wrapper.
+
 Variable-length traversals that reuse a node bound by a fixed prefix retain that node's identity at every returned
 depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
