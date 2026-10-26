@@ -63,7 +63,7 @@ func FetchNodeProperties(tx graph.Transaction, nodes graph.NodeSet, propertyName
 			nodes[nodeID].Properties = graph.AsProperties(nodeProperties)
 		}
 
-		return nil
+		return results.Error()
 	}, query.Returning(
 		returningCriteria...,
 	))

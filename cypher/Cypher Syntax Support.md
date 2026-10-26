@@ -394,7 +394,23 @@ Queries that contain similar constructs will result in the following translation
 
 ### Quantifier Expressions
 
-Quantifier Expressions are currently unsupported but planned.
+Quantifier expressions (`all`, `any`, `none`, `single`) are supported as predicates in `WHERE` clauses, including
+collections from property arrays, `labels()`, `collect()` results, path relationship checks, and scalar-list literals:
+
+```
+match (n:User) where any(x in n.serviceprincipalnames where x contains 'mssql') return n
+match (n) where all(x in [1, 2] where x < 3) return n
+```
+
+Quantifiers in projection expressions (`RETURN`/`WITH` items) are not supported and fail compilation with a normal
+translation error instead of executing a partial translation:
+
+```
+return all(x in [1] where x = 1) as value
+```
+
+Queries that contain similar constructs will result in the following translation error:
+`Error: aggregate grouping expression has unsupported type pgsql.Select`.
 
 ## Unsupported Constructs
 

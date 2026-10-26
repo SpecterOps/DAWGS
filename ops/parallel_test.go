@@ -35,6 +35,7 @@ type fakeNodeQuery struct {
 	graph.NodeQuery
 	fetch fakeFetchFunc
 	first func() (*graph.Node, error)
+	query func(delegate func(graph.Result) error, finalCriteria ...graph.Criteria) error
 }
 
 func (s *fakeNodeQuery) Filter(graph.Criteria) graph.NodeQuery     { return s }
@@ -44,7 +45,11 @@ func (s *fakeNodeQuery) Limit(int) graph.NodeQuery                 { return s }
 func (s *fakeNodeQuery) Count() (int64, error)                     { return 0, nil }
 func (s *fakeNodeQuery) Delete() error                             { return nil }
 func (s *fakeNodeQuery) Update(*graph.Properties) error            { return nil }
-func (s *fakeNodeQuery) Query(func(graph.Result) error, ...graph.Criteria) error {
+func (s *fakeNodeQuery) Query(delegate func(graph.Result) error, finalCriteria ...graph.Criteria) error {
+	if s.query != nil {
+		return s.query(delegate, finalCriteria...)
+	}
+
 	return nil
 }
 func (s *fakeNodeQuery) FetchIDs(func(cursor graph.Cursor[graph.ID]) error) error {

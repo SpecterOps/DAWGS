@@ -56,8 +56,8 @@ func (s *Translator) prepareFilterExpression(filterExpression *cypher.FilterExpr
 		s.scope.Alias(identifier, bi)
 		if aliasedIdentifier, bound := s.scope.AliasedLookup(identifier); !bound {
 			return fmt.Errorf("filter expression must have an aliased identifier")
-		} else if s.query.CurrentPart().currentPattern.Parts != nil || s.query.CurrentPart().CurrentProjection() != nil {
-			s.query.CurrentPart().quantifierIdentifiers.Add(aliasedIdentifier.Identifier)
+		} else if currentPart := s.query.CurrentPart(); (currentPart.currentPattern != nil && currentPart.currentPattern.Parts != nil) || currentPart.HasCurrentProjection() {
+			currentPart.quantifierIdentifiers.Add(aliasedIdentifier.Identifier)
 		} else {
 			return fmt.Errorf("quantifiers are not supported without a pattern or projection expression")
 		}
