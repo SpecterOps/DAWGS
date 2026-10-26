@@ -210,7 +210,10 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 
 		case pgsql.OperatorAnd, pgsql.OperatorOr, pgsql.OperatorEquals, pgsql.OperatorGreaterThan, pgsql.OperatorGreaterThanOrEqualTo,
 			pgsql.OperatorLessThan, pgsql.OperatorLessThanOrEqualTo, pgsql.OperatorIn, pgsql.OperatorJSONBFieldExists,
-			pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorPGArrayOverlap, pgsql.OperatorPGArrayLHSContainsRHS:
+			pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorPGArrayOverlap, pgsql.OperatorPGArrayLHSContainsRHS,
+			pgsql.OperatorIs, pgsql.OperatorIsNot:
+			// Null predicates apply to values of any type and always produce a
+			// boolean result, so operand type compatibility is not required.
 			return pgsql.Boolean, nil
 
 		default:

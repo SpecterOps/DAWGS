@@ -321,6 +321,69 @@
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return count(n), count(distinct n.department), min(n.score), max(n.score), avg(n.score)"
           },
           "assert": {"row_values": [[3, 2, 1, 3, 2]]}
+        },
+        {
+          "name": "literal null predicate projection returns true",
+          "vars": {
+            "query": "return null is null as value"
+          },
+          "assert": {"ordered_row_values": [[true]]}
+        },
+        {
+          "name": "literal null predicate negated projection returns false",
+          "vars": {
+            "query": "return null is not null as value"
+          },
+          "assert": {"ordered_row_values": [[false]]}
+        },
+        {
+          "name": "non-null literal null predicate projections",
+          "vars": {
+            "query": "return 1 is null as missing, 'a' is not null as present"
+          },
+          "assert": {"ordered_row_values": [[false, true]]}
+        },
+        {
+          "name": "true literal null predicate retains where matches",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and null is null return count(n.name)"
+          },
+          "assert": {"ordered_scalar_values": [3]}
+        },
+        {
+          "name": "false literal null predicate empties where matches",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and 1 is null return n.name"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "false negated literal null predicate empties where matches",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and null is not null return n.name"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "bound node is never null in a match",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and n is not null return count(n.name)"
+          },
+          "assert": {"ordered_scalar_values": [3]}
+        },
+        {
+          "name": "with bound null value satisfies null predicate",
+          "vars": {
+            "query": "with null as v return v is null as value"
+          },
+          "assert": {"ordered_row_values": [[true]]}
+        },
+        {
+          "name": "unwind value null predicate continuation",
+          "vars": {
+            "query": "unwind [1, 2] as x with x where x is not null return count(x)"
+          },
+          "assert": {"ordered_scalar_values": [2]}
         }
       ]
     }

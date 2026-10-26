@@ -500,3 +500,18 @@ return 1
 The reference `n` is being projected by the multipart `with` statement but this projection removes the resultset from
 the original query, allowing for ambiguity to slip into future operations against `n.name` where some values of
 `n.name` may be `null`.
+
+#### Null Predicates
+
+`IS NULL` and `IS NOT NULL` apply to values of any type, including literal `null` itself:
+
+```
+return null is null as value; // true
+return 1 is null as value;    // false
+```
+
+Property-lookup operands keep Cypher's stored-null semantics: a property that is missing or stored as JSON `null`
+satisfies `IS NULL`, and both are excluded by `IS NOT NULL`. Literal, parameter, function and entity operands lower to
+PostgreSQL's own null predicates, so a matched node is never `null` and an `OPTIONAL MATCH` null extension is. Null
+predicates in `WHERE` are ordinary filters: a literal-false predicate such as `where 1 is null` returns no rows rather
+than being dropped from the query.

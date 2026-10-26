@@ -77,6 +77,11 @@ assignments. It covers mixed Boolean operators, separate projections, parameters
 WHERE filtering and continuation after writes. Mutation variants assert complete node and relationship post-state,
 including untouched decoys. PostgreSQL runs every variant with each compiler mode explicitly.
 
+`scalar_shapes.json` includes literal null predicate projections and WHERE filters: `null is null`, negated forms,
+non-null literals, bound-node identity and WITH/UNWIND-bound null values, alongside its property stored-null coverage.
+Literal-false predicates must empty their matches instead of being dropped. PostgreSQL runs every variant with each
+compiler mode explicitly.
+
 `expansion_endpoint_predicate_shapes.json` checks predicates comparing expansion endpoints before a fixed suffix,
 including disjunction, conjunction, negation, equality, missing properties, parameters, zero hops, fixed prefixes,
 inbound expansion, bound suffix endpoints, duplicate input rows and exact path multiplicity. Mutation variants check

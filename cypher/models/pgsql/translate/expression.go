@@ -487,7 +487,15 @@ func (s *Builder) IsEmpty() bool {
 	return len(s.stack) == 0
 }
 
+// PopOperand removes and returns the next operand from the expression stack. An
+// empty stack is a producer bug rather than a caller-facing panic: every visitor
+// that pops operands must have pushed them first, so the underflow is reported as
+// an ordinary translation error instead.
 func (s *Builder) PopOperand(kindMapper *contextAwareKindMapper) (pgsql.Expression, error) {
+	if len(s.stack) == 0 {
+		return nil, fmt.Errorf("expression operand stack is empty")
+	}
+
 	next := s.stack[len(s.stack)-1]
 	s.stack = s.stack[:len(s.stack)-1]
 
@@ -1381,6 +1389,10 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			}
 		}
 
+		// Literal, parameter and entity operands keep the assembled IS expression:
+		// PostgreSQL evaluates it with Cypher's null predicate semantics.
+		s.PushOperand(newExpression)
+
 	case pgsql.OperatorIsNot:
 		switch typedLOperand := newExpression.LOperand.(type) {
 		case *pgsql.BinaryExpression:
@@ -1395,6 +1407,10 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 				}
 			}
 		}
+
+		// Literal, parameter and entity operands keep the assembled IS NOT expression:
+		// PostgreSQL evaluates it with Cypher's null predicate semantics.
+		s.PushOperand(newExpression)
 
 	case pgsql.OperatorIn:
 		if isKnownEmptyArrayExpression(newExpression.ROperand) {
