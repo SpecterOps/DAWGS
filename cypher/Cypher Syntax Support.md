@@ -232,6 +232,33 @@ Returns the current datetime with timezone information.
 match (s) where s.created_at < datetime() return s
 ```
 
+### Temporal Construction and Components
+
+Temporal constructions accept at most one text argument for an explicit instant
+(`datetime('2020-01-01')`, `localdatetime('2020-01-01T00:00:00')`, `date('2020-01-01')`,
+`localtime('12:00:00')`) and lower to PostgreSQL casts. Such constructed values
+support comparison and arithmetic, for example:
+
+```
+match (s) where s.created_at < datetime('2019-06-01T18:40:32.142+0100') return s
+match (s) where s.created_at < datetime() - duration('P3D') return s
+```
+
+Component access on a constructed temporal value (`.year`, `.epochmillis`, and
+similar) is rejected with an explicit translation error such as
+`unsupported temporal type component year on cast type date`. Only the
+current-instant functions without arguments support component access, and only
+for `.epochseconds` and `.epochmillis`:
+
+```
+return datetime().epochseconds as v
+return datetime().epochmillis as v
+match (u) where u.pwdlastset < (datetime().epochseconds - (365 * 86400)) return u
+```
+
+Any other component on a current-instant function (for example
+`datetime().year`) is likewise rejected with an explicit translation error.
+
 ### `type`
 
 Returns the type of the given relationship reference. This function returns the relationship's type as a text value.

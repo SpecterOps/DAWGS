@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -266,7 +267,8 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 		s.lock.Unlock()
 
 		if panicked != nil {
-			panic(panicked)
+			s.buildFailures.Add(1)
+			return "", nil, panicked
 		}
 		if err != nil {
 			s.buildFailures.Add(1)
@@ -285,9 +287,22 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 	}
 }
 
-func callTranslationBuild(build func() (string, translationCacheBuildResult, error)) (sql string, result translationCacheBuildResult, err error, panicked any) {
+// containedPanicError converts a compiler panic into an ordinary error carrying
+// the panic value and its stack. Containment reduces crash loudness without
+// losing the failure's diagnosability.
+func containedPanicError(recovered any) error {
+	return fmt.Errorf("cypher translation panicked: %v\n%s", recovered, debug.Stack())
+}
+
+// callTranslationBuild isolates the build function from its callers. A panic
+// escaping the compiler is a producer bug; it is recovered and reported as an
+// ordinary build error so the failure is diagnosable without crashing the
+// calling process.
+func callTranslationBuild(build func() (string, translationCacheBuildResult, error)) (sql string, result translationCacheBuildResult, err error, panicked error) {
 	defer func() {
-		panicked = recover()
+		if recovered := recover(); recovered != nil {
+			panicked = containedPanicError(recovered)
+		}
 	}()
 
 	sql, result, err = build()
@@ -297,7 +312,8 @@ func callTranslationBuild(build func() (string, translationCacheBuildResult, err
 func (s *translationCache) buildUncached(build func() (string, translationCacheBuildResult, error)) (string, map[string]any, error) {
 	sql, result, err, panicked := callTranslationBuild(build)
 	if panicked != nil {
-		panic(panicked)
+		s.buildFailures.Add(1)
+		return "", nil, panicked
 	}
 	if err != nil {
 		s.buildFailures.Add(1)

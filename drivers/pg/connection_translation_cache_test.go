@@ -192,6 +192,35 @@ func TestConnectionTranslationCacheDoesNotRetainFailures(t *testing.T) {
 	require.Zero(t, cache.statsSnapshot().Entries)
 }
 
+// A panicking compiler build is a producer bug; both the retained and bypass
+// connection-cache paths must contain it as an ordinary error naming the panic
+// value instead of crashing the calling process.
+func TestConnectionTranslationCacheContainsBuildPanic(t *testing.T) {
+	_, cache, _ := newTestCache(t, 2)
+
+	_, _, err := cache.TranslateWithPolicy("RETURN 1", 1, nil, "one", func() (translate.Result, string, error) {
+		panic("connection boom")
+	})
+	require.ErrorContains(t, err, "cypher translation panicked: connection boom")
+	require.Contains(t, err.Error(), "goroutine", "contained panic error keeps its stack for diagnosis")
+	require.Zero(t, cache.statsSnapshot().Entries)
+
+	// The cache remains usable and still retains a subsequent good build.
+	sql, _, err := cache.TranslateWithPolicy("RETURN $id", 1, map[string]any{"id": int64(1)}, "one", cacheableBuild("select @i0", int64(1)))
+	require.NoError(t, err)
+	require.Equal(t, "select @i0", sql)
+	require.Equal(t, 1, cache.statsSnapshot().Entries)
+}
+
+func TestConnectionTranslationCacheBypassContainsBuildPanic(t *testing.T) {
+	_, cache, _ := newTestCache(t, 0)
+
+	_, _, err := cache.TranslateWithPolicy("RETURN 1", 1, nil, "one", func() (translate.Result, string, error) {
+		panic("bypass boom")
+	})
+	require.ErrorContains(t, err, "cypher translation panicked: bypass boom")
+}
+
 func TestConnectionCacheProviderSeparatesAndRetiresPhysicalConnections(t *testing.T) {
 	provider, err := newConnectionCacheProvider(RuntimeConfig{TranslationCacheEntries: 2})
 	require.NoError(t, err)

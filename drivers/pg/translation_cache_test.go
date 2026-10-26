@@ -340,19 +340,17 @@ func TestTranslationCachePanicReleasesWaiters(t *testing.T) {
 	leaderStarted := make(chan struct{})
 	releaseLeader := make(chan struct{})
 	leaderDone := make(chan struct{})
-	panicValue := make(chan any, 1)
+	leaderErr := make(chan error, 1)
 	waiterDone := make(chan error, 1)
 
 	go func() {
 		defer close(leaderDone)
-		defer func() {
-			panicValue <- recover()
-		}()
-		_, _, _ = translationCache.GetOrBuild(key, parameters, func() (string, translationCacheBuildResult, error) {
+		_, _, err := translationCache.GetOrBuild(key, parameters, func() (string, translationCacheBuildResult, error) {
 			close(leaderStarted)
 			<-releaseLeader
 			panic("boom")
 		})
+		leaderErr <- err
 	}()
 
 	<-leaderStarted
@@ -368,7 +366,9 @@ func TestTranslationCachePanicReleasesWaiters(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	close(releaseLeader)
 	<-leaderDone
-	require.Equal(t, "boom", <-panicValue)
+	// The panicking build is contained as an ordinary error naming the panic
+	// value instead of re-panicking through the caller.
+	require.ErrorContains(t, <-leaderErr, "cypher translation panicked: boom")
 	select {
 	case err := <-waiterDone:
 		require.NoError(t, err)
@@ -447,4 +447,19 @@ func TestTranslationCacheInvalidationDoesNotPublishStaleBuild(t *testing.T) {
 	require.Equal(t, int64(2), builds.Load())
 	require.Equal(t, int64(1), translationCache.Stats().Size)
 	require.Equal(t, uint64(1), translationCache.Stats().Generation)
+}
+
+// A panicking build on the bypass path (disabled capacity) must also surface as
+// an ordinary error rather than a panic escaping the driver.
+func TestTranslationCacheBypassContainsBuildPanic(t *testing.T) {
+	translationCache := newTranslationCache(0)
+	parameters := map[string]any{"value": int64(1)}
+	key := translationCache.Key("RETURN $value", 1, parameters)
+
+	_, _, err := translationCache.GetOrBuild(key, parameters, func() (string, translationCacheBuildResult, error) {
+		panic("bypass boom")
+	})
+	require.ErrorContains(t, err, "cypher translation panicked: bypass boom")
+	require.Contains(t, err.Error(), "goroutine", "contained panic error keeps its stack for diagnosis")
+	require.Equal(t, int64(1), translationCache.Stats().BuildFailures)
 }
