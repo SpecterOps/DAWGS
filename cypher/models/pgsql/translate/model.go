@@ -1045,6 +1045,12 @@ func (s *QueryPart) CurrentProjection() *Projection {
 	return s.projections.Current()
 }
 
+// HasCurrentProjection reports whether a projection item is being translated without requiring
+// projection state to already exist.
+func (s *QueryPart) HasCurrentProjection() bool {
+	return s.projections != nil && len(s.projections.Items) > 0
+}
+
 // HasProperties builds the SQL model fragment responsible for has properties.
 func (s *QueryPart) HasProperties() bool {
 	return !s.properties.IsEmpty()
