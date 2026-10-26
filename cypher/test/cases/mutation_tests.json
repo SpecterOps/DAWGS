@@ -716,6 +716,38 @@
         "query": "match (n:NodeKind1) where n.name is null return n",
         "fitness": 9
       }
+    },
+    {
+      "name": "DAWGS-011 datetime literal component projection",
+      "type": "string_match",
+      "details": {
+        "query": "return datetime('2020-01-01').epochmillis as value",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-011 date property component projection",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) return date(n.d).year as value",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-011 datetime parameter component where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where datetime($ts).epochmillis > 0 return n",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-011 supported current instant component where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where (datetime().epochseconds - (365 * 86400)) > 0 return n",
+        "fitness": 3
+      }
     }
   ]
 }

@@ -144,7 +144,7 @@ func (s *connectionTranslationCache) TranslateWithPolicy(query string, graphID i
 		}
 	}
 
-	result, sql, err := build()
+	result, sql, err := runBuild(build)
 	if err != nil {
 		return "", nil, err
 	}
@@ -192,9 +192,22 @@ func isShortestPathQuery(query string) bool {
 	return strings.Contains(strings.ToLower(query), "shortestpath")
 }
 
+// runBuild executes a translation builder while containing a compiler panic as
+// an ordinary build error, so a producer bug cannot crash the calling process.
+func runBuild(build func() (translate.Result, string, error)) (result translate.Result, sql string, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result, sql = translate.Result{}, ""
+			err = containedPanicError(recovered)
+		}
+	}()
+
+	return build()
+}
+
 // buildUncached executes a translation builder and returns its immediate SQL and bindings.
 func buildUncached(build func() (translate.Result, string, error)) (string, map[string]any, error) {
-	result, sql, err := build()
+	result, sql, err := runBuild(build)
 	if err != nil {
 		return "", nil, err
 	}
