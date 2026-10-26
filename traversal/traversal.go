@@ -220,18 +220,22 @@ func (s *pattern) Driver(ctx context.Context, tx graph.Transaction, segment *gra
 		if tag.patternIdx < len(s.expansions) {
 			nextExpansion := s.expansions[tag.patternIdx]
 
-			// Expand the next segments
-			if criteria, err := nextExpansion.PrepareCriteria(segment); err != nil {
-				return nil, err
-			} else if err := tx.Relationships().Filter(criteria).FetchDirection(fetchDirection, fetchFunc); err != nil {
-				return nil, err
-			}
-
-			// If the next expansion is optional, make sure to preserve the current traversal branch
+			// If the next expansion is optional, make sure to preserve the current traversal branch. The
+			// preserved segment performs the optional expansion itself when the driver visits it again, which
+			// reports each of the optional step's matches exactly once. Eagerly fetching the expansion here as
+			// well would queue those same matches a second time and duplicate every terminal beneath them.
 			if nextExpansion.minDepth == 0 {
 				// Reattach the tag to the segment before adding it to the returned segments for the next expansion
 				segment.Tag = tag
 				nextSegments = append(nextSegments, segment)
+			} else {
+				// Expand the next segments. The fetch direction is the reverse intent of the next
+				// expansion's direction, since each expansion fetches the endpoint its own criteria select.
+				if criteria, err := nextExpansion.PrepareCriteria(segment); err != nil {
+					return nil, err
+				} else if err := tx.Relationships().Filter(criteria).FetchDirection(nextExpansion.direction.Reverse(), fetchFunc); err != nil {
+					return nil, err
+				}
 			}
 		} else if len(nextSegments) == 0 {
 			// If there are no expanded segments and there are no remaining expansions, this is a terminal segment.
