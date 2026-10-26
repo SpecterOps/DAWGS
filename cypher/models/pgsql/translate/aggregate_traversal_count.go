@@ -462,6 +462,14 @@ func (s *Translator) aggregateBindingPredicate(translator *Translator, match *cy
 		return nil, nil
 	}
 
+	// Pattern predicates require an active query part to stash and rebuild their
+	// pattern; this translator walks the predicate without one. Reject the shape
+	// with a translation error instead of declining the lowering, since the
+	// generic multi-match path cannot yet translate it either (DAWGS-036).
+	if containsPatternPredicate(match.Where) {
+		return nil, fmt.Errorf("unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported")
+	}
+
 	binding := translator.scope.Define(alias, pgsql.NodeComposite)
 	translator.scope.Alias(pgsql.Identifier(symbol), binding)
 
@@ -542,4 +550,30 @@ func aggregateNodeComposite(alias pgsql.Identifier) pgsql.CompositeValue {
 		},
 		DataType: pgsql.NodeComposite,
 	}
+}
+
+// containsPatternPredicate reports whether the WHERE expression tree carries a
+// pattern predicate, including negated or compound forms. Such predicates need
+// an active query part and cannot be expressed against the aggregate traversal
+// count CTEs.
+func containsPatternPredicate(where *cypher.Where) bool {
+	if where == nil {
+		return false
+	}
+
+	var found bool
+	visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, handler walk.VisitorHandler) {
+		if _, isPatternPredicate := node.(*cypher.PatternPredicate); isPatternPredicate {
+			found = true
+			handler.SetDone()
+		}
+	})
+
+	if err := walk.Cypher(where, visitor); err != nil {
+		// The visitor never sets an error; an unexpected walk failure is treated
+		// as unsupported so the caller rejects rather than partially lowers.
+		return true
+	}
+
+	return found
 }

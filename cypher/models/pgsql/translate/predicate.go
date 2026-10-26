@@ -11,6 +11,13 @@ import (
 )
 
 func (s *Translator) preparePatternPredicate(predicate *cypher.PatternPredicate) error {
+	if !s.query.HasParts() {
+		// Producer-boundary guard: pattern predicates need an active query part
+		// to stash the current match pattern. Report the bug instead of panicking
+		// on the missing part.
+		return fmt.Errorf("pattern predicate translation requires an active query part")
+	}
+
 	currentQueryPart := s.query.CurrentPart()
 
 	// Stash the match pattern
