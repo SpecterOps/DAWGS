@@ -120,7 +120,7 @@ func (s *ExpressionVisitor) ExitOC_ComparisonExpression(ctx *parser.OC_Compariso
 }
 
 func (s *ExpressionVisitor) EnterOC_NotExpression(ctx *parser.OC_NotExpressionContext) {
-	if len(ctx.AllNOT()) > 0 {
+	if NegatesOperand(ctx) {
 		s.ctx.Enter(&NegationVisitor{
 			Negation: &cypher.Negation{},
 		})
@@ -128,7 +128,7 @@ func (s *ExpressionVisitor) EnterOC_NotExpression(ctx *parser.OC_NotExpressionCo
 }
 
 func (s *ExpressionVisitor) ExitOC_NotExpression(ctx *parser.OC_NotExpressionContext) {
-	if len(ctx.AllNOT()) > 0 {
+	if NegatesOperand(ctx) {
 		visitor := s.ctx.Exit().(*NegationVisitor)
 		s.Expression = visitor.Negation
 	}
