@@ -1482,6 +1482,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	}
 
 	if len(s.constraints) > 0 {
+		if err := validateConstraintKindPredicates(s.constraints); err != nil {
+			return nil, err
+		}
+
 		var (
 			whereClause                      = match.NewWhere()
 			constraints                      = cypher.NewConjunction()
