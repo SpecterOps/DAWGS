@@ -75,3 +75,8 @@ fixed-step lowering, ordinary traversal above 15 hops, incoming traversal, paths
 SET and CREATE without RETURN. Shortest/all-shortest fixtures check that the
 harness receives the normalized maximum; compiler tests compare complete SQL and
 parameters for the exact shorthand and explicit range in both optimizer modes.
+
+`null_predicates.sql` covers literal and entity `IS NULL`/`IS NOT NULL`
+projections and WHERE predicates, WITH/UNWIND-bound null values and the
+unchanged property-lookup null rewrites that distinguish missing keys from
+stored JSON nulls.
