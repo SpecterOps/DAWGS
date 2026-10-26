@@ -684,6 +684,38 @@
         "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*0\\.\\.0\\]\\->\\(b\\) set b\\.selected = true return b$",
         "fitness": 3
       }
+    },
+    {
+      "name": "DAWGS-004 literal null predicate projection",
+      "type": "string_match",
+      "details": {
+        "query": "return null is null as value",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-004 literal null predicate negated",
+      "type": "string_match",
+      "details": {
+        "query": "with null as n return n is not null as value",
+        "fitness": -4
+      }
+    },
+    {
+      "name": "DAWGS-004 literal false null predicate where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where 1 is null set n.checked = true",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-004 property null predicate where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.name is null return n",
+        "fitness": 9
+      }
     }
   ]
 }
