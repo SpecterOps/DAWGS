@@ -276,6 +276,12 @@ and mutation selection. Additional constraints on an already-bound root use ordi
 boundary, including a repeated root, also retains ordinary traversal; `bound_suffix_boundary_shapes` verifies this across
 zero-hop paths, genuine cycles, aliases, and mutation selection.
 
+The PostgreSQL aggregate traversal count lowering rejects `MATCH ... WHERE` clauses carrying pattern predicates with a
+normal translation error; those predicates cannot be expressed against the lowering's recursive CTEs, and declining the
+optimization would reach generic multi-match translation, which does not yet translate the same shape correctly. Plain
+shapes and property-only predicates keep their existing lowering. This containment is PostgreSQL-scoped: Neo4j executes
+pattern predicates natively.
+
 The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
 storage maintenance on the `node` and `edge` tables in the following order:
 
