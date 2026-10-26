@@ -79,8 +79,10 @@ including untouched decoys. PostgreSQL runs every variant with each compiler mod
 
 `scalar_shapes.json` includes literal null predicate projections and WHERE filters: `null is null`, negated forms,
 non-null literals, bound-node identity and WITH/UNWIND-bound null values, alongside its property stored-null coverage.
-Literal-false predicates must empty their matches instead of being dropped. PostgreSQL runs every variant with each
-compiler mode explicitly.
+Literal-false predicates must empty their matches instead of being dropped. Repeated `NOT` prefixes must preserve
+their parity: double negation matches the positive predicate in WHERE, WITH WHERE, projections, string-prefix
+predicates and null predicates, while triple negation behaves as a single negation. PostgreSQL runs every variant
+with each compiler mode explicitly.
 
 `expansion_endpoint_predicate_shapes.json` checks predicates comparing expansion endpoints before a fixed suffix,
 including disjunction, conjunction, negation, equality, missing properties, parameters, zero hops, fixed prefixes,

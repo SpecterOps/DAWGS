@@ -134,6 +134,10 @@ Negation in query filters is supported with the `not` operator:
 
 * `match (n:User) where not(n.eligible) return n`
 
+Repeated `not` operators preserve Cypher parity: `not not n.eligible` matches the positive predicate and an odd
+number of `not` operators negates exactly once. Parenthesized forms such as `not (not n.eligible)` retain their
+explicit structure.
+
 ### Conjunction and Disjunction
 
 Conjunction `and` and disjunction `or` operators are both supported:
