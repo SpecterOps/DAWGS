@@ -171,6 +171,18 @@ compacted bucket stores the merged values with the merged key set. `container.EF
 targets below the stored minimum and for empty sets instead of underflowing its unsigned binary-search bound; a miss
 returns `(0, false)`.
 
+`traversal.NewPattern` chained expansions fetch each step's endpoint using that step's own direction, so patterns whose
+steps change direction (for example `OutboundWithDepth(1, 1).InboundWithDepth(1, 1)` over `a→b←c`) match. Each
+expansion's criteria still select the relationships entering or leaving the current node; only the fetched endpoint
+follows the expansion being performed.
+
+An optional following expansion (minimum depth 0) preserves the boundary segment instead of eager-fetching the step
+twice: the preserved segment performs the optional expansion when the traversal visits it, so every optional-step match
+reaches the terminal delegate exactly once, and the unmatched boundary segment is delegated once when the optional step
+has no matches. The shared `TestTraversalPatternDirectionChange` and `TestTraversalPatternOptionalStep` integration
+regressions run complete BreadthFirst pattern traversals on both backends, and the `traversal` package regressions pin
+the observed fetch directions and exact callback cardinality.
+
 Variable-length traversals that reuse a node bound by a fixed prefix retain that node's identity at every returned
 depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
 templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
