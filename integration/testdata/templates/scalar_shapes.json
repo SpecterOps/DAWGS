@@ -384,6 +384,48 @@
             "query": "unwind [1, 2] as x with x where x is not null return count(x)"
           },
           "assert": {"ordered_scalar_values": [2]}
+        },
+        {
+          "name": "double negation where matches the positive predicate",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where not not n.group = 'shape' return n.name order by n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha"], ["beta"], ["gamma"]]}
+        },
+        {
+          "name": "triple negation where behaves as a single negation",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where not not not n.group = 'shape' return n.name"
+          },
+          "assert": {"row_values": [["fallback"], ["has%percent"], ["hasXpercent"], ["missing-tags"], ["null-tags"], ["under_score"], ["underXscore"]]}
+        },
+        {
+          "name": "double negated projected predicate preserves values",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.name, not not n.score > 1 as again order by n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha", false], ["beta", true], ["gamma", true]]}
+        },
+        {
+          "name": "double negation preserves null predicate filtering",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['missing-tags', 'null-tags'] and not not n.tags is null return n.name order by n.name"
+          },
+          "assert": {"ordered_row_values": [["missing-tags"], ["null-tags"]]}
+        },
+        {
+          "name": "double negated string prefix predicate matches the positive form",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where not not n.name starts with 'under_' return n.name"
+          },
+          "assert": {"row_values": [["under_score"]]}
+        },
+        {
+          "name": "double negation in with where continuation",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) with n where not not n.group = 'shape' return n.name order by n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha"], ["beta"], ["gamma"]]}
         }
       ]
     }

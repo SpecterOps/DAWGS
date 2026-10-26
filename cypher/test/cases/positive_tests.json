@@ -896,6 +896,59 @@
         "query": "match (u:User {dontreqpreauth: true}) return u",
         "fitness": 5
       }
+    },
+    {
+      "name": "Double negation in WHERE preserves positive predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where not not n.x = 1 return n.x as x",
+        "matcher": "match \\(n:A\\) where n\\.x = 1 return n\\.x as x",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Triple negation in WHERE collapses to a single negation",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where not not not n.x = 1 return n.x as x",
+        "matcher": "match \\(n:A\\) where not n\\.x = 1 return n\\.x as x",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Double negation in projection preserves positive value",
+      "type": "string_match",
+      "details": {
+        "query": "return not not true as value",
+        "matcher": "return true as value",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Explicit parenthesized double negation retains both operators",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where not (not n.x = 1) return n.x as x",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Double negation within a conjunction preserves the conjoined predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where n.y = 1 and not not n.x = 1 return n.x as x",
+        "matcher": "match \\(n:A\\) where n\\.y = 1 and n\\.x = 1 return n\\.x as x",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "Double negation in WITH WHERE preserves positive predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n where not not n.x = 1 return n.x as x",
+        "matcher": "match \\(n:A\\) with n where n\\.x = 1 return n\\.x as x",
+        "fitness": 2
+      }
     }
   ]
 }

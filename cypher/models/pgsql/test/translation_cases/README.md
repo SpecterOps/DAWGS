@@ -80,3 +80,10 @@ parameters for the exact shorthand and explicit range in both optimizer modes.
 projections and WHERE predicates, WITH/UNWIND-bound null values and the
 unchanged property-lookup null rewrites that distinguish missing keys from
 stored JSON nulls.
+
+`negation_parity.sql` covers repeated `NOT` prefixes in WHERE filters,
+conjunctions, WITH WHERE continuations, projections and SET assignments. Even
+negation counts cancel to the positive predicate, odd counts negate exactly
+once, and an explicitly parenthesized `not (not …)` retains both operators.
+Double negation also drops the negated string-predicate coalesce rewrite while
+the property null rewrite keeps its dedicated lowering.

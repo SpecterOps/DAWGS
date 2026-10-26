@@ -60,7 +60,7 @@ type JoiningVisitor struct {
 }
 
 func (s *JoiningVisitor) EnterOC_NotExpression(ctx *parser.OC_NotExpressionContext) {
-	if len(ctx.AllNOT()) > 0 {
+	if NegatesOperand(ctx) {
 		s.ctx.Enter(&NegationVisitor{
 			Negation: &cypher.Negation{},
 		})
@@ -68,7 +68,7 @@ func (s *JoiningVisitor) EnterOC_NotExpression(ctx *parser.OC_NotExpressionConte
 }
 
 func (s *JoiningVisitor) ExitOC_NotExpression(ctx *parser.OC_NotExpressionContext) {
-	if len(ctx.AllNOT()) > 0 {
+	if NegatesOperand(ctx) {
 		visitor := s.ctx.Exit().(*NegationVisitor)
 		s.Joined.Add(visitor.Negation)
 	}
