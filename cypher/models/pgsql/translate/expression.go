@@ -156,6 +156,13 @@ func (s *Translator) translatePropertyLookup(lookup *cypher.PropertyLookup) erro
 		case pgsql.TypeCast:
 			if isCompositePropertyLookupTarget(typedTranslatedAtom) {
 				return s.translateCompositePropertyLookup(typedTranslatedAtom, lookup)
+			} else if fieldIdentifierLiteral, err := pgsql.AsLiteral(lookup.Symbol); err != nil {
+				return err
+			} else {
+				// Temporal constructions such as datetime('...') or date(n.d) lower to a type cast;
+				// their components are unsupported and must be rejected here instead of silently
+				// dropping the cast operand, which underflows the expression operand stack.
+				return fmt.Errorf("unsupported temporal type component %s on cast type %s", fieldIdentifierLiteral.Value, typedTranslatedAtom.CastType)
 			}
 		}
 	}
