@@ -748,6 +748,22 @@
         "query": "match (n:NodeKind1) where (datetime().epochseconds - (365 * 86400)) > 0 return n",
         "fitness": 3
       }
+    },
+    {
+      "name": "DAWGS-030 aggregate traversal count source pattern predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:User) where (s)-[:MemberOf]->() match (s)-[:MemberOf*1..3]->(t) with s, count(t) as c return s, c order by c desc limit 100",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-030 aggregate traversal count terminal pattern predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:User) match (s)-[:MemberOf*1..3]->(t) where (t)-[:MemberOf]->() with s, count(t) as c return s, c order by c desc limit 100",
+        "fitness": 0
+      }
     }
   ]
 }

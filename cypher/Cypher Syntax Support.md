@@ -172,6 +172,11 @@ Query filters may also include pattern lookups. For example, searching for users
 
 * `match (n:User) where not((n)<-[:HasSession]-(:Computer)) return n`
 
+Pattern predicates are not supported inside the optimized aggregate traversal count shape
+(`match ... with s, count(t) as c return ... order by ... limit ...`). Such queries fail compilation with
+`Error: unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported`
+instead of executing a partial lowering.
+
 ## Supported Subquery Expressions
 
 ### `collect`
