@@ -61,6 +61,16 @@ Schema tests cover nested and nullable list comparisons. Assignment fixtures use
 `coalesce(predicate, false)` to keep the separate stored-null behavior out of
 these backend-equivalent assertions.
 
+`string_predicate_escaping_shapes.json` covers literal `%`, `_` and backslashes
+in STARTS WITH, ENDS WITH and CONTAINS after case conversion, nested functions,
+coalesce, toString and WITH aliases. Controls cover direct properties, parameters,
+literal left operands, negation, empty strings and missing properties. SET and
+CREATE variants run with and without RETURN and check complete node/relationship
+state, unchanged direction/kind/role/missing-property decoys and creation counts.
+`TestPostgreSQLStringPredicateEscapingCompilerModes` runs the shared corpus in
+both compiler modes. Live execution requires running databases; its status is
+recorded in the active variance plan.
+
 `json_result_string_shapes.json` covers JSON-like strings returned by CREATE,
 node/relationship SET and WITH continuation. It checks exact string contents and
 complete post-state, including unchanged fixture entities. PostgreSQL executes

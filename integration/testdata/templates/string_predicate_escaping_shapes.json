@@ -1,0 +1,4203 @@
+{
+  "families": [
+    {
+      "name": "literal string predicate escaping",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "EscapeRoot"
+            ],
+            "properties": {
+              "tag": "root",
+              "role": "root",
+              "keep": "untouched"
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "EscapeInput"
+            ],
+            "properties": {
+              "tag": "target",
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "A_"
+            }
+          },
+          {
+            "id": "wildcard-decoy",
+            "kinds": [
+              "EscapeInput"
+            ],
+            "properties": {
+              "tag": "wildcard-decoy",
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "AB"
+            }
+          },
+          {
+            "id": "percent",
+            "kinds": [
+              "EscapeInput"
+            ],
+            "properties": {
+              "tag": "percent",
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "A%"
+            }
+          },
+          {
+            "id": "backslash",
+            "kinds": [
+              "EscapeInput"
+            ],
+            "properties": {
+              "tag": "backslash",
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "A\\"
+            }
+          },
+          {
+            "id": "role-decoy",
+            "kinds": [
+              "EscapeInput"
+            ],
+            "properties": {
+              "tag": "role-decoy",
+              "role": "decoy",
+              "keep": "untouched",
+              "name": "A_"
+            }
+          },
+          {
+            "id": "kind-decoy",
+            "kinds": [
+              "EscapeOther"
+            ],
+            "properties": {
+              "tag": "kind-decoy",
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "A_"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "EscapeInput"
+            ],
+            "properties": {
+              "tag": "missing",
+              "role": "candidate",
+              "keep": "untouched"
+            }
+          },
+          {
+            "id": "created-kind",
+            "kinds": [
+              "EscapeCreated"
+            ],
+            "properties": {
+              "tag": "created-kind",
+              "role": "decoy",
+              "keep": "untouched"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "target",
+            "kind": "EscapeEdge",
+            "properties": {
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "A_"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wildcard-decoy",
+            "kind": "EscapeEdge",
+            "properties": {
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "AB"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "role-decoy",
+            "kind": "EscapeEdge",
+            "properties": {
+              "role": "decoy",
+              "keep": "untouched",
+              "name": "A_"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "kind-decoy",
+            "kind": "EscapeOtherEdge",
+            "properties": {
+              "role": "candidate",
+              "keep": "untouched",
+              "name": "A_"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "missing",
+            "kind": "EscapeEdge",
+            "properties": {
+              "role": "candidate",
+              "keep": "untouched"
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "root",
+            "kind": "EscapeEdge",
+            "properties": {
+              "role": "candidate",
+              "name": "A_",
+              "keep": "untouched"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "STARTS WITH literal target",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH literal percent",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH 'a%' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "percent"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH literal backslash",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH 'a\\\\' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH upper",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toUpper(n.name) STARTS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH nested",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(toUpper(n.name)) STARTS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH coalesce",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND coalesce(n.name, '') STARTS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH toString",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toString(n.name) STARTS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH carried",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WITH n, toLower(n.name) AS value WHERE n.role = 'candidate' AND value STARTS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH bare control",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND n.name STARTS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH parameter control",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH $needle RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "params": {
+            "needle": "a_"
+          }
+        },
+        {
+          "name": "STARTS WITH negation",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND NOT toLower(n.name) STARTS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "wildcard-decoy",
+              "percent",
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH missing",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.tag = 'missing' RETURN toLower(n.name) STARTS WITH 'a_' AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "STARTS WITH empty",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH '' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target",
+              "wildcard-decoy",
+              "percent",
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "STARTS WITH literal left",
+          "vars": {
+            "query": "RETURN toLower('A_%\\\\') STARTS WITH 'a_%\\\\' AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "STARTS WITH node SET return=False",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH 'a_' SET n.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "STARTS WITH relationship SET return=False",
+          "vars": {
+            "query": "MATCH (:EscapeRoot)-[r:EscapeEdge]->() WHERE r.role = 'candidate' AND toLower(r.name) STARTS WITH 'a_' SET r.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "STARTS WITH CREATE return=False",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH 'a_' CREATE (c:EscapeCreated {role: 'created', name: n.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:EscapeCreated) WHERE c.role = 'created' RETURN c.name AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "A_"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "STARTS WITH node SET return=True",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH 'a_' SET n.hit = true RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "STARTS WITH relationship SET return=True",
+          "vars": {
+            "query": "MATCH (:EscapeRoot)-[r:EscapeEdge]->() WHERE r.role = 'candidate' AND toLower(r.name) STARTS WITH 'a_' SET r.hit = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start_id": "root",
+                "end_id": "target",
+                "kind": "EscapeEdge",
+                "properties": {
+                  "role": "candidate",
+                  "keep": "untouched",
+                  "name": "A_",
+                  "hit": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "STARTS WITH CREATE return=True",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) STARTS WITH 'a_' CREATE (c:EscapeCreated {role: 'created', name: n.name}) RETURN c.name AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "A_"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:EscapeCreated) WHERE c.role = 'created' RETURN c.name AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "A_"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "ENDS WITH literal target",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH literal percent",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH 'a%' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "percent"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH literal backslash",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH 'a\\\\' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH upper",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toUpper(n.name) ENDS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH nested",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(toUpper(n.name)) ENDS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH coalesce",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND coalesce(n.name, '') ENDS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH toString",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toString(n.name) ENDS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH carried",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WITH n, toLower(n.name) AS value WHERE n.role = 'candidate' AND value ENDS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH bare control",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND n.name ENDS WITH 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH parameter control",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH $needle RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "params": {
+            "needle": "a_"
+          }
+        },
+        {
+          "name": "ENDS WITH negation",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND NOT toLower(n.name) ENDS WITH 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "wildcard-decoy",
+              "percent",
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH missing",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.tag = 'missing' RETURN toLower(n.name) ENDS WITH 'a_' AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "ENDS WITH empty",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH '' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target",
+              "wildcard-decoy",
+              "percent",
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "ENDS WITH literal left",
+          "vars": {
+            "query": "RETURN toLower('A_%\\\\') ENDS WITH 'a_%\\\\' AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "ENDS WITH node SET return=False",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH 'a_' SET n.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ENDS WITH relationship SET return=False",
+          "vars": {
+            "query": "MATCH (:EscapeRoot)-[r:EscapeEdge]->() WHERE r.role = 'candidate' AND toLower(r.name) ENDS WITH 'a_' SET r.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ENDS WITH CREATE return=False",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH 'a_' CREATE (c:EscapeCreated {role: 'created', name: n.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:EscapeCreated) WHERE c.role = 'created' RETURN c.name AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "A_"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "ENDS WITH node SET return=True",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH 'a_' SET n.hit = true RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ENDS WITH relationship SET return=True",
+          "vars": {
+            "query": "MATCH (:EscapeRoot)-[r:EscapeEdge]->() WHERE r.role = 'candidate' AND toLower(r.name) ENDS WITH 'a_' SET r.hit = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start_id": "root",
+                "end_id": "target",
+                "kind": "EscapeEdge",
+                "properties": {
+                  "role": "candidate",
+                  "keep": "untouched",
+                  "name": "A_",
+                  "hit": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ENDS WITH CREATE return=True",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) ENDS WITH 'a_' CREATE (c:EscapeCreated {role: 'created', name: n.name}) RETURN c.name AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "A_"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:EscapeCreated) WHERE c.role = 'created' RETURN c.name AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "A_"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CONTAINS literal target",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS literal percent",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS 'a%' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "percent"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS literal backslash",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS 'a\\\\' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS upper",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toUpper(n.name) CONTAINS 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS nested",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(toUpper(n.name)) CONTAINS 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS coalesce",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND coalesce(n.name, '') CONTAINS 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS toString",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toString(n.name) CONTAINS 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS carried",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WITH n, toLower(n.name) AS value WHERE n.role = 'candidate' AND value CONTAINS 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS bare control",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND n.name CONTAINS 'A_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS parameter control",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS $needle RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "params": {
+            "needle": "a_"
+          }
+        },
+        {
+          "name": "CONTAINS negation",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND NOT toLower(n.name) CONTAINS 'a_' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "wildcard-decoy",
+              "percent",
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS missing",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.tag = 'missing' RETURN toLower(n.name) CONTAINS 'a_' AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "CONTAINS empty",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS '' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target",
+              "wildcard-decoy",
+              "percent",
+              "backslash"
+            ]
+          }
+        },
+        {
+          "name": "CONTAINS literal left",
+          "vars": {
+            "query": "RETURN toLower('A_%\\\\') CONTAINS 'a_%\\\\' AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "CONTAINS node SET return=False",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS 'a_' SET n.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CONTAINS relationship SET return=False",
+          "vars": {
+            "query": "MATCH (:EscapeRoot)-[r:EscapeEdge]->() WHERE r.role = 'candidate' AND toLower(r.name) CONTAINS 'a_' SET r.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CONTAINS CREATE return=False",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS 'a_' CREATE (c:EscapeCreated {role: 'created', name: n.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:EscapeCreated) WHERE c.role = 'created' RETURN c.name AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "A_"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CONTAINS node SET return=True",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS 'a_' SET n.hit = true RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CONTAINS relationship SET return=True",
+          "vars": {
+            "query": "MATCH (:EscapeRoot)-[r:EscapeEdge]->() WHERE r.role = 'candidate' AND toLower(r.name) CONTAINS 'a_' SET r.hit = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start_id": "root",
+                "end_id": "target",
+                "kind": "EscapeEdge",
+                "properties": {
+                  "role": "candidate",
+                  "keep": "untouched",
+                  "name": "A_",
+                  "hit": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_",
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CONTAINS CREATE return=True",
+          "vars": {
+            "query": "MATCH (n:EscapeInput) WHERE n.role = 'candidate' AND toLower(n.name) CONTAINS 'a_' CREATE (c:EscapeCreated {role: 'created', name: n.name}) RETURN c.name AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "A_"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "EscapeRoot"
+                    ],
+                    "properties": {
+                      "tag": "root",
+                      "role": "root",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "wildcard-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "wildcard-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "id": "percent",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "percent",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A%"
+                    }
+                  },
+                  {
+                    "id": "backslash",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "backslash",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A\\"
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "role-decoy",
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "EscapeOther"
+                    ],
+                    "properties": {
+                      "tag": "kind-decoy",
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "EscapeInput"
+                    ],
+                    "properties": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "EscapeCreated"
+                    ],
+                    "properties": {
+                      "tag": "created-kind",
+                      "role": "decoy",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start_id": "root",
+                    "end_id": "target",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "wildcard-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "AB"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "role-decoy",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "decoy",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "kind-decoy",
+                    "kind": "EscapeOtherEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched",
+                      "name": "A_"
+                    }
+                  },
+                  {
+                    "start_id": "root",
+                    "end_id": "missing",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start_id": "target",
+                    "end_id": "root",
+                    "kind": "EscapeEdge",
+                    "properties": {
+                      "role": "candidate",
+                      "name": "A_",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:EscapeCreated) WHERE c.role = 'created' RETURN c.name AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "A_"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

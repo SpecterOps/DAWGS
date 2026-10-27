@@ -109,6 +109,14 @@ ordered comparisons call `cypher_compare` instead of casting extracted text or
 using JSONB's cross-type total ordering. Known temporal comparisons retain their
 native casts.
 
+`string_predicate_escaping.sql` checks literal LIKE escaping after functions and
+WITH aliases, negation, literal left operands, node/relationship SET and CREATE
+without RETURN. Both the ILIKE prefilter and exact lower-case LIKE comparison use
+the escaped pattern. Parameter, direct property and regex controls retain their
+existing paths. Existing coalesce examples in `nodes.sql`, `pattern_binding.sql`
+and `shortest_paths.sql` now escape literal underscores, including SQL embedded
+in traversal-harness parameters.
+
 `with_property_consumers.sql` covers typed property aliases through WITH, text
 conversion without JSON quoting, case conversion, both split operands, size,
 coalesce, equality/null checks, scalar conversion and node/relationship mutations
