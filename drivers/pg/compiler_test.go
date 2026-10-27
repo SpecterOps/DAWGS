@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
@@ -556,4 +557,53 @@ func TestCompileTextUnoptimizedBypassesCache(t *testing.T) {
 	require.Equal(t, warmStats.Misses, disabledStats.Misses)
 	require.Equal(t, warmStats.Bypasses+1, disabledStats.Bypasses)
 	require.Equal(t, warmStats.UnoptimizedCompilations+1, disabledStats.UnoptimizedCompilations)
+}
+
+// Integral float literals previously formatted to the same builder text as
+// their integer counterparts (`3.0` degraded to `3`), so cache preparation
+// had to rely on the typed digest alone and the emitted SQL performed
+// integer division. Prepared sources must keep the floating-point spelling,
+// and warm compilation must never reuse the integer query's translation.
+func TestCompileRegularQuerySeparatesIntegralFloatAndIntegerLiterals(t *testing.T) {
+	setOptimizedTranslationForTest(t, true)
+
+	parse := func(source string) preparedRegularQuery {
+		regularQuery, err := frontend.ParseCypher(frontend.NewContext(), source)
+		require.NoError(t, err)
+		prepared, err := prepareRegularQuery(regularQuery)
+		require.NoError(t, err)
+		return prepared
+	}
+
+	floatDivision := parse("return 3.0 / 2.0 as a")
+	integerDivision := parse("return 3 / 2 as a")
+	require.Equal(t, "return 3.0 / 2.0 as a", floatDivision.source)
+	require.NotEqual(t, floatDivision.source, integerDivision.source)
+	require.NotEqual(t, floatDivision.identity, integerDivision.identity)
+
+	warm := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 8})
+	cold := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 0})
+
+	floatSQL, _, err := warm.compileRegularQuery(context.Background(), floatDivision, 7)
+	require.NoError(t, err)
+	require.Contains(t, floatSQL, "3.0 / 2.0")
+
+	// A warm cache holding the float query must not serve the integer query's
+	// translation, and the integer query must not reuse the float entry.
+	integerSQL, _, err := warm.compileRegularQuery(context.Background(), integerDivision, 7)
+	require.NoError(t, err)
+	require.Contains(t, integerSQL, "3 / 2")
+	require.NotEqual(t, floatSQL, integerSQL)
+
+	warmFloatSQL, warmFloatBindings, err := warm.compileRegularQuery(context.Background(), floatDivision, 7)
+	require.NoError(t, err)
+	coldFloatSQL, coldFloatBindings, err := cold.compileRegularQuery(context.Background(), floatDivision, 7)
+	require.NoError(t, err)
+	require.Equal(t, coldFloatSQL, warmFloatSQL)
+	require.Empty(t, coldFloatBindings)
+	require.Empty(t, warmFloatBindings)
+
+	stats := warm.compilationCache.Stats()
+	require.Equal(t, int64(2), stats.Misses)
+	require.Equal(t, int64(1), stats.Hits)
 }

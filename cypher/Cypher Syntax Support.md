@@ -486,6 +486,15 @@ expression indexes such as `properties ->> 'objectid'` or `properties ->> 'name'
 Boolean and numeric literals continue to use strict JSON scalar equality; use boolean or numeric literals, such as
 `n.enabled = true` or `n.count = 1`, when typed JSON scalar equality is required.
 
+### Floating-Point Literal Fidelity
+
+Floating-point literals keep their floating-point spelling in both the Cypher and SQL emitters: an integral value such
+as `3.0` never degrades to the integer `3`. PostgreSQL therefore evaluates `return 3.0 / 2.0` as numeric division
+returning `1.5`, and `toString(1.0)` returns `"1.0"`. Integer literals keep integer semantics: `return 3 / 2` remains
+integer division returning `1`. Exponent spellings such as `1e3` canonicalize to decimal float form (`1000.0`) when a
+query is re-emitted, including the Neo4j query rewrite.
+
+
 ### Index Utilization
 
 Indexing in CySQL does not require a label specifier to be utilized. If the node property `name` is indexed in CySQL,

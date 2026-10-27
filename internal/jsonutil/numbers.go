@@ -1,4 +1,4 @@
-// Package jsonutil provides shared JSON import conversions.
+// Package jsonutil provides shared JSON numeric conversions.
 package jsonutil
 
 import (

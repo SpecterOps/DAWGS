@@ -64,6 +64,7 @@ func TestBuilderIdentityFramesAndSortsMapEntries(t *testing.T) {
 	require.NotEqual(t, encode(int32(1)), encode(int64(1)))
 	require.NotEqual(t, encode(uint32(1)), encode(uint64(1)))
 	require.NotEqual(t, encode(float32(1)), encode(float64(1)))
+	require.NotEqual(t, encode(int64(1)), encode(float64(1)))
 }
 
 func TestBuilderIdentityBypassesUnsupportedAndBoundedWork(t *testing.T) {
