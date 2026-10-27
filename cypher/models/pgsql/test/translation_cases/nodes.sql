@@ -407,7 +407,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (@pi0::float8 = any (jsonb_to_text_array((n0.properties -> E'array'))::float8[]) or @pi1::text = any (jsonb_to_text_array((n0.properties -> E'array'))::text[]))) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where coalesce(n.system_tags, '') contains 'admin_tier_0' return n
--- pgsql_params:{"__strlit0":"null","__strlit1":"","__strlit2":"string","__strlit3":"%admin_tier_0%"}
+-- pgsql_params:{"__strlit0":"null","__strlit1":"","__strlit2":"string","__strlit3":"%admin\\_tier\\_0%"}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((jsonb_typeof(coalesce(nullif(nullif((n0.properties -> E'system_tags'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb) = @__strlit2::text and coalesce(nullif(nullif((n0.properties -> E'system_tags'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb #>> array []::text[] like @__strlit3::text) or (not (jsonb_typeof(coalesce(nullif(nullif((n0.properties -> E'system_tags'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb) = @__strlit2::text) and null))) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where coalesce(n.a, n.b, 1) = 1 return n
