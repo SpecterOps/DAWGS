@@ -22,6 +22,16 @@ clauses, wildcard projections, aggregation, UNWIND, SET, and CREATE with and
 without RETURN. Unmatched clauses produce one null-filled row; mutation variants
 check the resulting graph. PostgreSQL executes every variant in both compiler modes.
 
+`to_integer_shapes.json` covers numeric truncation toward zero for literals,
+parameters, node/relationship properties, WITH aliases and UNWIND inputs. Controls
+include nulls, exact large integers and signed 64-bit limits supplied as strings.
+SET, filter and CREATE variants check complete fixture state and creation counts
+with and without RETURN. `TestPostgreSQLToIntegerCompilerModes` runs the shared
+corpus in both compiler modes. `TestToInteger` checks actual Go integer types
+from native parameters and committed properties, including floating parameters
+at the signed 64-bit boundaries. These live checks require running databases;
+their current execution status is recorded in the active variance plan.
+
 `numeric_sum_shapes.json` checks exact large integer SUM results, DISTINCT,
 grouping, empty/all-null inputs, float and literal controls, relationship properties,
 WITH aliases and arithmetic after aggregation. Node/relationship SET and CREATE

@@ -64,6 +64,9 @@ const (
 	// FunctionToJSONB identifies PostgreSQL's conversion to JSONB.
 	FunctionToJSONB Identifier = "to_jsonb"
 
+	// FunctionTrunc removes the fractional part without rounding.
+	FunctionTrunc Identifier = "trunc"
+
 	// FunctionCypherText extracts a runtime string or explicitly converts a scalar.
 	FunctionCypherText Identifier = "cypher_text"
 
