@@ -1503,6 +1503,14 @@ func (s *ExpressionTreeTranslator) CompleteBinaryExpression(scope *Scope, operat
 	if err != nil {
 		return err
 	}
+	if operator == pgsql.OperatorIn {
+		if membership, rewritten, err := rewriteEntityMembership(scope, newExpression); err != nil {
+			return err
+		} else if rewritten {
+			s.PushOperand(membership)
+			return nil
+		}
+	}
 	if operator.IsIn(pgsql.OperatorAdd, pgsql.OperatorSubtract, pgsql.OperatorMultiply, pgsql.OperatorDivide, "%", "^") || isOrderedComparison(operator) || isStringPredicate(operator) || operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals, pgsql.OperatorIs, pgsql.OperatorIsNot, pgsql.OperatorIn) {
 		// WITH carries types in the scope. Expose scalar types before operand
 		// hinting can cast JSONB to text and erase runtime value information.

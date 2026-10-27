@@ -83,6 +83,8 @@ type Translator struct {
 	collectIDMembershipAliases map[pgsql.Identifier]struct{}
 	// collectIDProjectionDepth tracks nesting within an ID-only collect projection.
 	collectIDProjectionDepth int
+	// collectIDEntityType carries the element type into the current projection binding.
+	collectIDEntityType pgsql.DataType
 
 	// appliedLoweringCounts counts emitted applications of each planned lowering.
 	appliedLoweringCounts map[string]int
@@ -415,6 +417,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.ProjectionItem:
+		s.collectIDEntityType = pgsql.UnsetDataType
 		if typedExpression.Alias != nil {
 			if _, collectIDs := s.collectIDMembershipAliases[pgsql.Identifier(typedExpression.Alias.Symbol)]; collectIDs {
 				s.collectIDProjectionDepth++

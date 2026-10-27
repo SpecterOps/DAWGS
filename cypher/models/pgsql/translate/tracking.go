@@ -410,6 +410,8 @@ type BoundIdentifier struct {
 	DataType pgsql.DataType
 	// IDOnly reports that the binding is represented by a scalar entity ID instead of a composite.
 	IDOnly bool
+	// collectedEntityType retains the Cypher element type of an ID-only collection.
+	collectedEntityType pgsql.DataType
 	// PathDirectionReversed marks a path composite binding whose dependency order was produced
 	// from an optimizer-reversed pattern. Path materialization reverses the assembled node and
 	// edge references so the path renders in its original left-to-right logical order.
@@ -435,6 +437,7 @@ func (s *BoundIdentifier) Copy() *BoundIdentifier {
 		Dependencies:          dependenciesCopy,
 		DataType:              s.DataType,
 		IDOnly:                s.IDOnly,
+		collectedEntityType:   s.collectedEntityType,
 		PathDirectionReversed: s.PathDirectionReversed,
 		DistanceOnly:          s.DistanceOnly,
 	}

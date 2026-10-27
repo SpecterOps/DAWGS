@@ -71,6 +71,15 @@ properties, actual Go result types and errors for invalid arithmetic on both
 backends. PostgreSQL schema tests check repeat assertion, nulls, overflow and
 floating remainder against Go's `math.Mod`.
 
+`entity_membership_shapes.json` checks node and relationship membership through
+ID-only and full-entity collections, WITH aliases, DISTINCT, duplicate inputs,
+numeric ID decoys, negation and nullable/empty collections. SET and CREATE variants
+check complete fixture state and created values/counts with and without RETURN.
+PostgreSQL runs every variant in both compiler modes. Its separate
+`TestPostgreSQLEntityMembershipOverlappingIDs` commits an explicit node/relationship
+ID overlap and checks exact stored state after rollback-scoped mutations, so
+independent ID sequences cannot hide cross-type identity comparisons.
+
 The assertion vocabulary includes exact fixture-backed state checks:
 
 - `node_id_set` for exact surviving node IDs;
