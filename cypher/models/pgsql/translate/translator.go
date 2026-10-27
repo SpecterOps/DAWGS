@@ -304,7 +304,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.With:
-		if err := s.prepareWith(); err != nil {
+		if err := s.prepareWith(typedExpression); err != nil {
 			s.SetError(err)
 		}
 

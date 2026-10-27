@@ -71,6 +71,17 @@ state, unchanged direction/kind/role/missing-property decoys and creation counts
 both compiler modes. Live execution requires running databases; its status is
 recorded in the active variance plan.
 
+`with_modifier_shapes.json` covers ordering, SKIP and LIMIT on read-only WITH
+boundaries, entity/scalar aliases, nested ordering expressions, hidden sort keys,
+DISTINCT, aggregation, literal projections, duplicate/empty inputs, consecutive
+pages and independent RETURN modifiers. WITH WHERE cases distinguish filtering
+after pagination from filtering the input. SET and CREATE variants run with and
+without RETURN and check complete node/relationship post-state, unchanged
+direction/kind/property/root/missing-property decoys and created values/counts.
+`TestPostgreSQLWithModifierCompilerModes` runs all 44 shared variants in both
+compiler modes. Live execution requires running databases; its current status is
+recorded in the active variance plan.
+
 `json_result_string_shapes.json` covers JSON-like strings returned by CREATE,
 node/relationship SET and WITH continuation. It checks exact string contents and
 complete post-state, including unchanged fixture entities. PostgreSQL executes
@@ -189,8 +200,9 @@ leading and pending UNWIND, empty inputs, WITH aliases, DISTINCT/aggregation, nu
 chained optionals, multiple pattern parts, uncorrelated matches, WHERE filters, bound endpoints, variable-length
 and zero-hop paths, incoming paths and wildcard projection. Mutation cases check exact node/relationship state,
 staged pagination and continuation, and CREATE cardinality with and without RETURN. PostgreSQL executes every
-variant with each compiler mode explicitly. Read-only WITH pagination remains the separate DAWGS-040 finding;
-the pagination case uses the supported staged-write boundary.
+variant with each compiler mode explicitly. Read-only WITH pagination has dedicated
+coverage in `with_modifier_shapes.json`; this corpus's pagination case uses the
+staged-write boundary.
 
 `undirected_continuation_shapes.json` checks paired endpoint orientations after fixed and variable-length prefixes,
 including incoming and undirected prefixes, opposite-direction parallel edges, self-loops, bound endpoints, paths,
