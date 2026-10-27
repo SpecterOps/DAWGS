@@ -120,3 +120,9 @@ literal/UNWIND operands, carried properties, arithmetic after aggregation and
 node/relationship mutations including CREATE without RETURN. Related existing
 `scalar_aggregation.sql` cases now retain integer SUM types and empty-input zero;
 AVG keeps its existing floating-point conversion.
+
+`typed_collect.sql` covers JSONB property aggregation, DISTINCT, null and Boolean
+literals, nested collection aliases, typed UNWIND arithmetic/Boolean expressions,
+list concatenation, membership, head and node/relationship mutations including
+CREATE without RETURN. Related existing aggregation, multipart, pattern-binding
+and UNWIND cases preserve property types instead of extracting text.

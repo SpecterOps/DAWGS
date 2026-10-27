@@ -74,6 +74,14 @@ func rewriteArithmeticComparison(expression *pgsql.BinaryExpression) (bool, erro
 		pgsql.OperatorGreaterThan, pgsql.OperatorGreaterThanOrEqualTo, pgsql.OperatorLessThan, pgsql.OperatorLessThanOrEqualTo) {
 		return false, nil
 	}
+	// ANY is SQL comparison syntax, not an array value to serialize. Its
+	// scalar side is already converted by typed collection membership.
+	for _, operand := range []pgsql.Expression{expression.LOperand, expression.ROperand} {
+		switch unwrapParenthetical(operand).(type) {
+		case pgsql.AnyExpression, *pgsql.AnyExpression:
+			return false, nil
+		}
+	}
 	isDynamicJSON := func(operand pgsql.Expression) bool {
 		dataType, err := InferExpressionType(unwrapParenthetical(operand))
 		return err == nil && dataType == pgsql.JSONB

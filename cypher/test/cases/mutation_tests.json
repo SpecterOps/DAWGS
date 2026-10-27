@@ -900,6 +900,38 @@
         "query": "match (n) with sum(n.big) as total return total / 2",
         "fitness": -3
       }
+    },
+    {
+      "name": "typed node collection SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.x) as xs match (t:B) set t.xs = xs return t",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "typed relationship collection SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.flag) as xs match ()-[r:R]->() set r.xs = xs",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "typed collected UNWIND CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.x) as xs unwind xs as x create (c:B {value: x + 1})",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "typed collected Boolean SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.flag) as xs unwind xs as x match (t:B) set t.flag = x and true return t",
+        "fitness": 2
+      }
     }
   ]
 }

@@ -52,20 +52,24 @@ select @__strlit0::text as "'hello world'";
 select 2 + 3 as "2 + 3";
 
 -- case: MATCH (n) RETURN n.department, collect(n.name)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> E'department') as "n.department", array_remove(coalesce(array_agg(((s0.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as "collect(n.name)" from s0 group by ((s0.n0).properties -> E'department');
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> E'department') as "n.department", array_remove(coalesce(array_agg(nullif(((s0.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as "collect(n.name)" from s0 group by ((s0.n0).properties -> E'department');
 
 -- case: MATCH (n) RETURN collect(n.name)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select array_remove(coalesce(array_agg(((s0.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as "collect(n.name)" from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select array_remove(coalesce(array_agg(nullif(((s0.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as "collect(n.name)" from s0;
 
 -- case: MATCH (n) RETURN n.department, collect(n.name), count(n)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> E'department') as "n.department", array_remove(coalesce(array_agg(((s0.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as "collect(n.name)", count(s0.n0)::int8 as "count(n)" from s0 group by ((s0.n0).properties -> E'department');
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> E'department') as "n.department", array_remove(coalesce(array_agg(nullif(((s0.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as "collect(n.name)", count(s0.n0)::int8 as "count(n)" from s0 group by ((s0.n0).properties -> E'department');
 
 -- case: MATCH (n) RETURN size(n.tags)
 -- pgsql_params:{"__strlit0":"null"}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_size(nullif(((s0.n0).properties -> E'tags'), (@__strlit0::text)::jsonb)::jsonb)::int8 as "size(n.tags)" from s0;
 
 -- case: MATCH (n) RETURN size(collect(n.name))
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cardinality(array_remove(coalesce(array_agg(((s0.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray)::int as "size(collect(n.name))" from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cardinality(array_remove(coalesce(array_agg(nullif(((s0.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[])::int as "size(collect(n.name))" from s0;
 
 -- case: MATCH (n) WITH collect(labels(n)) as label_sets RETURN size(label_sets)
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select array_remove(coalesce(array_agg(to_jsonb((array(select _kind.name from generate_subscripts((s1.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s1.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[])::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as i0 from s1) select cardinality(s0.i0)::int as "size(label_sets)" from s0;
@@ -75,7 +79,8 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_size(nullif((n0.properties -> E'permissions'), (@__strlit0::text)::jsonb)::jsonb)::int8 > 2)) select s0.n0 as n from s0;
 
 -- case: MATCH (n) WITH n, collect(n.prop) as props WHERE size(props) > 1 RETURN n, props
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, array_remove(coalesce(array_agg(((s1.n0).properties ->> E'prop'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1 group by n0) select s0.n0 as n, s0.i0 as props from s0 where (cardinality(s0.i0)::int > 1);
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, array_remove(coalesce(array_agg(nullif(((s1.n0).properties -> E'prop'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as i0 from s1 group by n0) select s0.n0 as n, s0.i0 as props from s0 where (cardinality(s0.i0)::int > 1);
 
 -- case: MATCH (n) WITH n, count(n) as node_count WHERE node_count > 1 RETURN n, node_count
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, count(s1.n0)::int8 as i0 from s1 group by n0) select s0.n0 as n, s0.i0 as node_count from s0 where ((s0.i0)::int8 > 1);
