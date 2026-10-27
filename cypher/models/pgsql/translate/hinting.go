@@ -506,6 +506,15 @@ func applyBinaryExpressionTypeHints(kindMapper *contextAwareKindMapper, expressi
 		return nil
 	}
 
+	if isStringPredicate(expression.Operator) {
+		return nil // typedStringPredicate retains both operands' runtime types.
+	}
+	if rewritten, err := rewriteTypedOrdering(expression); err != nil {
+		return err
+	} else if rewritten {
+		return nil
+	}
+
 	if dynamic, err := requiresDynamicArithmetic(expression); err != nil {
 		return err
 	} else if dynamic {

@@ -891,6 +891,39 @@ begin
 end;
 $$ language plpgsql immutable parallel safe strict;
 
+-- Cypher's partial ordering differs from JSONB's total ordering. In particular,
+-- unlike scalar types are incomparable and list order is lexicographic.
+create or replace function public.cypher_compare(left_value jsonb, right_value jsonb)
+  returns int4 as
+$$
+declare
+  value_type text := jsonb_typeof(left_value);
+  left_length int4;
+  right_length int4;
+  comparison int4;
+begin
+  if value_type <> jsonb_typeof(right_value) or value_type in ('null', 'object') then
+    return null;
+  end if;
+  if value_type = 'array' then
+    left_length := jsonb_array_length(left_value);
+    right_length := jsonb_array_length(right_value);
+    for idx in 0 .. least(left_length, right_length) - 1 loop
+      comparison := public.cypher_compare(left_value -> idx, right_value -> idx);
+      if comparison is null or comparison <> 0 then
+        return comparison;
+      end if;
+    end loop;
+    return case when left_length < right_length then -1 when left_length > right_length then 1 else 0 end;
+  end if;
+  if value_type = 'string' then
+    return case when (left_value #>> '{}') collate "C" < (right_value #>> '{}') collate "C" then -1
+      when (left_value #>> '{}') collate "C" > (right_value #>> '{}') collate "C" then 1 else 0 end;
+  end if;
+  return case when left_value < right_value then -1 when left_value > right_value then 1 else 0 end;
+end;
+$$ language plpgsql immutable parallel safe strict;
+
 create or replace function public.cypher_contains(haystack text, needle text)
   returns bool as
 $$

@@ -796,6 +796,38 @@
         "query": "match (n:NodeKind1) with n, n.x + n.y as total set n.total = total return n",
         "fitness": -1
       }
+    },
+    {
+      "name": "Typed string predicate SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.x starts with '1' set n.seen = true return n",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Typed comparison relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() where r.x < 200 set r.seen = true return r",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Typed predicate projection assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.seen = coalesce(n.x contains n.y, false) return n",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Typed comparison CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.x < n.y create (m:NodeKind2 {source: n.x})",
+        "fitness": 8
+      }
     }
   ]
 }

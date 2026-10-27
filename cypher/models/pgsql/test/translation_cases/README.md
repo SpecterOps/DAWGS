@@ -99,3 +99,12 @@ arithmetic. Exponent spellings (`1e3`) canonicalize to decimal float form.
 operators, chained expressions, WHERE comparisons, WITH aliases, node/relationship
 SET and CREATE without RETURN. Three existing `nodes.sql` cases also dispatch
 property addition at runtime rather than assuming string concatenation.
+
+`predicate_types.sql` covers runtime type preservation for string predicates,
+negation, regex operands, ordered comparisons in either operand position,
+property pairs, lists, WITH-carried properties, node/relationship SET and CREATE
+without RETURN. Existing string-predicate fixtures now include a nullable type
+guard; positive filters retain bare text LIKE conditions for index use. Dynamic
+ordered comparisons call `cypher_compare` instead of casting extracted text or
+using JSONB's cross-type total ordering. Known temporal comparisons retain their
+native casts.

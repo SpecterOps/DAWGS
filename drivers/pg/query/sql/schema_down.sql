@@ -26,6 +26,7 @@ drop function if exists cypher_min_transition(jsonb, jsonb);
 drop function if exists cypher_max_transition(jsonb, jsonb);
 drop function if exists cypher_value_compare(jsonb, jsonb);
 drop function if exists cypher_jsonb_type_rank(jsonb);
+drop function if exists cypher_compare(jsonb, jsonb);
 drop function if exists cypher_arithmetic(jsonb, jsonb, text);
 drop function if exists cypher_contains(text, text);
 drop function if exists cypher_starts_with(text, text);

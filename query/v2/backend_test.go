@@ -260,8 +260,8 @@ func TestBackendParityPGTranslate(t *testing.T) {
 				v2.Node().ID(),
 				v2.Node().Kinds(),
 			),
-			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and (n0.properties ->> E'name') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit0::text)::text)) select (s0.n0).id as \"id(n)\", (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] as \"labels(n)\" from s0;",
-			expectedParams: map[string]any{"pi0": "admin", "__strlit0": "%"},
+			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and ((jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text and (n0.properties ->> E'name') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text) or (not (jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text) and null)))) select (s0.n0).id as \"id(n)\", (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] as \"labels(n)\" from s0;",
+			expectedParams: map[string]any{"pi0": "admin", "__strlit0": "string", "__strlit1": "%"},
 		},
 		"relationship read": {
 			builder: v2.New().Where(

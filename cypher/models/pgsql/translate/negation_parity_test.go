@@ -46,7 +46,7 @@ func TestNegationParityTranslation(t *testing.T) {
 				{
 					"double negated string predicate loses the negation rewrite",
 					`MATCH (n:MemberOf) WHERE NOT NOT n.name STARTS WITH 'a' RETURN n.name`,
-					`with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> E'name') like @__strlit0::text) and n0.kind_ids operator (pg_catalog.@>) array [10]::int2[]) select ((s0.n0).properties -> E'name') as "n.name" from s0;`,
+					`with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text and (n0.properties ->> E'name') like @__strlit1::text) or (not (jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text) and null))) and n0.kind_ids operator (pg_catalog.@>) array [10]::int2[]) select ((s0.n0).properties -> E'name') as "n.name" from s0;`,
 				},
 				{
 					"double negated null predicate keeps the property rewrite",
