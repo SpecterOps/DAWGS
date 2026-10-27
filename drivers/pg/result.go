@@ -2,7 +2,6 @@ package pg
 
 import (
 	"context"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -104,29 +103,13 @@ func decodeJSONValues(values []any, fields []pgconn.FieldDescription) []any {
 	return values
 }
 
-// decodeJSONValue decodes byte JSON and structured string JSON while preserving already-decoded scalar strings.
+// decodeJSONValue decodes raw JSON bytes. Strings from pgx are already decoded
+// JSON string values, even when their contents are valid JSON documents.
 func decodeJSONValue(value any) (any, bool) {
 	switch typedValue := value.(type) {
 	case []byte:
 		var decoded any
 		if err := unmarshalJSONNumbers(typedValue, &decoded); err == nil {
-			return decoded, true
-		}
-
-	case string:
-		trimmedValue := strings.TrimSpace(typedValue)
-		if len(trimmedValue) == 0 {
-			return nil, false
-		}
-
-		switch trimmedValue[0] {
-		case '{', '[', '"':
-		default:
-			return nil, false
-		}
-
-		var decoded any
-		if err := unmarshalJSONNumbers([]byte(trimmedValue), &decoded); err == nil {
 			return decoded, true
 		}
 	}

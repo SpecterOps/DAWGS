@@ -61,3 +61,26 @@ func TestPostgresJSONResultRejectsUnsupportedNumbers(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresJSONResultStrings(t *testing.T) {
+	ctx, conn := connectCompositeCodecIntegration(t)
+	for _, format := range []int16{pgtype.TextFormatCode, pgtype.BinaryFormatCode} {
+		for _, text := range []string{"[1, 2]", `{"k":"v"}`, `"q"`, "[]", "{}", `""`, " \t[1, 2]\n", `"\u0041"`, "{broken", "true", "null", "1234", ""} {
+			rows, err := conn.Query(ctx, `select
+ to_json($1::text), to_jsonb($1::text),
+ to_jsonb(array[$1::text]), jsonb_build_object('text', $1::text),
+ $1::text, convert_to($1::text, 'UTF8'),
+ '[1,true,null]'::jsonb, '{"k":"v"}'::json`, pgx.QueryResultFormats{format}, text)
+			require.NoError(t, err)
+			result := &queryResult{ctx: ctx, rows: rows}
+			require.True(t, result.Next(), "%v", result.Error())
+			require.Equal(t, []any{
+				text, text, []any{text}, map[string]any{"text": text}, text, []byte(text),
+				[]any{int64(1), true, nil}, map[string]any{"k": "v"},
+			}, result.Values(), "format=%d text=%q", format, text)
+			require.False(t, result.Next())
+			require.NoError(t, result.Error())
+			result.Close()
+		}
+	}
+}
