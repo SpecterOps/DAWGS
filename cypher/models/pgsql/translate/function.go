@@ -665,25 +665,25 @@ func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression
 }
 
 // prepareCollectIDExpression extracts a scalar entity ID before collection and records the ID-only alias.
-func prepareCollectIDExpression(scope *Scope, collectedExpression pgsql.Expression) (pgsql.Expression, bool) {
+func prepareCollectIDExpression(scope *Scope, collectedExpression pgsql.Expression) (pgsql.Expression, pgsql.DataType, bool) {
 	identifier, isIdentifier := unwrapParenthetical(collectedExpression).(pgsql.Identifier)
 	if !isIdentifier {
-		return nil, false
+		return nil, pgsql.UnsetDataType, false
 	}
 
 	binding, bound := scope.Lookup(identifier)
 	if !bound {
-		return nil, false
+		return nil, pgsql.UnsetDataType, false
 	}
 
-	switch binding.DataType {
-	case pgsql.NodeComposite, pgsql.EdgeComposite, pgsql.ExpansionRootNode, pgsql.ExpansionTerminalNode, pgsql.ExpansionEdge:
+	switch dataType := bindingExpressionType(binding); dataType {
+	case pgsql.NodeComposite, pgsql.EdgeComposite:
 		return pgsql.RowColumnReference{
 			Identifier: identifier,
 			Column:     pgsql.ColumnID,
-		}, true
+		}, dataType, true
 	default:
-		return nil, false
+		return nil, pgsql.UnsetDataType, false
 	}
 }
 
@@ -1053,7 +1053,8 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 		} else if collectedExpression, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
 		} else if s.collectIDProjectionDepth > 0 {
-			if idExpression, collectIDs := prepareCollectIDExpression(s.scope, collectedExpression); collectIDs {
+			if idExpression, entityType, collectIDs := prepareCollectIDExpression(s.scope, collectedExpression); collectIDs {
+				s.collectIDEntityType = entityType
 				s.treeTranslator.PushOperand(
 					functionWrapCollectToArray(typedExpression.Distinct, idExpression, pgsql.Int8Array),
 				)

@@ -126,3 +126,9 @@ literals, nested collection aliases, typed UNWIND arithmetic/Boolean expressions
 list concatenation, membership, head and node/relationship mutations including
 CREATE without RETURN. Related existing aggregation, multipart, pattern-binding
 and UNWIND cases preserve property types instead of extracting text.
+
+`entity_membership.sql` covers typed ID-only collections, full node/relationship
+collections, WITH aliases, numeric ID decoys, negation, optional null targets and
+SET/CREATE without RETURN. Same-type tests extract entity identity; cross-type
+tests preserve null and empty-list semantics without comparing numeric IDs.
+Direct aggregate entity-expression controls preserve their grouping scope.

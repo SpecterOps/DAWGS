@@ -183,6 +183,13 @@ values, an integral float's type cannot be recovered after storage has erased it
 fractional spelling. Validation and collection costs are recorded in
 [the variance ledger](variance_findings_priority.md#dawgs-054-typed-collections--2026-10-27).
 
+Entity membership preserves node and relationship identity types through `collect`
+and `WITH`. A relationship never matches a collected node with the same numeric ID,
+and a numeric ID never matches an entity. Membership of bound entities uses their
+identity, including when a collection retains full entities. Negation and nullable/empty
+lists keep Cypher's membership semantics in both PostgreSQL compiler modes.
+See [the membership regression evidence](variance_findings_priority.md#dawgs-056-entity-membership-types--2026-10-27).
+
 ## Quick Start
 
 Build the repository:
