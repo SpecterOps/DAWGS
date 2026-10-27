@@ -50,8 +50,8 @@ func TestBooleanValuesWithEmptyBuilderPredicates(t *testing.T) {
 			formatted, err := Translated(result)
 			require.NoError(t, err)
 			require.Contains(t, formatted.Statement, "and")
-			require.Contains(t, formatted.Statement, "> @")
-			require.Contains(t, formatted.Statement, "< @")
+			require.Contains(t, formatted.Statement, "> 0")
+			require.Contains(t, formatted.Statement, "< 0")
 		})
 	}
 }

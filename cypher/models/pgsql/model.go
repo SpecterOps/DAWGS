@@ -298,6 +298,10 @@ func NewUnaryExpression(operator Operator, operand Expression) *UnaryExpression 
 	}
 }
 
+func (s UnaryExpression) AsSelectItem() SelectItem {
+	return s
+}
+
 func (s UnaryExpression) AsExpression() Expression {
 	return s
 }

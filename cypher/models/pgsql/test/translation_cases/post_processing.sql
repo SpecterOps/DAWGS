@@ -41,5 +41,5 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where not (n:RegressionKind48 or n:RegressionKind49) and n.name is null and n.objectid starts with $sid_prefix return id(n)
 -- cypher_params: {"sid_prefix":"S-1-5"}
--- pgsql_params:{"__strlit0":"null","__strlit1":"%","pi0":"S-1-5"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not (n0.kind_ids operator (pg_catalog.@>) array [80]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [81]::int2[]) and (not n0.properties ? E'name' or (n0.properties -> E'name') = (@__strlit0::text)::jsonb) and (n0.properties ->> E'objectid') like (cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text)) select (s0.n0).id as "id(n)" from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"string","__strlit2":"%","pi0":"S-1-5"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not (n0.kind_ids operator (pg_catalog.@>) array [80]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [81]::int2[]) and (not n0.properties ? E'name' or (n0.properties -> E'name') = (@__strlit0::text)::jsonb) and ((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit1::text and (n0.properties ->> E'objectid') like (cypher_like_escape((@pi0::text)::text)::text || @__strlit2::text)::text) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit1::text) and null)))) select (s0.n0).id as "id(n)" from s0;

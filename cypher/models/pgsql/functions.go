@@ -64,6 +64,9 @@ const (
 	// FunctionToJSONB identifies PostgreSQL's conversion to JSONB.
 	FunctionToJSONB Identifier = "to_jsonb"
 
+	// FunctionCypherCompare compares compatible runtime values, returning null for unlike types.
+	FunctionCypherCompare Identifier = "cypher_compare"
+
 	// FunctionCypherArithmetic evaluates arithmetic using the runtime JSON value types.
 	FunctionCypherArithmetic Identifier = "cypher_arithmetic"
 

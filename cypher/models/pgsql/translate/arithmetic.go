@@ -40,7 +40,21 @@ func arithmeticJSONOperand(expression pgsql.Expression) (pgsql.Expression, error
 	if dataType == pgsql.JSONB {
 		return expression, nil
 	}
-	var value pgsql.Expression = pgsql.NewTypeCast(expression, dataType)
+	if !dataType.IsKnown() {
+		switch expression.(type) {
+		case pgsql.Parameter, *pgsql.Parameter:
+			// Untyped parameters represent null. A polymorphic to_jsonb call
+			// cannot infer their SQL type without this explicit null type.
+			return pgsql.NewTypeCast(expression, pgsql.JSONB), nil
+		}
+	}
+	// A scope-bound scalar (for example an UNWIND column) can lack an AST
+	// hint while still having a concrete SQL type. Let PostgreSQL resolve that
+	// column type instead of emitting an invalid cast to unknown.
+	var value pgsql.Expression = expression
+	if dataType.IsKnown() {
+		value = pgsql.NewTypeCast(expression, dataType)
+	}
 	if dataType.MatchesOneOf(pgsql.Float4, pgsql.Float8, pgsql.Numeric) {
 		// to_jsonb(float8) can spell 2.0 as 2. Keep a fractional digit so the
 		// next dynamic operation can distinguish float from integer division.

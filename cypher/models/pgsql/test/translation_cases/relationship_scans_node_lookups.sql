@@ -80,13 +80,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n:RegressionKind94) where n.distinguishedname starts with $prefix and n.domainsid = $domain return n
 -- cypher_params: {"domain":"S-1-5-21","prefix":"CN=ADMINSDHOLDER,CN=SYSTEM,"}
--- pgsql_params:{"__strlit0":"%","__strlit1":"string","pi0":"CN=ADMINSDHOLDER,CN=SYSTEM,","pi1":"S-1-5-21"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> E'distinguishedname') like (cypher_like_escape((@pi0::text)::text)::text || @__strlit0::text)::text and (jsonb_typeof((n0.properties -> E'domainsid')) = @__strlit1::text and (n0.properties ->> E'domainsid') = @pi1::text)) and n0.kind_ids operator (pg_catalog.@>) array [126]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"%","pi0":"CN=ADMINSDHOLDER,CN=SYSTEM,","pi1":"S-1-5-21"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((jsonb_typeof((n0.properties -> E'distinguishedname')) = @__strlit0::text and (n0.properties ->> E'distinguishedname') like (cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text) or (not (jsonb_typeof((n0.properties -> E'distinguishedname')) = @__strlit0::text) and null)) and (jsonb_typeof((n0.properties -> E'domainsid')) = @__strlit0::text and (n0.properties ->> E'domainsid') = @pi1::text)) and n0.kind_ids operator (pg_catalog.@>) array [126]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:RegressionKind85) where n.objectid ends with $suffix_a or n.objectid ends with $suffix_b return id(n)
 -- cypher_params: {"suffix_a":"-S-1","suffix_b":"-S-2"}
--- pgsql_params:{"__strlit0":"%","pi0":"-S-1","pi1":"-S-2"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text)::text or (n0.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi1::text)::text)::text)::text) and n0.kind_ids operator (pg_catalog.@>) array [117]::int2[]) select (s0.n0).id as "id(n)" from s0;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"%","pi0":"-S-1","pi1":"-S-2"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null)) or ((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') like (@__strlit1::text || cypher_like_escape((@pi1::text)::text)::text)::text) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null))) and n0.kind_ids operator (pg_catalog.@>) array [117]::int2[]) select (s0.n0).id as "id(n)" from s0;
 
 -- case: match (n) where toLower(n.name) starts with $prefix return id(n)
 -- cypher_params: {"prefix":"remote desktop users%_"}
@@ -100,13 +100,13 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n) where (n:RegressionKind85 or n:RegressionKind86) and n:RegressionKind69 and n.objectid ends with $suffix and n.domainsid = $domain return n
 -- cypher_params: {"domain":"S-1-5-21","suffix":"-512"}
--- pgsql_params:{"__strlit0":"%","__strlit1":"string","pi0":"-512","pi1":"S-1-5-21"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [118]::int2[]) and n0.kind_ids operator (pg_catalog.@>) array [101]::int2[] and (n0.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text)::text and (jsonb_typeof((n0.properties -> E'domainsid')) = @__strlit1::text and (n0.properties ->> E'domainsid') = @pi1::text))) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"%","pi0":"-512","pi1":"S-1-5-21"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [118]::int2[]) and n0.kind_ids operator (pg_catalog.@>) array [101]::int2[] and ((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null)) and (jsonb_typeof((n0.properties -> E'domainsid')) = @__strlit0::text and (n0.properties ->> E'domainsid') = @pi1::text))) select s0.n0 as n from s0;
 
 -- case: match (n:RegressionKind69) where not (n:RegressionKind85 or n:RegressionKind98) and n.objectid ends with $suffix return n
 -- cypher_params: {"suffix":"-512"}
--- pgsql_params:{"__strlit0":"%","pi0":"-512"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not (n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [130]::int2[]) and (n0.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text)::text) and n0.kind_ids operator (pg_catalog.@>) array [101]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"%","pi0":"-512"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (not (n0.kind_ids operator (pg_catalog.@>) array [117]::int2[] or n0.kind_ids operator (pg_catalog.@>) array [130]::int2[]) and ((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null))) and n0.kind_ids operator (pg_catalog.@>) array [101]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n) where n.name is null return n
 -- pgsql_params:{"__strlit0":"null"}
@@ -144,13 +144,13 @@ with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::e
 
 -- case: match (s)-[:RegressionKind82]->(e) where s.objectid ends with $suffix and id(e) = $end_id return s
 -- cypher_params: {"end_id":202,"suffix":"-555"}
--- pgsql_params:{"__strlit0":"%","pi0":"-555","pi1":202}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id join node n0 on ((n0.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text)::text) and n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select s0.n0 as s from s0;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"%","pi0":"-555","pi1":202}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n0 on (((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null))) and n0.id = e0.start_id join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id where e0.kind_id = any (array [114]::int2[])) select s0.n0 as s from s0;
 
 -- case: match (s)-[:RegressionKind82]->(e) where s.objectid ends with $suffix and id(e) = $end_id return id(s)
 -- cypher_params: {"end_id":202,"suffix":"-555"}
--- pgsql_params:{"__strlit0":"%","pi0":"-555","pi1":202}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id join node n0 on ((n0.properties ->> E'objectid') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text)::text) and n0.id = e0.start_id where e0.kind_id = any (array [114]::int2[])) select (s0.n0).id as "id(s)" from s0;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"%","pi0":"-555","pi1":202}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, n1.id as n1 from edge e0 join node n0 on (((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and (n0.properties ->> E'objectid') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null))) and n0.id = e0.start_id join node n1 on (n1.id = @pi1::float8) and n1.id = e0.end_id where e0.kind_id = any (array [114]::int2[])) select (s0.n0).id as "id(s)" from s0;
 
 -- case: match (n:RegressionKind99) return n order by n.name desc
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [131]::int2[]) select s0.n0 as n from s0 order by ((s0.n0).properties -> E'name') desc;

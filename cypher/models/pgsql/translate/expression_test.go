@@ -421,7 +421,7 @@ func TestPropertyLookupEqualityScalarRewrites(t *testing.T) {
 			LOperand:       propertyLookup("left"),
 			Operator:       pgsql.OperatorLessThan,
 			ROperand:       propertyLookup("right"),
-			ExpectedSql:    "nullif((n.properties -> E'left'), (@__strlit0::text)::jsonb)::jsonb < nullif((n.properties -> E'right'), (@__strlit0::text)::jsonb)::jsonb",
+			ExpectedSql:    "cypher_compare(nullif((n.properties -> E'left'), (@__strlit0::text)::jsonb)::jsonb, nullif((n.properties -> E'right'), (@__strlit0::text)::jsonb)::jsonb)::int4 < 0",
 			ExpectedParams: map[string]any{"__strlit0": "null"},
 		}}
 	)

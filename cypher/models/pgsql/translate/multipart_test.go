@@ -233,7 +233,7 @@ func TestMultipartWithPropertyAliasPredicateRetainsComparisonTypes(t *testing.T)
 				require.NoError(t, err)
 				statements, err := TranslatedStatements(translation, "predicate_")
 				require.NoError(t, err)
-				require.Regexp(t, `properties ->> E'x'\).*::int8`, statements[0].Statement, "the substituted property must be typed for its numeric comparison")
+				require.Regexp(t, `cypher_compare\(.*properties -> E'x'`, statements[0].Statement, "the substituted property must retain its runtime type")
 				require.Regexp(t, `properties -> E'x'\) as i\d+`, statements[0].Statement, "typing the predicate must preserve the projected JSON value")
 			})
 		}
