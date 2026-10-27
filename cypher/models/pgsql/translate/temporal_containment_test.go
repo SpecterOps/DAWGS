@@ -3,10 +3,51 @@ package translate
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/stretchr/testify/require"
 )
+
+// TestTemporalParameterTranslation covers casts and bindings in projections,
+// predicates, and mutation selection in both compiler modes.
+func TestTemporalParameterTranslation(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		t.Run(string(mode), func(t *testing.T) {
+			for _, tc := range []struct {
+				name     string
+				location *time.Location
+				expected pgsql.DataType
+			}{
+				{"UTC", time.UTC, pgsql.TimestampWithTimeZone},
+				{"local", time.Local, pgsql.TimestampWithoutTimeZone},
+				{"explicit offset", time.FixedZone("offset", 3600), pgsql.TimestampWithTimeZone},
+				{"same name as local", time.FixedZone(time.Local.String(), 3600), pgsql.TimestampWithTimeZone},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					value := time.Date(2026, time.January, 2, 3, 4, 5, 0, tc.location)
+					for _, query := range []string{
+						`RETURN $threshold AS value`,
+						`MATCH (n:MemberOf) WHERE n.created_at < $threshold RETURN n`,
+						`MATCH (n:MemberOf) WHERE n.created_at < $threshold SET n.selected = true RETURN n`,
+					} {
+						t.Run(query, func(t *testing.T) {
+							parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+							require.NoError(t, err)
+							result, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), map[string]any{"threshold": value}, DefaultGraphID, Options{OptimizerMode: mode})
+							require.NoError(t, err)
+							formatted, err := Translated(result)
+							require.NoError(t, err)
+							require.Contains(t, formatted.Statement, "@pi0::"+tc.expected.String())
+							require.Equal(t, map[string]any{"pi0": value}, result.Parameters)
+						})
+					}
+				})
+			}
+		})
+	}
+}
 
 // Temporal constructions with an argument lower to a type cast, and their
 // component lookups previously removed the cast operand without pushing a

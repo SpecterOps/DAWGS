@@ -1,3 +1,5 @@
+//go:build manual_integration
+
 package integration
 
 import (
