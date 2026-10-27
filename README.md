@@ -168,6 +168,21 @@ limitations on integral float representation are recorded in
 `avg` retains its existing floating-point input conversion and null result on empty
 input; this change does not provide exact integer averaging.
 
+### PostgreSQL collections
+
+`collect` preserves stored property value types, including exact signed 64-bit integers,
+Booleans, strings and nested lists. Missing and null values are excluded; empty
+or all-null input returns an empty list. DISTINCT retains value types as well.
+Values keep their types through WITH and UNWIND, so collected numbers support
+arithmetic and collected Booleans support Boolean expressions. Numeric-looking
+and JSON-looking strings remain strings.
+
+Property collections use JSONB elements internally. Native scalar and entity
+collections retain their existing representations. As with other JSON-backed
+values, an integral float's type cannot be recovered after storage has erased its
+fractional spelling. Validation and collection costs are recorded in
+[the variance ledger](variance_findings_priority.md#dawgs-054-typed-collections--2026-10-27).
+
 ## Quick Start
 
 Build the repository:

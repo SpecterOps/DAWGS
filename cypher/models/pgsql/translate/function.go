@@ -196,6 +196,13 @@ func NonAggregateGroupByExpressions(expression pgsql.Expression) ([]pgsql.Expres
 
 	case pgsql.TypeCast:
 		return NonAggregateGroupByExpressions(typedExpression.Expression)
+	case *pgsql.AnyExpression:
+		if typedExpression == nil {
+			return nil, nil
+		}
+		return NonAggregateGroupByExpressions(typedExpression.Expression)
+	case pgsql.AnyExpression:
+		return NonAggregateGroupByExpressions(typedExpression.Expression)
 
 	case *pgsql.FunctionCall:
 		if typedExpression == nil {
@@ -406,13 +413,18 @@ func (s *Translator) translateHeadFunction(functionInvocation *cypher.FunctionIn
 	} else if arrayType, err := s.inferArrayExpressionType(argument); err != nil {
 		return err
 	} else {
-		s.treeTranslator.PushOperand(&pgsql.ArrayIndex{
+		index := &pgsql.ArrayIndex{
 			Expression: pgsql.NewParenthetical(argument),
 			Indexes: []pgsql.Expression{
 				pgsql.NewLiteral(1, pgsql.Int),
 			},
 			CastType: arrayType.ArrayBaseType(),
-		})
+		}
+		if arrayType == pgsql.JSONBArray {
+			s.treeTranslator.PushOperand(pgsql.NewTypeCast(index, pgsql.JSONB))
+		} else {
+			s.treeTranslator.PushOperand(index)
+		}
 	}
 
 	return nil
@@ -608,34 +620,48 @@ func (s *Translator) translatePathLengthFunction(functionInvocation *cypher.Func
 
 // prepareCollectExpression prepares a value and result type for PostgreSQL array aggregation.
 func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression, functionName string) (pgsql.Expression, pgsql.DataType, error) {
-	castType := pgsql.AnyArray
+	collectedExpression = concreteEmptyArray(collectedExpression)
+	if literal, ok := unwrapParenthetical(collectedExpression).(pgsql.Literal); ok && literal.Null {
+		return pgsql.NewTypeCast(literal, pgsql.JSONB), pgsql.JSONBArray, nil
+	}
+	if isPropertyLookup(unwrapParenthetical(collectedExpression)) {
+		value, err := arithmeticJSONOperand(collectedExpression)
+		return value, pgsql.JSONBArray, err
+	}
 
-	switch typedArgument := unwrapParenthetical(collectedExpression).(type) {
-	case pgsql.Identifier:
-		if binding, bound := scope.Lookup(typedArgument); !bound {
-			return nil, pgsql.UnsetDataType, fmt.Errorf("binding not found for %s function argument %s", functionName, typedArgument)
-		} else if bindingArrayType, err := binding.DataType.ToArrayType(); err != nil {
-			return nil, pgsql.UnsetDataType, err
+	dataType, err := InferExpressionType(collectedExpression)
+	if err != nil {
+		return nil, pgsql.UnsetDataType, err
+	}
+	if identifier, ok := unwrapParenthetical(collectedExpression).(pgsql.Identifier); ok {
+		if binding, bound := scope.Lookup(identifier); !bound {
+			return nil, pgsql.UnsetDataType, fmt.Errorf("binding not found for %s function argument %s", functionName, identifier)
 		} else {
-			castType = bindingArrayType
-		}
-
-	case pgsql.TypeHinted:
-		typeHint := typedArgument.TypeHint()
-		if typeHint.IsArrayType() {
-			return pgsql.FunctionCall{
-				Function:   pgsql.FunctionToJSONB,
-				Parameters: []pgsql.Expression{collectedExpression},
-				CastType:   pgsql.JSONB,
-			}, pgsql.JSONBArray, nil
-		}
-
-		if arrayType, err := typeHint.ToArrayType(); err == nil {
-			castType = arrayType
+			dataType = bindingExpressionType(binding)
 		}
 	}
 
-	return collectedExpression, castType, nil
+	if dataType.IsArrayType() {
+		// A list is one collected value. PostgreSQL multidimensional arrays
+		// cannot represent ragged or empty nested lists.
+		return pgsql.FunctionCall{Function: pgsql.FunctionToJSONB,
+			Parameters: []pgsql.Expression{collectedExpression}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
+	}
+	if dataType == pgsql.JSONB {
+		// WITH aliases may carry JSON null rather than SQL NULL.
+		return pgsql.FunctionCall{Function: pgsql.FunctionNullIf,
+			Parameters: []pgsql.Expression{collectedExpression, jsonNullLiteral()}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
+	}
+	if arrayType, err := dataType.ToArrayType(); err == nil {
+		return collectedExpression, arrayType, nil
+	}
+	if dataType.IsKnown() {
+		// Boolean and null values have no native array type in the SQL model.
+		value, err := arithmeticJSONOperand(collectedExpression)
+		return value, pgsql.JSONBArray, err
+	}
+
+	return collectedExpression, pgsql.AnyArray, nil
 }
 
 // prepareCollectIDExpression extracts a scalar entity ID before collection and records the ID-only alias.
@@ -1114,9 +1140,6 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 // > array for null when necessary.
 //
 // The final function call is the aggregation function itself.
-//
-// Current semantic issues:
-// * `null` values are stripped during aggregation. This may not be the case in Neo4j's query execution pipeline.
 func functionWrapCollectToArray(distinct bool, collectedExpression pgsql.Expression, castType pgsql.DataType) pgsql.FunctionCall {
 	var coalesceType = pgsql.TextArray
 	if castType != pgsql.AnyArray {

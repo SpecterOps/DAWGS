@@ -67,6 +67,8 @@ func (s *Translator) translateUnwind(unwind *cypher.Unwind) error {
 		return err
 	} else if arrayExpression, err := s.treeTranslator.PopOperand(); err != nil {
 		return err
+	} else if arrayType, err := s.inferExpressionType(arrayExpression); err != nil {
+		return err
 	} else if err := RewriteFrameBindings(s.scope, arrayExpression); err != nil {
 		return err
 	} else if identifier, isIdentifier := variableIdentifier.(pgsql.Identifier); !isIdentifier {
@@ -75,6 +77,9 @@ func (s *Translator) translateUnwind(unwind *cypher.Unwind) error {
 		return fmt.Errorf("unable to lookup unwind variable binding %s", identifier)
 	} else {
 		arrayExpression = concreteEmptyArray(arrayExpression)
+		if arrayType == pgsql.JSONBArray {
+			binding.DataType = arrayType.ArrayBaseType()
+		}
 		if s.scope.CurrentFrame() == nil {
 			// A leading UNWIND has no MATCH/CREATE frame to attach to, but
 			// later clauses still need a frame that can export the unwind binding.
