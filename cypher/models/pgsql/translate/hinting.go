@@ -506,6 +506,19 @@ func applyBinaryExpressionTypeHints(kindMapper *contextAwareKindMapper, expressi
 		return nil
 	}
 
+	if dynamic, err := requiresDynamicArithmetic(expression); err != nil {
+		return err
+	} else if dynamic {
+		// Preserve JSON type information until the runtime arithmetic helper reads it.
+		return nil
+	}
+
+	if rewritten, err := rewriteArithmeticComparison(expression); err != nil {
+		return err
+	} else if rewritten {
+		return nil
+	}
+
 	if err := rewritePropertyLookupOperands(kindMapper, expression); err != nil {
 		return err
 	}
