@@ -828,6 +828,46 @@
         "query": "match (n:NodeKind1) where n.x < n.y create (m:NodeKind2 {source: n.x})",
         "fitness": 8
       }
+    },
+    {
+      "name": "WITH property conversion SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.name as x where toString(x) = 'Alice' set n.value = toString(x) return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "WITH relationship string consumer SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() with r, r.name as x where toString(x) = 'Alice' set r.value = toUpper(x)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "WITH property conversion CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n.name as x where toString(x) = 'Alice' create (c:NodeKind2 {value: toString(x)})",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "WITH converted property alias rebound SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.name as x with n, toString(x) as x where x = 'Alice' set n.value = x",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "WITH property list head filter and tail SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.items as x where head(x) = 'one' set n.items = tail(x)",
+        "fitness": 2
+      }
     }
   ]
 }

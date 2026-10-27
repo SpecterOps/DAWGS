@@ -7248,3 +7248,43 @@ $$
   language plpgsql
   volatile
   strict;
+
+-- Keep scalar value semantics when a property is carried through WITH.
+create or replace function public.cypher_text(value jsonb, consumer text)
+  returns text as
+$$
+declare
+  value_type text := jsonb_typeof(value);
+begin
+  if value_type = 'null' then return null; end if;
+  if value_type = 'string' or (consumer = 'toString' and value_type in ('number', 'boolean')) then
+    return value #>> '{}';
+  end if;
+  raise exception '% does not support a % value', consumer, value_type using errcode = '22023';
+end;
+$$ language plpgsql immutable parallel safe strict;
+
+create or replace function public.cypher_size(value jsonb)
+  returns int8 as
+$$
+begin
+  case jsonb_typeof(value)
+    when 'null' then return null;
+    when 'array' then return jsonb_array_length(value);
+    when 'string' then return char_length(value #>> '{}');
+    else raise exception 'size requires a string or list' using errcode = '22023';
+  end case;
+end;
+$$ language plpgsql immutable parallel safe strict;
+
+create or replace function public.cypher_list(value jsonb)
+  returns jsonb as
+$$
+begin
+  if jsonb_typeof(value) = 'null' then return null; end if;
+  if jsonb_typeof(value) <> 'array' then
+    raise exception 'expected a list value' using errcode = '22023';
+  end if;
+  return value;
+end;
+$$ language plpgsql immutable parallel safe strict;

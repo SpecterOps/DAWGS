@@ -208,7 +208,7 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 			// This is unknown, not unset meaning that it can be re-cast by future inference inspections
 			return pgsql.UnknownDataType, nil
 
-		case pgsql.OperatorAnd, pgsql.OperatorOr, pgsql.OperatorEquals, pgsql.OperatorGreaterThan, pgsql.OperatorGreaterThanOrEqualTo,
+		case pgsql.OperatorAnd, pgsql.OperatorOr, pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals, pgsql.OperatorGreaterThan, pgsql.OperatorGreaterThanOrEqualTo,
 			pgsql.OperatorLessThan, pgsql.OperatorLessThanOrEqualTo, pgsql.OperatorIn, pgsql.OperatorJSONBFieldExists,
 			pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorPGArrayOverlap, pgsql.OperatorPGArrayLHSContainsRHS,
 			pgsql.OperatorIs, pgsql.OperatorIsNot:

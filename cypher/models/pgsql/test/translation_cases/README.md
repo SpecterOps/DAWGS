@@ -108,3 +108,9 @@ guard; positive filters retain bare text LIKE conditions for index use. Dynamic
 ordered comparisons call `cypher_compare` instead of casting extracted text or
 using JSONB's cross-type total ordering. Known temporal comparisons retain their
 native casts.
+
+`with_property_consumers.sql` covers typed property aliases through WITH, text
+conversion without JSON quoting, case conversion, both split operands, size,
+coalesce, equality/null checks, scalar conversion and node/relationship mutations
+including CREATE without RETURN. Existing golden cases now retain dynamic
+coalesce values and call the runtime text/size helpers where needed.
