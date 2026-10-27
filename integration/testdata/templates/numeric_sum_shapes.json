@@ -1,0 +1,3026 @@
+{
+  "families": [
+    {
+      "name": "property sums and mutations",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "a",
+              "group": "alpha",
+              "seed": "9007199254740993"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "b",
+              "group": "alpha",
+              "seed": "2"
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "c",
+              "group": "beta",
+              "seed": "2"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "missing",
+              "group": "missing"
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "SumTarget"
+            ],
+            "properties": {
+              "tag": "target",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "role-decoy",
+            "kinds": [
+              "SumTarget"
+            ],
+            "properties": {
+              "tag": "role-decoy",
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "id": "kind-decoy",
+            "kinds": [
+              "OtherSumTarget"
+            ],
+            "properties": {
+              "tag": "kind-decoy",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "SumTarget"
+            ],
+            "properties": {
+              "tag": "missing-role",
+              "keep": true
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "target",
+            "end_id": "role-decoy",
+            "kind": "SumEdge",
+            "properties": {
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "role-decoy",
+            "end_id": "target",
+            "kind": "SumEdge",
+            "properties": {
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "kind-decoy",
+            "kind": "OtherSumEdge",
+            "properties": {
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "missing-role",
+            "kind": "SumEdge",
+            "properties": {
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "missing-role",
+            "end_id": "role-decoy",
+            "kind": "SumEdge",
+            "properties": {
+              "keep": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "integer sum",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN sum(n.x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          }
+        },
+        {
+          "name": "distinct",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN sum(DISTINCT n.x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          }
+        },
+        {
+          "name": "carried property",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n.x AS x RETURN sum(x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          }
+        },
+        {
+          "name": "distinct carried property",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n.x AS x RETURN sum(DISTINCT x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          }
+        },
+        {
+          "name": "carried result",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total RETURN total"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          }
+        },
+        {
+          "name": "repeated result alias",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total WITH total AS value RETURN value"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          }
+        },
+        {
+          "name": "reaggregated result",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total RETURN sum(total)"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          }
+        },
+        {
+          "name": "integer division",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total RETURN total / 2"
+          },
+          "assert": {
+            "exact_int": 4503599627370498
+          }
+        },
+        {
+          "name": "expression argument",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN sum(n.x + 1)"
+          },
+          "assert": {
+            "exact_int": 9007199254741000
+          }
+        },
+        {
+          "name": "filtered sum",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total WHERE total = 9007199254740997 RETURN total"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          }
+        },
+        {
+          "name": "empty input",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n WHERE n.tag = 'absent' RETURN sum(n.x)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "all missing",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n WHERE n.tag = 'missing' RETURN sum(n.x)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "null expression",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN sum(null)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "nullable expression",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN sum(coalesce(n.x, 0))"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          }
+        },
+        {
+          "name": "grouped sum",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN n.group AS category, sum(n.x) AS total ORDER BY category"
+          },
+          "assert": {
+            "ordered_row_values": [
+              [
+                "alpha",
+                9007199254740995
+              ],
+              [
+                "beta",
+                2
+              ],
+              [
+                "missing",
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "grouped distinct",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN n.group AS category, sum(DISTINCT n.x) AS total ORDER BY category"
+          },
+          "assert": {
+            "ordered_row_values": [
+              [
+                "alpha",
+                9007199254740995
+              ],
+              [
+                "beta",
+                2
+              ],
+              [
+                "missing",
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty grouped input",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n WHERE n.tag = 'absent' RETURN n.group, sum(n.x)"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "aggregate tuple",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) RETURN count(n), sum(n.x), min(n.x), max(n.x)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                4,
+                9007199254740997,
+                2,
+                9007199254740993
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty sum with average",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n WHERE n.tag = 'absent' RETURN sum(n.x), avg(n.x), count(n)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0,
+                null,
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "ordinary average control",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n WHERE n.tag IN ['b','c'] RETURN sum(n.x), avg(n.x)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                4,
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "node SET without RETURN",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total MATCH (t:SumTarget {role:'target'}) SET t.total = total"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740997
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumTarget {role:'target'}) RETURN n.total",
+              "assert": {
+                "exact_int": 9007199254740997
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET without RETURN",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) SET r.total = total"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740997
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) RETURN r.total",
+              "assert": {
+                "exact_int": 9007199254740997
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE without RETURN",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total CREATE (c:SumCreated {tag:'created', total:total})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.total",
+              "assert": {
+                "row_count": 1,
+                "exact_int": 9007199254740997
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.tag, labels(n)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    [
+                      "SumCreated"
+                    ]
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET distinct without RETURN",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(DISTINCT n.x) AS total MATCH (t:SumTarget {role:'target'}) SET t.total = total"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740995
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumTarget {role:'target'}) RETURN n.total",
+              "assert": {
+                "exact_int": 9007199254740995
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET distinct without RETURN",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(DISTINCT n.x) AS total MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) SET r.total = total"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740995
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) RETURN r.total",
+              "assert": {
+                "exact_int": 9007199254740995
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE distinct without RETURN",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(DISTINCT n.x) AS total CREATE (c:SumCreated {tag:'created', total:total})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.total",
+              "assert": {
+                "row_count": 1,
+                "exact_int": 9007199254740995
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.tag, labels(n)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    [
+                      "SumCreated"
+                    ]
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET returning",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total MATCH (t:SumTarget {role:'target'}) SET t.total = total RETURN t.total"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740997
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumTarget {role:'target'}) RETURN n.total",
+              "assert": {
+                "exact_int": 9007199254740997
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET returning",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) SET r.total = total RETURN r.total"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740997
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) RETURN r.total",
+              "assert": {
+                "exact_int": 9007199254740997
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE returning",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(n.x) AS total CREATE (c:SumCreated {tag:'created', total:total}) RETURN c.total"
+          },
+          "assert": {
+            "exact_int": 9007199254740997
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.total",
+              "assert": {
+                "row_count": 1,
+                "exact_int": 9007199254740997
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.tag, labels(n)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    [
+                      "SumCreated"
+                    ]
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET distinct returning",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(DISTINCT n.x) AS total MATCH (t:SumTarget {role:'target'}) SET t.total = total RETURN t.total"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740995
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumTarget {role:'target'}) RETURN n.total",
+              "assert": {
+                "exact_int": 9007199254740995
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET distinct returning",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(DISTINCT n.x) AS total MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) SET r.total = total RETURN r.total"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "total": 9007199254740995
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (:SumTarget {role:'target'})-[r:SumEdge {role:'target'}]->(:SumTarget {role:'keep'}) RETURN r.total",
+              "assert": {
+                "exact_int": 9007199254740995
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE distinct returning",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH sum(DISTINCT n.x) AS total CREATE (c:SumCreated {tag:'created', total:total}) RETURN c.total"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.total",
+              "assert": {
+                "row_count": 1,
+                "exact_int": 9007199254740995
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.tag, labels(n)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    [
+                      "SumCreated"
+                    ]
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty aggregate still creates",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n WHERE n.tag = 'absent' WITH sum(n.x) AS total CREATE (c:SumCreated {tag:'created', total:total})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.total",
+              "assert": {
+                "row_count": 1,
+                "exact_int": 0
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN n.tag, labels(n)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    [
+                      "SumCreated"
+                    ]
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "grouped empty aggregate creates nothing",
+          "vars": {
+            "query": "MATCH (n:SumNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:SumNode) WITH n WHERE n.tag = 'absent' WITH n.group AS category, sum(n.x) AS total CREATE (c:SumCreated {tag:'created', total:total})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "9007199254740993",
+                      "x": 9007199254740993
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "SumNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherSumTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "SumTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherSumEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "SumEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "SumEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SumCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "scalar and float controls",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "a",
+              "group": "alpha",
+              "seed": "9007199254740993"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "b",
+              "group": "alpha",
+              "seed": "2"
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "c",
+              "group": "beta",
+              "seed": "2"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "SumNode"
+            ],
+            "properties": {
+              "tag": "missing",
+              "group": "missing"
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "SumTarget"
+            ],
+            "properties": {
+              "tag": "target",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "role-decoy",
+            "kinds": [
+              "SumTarget"
+            ],
+            "properties": {
+              "tag": "role-decoy",
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "id": "kind-decoy",
+            "kinds": [
+              "OtherSumTarget"
+            ],
+            "properties": {
+              "tag": "kind-decoy",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "SumTarget"
+            ],
+            "properties": {
+              "tag": "missing-role",
+              "keep": true
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "target",
+            "end_id": "role-decoy",
+            "kind": "SumEdge",
+            "properties": {
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "role-decoy",
+            "end_id": "target",
+            "kind": "SumEdge",
+            "properties": {
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "kind-decoy",
+            "kind": "OtherSumEdge",
+            "properties": {
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "missing-role",
+            "kind": "SumEdge",
+            "properties": {
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "missing-role",
+            "end_id": "role-decoy",
+            "kind": "SumEdge",
+            "properties": {
+              "keep": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "literal integer",
+          "vars": {
+            "query": "UNWIND [9007199254740993, 2] AS x RETURN sum(x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          }
+        },
+        {
+          "name": "negative integers",
+          "vars": {
+            "query": "UNWIND [9007199254740993, 2] AS x RETURN sum(-x)"
+          },
+          "assert": {
+            "exact_int": -9007199254740995
+          }
+        },
+        {
+          "name": "maximum",
+          "vars": {
+            "query": "RETURN sum(9223372036854775807)"
+          },
+          "assert": {
+            "exact_int": 9223372036854775807
+          }
+        },
+        {
+          "name": "minimum",
+          "vars": {
+            "query": "RETURN sum(toInteger('-9223372036854775808'))"
+          },
+          "assert": {
+            "exact_int": -9223372036854775808
+          }
+        },
+        {
+          "name": "fractional",
+          "vars": {
+            "query": "UNWIND [1.25, 2.5] AS x RETURN sum(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              3.75
+            ]
+          }
+        },
+        {
+          "name": "integral float",
+          "vars": {
+            "query": "UNWIND [1.25, 0.75] AS x RETURN sum(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              2.0
+            ]
+          }
+        },
+        {
+          "name": "carried float",
+          "vars": {
+            "query": "WITH 1.0 AS x RETURN sum(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              1.0
+            ]
+          }
+        },
+        {
+          "name": "float division",
+          "vars": {
+            "query": "WITH sum(3.0) AS total RETURN total / 2"
+          },
+          "assert": {
+            "scalar_values": [
+              1.5
+            ]
+          }
+        },
+        {
+          "name": "null literal",
+          "vars": {
+            "query": "RETURN sum(null)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "relationship property sums",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "SumNode"
+            ]
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "SumNode"
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "SumInput",
+            "properties": {
+              "seed": "9007199254740993"
+            }
+          },
+          {
+            "start_id": "b",
+            "end_id": "a",
+            "kind": "SumInput",
+            "properties": {
+              "seed": "2"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "direct",
+          "vars": {
+            "query": "MATCH ()-[r:SumInput]->() SET r.x = toInteger(r.seed) WITH r RETURN sum(r.x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          }
+        },
+        {
+          "name": "carried",
+          "vars": {
+            "query": "MATCH ()-[r:SumInput]->() SET r.x = toInteger(r.seed) WITH r WITH r.x AS x RETURN sum(x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          }
+        },
+        {
+          "name": "distinct",
+          "vars": {
+            "query": "MATCH ()-[r:SumInput]->() SET r.x = toInteger(r.seed) WITH r RETURN sum(DISTINCT r.x)"
+          },
+          "assert": {
+            "exact_int": 9007199254740995
+          }
+        }
+      ]
+    }
+  ]
+}

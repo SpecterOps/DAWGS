@@ -9,6 +9,19 @@ and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each
 post-state entry contains `cypher`, optional `params`, and `assert`.
 
+`numeric_sum_shapes.json` checks exact large integer SUM results, DISTINCT,
+grouping, empty/all-null inputs, float and literal controls, relationship properties,
+WITH aliases and arithmetic after aggregation. Node/relationship SET and CREATE
+variants check complete fixture post-state, unchanged direction/kind/role/missing
+decoys, exact large stored totals and CREATE cardinality with and without RETURN.
+Numeric fixture properties are assigned from exact decimal strings in Cypher so
+fixture JSON decoding cannot turn integers into Neo4j floats. PostgreSQL executes
+all variants in both compiler modes. `TestNumericSum` independently checks committed
+properties, concrete Go result types, both signed 64-bit limits and invalid operands
+on both backends. AVG controls cover ordinary values and its empty-input null;
+large-integer averaging remains a separate precision limitation. PostgreSQL-scoped
+schema tests check repeat assertion, SQL/JSON nulls, float spelling and overflow.
+
 `exact_result_number_shapes.json` covers large integer CREATE and SET results,
 carried property projections, both signed 64-bit limits, and post-mutation reads.
 It uses typed `exact_int` expectations to avoid rounding expected values through

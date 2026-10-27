@@ -18,12 +18,14 @@ drop function if exists public.bump_all_graph_traversal_epochs;
 -- Drop functions
 drop aggregate if exists cypher_min(jsonb);
 drop aggregate if exists cypher_max(jsonb);
+drop aggregate if exists cypher_sum(jsonb);
 drop function if exists query_perf;
 drop function if exists lock_details;
 drop function if exists table_sizes;
 drop function if exists jsonb_to_text_array;
 drop function if exists cypher_min_transition(jsonb, jsonb);
 drop function if exists cypher_max_transition(jsonb, jsonb);
+drop function if exists cypher_sum_transition(jsonb, jsonb);
 drop function if exists cypher_value_compare(jsonb, jsonb);
 drop function if exists cypher_jsonb_type_rank(jsonb);
 drop function if exists cypher_compare(jsonb, jsonb);

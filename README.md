@@ -150,6 +150,24 @@ representation. JSON cannot recover temporal or integral-float type information
 already lost during serialization. Helper costs and validation are recorded in
 [the variance ledger](variance_findings_priority.md#dawgs-052-with-property-consumers--2026-10-26).
 
+### PostgreSQL numeric aggregates
+
+`sum` preserves signed 64-bit integer precision, including values above 2^53.
+Floating-point inputs produce floating-point sums; mixed numeric inputs use
+floating-point arithmetic. Null and missing values do not contribute, and empty
+or all-null input returns integer zero. An empty grouped input produces no groups.
+`sum(DISTINCT ...)` counts each distinct numeric value once. These rules also apply
+to relationship properties, WITH aliases, and aggregate values used in later writes.
+Non-numeric inputs and integer overflow return query errors.
+
+Run ordinary schema assertion when upgrading to install `cypher_sum(jsonb)` and
+`cypher_sum_transition(jsonb, jsonb)`. The aggregate retains one numeric accumulator
+per group and uses runtime type dispatch. Its measured cost and the existing JSON
+limitations on integral float representation are recorded in
+[the variance ledger](variance_findings_priority.md#dawgs-053-numeric-sum--2026-10-27).
+`avg` retains its existing floating-point input conversion and null result on empty
+input; this change does not provide exact integer averaging.
+
 ## Quick Start
 
 Build the repository:

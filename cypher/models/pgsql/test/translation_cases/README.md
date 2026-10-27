@@ -114,3 +114,9 @@ conversion without JSON quoting, case conversion, both split operands, size,
 coalesce, equality/null checks, scalar conversion and node/relationship mutations
 including CREATE without RETURN. Existing golden cases now retain dynamic
 coalesce values and call the runtime text/size helpers where needed.
+
+`numeric_sum.sql` covers typed runtime SUM, DISTINCT, grouped and empty inputs,
+literal/UNWIND operands, carried properties, arithmetic after aggregation and
+node/relationship mutations including CREATE without RETURN. Related existing
+`scalar_aggregation.sql` cases now retain integer SUM types and empty-input zero;
+AVG keeps its existing floating-point conversion.
