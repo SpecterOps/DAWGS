@@ -133,3 +133,18 @@ func TestRewriteQuery_RewritesPatternPropertiesAndTemporalComparisons(t *testing
 	require.Equal(t, params["props"], rewrittenParams["props"])
 	require.Len(t, rewrittenParams, 2)
 }
+
+// Rewritten queries previously degraded integral float literals to integers,
+// so `3.0 / 2.0` reached Neo4j as integer division `3 / 2`. The rewrite must
+// preserve floating-point literal spellings in the re-emitted query text.
+func TestRewriteQuery_PreservesIntegralFloatLiterals(t *testing.T) {
+	query, rewrittenParams, err := rewriteQuery(
+		"match (n) where date() <= n.created_at return 3.0 / 2.0 as a, [1.0, 2.5] as c, 1e3 as b",
+		nil,
+	)
+	require.NoError(t, err)
+	require.Nil(t, rewrittenParams)
+	require.Contains(t, query, "return 3.0 / 2.0 as a")
+	require.Contains(t, query, "[1.0, 2.5] as c")
+	require.Contains(t, query, "1000.0 as b")
+}

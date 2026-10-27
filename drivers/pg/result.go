@@ -2,7 +2,6 @@ package pg
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -110,7 +109,7 @@ func decodeJSONValue(value any) (any, bool) {
 	switch typedValue := value.(type) {
 	case []byte:
 		var decoded any
-		if err := json.Unmarshal(typedValue, &decoded); err == nil {
+		if err := unmarshalJSONNumbers(typedValue, &decoded); err == nil {
 			return decoded, true
 		}
 
@@ -127,7 +126,7 @@ func decodeJSONValue(value any) (any, bool) {
 		}
 
 		var decoded any
-		if err := json.Unmarshal([]byte(trimmedValue), &decoded); err == nil {
+		if err := unmarshalJSONNumbers([]byte(trimmedValue), &decoded); err == nil {
 			return decoded, true
 		}
 	}

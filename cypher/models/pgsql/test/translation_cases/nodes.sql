@@ -383,10 +383,10 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> E'value'))::int8 = any (array [1, 2, 3, 4]::int8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where u.pwdlastset < (datetime().epochseconds - (365 * 86400)) and not u.pwdlastset IN [-1.0, 0.0] return u limit 100
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> E'pwdlastset'))::numeric < (extract(epoch from now()::timestamp with time zone)::numeric - (365 * 86400)) and not ((n0.properties ->> E'pwdlastset'))::float8 = any (array [- 1, 0]::float8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 100;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> E'pwdlastset'))::numeric < (extract(epoch from now()::timestamp with time zone)::numeric - (365 * 86400)) and not ((n0.properties ->> E'pwdlastset'))::float8 = any (array [- 1.0, 0.0]::float8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 100;
 
 -- case: match (u:NodeKind1) where u.pwdlastset < (datetime().epochmillis - 86400000) and not u.pwdlastset IN [-1.0, 0.0] return u limit 100
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> E'pwdlastset'))::numeric < (extract(epoch from now()::timestamp with time zone)::numeric * 1000 - 86400000) and not ((n0.properties ->> E'pwdlastset'))::float8 = any (array [- 1, 0]::float8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 100;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> E'pwdlastset'))::numeric < (extract(epoch from now()::timestamp with time zone)::numeric * 1000 - 86400000) and not ((n0.properties ->> E'pwdlastset'))::float8 = any (array [- 1.0, 0.0]::float8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 100;
 
 -- case: match (n:NodeKind1) where size(n.array_value) > 0 return n
 -- pgsql_params:{"__strlit0":"array"}

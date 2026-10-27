@@ -941,3 +941,32 @@ func TestFormat_NonMaterializedStringLiteralRemainsExtracted(t *testing.T) {
 	require.Equal(t, "@__strlit0::text", formatted.Statement)
 	requireExtractedStringLiteral(t, formatted, value)
 }
+
+// TestFormat_FloatLiteralsKeepFloatingPointType verifies that integral float
+// values render with a fractional suffix so PostgreSQL cannot parse them as
+// integers and silently change arithmetic such as division.
+func TestFormat_FloatLiteralsKeepFloatingPointType(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    any
+		expected string
+	}{
+		{name: "integral float64", value: float64(3), expected: "3.0"},
+		{name: "integral negative float64", value: float64(-2), expected: "-2.0"},
+		{name: "zero float64", value: float64(0), expected: "0.0"},
+		{name: "fractional float64", value: 1.5, expected: "1.5"},
+		{name: "float64 above int64 range", value: 1e18, expected: "1000000000000000000.0"},
+		{name: "integral float32", value: float32(4), expected: "4.0"},
+		{name: "fractional float32", value: float32(2.5), expected: "2.5"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			formatted, err := format.Expression(mustAsLiteral(test.value), format.NewOutputBuilder())
+			require.NoError(t, err)
+			require.Equal(t, test.expected, formatted.Statement)
+			require.Empty(t, formatted.Parameters)
+			require.Empty(t, formatted.LiteralParameters)
+		})
+	}
+}

@@ -9,6 +9,14 @@ and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each
 post-state entry contains `cypher`, optional `params`, and `assert`.
 
+`exact_result_number_shapes.json` covers large integer CREATE and SET results,
+carried property projections, both signed 64-bit limits, and post-mutation reads.
+It uses typed `exact_int` expectations to avoid rounding expected values through
+JSON-to-float conversion. PostgreSQL runs every variant in both compiler modes.
+`TestExactResultNumbers` additionally checks actual Go types in committed scalar,
+map, entity, collection and path results on both backends. PostgreSQL wire-codec
+tests cover JSON/JSONB arrays, nullable composites and explicit range errors.
+
 The assertion vocabulary includes exact fixture-backed state checks:
 
 - `node_id_set` for exact surviving node IDs;
@@ -81,8 +89,10 @@ including untouched decoys. PostgreSQL runs every variant with each compiler mod
 non-null literals, bound-node identity and WITH/UNWIND-bound null values, alongside its property stored-null coverage.
 Literal-false predicates must empty their matches instead of being dropped. Repeated `NOT` prefixes must preserve
 their parity: double negation matches the positive predicate in WHERE, WITH WHERE, projections, string-prefix
-predicates and null predicates, while triple negation behaves as a single negation. PostgreSQL runs every variant
-with each compiler mode explicitly.
+predicates and null predicates, while triple negation behaves as a single negation. Its float-literal family checks
+that integral float literals keep floating-point semantics on both backends: `3.0 / 2.0` returns `1.5`,
+`toString(1.0)` returns `"1.0"`, float lists and property equality keep element values, and the integer `3 / 2`
+control still returns `1`. PostgreSQL runs every variant with each compiler mode explicitly.
 
 `expansion_endpoint_predicate_shapes.json` checks predicates comparing expansion endpoints before a fixed suffix,
 including disjunction, conjunction, negation, equality, missing properties, parameters, zero hops, fixed prefixes,

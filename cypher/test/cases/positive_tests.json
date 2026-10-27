@@ -949,6 +949,56 @@
         "matcher": "match \\(n:A\\) with n where n\\.x = 1 return n\\.x as x",
         "fitness": 2
       }
+    },
+    {
+      "name": "Integral float division keeps floating-point literals",
+      "type": "string_match",
+      "details": {
+        "query": "return 3.0 / 2.0 as a",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Exponent float literal canonicalizes to decimal float form",
+      "type": "string_match",
+      "details": {
+        "query": "return 1e3 as b",
+        "matcher": "return 1000\\.0 as b",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Negative exponent float literal canonicalizes to decimal float form",
+      "type": "string_match",
+      "details": {
+        "query": "return -1e3 as neg",
+        "matcher": "return -1000\\.0 as neg",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "toString of an integral float keeps fractional spelling",
+      "type": "string_match",
+      "details": {
+        "query": "return toString(1.0) as s",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Float list literal keeps element types",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1.0, 2.5] as x return x",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Negative integral float predicate retains floating-point spelling",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:MemberOf) where n.k > -1.0 return n.k as x",
+        "fitness": 3
+      }
     }
   ]
 }

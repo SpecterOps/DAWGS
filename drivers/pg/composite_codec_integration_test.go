@@ -146,7 +146,7 @@ order by series.id`, pgx.QueryResultFormats{testCase.format})
 			// first Rows.Values call.
 			require.Equal(t, int64(101), first.ID)
 			require.Equal(t, []int16{1, 2}, first.KindIDs)
-			require.Equal(t, float64(101), first.Properties["id"])
+			require.Equal(t, int64(101), first.Properties["id"])
 
 			require.False(t, rows.Next())
 			require.NoError(t, rows.Err())

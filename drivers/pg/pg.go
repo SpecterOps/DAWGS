@@ -22,8 +22,11 @@ const (
 	defaultBatchWriteSize = 2_000
 )
 
-// AfterPooledConnectionEstablished loads and registers the driver's owned graph composite types on a new pooled connection.
+// AfterPooledConnectionEstablished registers exact-number JSON decoding and
+// loads the driver's owned graph composite types on a new pooled connection.
 func AfterPooledConnectionEstablished(ctx context.Context, conn *pgx.Conn) error {
+	installJSONCodecs(conn.TypeMap())
+
 	for _, dataType := range pgsql.CompositeTypes {
 		if definition, err := conn.LoadType(ctx, dataType.String()); err != nil {
 			if !StateObjectDoesNotExist.ErrorMatches(err) {

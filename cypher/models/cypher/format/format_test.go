@@ -424,3 +424,44 @@ func TestNewStringLiteral_InQuery(t *testing.T) {
 		})
 	}
 }
+
+// TestCypherEmitter_FloatLiteralsKeepFloatingPointSpelling verifies that the
+// emitter preserves the floating-point type of integral float literals, both
+// for parsed queries and for hand-built literal values.
+func TestCypherEmitter_FloatLiteralsKeepFloatingPointSpelling(t *testing.T) {
+	t.Run("parsed query", func(t *testing.T) {
+		var (
+			buffer            = &bytes.Buffer{}
+			emitter           = format.NewCypherEmitter(false)
+			regularQuery, err = frontend.ParseCypher(frontend.DefaultCypherContext(), "return 3.0 / 2.0 as a, 1e3 as b, [1.0, 2.5] as c")
+		)
+		require.NoError(t, err)
+		require.NoError(t, emitter.Write(regularQuery, buffer))
+		require.Equal(t, "return 3.0 / 2.0 as a, 1000.0 as b, [1.0, 2.5] as c", buffer.String())
+	})
+
+	t.Run("hand-built literals", func(t *testing.T) {
+		var (
+			buffer  = &bytes.Buffer{}
+			emitter = format.NewCypherEmitter(false)
+		)
+
+		require.NoError(t, emitter.WriteExpression(buffer, &cypher.ListLiteral{
+			cypher.NewLiteral(float64(3), false),
+			cypher.NewLiteral(-0.5, false),
+			cypher.NewLiteral(float32(2), false),
+		}))
+		require.Equal(t, "[3.0, -0.5, 2.0]", buffer.String())
+	})
+
+	t.Run("stripped literals keep float values redacted", func(t *testing.T) {
+		var (
+			buffer            = &bytes.Buffer{}
+			emitter           = format.NewCypherEmitter(true)
+			regularQuery, err = frontend.ParseCypher(frontend.DefaultCypherContext(), "return 3.0 as a")
+		)
+		require.NoError(t, err)
+		require.NoError(t, emitter.Write(regularQuery, buffer))
+		require.Equal(t, "return $STRIPPED as a", buffer.String())
+	})
+}

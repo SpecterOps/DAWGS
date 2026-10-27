@@ -428,6 +428,91 @@
           "assert": {"ordered_row_values": [["alpha"], ["beta"], ["gamma"]]}
         }
       ]
+    },
+    {
+      "name": "float literal type shapes",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "alpha",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "alpha",
+              "group": "shape",
+              "department": "eng",
+              "score": 1,
+              "objectid": "S-1-500",
+              "tags": ["admin", "tier0"]
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "integral float division stays float arithmetic",
+          "vars": {
+            "query": "return 3.0 / 2.0 as a"
+          },
+          "assert": {"ordered_row_values": [[1.5]]}
+        },
+        {
+          "name": "integral float multiplication stays float arithmetic",
+          "vars": {
+            "query": "return 3.0 * 2.0 as a"
+          },
+          "assert": {"ordered_row_values": [[6.0]]}
+        },
+        {
+          "name": "mixed integral and fractional float arithmetic",
+          "vars": {
+            "query": "return 3.0 - 0.5 as a"
+          },
+          "assert": {"ordered_row_values": [[2.5]]}
+        },
+        {
+          "name": "exponent literal keeps float division",
+          "vars": {
+            "query": "return 1e3 / 2.0 as a"
+          },
+          "assert": {"ordered_row_values": [[500.0]]}
+        },
+        {
+          "name": "integral float projection returns a float",
+          "vars": {
+            "query": "return 3.0 as a"
+          },
+          "assert": {"ordered_row_values": [[3.0]]}
+        },
+        {
+          "name": "toString of an integral float keeps fractional text",
+          "vars": {
+            "query": "return toString(1.0) as s"
+          },
+          "assert": {"ordered_row_values": [["1.0"]]}
+        },
+        {
+          "name": "float list literal keeps element values",
+          "vars": {
+            "query": "return [1.0, 2.5] as values"
+          },
+          "assert": {"ordered_row_values": [[[1.0, 2.5]]]}
+        },
+        {
+          "name": "property equality against an integral float",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and n.score = 1.0 return n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha"]]}
+        },
+        {
+          "name": "integer division control stays integer arithmetic",
+          "vars": {
+            "query": "return 3 / 2 as a"
+          },
+          "assert": {"ordered_row_values": [[1]]}
+        }
+      ]
     }
   ]
 }

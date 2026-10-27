@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
@@ -210,10 +211,10 @@ func formatValue(builder *OutputBuilder, value any) error {
 		builder.Write(strconv.FormatBool(typedValue))
 
 	case float32:
-		builder.Write(strconv.FormatFloat(float64(typedValue), 'f', -1, 64))
+		builder.Write(cypher.FormatFloatLiteral(float64(typedValue)))
 
 	case float64:
-		builder.Write(strconv.FormatFloat(typedValue, 'f', -1, 64))
+		builder.Write(cypher.FormatFloatLiteral(typedValue))
 
 	case []string:
 		return formatSlice(builder, typedValue, pgsql.TextArray)

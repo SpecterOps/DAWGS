@@ -73,6 +73,17 @@ For a persistent, explicitly selected warm set that also applies to new physical
 to `pg.NewDriver` must have been created by `pg.NewPool` or `pg.NewPoolWithRuntimeConfig` so those lifecycle hooks are in
 place.
 
+### PostgreSQL JSON result numbers
+
+PostgreSQL JSON/JSONB query results decode integer tokens as exact signed 64-bit `int64`
+values, and decimal/exponent tokens as `float64`. This applies recursively to maps,
+lists, node/relationship properties and paths, including direct pgx reads through DAWGS
+pools. Callers inspecting untyped results must accept `int64` where they previously
+received `float64`. Out-of-range integer tokens and floating-point overflow stop row
+iteration and appear in `Result.Error()`; check it after draining results. These rules
+apply to the JSON spelling returned by PostgreSQL; JSONB can normalize exponent
+spellings before returning them.
+
 ## Quick Start
 
 Build the repository:

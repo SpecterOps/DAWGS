@@ -1,0 +1,169 @@
+{
+  "families": [
+    {
+      "name": "exact integer mutation results",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "schema",
+            "kinds": [
+              "ExactNumber"
+            ],
+            "properties": {
+              "marker": "schema"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "schema",
+            "end_id": "schema",
+            "kind": "ExactNumberEdge",
+            "properties": {
+              "marker": "schema"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "large positive property",
+          "vars": {
+            "query": "CREATE (n:ExactNumber {value: 4611686018427387905}) RETURN n.value"
+          },
+          "assert": {
+            "exact_int": 4611686018427387905
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:ExactNumber) WHERE n.value IS NOT NULL RETURN n.value",
+              "assert": {
+                "exact_int": 4611686018427387905
+              }
+            }
+          ]
+        },
+        {
+          "name": "above safe integer",
+          "vars": {
+            "query": "CREATE (n:ExactNumber {value: 9007199254740993}) RETURN n.value"
+          },
+          "assert": {
+            "exact_int": 9007199254740993
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:ExactNumber) WHERE n.value IS NOT NULL RETURN n.value",
+              "assert": {
+                "exact_int": 9007199254740993
+              }
+            }
+          ]
+        },
+        {
+          "name": "large negative property",
+          "vars": {
+            "query": "CREATE (n:ExactNumber {value: -9007199254740993}) RETURN n.value"
+          },
+          "assert": {
+            "exact_int": -9007199254740993
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:ExactNumber) WHERE n.value IS NOT NULL RETURN n.value",
+              "assert": {
+                "exact_int": -9007199254740993
+              }
+            }
+          ]
+        },
+        {
+          "name": "maximum signed integer",
+          "vars": {
+            "query": "CREATE (n:ExactNumber {value: 9223372036854775807}) RETURN n.value"
+          },
+          "assert": {
+            "exact_int": 9223372036854775807
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:ExactNumber) WHERE n.value IS NOT NULL RETURN n.value",
+              "assert": {
+                "exact_int": 9223372036854775807
+              }
+            }
+          ]
+        },
+        {
+          "name": "minimum signed integer",
+          "vars": {
+            "query": "CREATE (n:ExactNumber {value: (-9223372036854775807 - 1)}) RETURN n.value"
+          },
+          "assert": {
+            "exact_int": -9223372036854775808
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:ExactNumber) WHERE n.value IS NOT NULL RETURN n.value",
+              "assert": {
+                "exact_int": -9223372036854775808
+              }
+            }
+          ]
+        },
+        {
+          "name": "carried property",
+          "vars": {
+            "query": "CREATE (n:ExactNumber {value: 4611686018427387905}) WITH n.value AS value RETURN value"
+          },
+          "assert": {
+            "exact_int": 4611686018427387905
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:ExactNumber) WHERE n.value IS NOT NULL RETURN n.value",
+              "assert": {
+                "exact_int": 4611686018427387905
+              }
+            }
+          ]
+        },
+        {
+          "name": "node assignment",
+          "vars": {
+            "query": "MATCH (n:ExactNumber) WHERE n.marker = 'schema' SET n.value = 4611686018427387905 RETURN n.value"
+          },
+          "assert": {
+            "exact_int": 4611686018427387905
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:ExactNumber) WHERE n.value IS NOT NULL RETURN n.value",
+              "assert": {
+                "exact_int": 4611686018427387905
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship assignment",
+          "vars": {
+            "query": "MATCH ()-[r:ExactNumberEdge]->() WHERE r.marker = 'schema' SET r.value = 4611686018427387905 RETURN r.value"
+          },
+          "assert": {
+            "exact_int": 4611686018427387905
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH ()-[r:ExactNumberEdge]->() WHERE r.value IS NOT NULL RETURN r.value",
+              "assert": {
+                "exact_int": 4611686018427387905
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

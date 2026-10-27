@@ -433,12 +433,12 @@ func (s Emitter) formatLiteral(output io.Writer, literal *cypher.Literal) error 
 		}
 
 	case float32:
-		if _, err := io.WriteString(output, strconv.FormatFloat(float64(typedLiteral), 'f', -1, 64)); err != nil {
+		if _, err := io.WriteString(output, cypher.FormatFloatLiteral(float64(typedLiteral))); err != nil {
 			return err
 		}
 
 	case float64:
-		if _, err := io.WriteString(output, strconv.FormatFloat(typedLiteral, 'f', -1, 64)); err != nil {
+		if _, err := io.WriteString(output, cypher.FormatFloatLiteral(typedLiteral)); err != nil {
 			return err
 		}
 
