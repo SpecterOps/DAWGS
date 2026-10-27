@@ -44,11 +44,11 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n:NodeKind1) where n.x + n.y > 9 return n
 -- pgsql_params:{"__strlit0":"null","__strlit1":"+"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_arithmetic(nullif((n0.properties -> E'x'), (@__strlit0::text)::jsonb)::jsonb, nullif((n0.properties -> E'y'), (@__strlit0::text)::jsonb)::jsonb, @__strlit1::text)::jsonb > to_jsonb((9)::int8)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_compare(cypher_arithmetic(nullif((n0.properties -> E'x'), (@__strlit0::text)::jsonb)::jsonb, nullif((n0.properties -> E'y'), (@__strlit0::text)::jsonb)::jsonb, @__strlit1::text)::jsonb, to_jsonb((9)::int8)::jsonb)::int4 > 0) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) with n.x as x, n.y as y return x + y as value
 -- pgsql_params:{"__strlit0":"+"}
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'x') as i0, ((s1.n0).properties -> E'y') as i1 from s1) select cypher_arithmetic((i0)::jsonb, (i1)::jsonb, @__strlit0::text)::jsonb as value from s0;
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'x') as i0, ((s1.n0).properties -> E'y') as i1 from s1) select cypher_arithmetic((s0.i0)::jsonb, (s0.i1)::jsonb, @__strlit0::text)::jsonb as value from s0;
 
 -- case: match (n:NodeKind1) set n.total = n.x + n.y return n
 -- pgsql_params:{"__strlit0":"total","__strlit1":"null","__strlit2":"+"}

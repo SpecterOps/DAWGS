@@ -107,6 +107,27 @@ for existing values. Runtime type dispatch adds per-row cost; local measurements
 and the remaining WITH alias-filter boundary are recorded in
 [the variance ledger](variance_findings_priority.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
 
+### PostgreSQL typed predicates
+
+String predicates (`STARTS WITH`, `ENDS WITH`, `CONTAINS` and regex matching)
+require string values on both sides. Numeric, Boolean and list properties yield
+null instead of matching their text representation. Missing properties and
+negated predicates preserve null as well. Use an explicit `toString` conversion
+when a textual comparison is intended.
+
+Ordered comparisons (`<`, `<=`, `>` and `>=`) retain dynamic property types:
+numbers compare numerically, strings compare by Unicode order, Booleans compare
+false before true, and lists compare lexicographically. Incompatible types and
+null operands yield null; numeric strings are not numbers. These rules also
+apply to properties carried through WITH and to mutation filters. Existing native
+temporal comparisons keep their cast path. Run ordinary schema assertion when
+upgrading to install `cypher_compare(jsonb, jsonb)`.
+
+Positive string filters retain indexable text lookups. Runtime ordered comparison
+adds per-row dispatch cost; local measurements and remaining representation
+boundaries are recorded in
+[the variance ledger](variance_findings_priority.md#dawgs-018-typed-predicates--2026-10-26).
+
 ## Quick Start
 
 Build the repository:

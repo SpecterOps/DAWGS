@@ -17,6 +17,18 @@ JSON-to-float conversion. PostgreSQL runs every variant in both compiler modes.
 map, entity, collection and path results on both backends. PostgreSQL wire-codec
 tests cover JSON/JSONB arrays, nullable composites and explicit range errors.
 
+`predicate_type_shapes.json` checks string predicates and ordered comparisons
+without converting non-string values to text or numeric strings to numbers.
+It covers null results, negation, both operand positions, property pairs, numeric,
+string, Boolean and list ordering, parameters and WITH aliases. Mutation variants
+check complete node/relationship state, unchanged direction/kind/property/missing
+decoys and CREATE cardinality with and without RETURN. PostgreSQL runs every
+variant in both compiler modes. `TestPropertyPredicateTypes` also checks actual
+Boolean/nil Go results and committed exact integers through signed-64-bit limits.
+Schema tests cover nested and nullable list comparisons. Assignment fixtures use
+`coalesce(predicate, false)` to keep the separate stored-null behavior out of
+these backend-equivalent assertions.
+
 `json_result_string_shapes.json` covers JSON-like strings returned by CREATE,
 node/relationship SET and WITH continuation. It checks exact string contents and
 complete post-state, including unchanged fixture entities. PostgreSQL executes

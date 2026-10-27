@@ -472,53 +472,6 @@ func (s *Translator) resolveParameterValue(parameter *cypher.Parameter) any {
 	return parameter.Value
 }
 
-// coalescePropertyLookupExpression builds a coalesce call from a property lookup and translated fallback operands.
-func coalescePropertyLookupExpression(expression pgsql.Expression) pgsql.Expression {
-	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
-		return pgsql.FunctionCall{
-			Function: pgsql.FunctionCoalesce,
-			Parameters: []pgsql.Expression{
-				propertyLookup,
-				pgsql.NewLiteral("", pgsql.Text),
-			},
-			CastType: pgsql.Text,
-		}
-	}
-
-	return expression
-}
-
-// rewriteNegatedStringPredicateExpression preserves Cypher null behavior when negating a string predicate.
-func rewriteNegatedStringPredicateExpression(expression pgsql.Expression) pgsql.Expression {
-	switch typedExpression := expression.(type) {
-	case *pgsql.Parenthetical:
-		typedExpression.Expression = rewriteNegatedStringPredicateExpression(typedExpression.Expression)
-		return typedExpression
-
-	case *pgsql.BinaryExpression:
-		switch typedExpression.Operator {
-		case pgsql.OperatorLike, pgsql.OperatorILike:
-			// If this is a string comparison operation then the negation requires wrapping the
-			// operand references in coalesce functions. While this will kick out index acceleration
-			// the negation will already damage the query planner's ability to utilize an index lookup.
-			typedExpression.LOperand = coalescePropertyLookupExpression(typedExpression.LOperand)
-			typedExpression.ROperand = coalescePropertyLookupExpression(typedExpression.ROperand)
-		}
-
-	case pgsql.FunctionCall:
-		switch typedExpression.Function {
-		case pgsql.FunctionCypherContains, pgsql.FunctionCypherStartsWith, pgsql.FunctionCypherEndsWith:
-			for idx, parameter := range typedExpression.Parameters {
-				typedExpression.Parameters[idx] = coalescePropertyLookupExpression(parameter)
-			}
-		}
-
-		return typedExpression
-	}
-
-	return expression
-}
-
 // Exit builds the SQL model fragment responsible for exit.
 func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	switch typedExpression := expression.(type) {
@@ -682,7 +635,7 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		} else {
 			s.treeTranslator.PushOperand(&pgsql.UnaryExpression{
 				Operator: pgsql.OperatorNot,
-				Operand:  rewriteNegatedStringPredicateExpression(operand),
+				Operand:  operand,
 			})
 		}
 
