@@ -803,6 +803,94 @@ create aggregate public.cypher_max(jsonb)
   parallel = safe
 );
 
+-- Dynamic properties must retain their JSON types until arithmetic is evaluated.
+-- The native typed compiler path handles operands whose types are already known.
+create or replace function public.cypher_arithmetic(left_value jsonb, right_value jsonb, op text)
+  returns jsonb as
+$$
+declare
+  left_type text := jsonb_typeof(left_value);
+  right_type text := jsonb_typeof(right_value);
+  left_text text := left_value #>> '{}';
+  right_text text := right_value #>> '{}';
+  left_int int8;
+  right_int int8;
+  left_float float8;
+  right_float float8;
+  result_float float8;
+  divisor float8;
+begin
+  if left_type = 'null' or right_type = 'null' then
+    return null;
+  end if;
+
+  if op = '+' then
+    if left_type = 'array' or right_type = 'array' then
+      return left_value || right_value;
+    end if;
+    if (left_type = 'string' and right_type in ('string', 'number'))
+       or (right_type = 'string' and left_type = 'number') then
+      return to_jsonb(left_text || right_text);
+    end if;
+  end if;
+
+  if left_type <> 'number' or right_type <> 'number' then
+    raise exception 'unsupported Cypher arithmetic operand types: % % %', left_type, op, right_type
+      using errcode = '22023';
+  end if;
+
+  -- JSONB preserves fractional spellings. Do not route integer arithmetic
+  -- through float8: that would lose bits above 2^53 and change integer division.
+  if op <> '^' and left_text !~ '[.eE]' and right_text !~ '[.eE]'
+     and left_text::numeric between -9223372036854775808 and 9223372036854775807
+     and right_text::numeric between -9223372036854775808 and 9223372036854775807 then
+    left_int := left_text::int8;
+    right_int := right_text::int8;
+    case op
+      when '+' then return to_jsonb(left_int + right_int);
+      when '-' then return to_jsonb(left_int - right_int);
+      when '*' then return to_jsonb(left_int * right_int);
+      when '/' then return to_jsonb(left_int / right_int);
+      when '%' then return to_jsonb(left_int % right_int);
+      else raise exception 'unsupported Cypher arithmetic operator: %', op using errcode = '22023';
+    end case;
+  end if;
+
+  left_float := left_text::float8;
+  right_float := right_text::float8;
+  case op
+    when '+' then result_float := left_float + right_float;
+    when '-' then result_float := left_float - right_float;
+    when '*' then result_float := left_float * right_float;
+    when '/' then result_float := left_float / right_float;
+    when '%' then
+      if right_float = 0 then
+        raise division_by_zero;
+      end if;
+      -- Binary reduction preserves floating remainder semantics (e.g. 1.0 %
+      -- 0.1), unlike decimal numeric modulo or a rounded quotient product.
+      result_float := abs(left_float);
+      divisor := abs(right_float);
+      while divisor <= result_float - divisor loop
+        divisor := divisor * 2;
+      end loop;
+      loop
+        if result_float >= divisor then
+          result_float := result_float - divisor;
+        end if;
+        exit when divisor = abs(right_float);
+        divisor := divisor / 2;
+      end loop;
+      if left_float < 0 then
+        result_float := -result_float;
+      end if;
+    when '^' then result_float := power(left_float, right_float);
+    else raise exception 'unsupported Cypher arithmetic operator: %', op using errcode = '22023';
+  end case;
+  return to_jsonb(result_float::text::numeric + 0.0);
+end;
+$$ language plpgsql immutable parallel safe strict;
+
 create or replace function public.cypher_contains(haystack text, needle text)
   returns bool as
 $$

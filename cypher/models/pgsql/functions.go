@@ -64,6 +64,9 @@ const (
 	// FunctionToJSONB identifies PostgreSQL's conversion to JSONB.
 	FunctionToJSONB Identifier = "to_jsonb"
 
+	// FunctionCypherArithmetic evaluates arithmetic using the runtime JSON value types.
+	FunctionCypherArithmetic Identifier = "cypher_arithmetic"
+
 	// FunctionCypherContains identifies the SQL helper implementing Cypher CONTAINS semantics.
 	FunctionCypherContains Identifier = "cypher_contains"
 
