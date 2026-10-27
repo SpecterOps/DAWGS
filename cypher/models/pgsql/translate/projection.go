@@ -1819,6 +1819,11 @@ func (s *Translator) translateProjectionItem(scope *Scope, projectionItem *cyphe
 		}
 
 		if hasAlias {
+			if s.collectIDEntityType.IsKnown() {
+				if binding, found := scope.AliasedLookup(alias); found {
+					binding.collectedEntityType = s.collectIDEntityType
+				}
+			}
 			s.query.CurrentPart().CurrentProjection().SetAlias(alias)
 		}
 

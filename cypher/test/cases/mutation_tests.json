@@ -932,6 +932,38 @@
         "query": "match (n:A) with collect(n.flag) as xs unwind xs as x match (t:B) set t.flag = x and true return t",
         "fitness": 2
       }
+    },
+    {
+      "name": "DAWGS-056 cross entity relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n) as xs match ()-[r:R]->() where r in xs set r.hit = true return r",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-056 cross entity node SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with collect(r) as xs match (n:A) where n in xs set n.hit = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-056 negated entity CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n) as xs match ()-[r:R]->() where not r in xs create (c:B {hit: true})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-056 same entity SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with collect(r) as xs match ()-[s:R]->() where s in xs set s.hit = true return s",
+        "fitness": 0
+      }
     }
   ]
 }
