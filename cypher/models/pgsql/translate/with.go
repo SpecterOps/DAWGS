@@ -3,11 +3,14 @@ package translate
 import (
 	"fmt"
 
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
-func (s *Translator) prepareWith() error {
-	if !s.multipartWrites {
+func (s *Translator) prepareWith(with *cypher.With) error {
+	part := s.query.CurrentPart()
+	part.withModifiers = with.Projection != nil && (with.Projection.Order != nil || with.Projection.Skip != nil || with.Projection.Limit != nil)
+	if !s.multipartWrites && !part.withModifiers {
 		return nil
 	}
 	constraint, err := s.treeTranslator.ConsumeAllConstraints()
@@ -28,7 +31,8 @@ func (s *Translator) prepareWith() error {
 // translateWith closes the current query part, projects WITH items, and opens the scope consumed by the next part.
 func (s *Translator) translateWith() error {
 	currentPart := s.query.CurrentPart()
-	if s.multipartWrites && currentPart.projections.Frame == nil {
+	boundaryPredicates := s.multipartWrites || currentPart.withModifiers
+	if boundaryPredicates && currentPart.projections.Frame == nil {
 		// Literal projections still consume the incoming row stream. The
 		// placeholder frame of a leading WITH resolves to no physical source.
 		currentPart.projections.Frame = s.scope.CurrentFrame()
@@ -98,7 +102,7 @@ func (s *Translator) translateWith() error {
 		if s.query.CurrentPart().quantifierIdentifiers != nil && s.query.CurrentPart().quantifierIdentifiers.Len() > 0 {
 			set = set.MergeSet(s.query.CurrentPart().quantifierIdentifiers)
 		}
-		if s.multipartWrites {
+		if boundaryPredicates {
 			currentPart.projections.Constraints = currentPart.withInputConstraints
 		} else if projectionConstraint, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(set); err != nil {
 			return err
@@ -203,7 +207,7 @@ func (s *Translator) translateWith() error {
 				}
 			}
 		}
-		if s.multipartWrites {
+		if boundaryPredicates {
 			constraint, err := s.treeTranslator.ConsumeAllConstraints()
 			if err != nil {
 				return err

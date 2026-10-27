@@ -42,6 +42,13 @@ select s0.n0 as s
 from s0;
 ```
 
+`with_modifiers.sql` covers read-only WITH ordering, SKIP and LIMIT, entity and
+scalar aliases, nested alias expressions, DISTINCT, aggregation, input predicates
+and WITH WHERE after pagination. It also checks literal row-stream projections,
+consecutive pages, SET and CREATE without RETURN. Existing staged-write modifier
+tests remain controls; read-only boundaries reuse their ordering and pagination
+renderer.
+
 `optional_row_identity.sql` covers OPTIONAL MATCH correlation for duplicate inputs,
 pending/leading UNWIND, chained optionals, variable-length expansion, DISTINCT,
 updates and CREATE without RETURN. Related existing optional cases in `nodes.sql`,

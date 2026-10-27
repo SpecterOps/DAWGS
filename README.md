@@ -107,6 +107,17 @@ for existing values. Runtime type dispatch adds per-row cost; local measurements
 and the remaining WITH alias-filter boundary are recorded in
 [the variance ledger](variance_findings_priority_complete.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
 
+### PostgreSQL WITH ordering and pagination
+
+`WITH` applies `ORDER BY`, `SKIP` and `LIMIT` at its own query boundary, including
+read-only queries. For example, `MATCH (n:User) WITH n ORDER BY n.score DESC
+SKIP 1 LIMIT 2 RETURN n.score` selects the second and third highest scores.
+Entity and scalar aliases resolve against that boundary's input. `WITH ... WHERE`
+filters the paginated output, and a later `WITH` or `RETURN` keeps its own
+ordering and pagination. Pagination counts retain the existing literal-only
+contract. The shared read and mutation regressions and their live validation
+status are recorded in [the active variance plan](variance_findings_priority.md#dawgs-040-with-ordering-and-pagination--2026-10-27).
+
 ### PostgreSQL temporal parameters
 
 Go `time.Time` values whose location is `time.Local` map to PostgreSQL
