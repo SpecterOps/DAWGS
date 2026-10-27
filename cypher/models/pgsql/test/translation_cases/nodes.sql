@@ -47,8 +47,8 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.id = 1)) select s0.n0 as n from s0;
 
 -- case: match (n) where coalesce(n.name, '') = '1234' return n
--- pgsql_params:{"__strlit0":"","__strlit1":"1234"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce((n0.properties ->> E'name'), @__strlit0::text)::text = @__strlit1::text)) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"","__strlit2":"1234"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce(nullif(nullif((n0.properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb = to_jsonb((@__strlit2::text)::text)::jsonb)) select s0.n0 as n from s0;
 
 -- case: match (n) where n.name = '1234' return n
 -- pgsql_params:{"__strlit0":"string","__strlit1":"1234"}
@@ -379,11 +379,12 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((jsonb_typeof((n0.properties -> E'system_tags')) = @__strlit0::text and (n0.properties ->> E'system_tags') like @__strlit1::text) or (not (jsonb_typeof((n0.properties -> E'system_tags')) = @__strlit0::text) and null)))) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where toString(n.functionallevel) in ['2008 R2','2012','2008','2003','2003 Interim','2000 Mixed/Native'] return n
--- pgsql_params:{"__strlit0":"2008 R2","__strlit1":"2012","__strlit2":"2008","__strlit3":"2003","__strlit4":"2003 Interim","__strlit5":"2000 Mixed/Native"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> E'functionallevel') = any (array [@__strlit0::text, @__strlit1::text, @__strlit2::text, @__strlit3::text, @__strlit4::text, @__strlit5::text]::text[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"toString","__strlit2":"2008 R2","__strlit3":"2012","__strlit4":"2008","__strlit5":"2003","__strlit6":"2003 Interim","__strlit7":"2000 Mixed/Native"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((cypher_text(nullif((n0.properties -> E'functionallevel'), (@__strlit0::text)::jsonb)::jsonb, @__strlit1::text)::text)::text = any (array [@__strlit2::text, @__strlit3::text, @__strlit4::text, @__strlit5::text, @__strlit6::text, @__strlit7::text]::text[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where toInteger(n.value) in [1, 2, 3, 4] return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties ->> E'value'))::int8 = any (array [1, 2, 3, 4]::int8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"number"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (case when jsonb_typeof(nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb) = @__strlit1::text then (nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb)::int8 else (nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb #>> array []::text[])::int8 end = any (array [1, 2, 3, 4]::int8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where u.pwdlastset < (datetime().epochseconds - (365 * 86400)) and not u.pwdlastset IN [-1.0, 0.0] return u limit 100
 -- pgsql_params:{"__strlit0":"null"}
@@ -394,8 +395,8 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_compare(nullif((n0.properties -> E'pwdlastset'), (@__strlit0::text)::jsonb)::jsonb, to_jsonb((extract(epoch from now()::timestamp with time zone)::numeric * 1000 - 86400000)::numeric + 0.0)::jsonb)::int4 < 0 and not ((n0.properties ->> E'pwdlastset'))::float8 = any (array [- 1.0, 0.0]::float8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 100;
 
 -- case: match (n:NodeKind1) where size(n.array_value) > 0 return n
--- pgsql_params:{"__strlit0":"array"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (case when jsonb_typeof((n0.properties -> E'array_value')) = @__strlit0::text then jsonb_array_length((n0.properties -> E'array_value'))::int else null end > 0) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (cypher_size(nullif((n0.properties -> E'array_value'), (@__strlit0::text)::jsonb)::jsonb)::int8 > 0) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n) where 1 in n.array return n
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (1 = any (jsonb_to_text_array((n0.properties -> E'array'))::int8[]))) select s0.n0 as n from s0;
@@ -406,25 +407,28 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (@pi0::float8 = any (jsonb_to_text_array((n0.properties -> E'array'))::float8[]) or @pi1::text = any (jsonb_to_text_array((n0.properties -> E'array'))::text[]))) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where coalesce(n.system_tags, '') contains 'admin_tier_0' return n
--- pgsql_params:{"__strlit0":"","__strlit1":"%admin_tier_0%"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce((n0.properties ->> E'system_tags'), @__strlit0::text)::text like @__strlit1::text) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"","__strlit2":"string","__strlit3":"%admin_tier_0%"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((jsonb_typeof(coalesce(nullif(nullif((n0.properties -> E'system_tags'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb) = @__strlit2::text and coalesce(nullif(nullif((n0.properties -> E'system_tags'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb #>> array []::text[] like @__strlit3::text) or (not (jsonb_typeof(coalesce(nullif(nullif((n0.properties -> E'system_tags'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb) = @__strlit2::text) and null))) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where coalesce(n.a, n.b, 1) = 1 return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce(((n0.properties ->> E'a'))::int8, ((n0.properties ->> E'b'))::int8, 1)::int8 = 1) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce(nullif(nullif((n0.properties -> E'a'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(nullif((n0.properties -> E'b'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((1)::int8)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb = to_jsonb((1)::int8)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where coalesce(n.a, n.b) = 1 return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce((n0.properties ->> E'a'), (n0.properties ->> E'b'))::int8 = 1) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce(nullif(nullif((n0.properties -> E'a'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(nullif((n0.properties -> E'b'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb = to_jsonb((1)::int8)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where 1 = coalesce(n.a, n.b) return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (1 = coalesce((n0.properties ->> E'a'), (n0.properties ->> E'b'))::int8) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (to_jsonb((1)::int8)::jsonb = coalesce(nullif(nullif((n0.properties -> E'a'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(nullif((n0.properties -> E'b'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where u.hasspn = true and u.enabled = true and not '-502' ends with u.objectid and not coalesce(u.gmsa, false) = true and not coalesce(u.msa, false) = true return u limit 10
--- pgsql_params:{"__strlit0":"string","__strlit1":"-502"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> E'hasspn'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> E'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb and not ((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and cypher_ends_with((@__strlit1::text)::text, (n0.properties ->> E'objectid'))::bool) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null)) and not coalesce(((n0.properties ->> E'gmsa'))::bool, false)::bool = true and not coalesce(((n0.properties ->> E'msa'))::bool, false)::bool = true) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 10;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"-502","__strlit2":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((n0.properties -> E'hasspn'))::jsonb = to_jsonb((true)::bool)::jsonb and ((n0.properties -> E'enabled'))::jsonb = to_jsonb((true)::bool)::jsonb and not ((jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text and cypher_ends_with((@__strlit1::text)::text, (n0.properties ->> E'objectid'))::bool) or (not (jsonb_typeof((n0.properties -> E'objectid')) = @__strlit0::text) and null)) and not coalesce(nullif(nullif((n0.properties -> E'gmsa'), (@__strlit2::text)::jsonb)::jsonb, (@__strlit2::text)::jsonb)::jsonb, nullif(to_jsonb((false)::bool)::jsonb, (@__strlit2::text)::jsonb)::jsonb)::jsonb = to_jsonb((true)::bool)::jsonb and not coalesce(nullif(nullif((n0.properties -> E'msa'), (@__strlit2::text)::jsonb)::jsonb, (@__strlit2::text)::jsonb)::jsonb, nullif(to_jsonb((false)::bool)::jsonb, (@__strlit2::text)::jsonb)::jsonb)::jsonb = to_jsonb((true)::bool)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as u from s0 limit 10;
 
 -- case: match (n:NodeKind1) where coalesce(n.name, '') = coalesce(n.migrated_name, '') return n
--- pgsql_params:{"__strlit0":""}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce((n0.properties ->> E'name'), @__strlit0::text)::text = coalesce((n0.properties ->> E'migrated_name'), @__strlit0::text)::text) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":""}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (coalesce(nullif(nullif((n0.properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb = coalesce(nullif(nullif((n0.properties -> E'migrated_name'), (@__strlit0::text)::jsonb)::jsonb, (@__strlit0::text)::jsonb)::jsonb, nullif(to_jsonb((@__strlit1::text)::text)::jsonb, (@__strlit0::text)::jsonb)::jsonb)::jsonb) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (n:NodeKind1) where '1' in n.array_prop + ['1', '2'] return n
 -- pgsql_params:{"__strlit0":"1","__strlit1":"2"}

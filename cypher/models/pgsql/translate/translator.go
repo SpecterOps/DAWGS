@@ -632,6 +632,8 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 	case *cypher.Negation:
 		if operand, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
+		} else if operand, err = s.booleanArgument(operand); err != nil {
+			s.SetError(err)
 		} else {
 			s.treeTranslator.PushOperand(&pgsql.UnaryExpression{
 				Operator: pgsql.OperatorNot,
@@ -640,6 +642,19 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.Where:
+		if !s.treeTranslator.treeBuilder.IsEmpty() {
+			operand, err := s.treeTranslator.PopOperand()
+			if err != nil {
+				s.SetError(err)
+				return
+			}
+			operand, err = s.booleanArgument(operand)
+			if err != nil {
+				s.SetError(err)
+				return
+			}
+			s.treeTranslator.PushOperand(operand)
+		}
 		// Assign the last operands as identifier set constraints
 		if err := s.treeTranslator.PopRemainingExpressionsAsUserConstraints(); err != nil {
 			s.SetError(err)

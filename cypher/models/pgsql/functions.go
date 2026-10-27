@@ -64,6 +64,18 @@ const (
 	// FunctionToJSONB identifies PostgreSQL's conversion to JSONB.
 	FunctionToJSONB Identifier = "to_jsonb"
 
+	// FunctionCypherText extracts a runtime string or explicitly converts a scalar.
+	FunctionCypherText Identifier = "cypher_text"
+
+	// FunctionCharLength counts Unicode characters in a string.
+	FunctionCharLength Identifier = "char_length"
+
+	// FunctionCypherList validates a runtime list without changing element types.
+	FunctionCypherList Identifier = "cypher_list"
+
+	// FunctionCypherSize returns the length of a runtime string or list.
+	FunctionCypherSize Identifier = "cypher_size"
+
 	// FunctionCypherCompare compares compatible runtime values, returning null for unlike types.
 	FunctionCypherCompare Identifier = "cypher_compare"
 

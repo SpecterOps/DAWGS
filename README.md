@@ -128,6 +128,28 @@ adds per-row dispatch cost; local measurements and remaining representation
 boundaries are recorded in
 [the variance ledger](variance_findings_priority.md#dawgs-018-typed-predicates--2026-10-26).
 
+### PostgreSQL properties carried through WITH
+
+Properties keep their stored value types across `WITH`. `toString` extracts string
+contents without JSON quotes or extra escaping; case conversion, split (including
+a carried delimiter), size, head/tail, scalar casts, comparisons and Boolean predicates
+consume the carried value. `size` counts Unicode characters in strings and elements
+in lists. `coalesce` preserves the first non-null value's type, including when its
+fallback has a different type. Missing properties and stored JSON nulls both behave
+as null in these consumers. Node and relationship mutations use the same rules.
+
+Run ordinary schema assertion when upgrading to install `cypher_text(jsonb, text)`,
+`cypher_size(jsonb)` and `cypher_list(jsonb)`. Runtime text conversion accepts
+strings; explicit `toString` additionally accepts numbers and Booleans. Unsupported values return a
+query error. Direct property case conversion retains its functional-index path;
+native literal, typed-scalar and direct property-array coalesce paths remain available.
+
+This does not change the separately tracked `toInteger` numeric rounding policy,
+empty-string split behavior, list UNWIND/collection support, or temporal storage
+representation. JSON cannot recover temporal or integral-float type information
+already lost during serialization. Helper costs and validation are recorded in
+[the variance ledger](variance_findings_priority.md#dawgs-052-with-property-consumers--2026-10-26).
+
 ## Quick Start
 
 Build the repository:

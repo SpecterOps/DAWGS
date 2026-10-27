@@ -200,7 +200,7 @@ func TestLegacyBuilderPostgreSQL_StandaloneHopForms(t *testing.T) {
 				)),
 				query.Returning(query.Relationship(), query.End()),
 			},
-			fragments:  []string{" or ", "jsonb_array_length", "jsonb_to_text_array", "e0.kind_id = any (array [90]::int2[])"},
+			fragments:  []string{" or ", "cypher_size", "jsonb_to_text_array", "e0.kind_id = any (array [90]::int2[])"},
 			parameters: map[string]any{"pi0": uint64(101), "pi1": true, "pi2": 0, "pi3": "1.3.6.1.5.5.7.3.2"},
 		},
 		"HOP-09 two-sided ID lists": {

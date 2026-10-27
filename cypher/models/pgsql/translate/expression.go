@@ -1492,14 +1492,34 @@ func (s *ExpressionTreeTranslator) CompleteBinaryExpression(scope *Scope, operat
 	if err != nil {
 		return err
 	}
-	if operator.IsIn(pgsql.OperatorAdd, pgsql.OperatorSubtract, pgsql.OperatorMultiply, pgsql.OperatorDivide, "%", "^") || isOrderedComparison(operator) || isStringPredicate(operator) {
+	if operator.IsIn(pgsql.OperatorAdd, pgsql.OperatorSubtract, pgsql.OperatorMultiply, pgsql.OperatorDivide, "%", "^") || isOrderedComparison(operator) || isStringPredicate(operator) || operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals, pgsql.OperatorIs, pgsql.OperatorIsNot) {
 		// WITH carries types in the scope. Expose scalar types before operand
 		// hinting can cast JSONB to text and erase runtime value information.
 		for _, operand := range []*pgsql.Expression{&newExpression.LOperand, &newExpression.ROperand} {
 			if identifier, ok := unwrapParenthetical(*operand).(pgsql.Identifier); ok {
 				if dataType, found := scope.LookupDataType(identifier); found && (dataType == pgsql.JSONB || ((isStringPredicate(operator) || isOrderedComparison(operator)) && dataType.IsKnown() && !expressionHasCompositeProperties(dataType))) {
 					*operand = pgsql.NewTypeCast(pgsql.NewParenthetical(*operand), dataType)
+					if dataType == pgsql.JSONB {
+						*operand = pgsql.FunctionCall{Function: pgsql.FunctionNullIf,
+							Parameters: []pgsql.Expression{*operand, jsonNullLiteral()}, CastType: pgsql.JSONB}
+					}
 				}
+			}
+		}
+	}
+	if operator.IsIn(pgsql.OperatorAnd, pgsql.OperatorOr) {
+		for _, operand := range []*pgsql.Expression{&newExpression.LOperand, &newExpression.ROperand} {
+			dataType, err := InferExpressionType(*operand)
+			if err != nil {
+				return err
+			}
+			if identifier, ok := unwrapParenthetical(*operand).(pgsql.Identifier); ok {
+				if scopedType, found := scope.LookupDataType(identifier); found {
+					dataType = scopedType
+				}
+			}
+			if dataType == pgsql.JSONB {
+				*operand = jsonBooleanOperand(*operand)
 			}
 		}
 	}

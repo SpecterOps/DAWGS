@@ -227,3 +227,13 @@ hard-coding them. `node_params` maps a query parameter to one fixture node ID;
 The integration runner and `cmd/plancorpus` resolve these fields after loading
 the fixture, so semantic execution and plan capture use the same ID-anchored
 query shape.
+
+`with_property_consumer_shapes.json` checks string contents and escaping across
+WITH, repeated and rebound aliases, case conversion, split, size, head/tail, heterogeneous coalesce,
+equality/null checks and Boolean consumers. Node and relationship mutations check
+complete stored state, all applicable decoys, continuation and CREATE with and
+without RETURN. PostgreSQL executes every variant in both compiler modes.
+`TestWithPropertyConsumers` additionally checks committed properties and actual Go
+result types, exact large integers, numeric-string/date conversion and invalid
+runtime types on both backends. The split variant uses nonempty inputs; the
+separate empty-string split finding remains open.
