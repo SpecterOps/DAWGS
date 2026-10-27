@@ -17,6 +17,15 @@ JSON-to-float conversion. PostgreSQL runs every variant in both compiler modes.
 map, entity, collection and path results on both backends. PostgreSQL wire-codec
 tests cover JSON/JSONB arrays, nullable composites and explicit range errors.
 
+`json_result_string_shapes.json` covers JSON-like strings returned by CREATE,
+node/relationship SET and WITH continuation. It checks exact string contents and
+complete post-state, including unchanged fixture entities. PostgreSQL executes
+every variant in both compiler modes. `TestJSONResultStrings` additionally checks
+the actual Go types through `Values` and `Scan` for committed properties, carried
+scalars, entities, paths and nested parameter values on both backends. PostgreSQL
+wire tests cover JSON and JSONB in text and binary formats alongside real structured
+JSON, text and bytea controls.
+
 The assertion vocabulary includes exact fixture-backed state checks:
 
 - `node_id_set` for exact surviving node IDs;

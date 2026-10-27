@@ -84,6 +84,11 @@ iteration and appear in `Result.Error()`; check it after draining results. These
 apply to the JSON spelling returned by PostgreSQL; JSONB can normalize exponent
 spellings before returning them.
 
+JSON string values retain their exact contents, including strings such as `[1, 2]`,
+`{"k":"v"}` and `"q"`. Reading a string through `Result.Values()` or scanning it into
+a Go string does not parse its contents as another JSON value. Actual JSON objects
+and arrays continue to decode to maps and lists.
+
 ## Quick Start
 
 Build the repository:
