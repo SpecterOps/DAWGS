@@ -97,6 +97,9 @@ const (
 	// FunctionCypherMax identifies the SQL aggregate implementing Cypher maximum semantics.
 	FunctionCypherMax Identifier = "cypher_max"
 
+	// FunctionCypherSum sums runtime numbers without converting integers to floats.
+	FunctionCypherSum Identifier = "cypher_sum"
+
 	// FunctionArrayLength identifies PostgreSQL's dimension-aware array-length function.
 	FunctionArrayLength Identifier = "array_length"
 
@@ -201,7 +204,7 @@ const (
 // IsAggregateFunction supports benchmark evidence processing for is aggregate function.
 func IsAggregateFunction(function Identifier) bool {
 	switch function {
-	case FunctionCount, FunctionArrayAggregate, FunctionMin, FunctionMax, FunctionCypherMin, FunctionCypherMax, FunctionSum, FunctionAvg:
+	case FunctionCount, FunctionArrayAggregate, FunctionMin, FunctionMax, FunctionCypherMin, FunctionCypherMax, FunctionCypherSum, FunctionSum, FunctionAvg:
 		return true
 
 	default:

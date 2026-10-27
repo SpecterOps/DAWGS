@@ -15,7 +15,8 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- case: MATCH (n) RETURN sum(n.age)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select sum((((s0.n0).properties ->> E'age'))::float8)::numeric as "sum(n.age)" from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_sum(nullif(((s0.n0).properties -> E'age'), (@__strlit0::text)::jsonb)::jsonb)::jsonb as "sum(n.age)" from s0;
 
 -- case: MATCH (n) RETURN avg(n.salary)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select avg((((s0.n0).properties ->> E'salary'))::float8)::numeric as "avg(n.salary)" from s0;
@@ -33,13 +34,15 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_max(((s0.n0).properties -> E'name'))::jsonb as "max(n.name)" from s0;
 
 -- case: MATCH (n) RETURN n.department, sum(n.salary)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> E'department') as "n.department", sum((((s0.n0).properties ->> E'salary'))::float8)::numeric as "sum(n.salary)" from s0 group by ((s0.n0).properties -> E'department');
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> E'department') as "n.department", cypher_sum(nullif(((s0.n0).properties -> E'salary'), (@__strlit0::text)::jsonb)::jsonb)::jsonb as "sum(n.salary)" from s0 group by ((s0.n0).properties -> E'department');
 
 -- case: MATCH (n) RETURN n.department, avg(n.age)
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select ((s0.n0).properties -> E'department') as "n.department", avg((((s0.n0).properties ->> E'age'))::float8)::numeric as "avg(n.age)" from s0 group by ((s0.n0).properties -> E'department');
 
 -- case: MATCH (n) RETURN count(n), sum(n.age), avg(n.age), min(n.age), max(n.age)
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8 as "count(n)", sum((((s0.n0).properties ->> E'age'))::float8)::numeric as "sum(n.age)", avg((((s0.n0).properties ->> E'age'))::float8)::numeric as "avg(n.age)", cypher_min(((s0.n0).properties -> E'age'))::jsonb as "min(n.age)", cypher_max(((s0.n0).properties -> E'age'))::jsonb as "max(n.age)" from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s0.n0)::int8 as "count(n)", cypher_sum(nullif(((s0.n0).properties -> E'age'), (@__strlit0::text)::jsonb)::jsonb)::jsonb as "sum(n.age)", avg((((s0.n0).properties ->> E'age'))::float8)::numeric as "avg(n.age)", cypher_min(((s0.n0).properties -> E'age'))::jsonb as "min(n.age)", cypher_max(((s0.n0).properties -> E'age'))::jsonb as "max(n.age)" from s0;
 
 -- case: RETURN 'hello world'
 -- pgsql_params:{"__strlit0":"hello world"}
@@ -78,7 +81,8 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, count(s1.n0)::int8 as i0 from s1 group by n0) select s0.n0 as n, s0.i0 as node_count from s0 where ((s0.i0)::int8 > 1);
 
 -- case: MATCH (n) WITH sum(n.age) as total_age, count(n) as total_count RETURN total_age / total_count as avg_age
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select sum((((s1.n0).properties ->> E'age'))::float8)::numeric as i0, count(s1.n0)::int8 as i1 from s1) select s0.i0 / s0.i1 as avg_age from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"/"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_sum(nullif(((s1.n0).properties -> E'age'), (@__strlit0::text)::jsonb)::jsonb)::jsonb as i0, count(s1.n0)::int8 as i1 from s1) select cypher_arithmetic(nullif((s0.i0)::jsonb, (@__strlit0::text)::jsonb)::jsonb, to_jsonb(s0.i1)::jsonb, @__strlit1::text)::jsonb as avg_age from s0;
 
 -- case: MATCH (n) WITH count(n) as cnt WHERE cnt > 1 RETURN cnt
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s1.n0)::int8 as i0 from s1) select s0.i0 as cnt from s0 where ((s0.i0)::int8 > 1);
@@ -115,5 +119,6 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select count(s1.n0)::int8 > 1 as i0 from s1) select s0.i0 as many from s0;
 
 -- case: MATCH (n) WITH sum(n.age) / count(n) AS avg_age RETURN avg_age
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select sum((((s1.n0).properties ->> E'age'))::float8)::numeric / count(s1.n0)::int8 as i0 from s1) select s0.i0 as avg_age from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"/"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select cypher_arithmetic(cypher_sum(nullif(((s1.n0).properties -> E'age'), (@__strlit0::text)::jsonb)::jsonb)::jsonb, to_jsonb((count(s1.n0)::int8)::int8)::jsonb, @__strlit1::text)::jsonb as i0 from s1) select s0.i0 as avg_age from s0;
 
