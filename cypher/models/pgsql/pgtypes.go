@@ -465,11 +465,13 @@ func NegotiateValue(value any) (any, error) {
 func ValueToDataType(value any) (DataType, error) {
 	switch typedValue := value.(type) {
 	case time.Time:
-		if typedValue.Location() != nil && typedValue.Location().String() != time.Local.String() {
-			return TimestampWithTimeZone, nil
+		// Local timestamps use the time.Local location itself. An explicit
+		// location can share its name, including UTC on a UTC host.
+		if typedValue.Location() == time.Local {
+			return TimestampWithoutTimeZone, nil
 		}
 
-		return TimestampWithoutTimeZone, nil
+		return TimestampWithTimeZone, nil
 
 	case time.Duration:
 		return Interval, nil

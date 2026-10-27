@@ -1,6 +1,8 @@
 package pgsql
 
 import (
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -438,10 +440,10 @@ func TestValueToDataType(t *testing.T) {
 		Value:        time.Duration(5),
 		ExpectedType: Interval,
 	}, {
-		Value:        time.Now().UTC(),
+		Value:        time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC),
 		ExpectedType: TimestampWithTimeZone,
 	}, {
-		Value:        time.Now().Local(),
+		Value:        time.Date(2026, time.January, 2, 3, 4, 5, 0, time.Local),
 		ExpectedType: TimestampWithoutTimeZone,
 	}}
 
@@ -450,5 +452,52 @@ func TestValueToDataType(t *testing.T) {
 
 		require.Nil(t, err)
 		require.Equal(t, testCase.ExpectedType, dataType)
+	}
+}
+
+// TestTemporalTypeInferenceTimezones isolates time.Local initialization in each
+// subprocess so UTC hosts and locations with identical names stay covered.
+func TestTemporalTypeInferenceTimezones(t *testing.T) {
+	const probeEnv = "DAWGS_TEMPORAL_TYPE_PROBE"
+	if os.Getenv(probeEnv) != "1" {
+		executable, err := os.Executable()
+		require.NoError(t, err)
+		for _, zone := range []string{"UTC", "Etc/UTC", "America/New_York"} {
+			t.Run(zone, func(t *testing.T) {
+				cmd := exec.Command(executable, "-test.run=^TestTemporalTypeInferenceTimezones$")
+				cmd.Env = append(os.Environ(), "TZ="+zone, probeEnv+"=1")
+				output, err := cmd.CombinedOutput()
+				require.NoError(t, err, "%s", output)
+			})
+		}
+		return
+	}
+
+	_, localOffset := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.Local).Zone()
+	for _, tc := range []struct {
+		name     string
+		location *time.Location
+		expected DataType
+	}{
+		{"explicit UTC", time.UTC, TimestampWithTimeZone},
+		{"local", time.Local, TimestampWithoutTimeZone},
+		{"explicit offset", time.FixedZone("offset", 3600), TimestampWithTimeZone},
+		{"same name and offset", time.FixedZone(time.Local.String(), localOffset), TimestampWithTimeZone},
+		{"same name different offset", time.FixedZone(time.Local.String(), localOffset+3600), TimestampWithTimeZone},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value := time.Date(2026, time.January, 2, 3, 4, 5, 0, tc.location)
+			dataType, err := ValueToDataType(value)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, dataType)
+
+			literal, err := AsLiteral(value)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, literal.TypeHint())
+
+			parameter, err := AsParameter("threshold", value)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, parameter.TypeHint())
+		})
 	}
 }

@@ -1,0 +1,89 @@
+{
+  "families": [
+    {
+      "name": "typed datetime parameter selection and mutation boundaries",
+      "template": "MATCH (n:TemporalNode) WHERE datetime(n.created_at) < $threshold {{action}} RETURN n",
+      "fixture": {
+        "nodes": [
+          {"id": "before", "kinds": ["TemporalNode"], "properties": {"created_at": "2026-01-02T03:04:04Z", "selected": false}},
+          {"id": "equal", "kinds": ["TemporalNode"], "properties": {"created_at": "2026-01-02T03:04:05Z", "selected": false}},
+          {"id": "after", "kinds": ["TemporalNode"], "properties": {"created_at": "2026-01-02T03:04:06Z", "selected": false}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "UTC parameter reads only the earlier node",
+          "vars": {"action": ""},
+          "params": {"threshold": {"$type": "datetime", "value": "2026-01-02T03:04:05Z"}},
+          "assert": {"node_ids": ["before"]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:TemporalNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "before", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:04Z", "selected": false}},
+                  {"id": "equal", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:05Z", "selected": false}},
+                  {"id": "after", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:06Z", "selected": false}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "offset parameter preserves the same read boundary",
+          "vars": {"action": ""},
+          "params": {"threshold": {"$type": "datetime", "value": "2026-01-02T04:04:05+01:00"}},
+          "assert": {"node_ids": ["before"]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:TemporalNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "before", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:04Z", "selected": false}},
+                  {"id": "equal", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:05Z", "selected": false}},
+                  {"id": "after", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:06Z", "selected": false}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "UTC parameter updates only the earlier node",
+          "vars": {"action": "SET n.selected = true"},
+          "params": {"threshold": {"$type": "datetime", "value": "2026-01-02T03:04:05Z"}},
+          "assert": {"node_ids": ["before"]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:TemporalNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "before", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:04Z", "selected": true}},
+                  {"id": "equal", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:05Z", "selected": false}},
+                  {"id": "after", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:06Z", "selected": false}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "offset parameter preserves the same mutation boundary",
+          "vars": {"action": "SET n.selected = true"},
+          "params": {"threshold": {"$type": "datetime", "value": "2026-01-02T04:04:05+01:00"}},
+          "assert": {"node_ids": ["before"]},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:TemporalNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "before", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:04Z", "selected": true}},
+                  {"id": "equal", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:05Z", "selected": false}},
+                  {"id": "after", "kinds": ["TemporalNode"], "props": {"created_at": "2026-01-02T03:04:06Z", "selected": false}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
