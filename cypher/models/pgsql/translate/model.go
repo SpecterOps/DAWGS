@@ -873,6 +873,8 @@ type QueryPart struct {
 	projections *Projections
 	// withInputConstraints preserves MATCH predicates before WITH introduces aliases.
 	withInputConstraints pgsql.Expression
+	// withModifiers keeps WITH predicates after its ordering and pagination.
+	withModifiers bool
 	// mutations retains the mutations while QueryPart is assembled or evaluated.
 	mutations *Mutations
 	// fromClauses retains the from clauses while QueryPart is assembled or evaluated.

@@ -1028,6 +1028,38 @@
         "query": "match (n:A) with n, toLower(n.name) as value where value contains 'a_' create (c:B {name: n.name})",
         "fitness": 7
       }
+    },
+    {
+      "name": "DAWGS-040 node page",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n order by n.x desc skip 1 limit 2 set n.hit = true return n",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-040 relationship page",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with r order by r.x desc limit 1 set r.hit = true",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DAWGS-040 paginated alias filter",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n, n.x as value order by value desc limit 1 where value < 3 set n.hit = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-040 CREATE page",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n order by n.x desc skip 1 limit 2 create (c:B {value: n.x})",
+        "fitness": 5
+      }
     }
   ]
 }

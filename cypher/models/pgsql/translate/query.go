@@ -93,14 +93,12 @@ func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery
 
 		if inlineSelect, err := s.buildInlineProjection(part); err != nil {
 			return err
-		} else if s.multipartWrites {
+		} else {
 			if query, err := multipartBoundaryQuery(part, nextCTE.Query, inlineSelect); err != nil {
 				return err
 			} else {
 				nextCTE.Query = query
 			}
-		} else {
-			nextCTE.Query.Body = inlineSelect
 		}
 		multipartCTEChain = append(multipartCTEChain, nextCTE)
 	}
