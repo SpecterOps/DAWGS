@@ -87,3 +87,10 @@ negation counts cancel to the positive predicate, odd counts negate exactly
 once, and an explicitly parenthesized `not (not …)` retains both operators.
 Double negation also drops the negated string-predicate coalesce rewrite while
 the property null rewrite keeps its dedicated lowering.
+
+`float_literals.sql` covers integral floating-point literals in projections,
+division, `toString`, list literals, membership lists and property equality.
+Integral values keep a fractional suffix (`3.0`, never `3`) so PostgreSQL
+evaluates them as numeric literals and float arithmetic never silently becomes
+integer arithmetic; the integer division control pins `3 / 2` as integer
+arithmetic. Exponent spellings (`1e3`) canonicalize to decimal float form.

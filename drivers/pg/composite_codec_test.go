@@ -59,6 +59,7 @@ func newCompositeCodecTestMap(t testing.TB, owned bool) (*pgtype.Map, compositeC
 	t.Helper()
 
 	typeMap := pgtype.NewMap()
+	installJSONCodecs(typeMap)
 	types := compositeCodecTestTypes{}
 	types.node = &pgtype.Type{
 		Name: pgsql.NodeComposite.String(),
@@ -171,7 +172,7 @@ func testNodeComposite(id int64) nodeComposite {
 	return nodeComposite{
 		ID:         id,
 		KindIDs:    []int16{1, 2},
-		Properties: map[string]any{"id": float64(id), "name": "node"},
+		Properties: map[string]any{"id": id, "name": "node"},
 	}
 }
 
@@ -182,7 +183,7 @@ func testEdgeComposite(id, startID, endID int64) edgeComposite {
 		StartID:    startID,
 		EndID:      endID,
 		KindID:     3,
-		Properties: map[string]any{"id": float64(id), "name": "edge"},
+		Properties: map[string]any{"id": id, "name": "edge"},
 	}
 }
 
