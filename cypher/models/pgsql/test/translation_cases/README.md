@@ -132,3 +132,10 @@ collections, WITH aliases, numeric ID decoys, negation, optional null targets an
 SET/CREATE without RETURN. Same-type tests extract entity identity; cross-type
 tests preserve null and empty-list semantics without comparing numeric IDs.
 Direct aggregate entity-expression controls preserve their grouping scope.
+
+`to_integer.sql` covers truncation toward zero for numeric literals, WITH
+scalars, node/relationship properties, mutation filters, SET and CREATE without
+RETURN. Exact integer, integer-string and null controls retain their existing
+casts. Related `nodes.sql`, `scalar_aggregation.sql` and
+`with_property_consumers.sql` cases now truncate JSONB numbers through exact
+numeric values before casting to int8.

@@ -1,0 +1,1189 @@
+{
+  "families": [
+    {
+      "name": "numeric truncation",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "IntegerInput"
+            ],
+            "properties": {
+              "role": "target",
+              "x": 1.9,
+              "y": -1.5,
+              "keep": "untouched"
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "IntegerInput",
+              "IntegerCreated"
+            ],
+            "properties": {
+              "role": "decoy",
+              "x": 8.2,
+              "keep": "untouched"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "target",
+            "end_id": "decoy",
+            "kind": "IntegerEdge",
+            "properties": {
+              "role": "target",
+              "x": 1.9,
+              "y": -1.5,
+              "keep": "untouched"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "positive",
+          "vars": {
+            "query": "RETURN toInteger(1.9) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "negative",
+          "vars": {
+            "query": "RETURN toInteger(-1.5) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          }
+        },
+        {
+          "name": "positive half",
+          "vars": {
+            "query": "RETURN toInteger(1.5) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "negative near integer",
+          "vars": {
+            "query": "RETURN toInteger(-1.9) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          }
+        },
+        {
+          "name": "positive near zero",
+          "vars": {
+            "query": "RETURN toInteger(0.9) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "negative near zero",
+          "vars": {
+            "query": "RETURN toInteger(-0.9) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "positive half zero",
+          "vars": {
+            "query": "RETURN toInteger(0.5) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "negative half zero",
+          "vars": {
+            "query": "RETURN toInteger(-0.5) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "zero",
+          "vars": {
+            "query": "RETURN toInteger(0.0) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "negative zero",
+          "vars": {
+            "query": "RETURN toInteger(-0.0) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "integer",
+          "vars": {
+            "query": "RETURN toInteger(2) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "integral float",
+          "vars": {
+            "query": "RETURN toInteger(2.0) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "large integer",
+          "vars": {
+            "query": "RETURN toInteger(9007199254740993) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "exact_int": 9007199254740993
+          }
+        },
+        {
+          "name": "maximum string",
+          "vars": {
+            "query": "RETURN toInteger('9223372036854775807') AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "exact_int": 9223372036854775807
+          }
+        },
+        {
+          "name": "minimum string",
+          "vars": {
+            "query": "RETURN toInteger('-9223372036854775808') AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "exact_int": -9223372036854775808
+          }
+        },
+        {
+          "name": "integer string",
+          "vars": {
+            "query": "RETURN toInteger('42') AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                42
+              ]
+            }
+          }
+        },
+        {
+          "name": "null",
+          "vars": {
+            "query": "RETURN toInteger(null) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "computed",
+          "vars": {
+            "query": "RETURN toInteger(7.0 / 2.0) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "negative computed",
+          "vars": {
+            "query": "RETURN toInteger(-7.0 / 2.0) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -3
+              ]
+            }
+          }
+        },
+        {
+          "name": "parameter 1.9",
+          "vars": {
+            "query": "RETURN toInteger($x) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          },
+          "params": {
+            "x": 1.9
+          }
+        },
+        {
+          "name": "parameter -1.5",
+          "vars": {
+            "query": "RETURN toInteger($x) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          },
+          "params": {
+            "x": -1.5
+          }
+        },
+        {
+          "name": "node property",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) RETURN toInteger(n.x) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "relationship property",
+          "vars": {
+            "query": "MATCH ()-[r:IntegerEdge]->() RETURN toInteger(r.y) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          }
+        },
+        {
+          "name": "carried property",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) WITH n.x AS x RETURN toInteger(x) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "carried relationship property",
+          "vars": {
+            "query": "MATCH ()-[r:IntegerEdge]->() WITH r.y AS x RETURN toInteger(x) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          }
+        },
+        {
+          "name": "carried float",
+          "vars": {
+            "query": "WITH -1.9 AS x RETURN toInteger(x) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          }
+        },
+        {
+          "name": "rebound property",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) WITH n.x AS x WITH x AS y RETURN toInteger(y) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "coalesced property",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) RETURN toInteger(coalesce(n.x,0.0)) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "missing property",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) RETURN toInteger(n.missing) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "converted arithmetic",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) RETURN toInteger(n.x) / 2 AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "filter",
+          "vars": {
+            "query": "MATCH (n:IntegerInput) WHERE toInteger(n.x) = 1 RETURN count(n) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "UNWIND floats",
+          "vars": {
+            "query": "UNWIND [1.9,-1.5,0.9,-0.9] AS x RETURN toInteger(x) AS value ORDER BY value"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "value": [
+                -1,
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "node without RETURN",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) SET n.value = toInteger(n.x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship without RETURN",
+          "vars": {
+            "query": "MATCH ()-[r:IntegerEdge]->() WITH r,r.y AS x SET r.value = toInteger(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": -1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "create without RETURN",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) WITH n.x AS x CREATE (c:IntegerCreated {role:'created',value:toInteger(x)})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c.value AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    1
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "filter node without RETURN",
+          "vars": {
+            "query": "MATCH (n:IntegerInput) WHERE toInteger(n.x) = 1 SET n.value = -1"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": -1
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "filter relationship without RETURN",
+          "vars": {
+            "query": "MATCH ()-[r:IntegerEdge]->() WHERE toInteger(r.y) = -1 SET r.value = 1"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "node with RETURN",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) SET n.value = toInteger(n.x) RETURN n.value AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship with RETURN",
+          "vars": {
+            "query": "MATCH ()-[r:IntegerEdge]->() WITH r,r.y AS x SET r.value = toInteger(x) RETURN r.value AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": -1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "create with RETURN",
+          "vars": {
+            "query": "MATCH (n:IntegerInput {role:'target'}) WITH n.x AS x CREATE (c:IntegerCreated {role:'created',value:toInteger(x)}) RETURN c.value AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c.value AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    1
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "filter node with RETURN",
+          "vars": {
+            "query": "MATCH (n:IntegerInput) WHERE toInteger(n.x) = 1 SET n.value = -1 RETURN n.value AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": -1
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "filter relationship with RETURN",
+          "vars": {
+            "query": "MATCH ()-[r:IntegerEdge]->() WHERE toInteger(r.y) = -1 SET r.value = 1 RETURN r.value AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:IntegerInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:IntegerEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched",
+                      "value": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:'created'}) RETURN c",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

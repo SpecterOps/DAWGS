@@ -1031,13 +1031,23 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 				s.SetError(err)
 				return
 			} else if dynamic {
-				// Retain the existing numeric cast policy; DAWGS-015 owns
-				// changing numeric rounding to Cypher truncation.
+				// JSONB numbers already have an exact numeric representation;
+				// avoid float8 so integral properties retain all 64 bits.
 				s.treeTranslator.PushOperand(pgsql.Case{
 					Conditions: []pgsql.Expression{pgsql.NewBinaryExpression(jsonbTypeof(jsonValue), pgsql.OperatorEquals, pgsql.NewLiteral("number", pgsql.Text))},
-					Then:       []pgsql.Expression{pgsql.NewTypeCast(jsonValue, pgsql.Int8)}, Else: converted,
+					Then: []pgsql.Expression{pgsql.FunctionCall{
+						Function: pgsql.FunctionTrunc, Parameters: []pgsql.Expression{pgsql.NewTypeCast(jsonValue, pgsql.Numeric)}, CastType: pgsql.Int8,
+					}}, Else: converted,
 				})
 			} else {
+				if dataType, err := s.inferExpressionType(argument); err != nil {
+					s.SetError(err)
+					return
+				} else if dataType == pgsql.Float4 || dataType == pgsql.Float8 || dataType == pgsql.Numeric {
+					// Truncate in the native numeric type. Passing floating parameters
+					// through numeric first can lose significant digits near int64 limits.
+					converted = pgsql.FunctionCall{Function: pgsql.FunctionTrunc, Parameters: []pgsql.Expression{value}, CastType: pgsql.Int8}
+				}
 				s.treeTranslator.PushOperand(converted)
 			}
 		}

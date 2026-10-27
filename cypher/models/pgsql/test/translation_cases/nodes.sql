@@ -384,7 +384,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 
 -- case: match (n:NodeKind1) where toInteger(n.value) in [1, 2, 3, 4] return n
 -- pgsql_params:{"__strlit0":"null","__strlit1":"number"}
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (case when jsonb_typeof(nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb) = @__strlit1::text then (nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb)::int8 else (nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb #>> array []::text[])::int8 end = any (array [1, 2, 3, 4]::int8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (case when jsonb_typeof(nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb) = @__strlit1::text then trunc((nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb)::numeric)::int8 else (nullif((n0.properties -> E'value'), (@__strlit0::text)::jsonb)::jsonb #>> array []::text[])::int8 end = any (array [1, 2, 3, 4]::int8[])) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
 
 -- case: match (u:NodeKind1) where u.pwdlastset < (datetime().epochseconds - (365 * 86400)) and not u.pwdlastset IN [-1.0, 0.0] return u limit 100
 -- pgsql_params:{"__strlit0":"null"}
