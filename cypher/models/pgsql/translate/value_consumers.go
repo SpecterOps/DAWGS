@@ -53,7 +53,7 @@ func (s *Translator) functionTextArgument(argument pgsql.Expression, function st
 }
 
 // scalarCastArgument unwraps a carried JSON scalar before native conversions.
-// Conversion policy (for example toInteger rounding) remains with that consumer.
+// Conversion policy (for example toInteger truncation) remains with that consumer.
 func (s *Translator) scalarCastArgument(argument pgsql.Expression) (pgsql.Expression, error) {
 	value, dynamic, err := s.functionJSONArgument(argument)
 	if err != nil {

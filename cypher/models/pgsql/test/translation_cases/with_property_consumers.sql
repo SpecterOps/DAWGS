@@ -55,7 +55,7 @@ with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposit
 
 -- case: match (n:NodeKind1) with n.name as x return toInteger(x) as value
 -- pgsql_params:{"__strlit0":"number"}
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'name') as i0 from s1) select case when jsonb_typeof(s0.i0) = @__strlit0::text then (i0)::int8 else (s0.i0 #>> array []::text[])::int8 end as value from s0;
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'name') as i0 from s1) select case when jsonb_typeof(s0.i0) = @__strlit0::text then trunc((i0)::numeric)::int8 else (s0.i0 #>> array []::text[])::int8 end as value from s0;
 
 -- case: match (n:NodeKind1) with n.name as x return date(x) as value
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'name') as i0 from s1) select (s0.i0 #>> array []::text[])::date as value from s0;

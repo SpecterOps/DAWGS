@@ -105,7 +105,7 @@ normalization that has already erased an integral float's fractional spelling
 cannot be reversed. Use explicit `toFloat` operands when that distinction matters
 for existing values. Runtime type dispatch adds per-row cost; local measurements
 and the remaining WITH alias-filter boundary are recorded in
-[the variance ledger](variance_findings_priority.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
+[the variance ledger](variance_findings_priority_complete.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
 
 ### PostgreSQL temporal parameters
 
@@ -135,7 +135,7 @@ upgrading to install `cypher_compare(jsonb, jsonb)`.
 Positive string filters retain indexable text lookups. Runtime ordered comparison
 adds per-row dispatch cost; local measurements and remaining representation
 boundaries are recorded in
-[the variance ledger](variance_findings_priority.md#dawgs-018-typed-predicates--2026-10-26).
+[the variance ledger](variance_findings_priority_complete.md#dawgs-018-typed-predicates--2026-10-26).
 
 ### PostgreSQL properties carried through WITH
 
@@ -153,11 +153,21 @@ strings; explicit `toString` additionally accepts numbers and Booleans. Unsuppor
 query error. Direct property case conversion retains its functional-index path;
 native literal, typed-scalar and direct property-array coalesce paths remain available.
 
-This does not change the separately tracked `toInteger` numeric rounding policy,
-empty-string split behavior, list UNWIND/collection support, or temporal storage
+This does not change empty-string split behavior, list UNWIND/collection support, or temporal storage
 representation. JSON cannot recover temporal or integral-float type information
 already lost during serialization. Helper costs and validation are recorded in
-[the variance ledger](variance_findings_priority.md#dawgs-052-with-property-consumers--2026-10-26).
+[the variance ledger](variance_findings_priority_complete.md#dawgs-052-with-property-consumers--2026-10-26).
+
+### PostgreSQL integer conversion
+
+`toInteger` truncates numeric inputs toward zero: `1.9` becomes `1`, `-1.5`
+becomes `-1`, and fractions between `-1` and `1` become `0`. This applies to
+literals, parameters, properties, WITH aliases and mutation expressions. Integer
+inputs retain their exact signed 64-bit value, including values above 2^53.
+No schema migration is required. This repair covers numeric rounding; invalid
+strings and out-of-range conversion behavior remain separate compatibility limits.
+Live validation status is recorded in
+[the active variance plan](variance_findings_priority.md#dawgs-015-integer-truncation--2026-10-27).
 
 ### PostgreSQL numeric aggregates
 
@@ -173,7 +183,7 @@ Run ordinary schema assertion when upgrading to install `cypher_sum(jsonb)` and
 `cypher_sum_transition(jsonb, jsonb)`. The aggregate retains one numeric accumulator
 per group and uses runtime type dispatch. Its measured cost and the existing JSON
 limitations on integral float representation are recorded in
-[the variance ledger](variance_findings_priority.md#dawgs-053-numeric-sum--2026-10-27).
+[the variance ledger](variance_findings_priority_complete.md#dawgs-053-numeric-sum--2026-10-27).
 `avg` retains its existing floating-point input conversion and null result on empty
 input; this change does not provide exact integer averaging.
 
@@ -190,14 +200,14 @@ Property collections use JSONB elements internally. Native scalar and entity
 collections retain their existing representations. As with other JSON-backed
 values, an integral float's type cannot be recovered after storage has erased its
 fractional spelling. Validation and collection costs are recorded in
-[the variance ledger](variance_findings_priority.md#dawgs-054-typed-collections--2026-10-27).
+[the variance ledger](variance_findings_priority_complete.md#dawgs-054-typed-collections--2026-10-27).
 
 Entity membership preserves node and relationship identity types through `collect`
 and `WITH`. A relationship never matches a collected node with the same numeric ID,
 and a numeric ID never matches an entity. Membership of bound entities uses their
 identity, including when a collection retains full entities. Negation and nullable/empty
 lists keep Cypher's membership semantics in both PostgreSQL compiler modes.
-See [the membership regression evidence](variance_findings_priority.md#dawgs-056-entity-membership-types--2026-10-27).
+See [the membership regression evidence](variance_findings_priority_complete.md#dawgs-056-entity-membership-types--2026-10-27).
 
 ## Quick Start
 

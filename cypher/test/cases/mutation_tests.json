@@ -964,6 +964,38 @@
         "query": "match ()-[r:R]->() with collect(r) as xs match ()-[s:R]->() where s in xs set s.hit = true return s",
         "fitness": 0
       }
+    },
+    {
+      "name": "DAWGS-015 node SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) set n.value = toInteger(n.x) return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-015 relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with r, r.x as x set r.value = toInteger(x)",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "DAWGS-015 filtered SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where toInteger(n.x) = 1 set n.hit = true return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-015 CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n.x as x create (c:B {value: toInteger(x)})",
+        "fitness": 4
+      }
     }
   ]
 }
