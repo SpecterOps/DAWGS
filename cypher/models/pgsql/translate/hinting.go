@@ -509,6 +509,18 @@ func applyBinaryExpressionTypeHints(kindMapper *contextAwareKindMapper, expressi
 	if isStringPredicate(expression.Operator) {
 		return nil // typedStringPredicate retains both operands' runtime types.
 	}
+	if expression.Operator == pgsql.OperatorIn {
+		if dataType, err := InferExpressionType(expression.ROperand); err != nil {
+			return err
+		} else if dataType == pgsql.JSONBArray {
+			// Typed collection membership must read the original property JSON,
+			// before scalar hinting can replace it with extracted text.
+			return nil
+		}
+	}
+	if err := rewriteCollectArrayConcatenation(expression); err != nil {
+		return err
+	}
 	if rewritten, err := rewriteTypedOrdering(expression); err != nil {
 		return err
 	} else if rewritten {

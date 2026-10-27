@@ -22,6 +22,15 @@ on both backends. AVG controls cover ordinary values and its empty-input null;
 large-integer averaging remains a separate precision limitation. PostgreSQL-scoped
 schema tests check repeat assertion, SQL/JSON nulls, float spelling and overflow.
 
+`typed_collect_shapes.json` checks typed property collections, DISTINCT, null and
+empty inputs, grouping, WITH aliases, nested lists, membership, head/tail, list
+concatenation and UNWIND consumers. Node/relationship SET and CREATE variants
+check complete fixture state, unchanged direction/kind/role/missing-property
+decoys and created values/cardinality with and without RETURN. PostgreSQL runs
+every variant in both compiler modes. `TestTypedCollect` independently checks
+committed node and relationship inputs and actual Go element types, including
+both signed 64-bit limits, mixed values, Booleans and JSON-looking strings.
+
 `exact_result_number_shapes.json` covers large integer CREATE and SET results,
 carried property projections, both signed 64-bit limits, and post-mutation reads.
 It uses typed `exact_int` expectations to avoid rounding expected values through

@@ -1333,6 +1333,17 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			s.PushOperand(pgsql.NewLiteral(false, pgsql.Boolean))
 			return nil
 		}
+		if rightType, err := InferExpressionType(newExpression.ROperand); err != nil {
+			return err
+		} else if rightType == pgsql.JSONBArray {
+			value, err := arithmeticJSONOperand(newExpression.LOperand)
+			if err != nil {
+				return err
+			}
+			s.PushOperand(pgsql.NewBinaryExpression(value, pgsql.OperatorEquals,
+				pgsql.NewAnyExpression(newExpression.ROperand, pgsql.JSONBArray)))
+			return nil
+		}
 
 		newExpression.Operator = pgsql.OperatorEquals
 
@@ -1492,12 +1503,12 @@ func (s *ExpressionTreeTranslator) CompleteBinaryExpression(scope *Scope, operat
 	if err != nil {
 		return err
 	}
-	if operator.IsIn(pgsql.OperatorAdd, pgsql.OperatorSubtract, pgsql.OperatorMultiply, pgsql.OperatorDivide, "%", "^") || isOrderedComparison(operator) || isStringPredicate(operator) || operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals, pgsql.OperatorIs, pgsql.OperatorIsNot) {
+	if operator.IsIn(pgsql.OperatorAdd, pgsql.OperatorSubtract, pgsql.OperatorMultiply, pgsql.OperatorDivide, "%", "^") || isOrderedComparison(operator) || isStringPredicate(operator) || operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals, pgsql.OperatorIs, pgsql.OperatorIsNot, pgsql.OperatorIn) {
 		// WITH carries types in the scope. Expose scalar types before operand
 		// hinting can cast JSONB to text and erase runtime value information.
 		for _, operand := range []*pgsql.Expression{&newExpression.LOperand, &newExpression.ROperand} {
 			if identifier, ok := unwrapParenthetical(*operand).(pgsql.Identifier); ok {
-				if dataType, found := scope.LookupDataType(identifier); found && (dataType == pgsql.JSONB || ((isStringPredicate(operator) || isOrderedComparison(operator)) && dataType.IsKnown() && !expressionHasCompositeProperties(dataType))) {
+				if dataType, found := scope.LookupDataType(identifier); found && (dataType == pgsql.JSONB || (operator == pgsql.OperatorIn && dataType == pgsql.JSONBArray) || ((isStringPredicate(operator) || isOrderedComparison(operator)) && dataType.IsKnown() && !expressionHasCompositeProperties(dataType))) {
 					*operand = pgsql.NewTypeCast(pgsql.NewParenthetical(*operand), dataType)
 					if dataType == pgsql.JSONB {
 						*operand = pgsql.FunctionCall{Function: pgsql.FunctionNullIf,
@@ -1506,6 +1517,9 @@ func (s *ExpressionTreeTranslator) CompleteBinaryExpression(scope *Scope, operat
 				}
 			}
 		}
+	}
+	if err := exposeCollectArrayOperands(scope, newExpression); err != nil {
+		return err
 	}
 	if operator.IsIn(pgsql.OperatorAnd, pgsql.OperatorOr) {
 		for _, operand := range []*pgsql.Expression{&newExpression.LOperand, &newExpression.ROperand} {
