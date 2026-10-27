@@ -1052,13 +1052,14 @@ func (s *Translator) translateFunction(typedExpression *cypher.FunctionInvocatio
 			s.SetError(fmt.Errorf("expected only one argument for cypher function: %s", typedExpression.Name))
 		} else if argument, err := s.treeTranslator.PopOperand(); err != nil {
 			s.SetError(err)
-		} else if typeCastNumericArg, err := TypeCastExpression(argument, pgsql.Float8); err != nil {
+		} else if jsonArgument, err := arithmeticJSONOperand(argument); err != nil {
 			s.SetError(err)
 		} else {
 			s.treeTranslator.PushOperand(pgsql.FunctionCall{
-				Function:   pgsql.FunctionSum,
-				Parameters: []pgsql.Expression{typeCastNumericArg},
-				CastType:   pgsql.Numeric,
+				Function:   pgsql.FunctionCypherSum,
+				Parameters: []pgsql.Expression{jsonArgument},
+				Distinct:   typedExpression.Distinct,
+				CastType:   pgsql.JSONB,
 			})
 		}
 

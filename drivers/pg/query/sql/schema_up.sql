@@ -891,6 +891,32 @@ begin
 end;
 $$ language plpgsql immutable parallel safe strict;
 
+-- A constant-size numeric state retains integer precision and float spelling.
+-- Nulls do not contribute; the initial zero is also the empty-input identity.
+create or replace function public.cypher_sum_transition(state jsonb, value jsonb)
+  returns jsonb as
+$$
+begin
+  if value is null or value = 'null'::jsonb then
+    return state;
+  end if;
+  if jsonb_typeof(value) <> 'number' then
+    raise exception 'unsupported Cypher sum operand type: %', jsonb_typeof(value)
+      using errcode = '22023';
+  end if;
+  return public.cypher_arithmetic(state, value, '+');
+end;
+$$ language plpgsql immutable parallel safe;
+
+drop aggregate if exists public.cypher_sum(jsonb);
+create aggregate public.cypher_sum(jsonb)
+(
+  sfunc = public.cypher_sum_transition,
+  stype = jsonb,
+  initcond = '0',
+  parallel = safe
+);
+
 -- Cypher's partial ordering differs from JSONB's total ordering. In particular,
 -- unlike scalar types are incomparable and list order is lexicographic.
 create or replace function public.cypher_compare(left_value jsonb, right_value jsonb)

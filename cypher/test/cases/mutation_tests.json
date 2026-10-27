@@ -868,6 +868,38 @@
         "query": "match (n:NodeKind1) with n, n.items as x where head(x) = 'one' set n.items = tail(x)",
         "fitness": 2
       }
+    },
+    {
+      "name": "SUM node assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:nodekind1) with sum(n.big) as total match (t:nodekind2) set t.total = total return t",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "SUM DISTINCT relationship assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:nodekind1) with sum(distinct n.big) as total match ()-[r:edgekind1]->() set r.total = total",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "SUM CREATE without RETURN",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:nodekind1) with sum(n.big) as total create (c:nodekind2 {total: total})",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "SUM carried aggregate arithmetic",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) with sum(n.big) as total return total / 2",
+        "fitness": -3
+      }
     }
   ]
 }
