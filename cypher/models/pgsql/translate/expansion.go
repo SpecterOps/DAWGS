@@ -3285,6 +3285,17 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 		return nil, nil
 	}
 
+	// Dynamic filter SQL is executed inside PL/pgSQL and cannot see an outer
+	// translation frame. Materialize a single correlated endpoint in the outer
+	// query and use the existing array overload instead. Both-bound endpoints
+	// must retain their pair filter because independent arrays lose pair semantics.
+	if !hasPairFilter && s.usesBoundRootIDs() != s.usesBoundTerminalIDs() {
+		return []pgsql.Expression{
+			endpointIDsArrayParameter(rootFilterStatement, hasRootFilter),
+			endpointIDsArrayParameter(terminalFilterStatement, hasTerminalFilter),
+		}, nil
+	}
+
 	// Pair filters supersede separate root/terminal filters because they encode
 	// the allowed combinations, not just independent endpoint sets.
 	var (
@@ -3325,6 +3336,16 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 	}
 
 	return filterParameters, nil
+}
+
+func endpointIDsArrayParameter(filterStatement pgsql.Insert, hasFilter bool) pgsql.Expression {
+	if !hasFilter {
+		return pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+	}
+
+	return pgsql.NewTypeCast(pgsql.ArrayExpression{
+		Expression: *filterStatement.Source,
+	}, pgsql.Int8Array)
 }
 
 // shortestPathsParameters renders a forward search's query fragments, depth limit, and filter inserts as harness parameters.
