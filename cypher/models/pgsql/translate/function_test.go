@@ -71,9 +71,8 @@ func TestListSizeGuardsDynamicJSONPropertiesByType(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Contains(t, formatted.Statement, "case when jsonb_typeof")
-	require.Contains(t, formatted.Statement, "= "+literalParameterSQL(t, formatted.Parameters, "array")+" then jsonb_array_length")
-	require.Contains(t, formatted.Statement, "else null end")
+	require.Contains(t, formatted.Statement, "cypher_size(nullif(")
+	require.Contains(t, formatted.Statement, "properties -> E'values'")
 }
 
 // TestTailFunctionDoesNotDuplicatePathComponentExpression verifies nested tail calls hydrate path components only once.

@@ -47,11 +47,12 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select cypher_compare(nullif(((s0.n0).properties -> E'x'), (@__strlit0::text)::jsonb)::jsonb, to_jsonb((array [1, 3]::int8[])::int8[])::jsonb)::int4 > 0 as value from s0;
 
 -- case: match (n:NodeKind1) with n.x as x return x starts with '1' as value
--- pgsql_params:{"__strlit0":"string","__strlit1":"1%"}
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'x') as i0 from s1) select ((jsonb_typeof((s0.i0)::jsonb) = @__strlit0::text and (s0.i0)::jsonb #>> array []::text[] like @__strlit1::text) or (not (jsonb_typeof((s0.i0)::jsonb) = @__strlit0::text) and null)) as value from s0;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"string","__strlit2":"1%"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'x') as i0 from s1) select ((jsonb_typeof(nullif((s0.i0)::jsonb, (@__strlit0::text)::jsonb)::jsonb) = @__strlit1::text and nullif((s0.i0)::jsonb, (@__strlit0::text)::jsonb)::jsonb #>> array []::text[] like @__strlit2::text) or (not (jsonb_typeof(nullif((s0.i0)::jsonb, (@__strlit0::text)::jsonb)::jsonb) = @__strlit1::text) and null)) as value from s0;
 
 -- case: match (n:NodeKind1) with n.x as x return x < 200 as value
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'x') as i0 from s1) select cypher_compare((s0.i0)::jsonb, to_jsonb((200)::int8)::jsonb)::int4 < 0 as value from s0;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'x') as i0 from s1) select cypher_compare(nullif((s0.i0)::jsonb, (@__strlit0::text)::jsonb)::jsonb, to_jsonb((200)::int8)::jsonb)::int4 < 0 as value from s0;
 
 -- case: match (n:NodeKind1) where n.x starts with '1' set n.seen = true return n
 -- pgsql_params:{"__strlit0":"string","__strlit1":"1%","__strlit2":"seen"}

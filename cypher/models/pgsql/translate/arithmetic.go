@@ -24,7 +24,7 @@ func requiresDynamicArithmetic(expression *pgsql.BinaryExpression) (bool, error)
 
 // arithmeticJSONOperand preserves stored JSON types instead of extracting text.
 func arithmeticJSONOperand(expression pgsql.Expression) (pgsql.Expression, error) {
-	expression = unwrapParenthetical(expression)
+	expression = concreteEmptyArray(unwrapParenthetical(expression))
 	if literal, ok := expression.(pgsql.Literal); ok && literal.Null {
 		return pgsql.NewTypeCast(literal, pgsql.JSONB), nil
 	}

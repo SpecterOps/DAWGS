@@ -1662,10 +1662,14 @@ func (s *Translator) buildTailProjection() error {
 	return nil
 }
 
-// ensureProjectionAliasBinding defines an inferred scope binding for an expression alias not already known.
+// ensureProjectionAliasBinding gives a new expression its own typed binding. A
+// materialized alias still describes the input value and must not be reused for
+// a conversion that changes the output type.
 func (s *Translator) ensureProjectionAliasBinding(alias pgsql.Identifier, selectItem pgsql.SelectItem) error {
-	if _, isBound := s.scope.AliasedLookup(alias); isBound {
-		return nil
+	if binding, isBound := s.scope.AliasedLookup(alias); isBound {
+		if _, isIdentifier := unwrapParenthetical(selectItem).(pgsql.Identifier); isIdentifier || binding.LastProjection == nil {
+			return nil
+		}
 	}
 
 	inferredType, err := s.inferExpressionType(selectItem)
