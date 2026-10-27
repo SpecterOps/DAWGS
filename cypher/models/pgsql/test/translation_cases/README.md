@@ -94,3 +94,8 @@ Integral values keep a fractional suffix (`3.0`, never `3`) so PostgreSQL
 evaluates them as numeric literals and float arithmetic never silently becomes
 integer arithmetic; the integer division control pins `3 / 2` as integer
 arithmetic. Exponent spellings (`1e3`) canonicalize to decimal float form.
+
+`property_arithmetic.sql` covers runtime type dispatch for all six numeric
+operators, chained expressions, WHERE comparisons, WITH aliases, node/relationship
+SET and CREATE without RETURN. Three existing `nodes.sql` cases also dispatch
+property addition at runtime rather than assuming string concatenation.

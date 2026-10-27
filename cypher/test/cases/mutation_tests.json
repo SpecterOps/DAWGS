@@ -764,6 +764,38 @@
         "query": "match (s:User) match (s)-[:MemberOf*1..3]->(t) where (t)-[:MemberOf]->() with s, count(t) as c return s, c order by c desc limit 100",
         "fitness": 0
       }
+    },
+    {
+      "name": "Property arithmetic SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.total = n.x + n.y return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Property arithmetic relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() set r.total = r.x % r.y return r",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Property arithmetic WHERE and CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.x + n.y > 2 create (m:NodeKind2 {total: n.x * n.y})",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "Property arithmetic WITH continuation",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.x + n.y as total set n.total = total return n",
+        "fitness": -1
+      }
     }
   ]
 }

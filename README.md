@@ -89,6 +89,24 @@ JSON string values retain their exact contents, including strings such as `[1, 2
 a Go string does not parse its contents as another JSON value. Actual JSON objects
 and arrays continue to decode to maps and lists.
 
+Arithmetic between PostgreSQL properties uses their stored JSON types. Numeric
+values support `+`, `-`, `*`, `/`, `%` and `^`; integer operations retain signed
+64-bit precision and integer division truncates toward zero. String addition
+concatenates, list addition appends, and missing/null operands yield null.
+Unsupported operand types and integer overflow return query errors. Chained
+arithmetic and arithmetic on properties carried through WITH use the same rules.
+Known literal arithmetic and property/literal expressions retain their native
+SQL path. Run ordinary schema assertion when upgrading to install the
+`cypher_arithmetic(jsonb, jsonb, text)` helper.
+
+Integer versus float dispatch follows the stored JSON number spelling. Fractional
+spellings and floating results retain float behavior; JSON serialization or JSONB
+normalization that has already erased an integral float's fractional spelling
+cannot be reversed. Use explicit `toFloat` operands when that distinction matters
+for existing values. Runtime type dispatch adds per-row cost; local measurements
+and the remaining WITH alias-filter boundary are recorded in
+[the variance ledger](variance_findings_priority.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
+
 ## Quick Start
 
 Build the repository:

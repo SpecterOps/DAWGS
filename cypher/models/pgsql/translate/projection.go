@@ -1672,6 +1672,10 @@ func (s *Translator) ensureProjectionAliasBinding(alias pgsql.Identifier, select
 	if err != nil {
 		return err
 	}
+	if isPropertyLookup(unwrapParenthetical(selectItem)) {
+		// Projected properties use -> and retain a JSONB value across WITH.
+		inferredType = pgsql.JSONB
+	}
 
 	newBinding, err := s.scope.DefineNew(inferredType)
 	if err != nil {

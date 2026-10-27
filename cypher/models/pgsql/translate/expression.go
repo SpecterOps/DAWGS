@@ -845,12 +845,9 @@ func isPropertyLookup(expression pgsql.Expression) bool {
 	return isPropertyLookup
 }
 
-// isConcatenationOperation accepts two expressions and their inferred pgsql.DataType values and attempts to determine
-// if the values are able to be concatenated.
-//
-// For further information regarding the conditional logic, please see the PgSQL upstream documentation:
-// https://www.postgresql.org/docs/9.1/functions-string.html
-func isConcatenationOperation(lOperand, rOperand pgsql.Expression, lOperandType, rOperandType pgsql.DataType) bool {
+// isConcatenationOperation identifies concatenation when an operand has a known
+// string or array type. Dynamic property pairs use runtime dispatch instead.
+func isConcatenationOperation(lOperandType, rOperandType pgsql.DataType) bool {
 	// Any use of an array type automatically assumes concatenation
 	if lOperandType.IsArrayType() || rOperandType.IsArrayType() {
 		return true
@@ -863,12 +860,6 @@ func isConcatenationOperation(lOperand, rOperand pgsql.Expression, lOperandType,
 
 	if lOperandType == pgsql.Text || rOperandType == pgsql.Text {
 		return true
-	}
-
-	// Dynamic properties have no schema-level type information. When both operands are dynamic property lookups,
-	// prefer Cypher's string concatenation form instead of emitting invalid jsonb + jsonb SQL.
-	if lOperandType == pgsql.UnknownDataType && rOperandType == pgsql.UnknownDataType {
-		return isPropertyLookup(lOperand) && isPropertyLookup(rOperand)
 	}
 
 	return false
@@ -1252,6 +1243,25 @@ func cypherStringPredicateExpression(function pgsql.Identifier, lOperand, rOpera
 
 // rewriteBinaryExpression applies operator-specific casts, wildcard escaping, and Cypher null semantics before pushing the result.
 func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.BinaryExpression) error {
+	if dynamic, err := requiresDynamicArithmetic(newExpression); err != nil {
+		return err
+	} else if dynamic {
+		left, err := arithmeticJSONOperand(newExpression.LOperand)
+		if err != nil {
+			return err
+		}
+		right, err := arithmeticJSONOperand(newExpression.ROperand)
+		if err != nil {
+			return err
+		}
+		s.PushOperand(pgsql.FunctionCall{
+			Function:   pgsql.FunctionCypherArithmetic,
+			Parameters: []pgsql.Expression{left, right, pgsql.NewLiteral(string(newExpression.Operator), pgsql.Text)},
+			CastType:   pgsql.JSONB,
+		})
+		return nil
+	}
+
 	switch newExpression.Operator {
 	case pgsql.OperatorAdd:
 		// In the case of the use of the cypher `+` operator we must attempt to disambiguate if the intent
@@ -1260,7 +1270,7 @@ func (s *ExpressionTreeTranslator) rewriteBinaryExpression(newExpression *pgsql.
 			return err
 		} else if rOperandType, err := InferExpressionType(newExpression.ROperand); err != nil {
 			return err
-		} else if isConcatenationOperation(newExpression.LOperand, newExpression.ROperand, lOperandType, rOperandType) {
+		} else if isConcatenationOperation(lOperandType, rOperandType) {
 			newExpression.Operator = pgsql.OperatorConcatenate
 		}
 
@@ -1584,6 +1594,17 @@ func (s *ExpressionTreeTranslator) CompleteBinaryExpression(scope *Scope, operat
 	} else if err := rewriteIdentityOperands(scope, newExpression); err != nil {
 		return err
 	} else {
+		// WITH references carry their JSONB type in the scope rather than on
+		// the identifier itself. Expose it before arithmetic dispatch.
+		if operator.IsIn(pgsql.OperatorAdd, pgsql.OperatorSubtract, pgsql.OperatorMultiply, pgsql.OperatorDivide, "%", "^") {
+			for _, operand := range []*pgsql.Expression{&newExpression.LOperand, &newExpression.ROperand} {
+				if identifier, ok := unwrapParenthetical(*operand).(pgsql.Identifier); ok {
+					if dataType, found := scope.LookupDataType(identifier); found && dataType == pgsql.JSONB {
+						*operand = pgsql.NewTypeCast(*operand, dataType)
+					}
+				}
+			}
+		}
 		return s.rewriteBinaryExpression(newExpression)
 	}
 }

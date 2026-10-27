@@ -26,6 +26,17 @@ scalars, entities, paths and nested parameter values on both backends. PostgreSQ
 wire tests cover JSON and JSONB in text and binary formats alongside real structured
 JSON, text and bytea controls.
 
+`property_arithmetic_shapes.json` checks all six numeric operators, exact large
+integers, integer/float division, binary floating remainder, strings, lists,
+missing values, parentheses, chained operations, WITH-carried operands, comparisons
+and complete node/relationship mutation state. Numeric fixture properties are
+assigned in Cypher before the tested expression so JSON fixture decoding cannot
+silently turn integer inputs into Neo4j floats. PostgreSQL executes all variants
+in both compiler modes. `TestPropertyArithmetic` also checks committed typed
+properties, actual Go result types and errors for invalid arithmetic on both
+backends. PostgreSQL schema tests check repeat assertion, nulls, overflow and
+floating remainder against Go's `math.Mod`.
+
 The assertion vocabulary includes exact fixture-backed state checks:
 
 - `node_id_set` for exact surviving node IDs;
