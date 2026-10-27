@@ -111,9 +111,9 @@ func typedStringPredicate(expression *pgsql.BinaryExpression) (pgsql.Expression,
 	if err != nil {
 		return nil, err
 	}
-	// Retain the current literal escaping contract. Functional-left literal
-	// escaping and regex matching scope are separate migration work items.
-	if expression.Operator != pgsql.OperatorCypherRegexMatch && isPropertyLookup(unwrapParenthetical(expression.LOperand)) {
+	// LIKE metacharacters belong to the literal right operand regardless of
+	// the left operand's shape. Regex patterns keep their separate contract.
+	if expression.Operator != pgsql.OperatorCypherRegexMatch {
 		if literal, ok := right.(pgsql.Literal); ok && !literal.Null {
 			right, err = rewriteStringWildCardLiteral(right)
 			if err != nil {

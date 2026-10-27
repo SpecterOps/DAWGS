@@ -124,6 +124,15 @@ null instead of matching their text representation. Missing properties and
 negated predicates preserve null as well. Use an explicit `toString` conversion
 when a textual comparison is intended.
 
+`STARTS WITH`, `ENDS WITH` and `CONTAINS` treat `%`, `_` and backslashes
+as literal characters, including after functions such as `toLower`, `toUpper`,
+`coalesce` and `toString`, and through WITH aliases. PostgreSQL escapes literal
+LIKE patterns before adding prefix/suffix wildcards; the `toLower` index
+prefilter uses the same escaped pattern. Parameter and property operands keep
+their existing runtime escaping. No schema migration is required. Live validation
+status is recorded in
+[the active variance plan](variance_findings_priority.md#dawgs-014-string-predicate-literal-escaping--2026-10-27).
+
 Ordered comparisons (`<`, `<=`, `>` and `>=`) retain dynamic property types:
 numbers compare numerically, strings compare by Unicode order, Booleans compare
 false before true, and lists compare lexicographically. Incompatible types and

@@ -996,6 +996,38 @@
         "query": "match (n:A) with n.x as x create (c:B {value: toInteger(x)})",
         "fitness": 4
       }
+    },
+    {
+      "name": "DAWGS-014 node SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where toLower(n.name) starts with 'a_' set n.hit = true return n",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-014 relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() where toUpper(r.name) ends with 'A%' set r.hit = true",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-014 negated SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where not coalesce(n.name, '') contains 'a_' set n.hit = true",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-014 CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n, toLower(n.name) as value where value contains 'a_' create (c:B {name: n.name})",
+        "fitness": 7
+      }
     }
   ]
 }
