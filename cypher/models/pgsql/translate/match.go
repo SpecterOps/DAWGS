@@ -14,8 +14,18 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 	// so we can use this point for optional match outer joins
 	joinFrame := s.scope.CurrentFrame()
 	var rowIdentity pgsql.Identifier
-	if match.Optional && joinFrame != nil {
+	if match.Optional {
 		var err error
+		if joinFrame == nil {
+			// Cypher starts with one empty row, even without a preceding clause.
+			// A synthetic frame lets the normal optional join preserve that row.
+			joinFrame, err = s.scope.PushFrame()
+			if err != nil {
+				return err
+			}
+			joinFrame.Synthetic = true
+			currentQueryPart.Frame = joinFrame
+		}
 		joinFrame, rowIdentity, err = s.buildOptionalMatchInput(joinFrame)
 		if err != nil {
 			return err
@@ -61,11 +71,8 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 		return err
 	}
 
-	// If there is no valid previous frame, skip translating an `OPTIONAL MATCH`/treat as plain `MATCH`
 	if match.Optional {
-		if joinFrame != nil {
-			return s.translateOptionalMatch(joinFrame, rowIdentity)
-		}
+		return s.translateOptionalMatch(joinFrame, rowIdentity)
 	}
 
 	return nil
@@ -165,8 +172,6 @@ func (s *Translator) translateOptionalMatch(joinFrame *Frame, rowIdentity pgsql.
 func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, originFrame *Frame, rowIdentity pgsql.Identifier) (pgsql.Query, error) {
 	optMatchFrame := aggregationFrame.Previous
 
-	// Leading OPTIONAL MATCH without an input frame follows the existing MATCH
-	// path and does not enter this merge.
 	if originFrame == nil {
 		return pgsql.Query{}, fmt.Errorf("could not get origin frame prior to OPTIONAL MATCH")
 	}

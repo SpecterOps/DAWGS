@@ -9,6 +9,19 @@ and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each
 post-state entry contains `cypher`, optional `params`, and `assert`.
 
+`temporal_parameter_shapes.json` checks typed datetime selection and mutation
+boundaries. Tagged RFC3339 datetimes are canonicalized to UTC with a numeric
+offset, preserving their instant and nanoseconds without invoking backend-specific
+timezone-name ordering. Neo4j-scoped tests separately pass ordinary Go timestamps
+with positive and negative offsets through both `Query` and `Raw`, including
+nested maps and typed lists, and check the returned offset and precision.
+
+`leading_optional_match_shapes.json` checks empty and populated graphs, rejected
+predicates, unmatched and matched relationships, comma patterns, chained optional
+clauses, wildcard projections, aggregation, UNWIND, SET, and CREATE with and
+without RETURN. Unmatched clauses produce one null-filled row; mutation variants
+check the resulting graph. PostgreSQL executes every variant in both compiler modes.
+
 `numeric_sum_shapes.json` checks exact large integer SUM results, DISTINCT,
 grouping, empty/all-null inputs, float and literal controls, relationship properties,
 WITH aliases and arithmetic after aggregation. Node/relationship SET and CREATE

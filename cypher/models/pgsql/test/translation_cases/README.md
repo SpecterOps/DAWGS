@@ -47,6 +47,11 @@ pending/leading UNWIND, chained optionals, variable-length expansion, DISTINCT,
 updates and CREATE without RETURN. Related existing optional cases in `nodes.sql`,
 `multipart.sql` and `update.sql` also retain the materialized input row identity.
 
+`leading_optional_match.sql` covers the implicit single input row for a leading
+OPTIONAL MATCH, including predicates, relationships, chained clauses, wildcard
+projections, counts, SET and CREATE with and without RETURN. Existing leading
+optional cases in `nodes.sql` and `multipart.sql` use the same null-preserving join.
+
 `reused_relationship.sql` covers identity-constrained scans of reused fixed
 relationships, WITH aliases, directions, bound endpoints, paths, continuations,
 pattern predicates, OPTIONAL MATCH updates and CREATE without RETURN. The related

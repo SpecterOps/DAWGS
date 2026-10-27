@@ -33,8 +33,8 @@ func TestParamsDecodesTaggedDatetime(t *testing.T) {
 		"nested": [{"$type": "datetime", "value": "2025-02-03T04:05:06Z"}]
 	}`), &values))
 
-	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 123456789, time.UTC), values["threshold"])
-	require.Equal(t, []any{time.Date(2025, time.February, 3, 4, 5, 6, 0, time.UTC)}, values["nested"])
+	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 123456789, time.FixedZone("Offset", 0)), values["threshold"])
+	require.Equal(t, []any{time.Date(2025, time.February, 3, 4, 5, 6, 0, time.FixedZone("Offset", 0))}, values["nested"])
 }
 
 // TestParamsDecodesNestedObjectsAsStandardMaps verifies untagged objects remain
@@ -88,6 +88,21 @@ func TestParamsRejectsInvalidStringList(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			var values Params
 			require.Error(t, json.Unmarshal([]byte(raw), &values))
+		})
+	}
+}
+
+// Tagged RFC3339 timestamps describe instants rather than named timezone values.
+func TestParamsDatetimeCanonicalInstants(t *testing.T) {
+	for _, input := range []string{"2026-01-02T03:04:05.123456789Z", "2026-01-02T04:04:05.123456789+01:00", "2026-01-01T21:34:05.123456789-05:30"} {
+		t.Run(input, func(t *testing.T) {
+			var values Params
+			require.NoError(t, json.Unmarshal([]byte(`{"threshold":{"$type":"datetime","value":"`+input+`"}}`), &values))
+			actual := values["threshold"].(time.Time)
+			require.True(t, actual.Equal(time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC)))
+			zone, offset := actual.Zone()
+			require.Equal(t, "Offset", zone)
+			require.Zero(t, offset)
 		})
 	}
 }

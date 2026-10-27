@@ -107,6 +107,30 @@ for existing values. Runtime type dispatch adds per-row cost; local measurements
 and the remaining WITH alias-filter boundary are recorded in
 [the variance ledger](variance_findings_priority.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
 
+### PostgreSQL temporal parameters
+
+Go `time.Time` values whose location is `time.Local` map to PostgreSQL
+`timestamp without time zone`. Values with `time.UTC` or another explicit
+location map to `timestamp with time zone`, even when that location shares
+the local zone's name or offset. Use `value.UTC()` for an explicit UTC instant
+and `value.In(time.Local)` for a local timestamp. Parameter types also separate
+translation cache entries, and cache hits bind the current timestamp value.
+
+### Neo4j temporal parameters
+
+Neo4j query parameters also accept Go timestamps parsed from numeric RFC3339
+offsets. The driver preserves their instant, offset and nanosecond precision,
+including inside parameter maps and lists. Named timezones retain Neo4j's native
+comparison behavior: equal instants with different timezone representations can
+compare differently. Tagged `datetime` values in the shared test corpus are
+canonical UTC instants with a numeric offset so their assertions are portable.
+
+### Optional matches
+
+Leading `OPTIONAL MATCH` clauses preserve one null-filled row when no pattern
+matches, including through subsequent optional clauses and mutations. PostgreSQL
+uses the same optional-join path for leading clauses and clauses with prior input.
+
 ### PostgreSQL typed predicates
 
 String predicates (`STARTS WITH`, `ENDS WITH`, `CONTAINS` and regex matching)
@@ -198,7 +222,7 @@ Build the repository:
 make build
 ```
 
-Run unit tests:
+Run unit tests (no database required, even when `CONNECTION_STRING` is set):
 
 ```bash
 make test
@@ -207,6 +231,10 @@ make test
 Run integration tests when a backend is available:
 
 Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j driver.
+`make test_integration` enables the `manual_integration` and `integration` build
+tags, including PostgreSQL composite/JSON codec and graph-wipe tests. Tests scoped
+to another backend skip automatically. `make test_all` runs the unit, integration,
+and BDD suites for the selected backend; run it separately for each backend.
 
 PostgreSQL integration tests require `pg_stat_statements` in `shared_preload_libraries`
 before the server starts. The CI PostgreSQL integration service configures this through

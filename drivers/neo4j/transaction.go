@@ -297,6 +297,7 @@ func (s *neo4jTransaction) createRelationshipByIDs(startNodeID, endNodeID graph.
 
 func (s *neo4jTransaction) Raw(stmt string, params map[string]any) graph.Result {
 	const maxParametersToRender = 12
+	params = normalizeTemporalParameters(params)
 
 	if drivers.IsQueryAnalysisEnabled() {
 		var (

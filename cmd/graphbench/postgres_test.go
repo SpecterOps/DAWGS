@@ -477,7 +477,7 @@ func TestResolveCaseParams(t *testing.T) {
 	}, params)
 }
 
-// TestScaleCaseDecodesTypedDatetimeParameter verifies that the corpus JSON datetime envelope becomes a UTC time value rather than an untyped map.
+// TestScaleCaseDecodesTypedDatetimeParameter verifies that the corpus JSON datetime envelope becomes a canonical UTC instant with a numeric offset.
 func TestScaleCaseDecodesTypedDatetimeParameter(t *testing.T) {
 	var testCase ScaleCase
 	require.NoError(t, json.Unmarshal([]byte(`{
@@ -489,7 +489,7 @@ func TestScaleCaseDecodesTypedDatetimeParameter(t *testing.T) {
 		"candidate_modes":["postgres_sql"]
 	}`), &testCase))
 
-	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC), testCase.Params["threshold"])
+	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 0, time.FixedZone("Offset", 0)), testCase.Params["threshold"])
 }
 
 // TestParsePostgresPlanMetrics verifies parsing of planning/execution milliseconds and every shared, local, and temporary buffer counter from text plans.

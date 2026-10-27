@@ -41,6 +41,8 @@ const (
 	includeKey = "include"
 )
 
+var corpusDatetimeLocation = time.FixedZone("Offset", 0)
+
 // Params is a query parameter map that supports tagged generated and temporal
 // values. A datetime is represented in JSON as:
 //
@@ -52,6 +54,8 @@ const (
 //	{"$type": "string_list", "prefix": "missing", "count": 1000, "include": ["target-id"]}
 //
 // Tagged values may also appear in nested maps and lists.
+// Datetimes are canonical UTC instants with a numeric offset. This keeps shared
+// corpus assertions independent of backend timezone-name ordering.
 type Params map[string]any
 
 // UnmarshalJSON decodes plain JSON parameters and expands supported tagged
@@ -142,7 +146,7 @@ func convertTaggedValue(rawType any, tagged map[string]any) (any, error) {
 			return nil, fmt.Errorf("datetime must contain only %q and %q", typeKey, valueKey)
 		}
 
-		return parsed, nil
+		return parsed.In(corpusDatetimeLocation), nil
 
 	case "string_list":
 		return convertStringList(tagged)

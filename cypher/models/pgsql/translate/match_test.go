@@ -18,6 +18,9 @@ func TestOptionalMatchIdentityLifetime(t *testing.T) {
 			optionalCount int
 			columns       []string
 		}{
+			{"leading node", "OPTIONAL MATCH (n:Group) RETURN *", 1, []string{"n"}},
+			{"leading traversal", "OPTIONAL MATCH (n:Group)-[r:MemberOf]->(m) RETURN *", 1, []string{"n", "r", "m"}},
+			{"leading chained", "OPTIONAL MATCH (n:Group) OPTIONAL MATCH (n)-[r:MemberOf]->(m) RETURN *", 2, []string{"n", "r", "m"}},
 			{"leading unwind", "UNWIND [1,1,1] AS x OPTIONAL MATCH (n:Group) RETURN *", 1, []string{"n", "x"}},
 			{"pending unwind", "MATCH (n:Group) UNWIND [1,1,1] AS x OPTIONAL MATCH (n)-[r:MemberOf]->(m) RETURN *", 1, []string{"m", "n", "r", "x"}},
 			{"chained optional", "MATCH (n:Group) OPTIONAL MATCH (n)-[r:MemberOf]->(m) OPTIONAL MATCH (m)-[s:MemberOf]->(p) RETURN *", 2, []string{"m", "n", "p", "r", "s"}},
