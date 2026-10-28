@@ -19,10 +19,14 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -186,6 +190,49 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	}
 	if dumpResult.Manifest.Metrics.Graphs[0].NodeCount != nodeCount || dumpResult.Manifest.Metrics.Graphs[0].EdgeCount != edgeCount {
 		t.Fatalf("unexpected dump metrics counts: %+v", dumpResult.Manifest.Metrics.Graphs[0])
+	}
+
+	archiveBase := t.TempDir()
+	archiveDumpDir := filepath.Join(archiveBase, "dumpdir")
+	archivePath := filepath.Join(archiveBase, "dump.tar")
+	var archiveOutput bytes.Buffer
+	runtime := commandRuntime{stdout: &archiveOutput, stderr: io.Discard}
+	if err := runtime.run(ctx, []string{
+		"dump", "-connection", connection, "-out", archiveDumpDir,
+		"-archive-out", archivePath,
+		"-graph", graphName, "-compression", "gzip", "-shard-size", "3",
+	}); err != nil {
+		t.Fatalf("dump unencrypted archive: %v", err)
+	}
+	if !strings.Contains(archiveOutput.String(), "archive: "+archivePath) {
+		t.Fatalf("dump output omits archive path: %s", archiveOutput.String())
+	}
+	if entries, err := os.ReadDir(archiveBase); err != nil || len(entries) != 2 || entries[0].Name() != "dump.tar" || entries[1].Name() != "dumpdir" {
+		t.Fatalf("archive output directory contains %v, error = %v", entries, err)
+	}
+	archiveFile, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatalf("open unencrypted archive: %v", err)
+	}
+	defer archiveFile.Close()
+	archiveReader := tar.NewReader(archiveFile)
+	var archivedPaths []string
+	for {
+		header, err := archiveReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read unencrypted archive: %v", err)
+		}
+		archivedPaths = append(archivedPaths, header.Name)
+	}
+	expectedPaths, err := retriever.ArchivePathsFromManifest(dumpResult.Manifest)
+	if err != nil {
+		t.Fatalf("expected archive paths: %v", err)
+	}
+	if !reflect.DeepEqual(archivedPaths, expectedPaths) {
+		t.Fatalf("archive paths = %v, want %v", archivedPaths, expectedPaths)
 	}
 
 	if _, err := retriever.Load(ctx, db, driverName, retriever.LoadOptions{

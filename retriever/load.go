@@ -1,6 +1,7 @@
 package retriever
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
@@ -528,7 +529,7 @@ func prepareLoadInput(options LoadOptions) (LoadOptions, func(), error) {
 		OutputDir: tempDir,
 	})
 
-	if err := UnpackEncryptedCollectionArchiveWithOptions(options.ArchiveReader, tempDir, options.ArchiveIdentity, ArchiveOptions{Progress: options.Progress}); err != nil {
+	if err := unpackLoadArchive(options, tempDir); err != nil {
 		cleanup()
 		return LoadOptions{}, nil, err
 	}
@@ -550,6 +551,23 @@ func prepareLoadInput(options LoadOptions) (LoadOptions, func(), error) {
 	}
 
 	return options, cleanup, nil
+}
+
+// unpackLoadArchive detects the archive envelope without consuming the stream.
+func unpackLoadArchive(options LoadOptions, outputDir string) error {
+	reader := bufio.NewReader(options.ArchiveReader)
+	prefix, _ := reader.Peek(len(encryptedArchiveMagic))
+	archiveOptions := ArchiveOptions{Progress: options.Progress}
+	if string(prefix) == encryptedArchiveMagic {
+		if options.ArchiveIdentity == nil {
+			return ValidationError{Message: "encrypted archive requires archive identity; pass -identity"}
+		}
+		return UnpackEncryptedCollectionArchiveWithOptions(reader, outputDir, options.ArchiveIdentity, archiveOptions)
+	}
+	if options.ArchiveIdentity != nil {
+		return ValidationError{Message: "archive identity supplied for an unencrypted or invalid archive"}
+	}
+	return unpackCollectionTarWithOptions(reader, outputDir, false, archiveOptions)
 }
 
 func assertManifestSchemas(ctx context.Context, db graph.Database, value Manifest) error {

@@ -163,7 +163,29 @@ The listener shuts down when the Retriever command exits, and failure to bind
 the requested address fails the command before database work starts. Treat all
 captured profiles as sensitive operational artifacts.
 
-## Encrypted Archives
+## Archives
+
+Pass `-archive-out` without `-recipient` to write an unencrypted TAR file
+alongside the collection directory:
+
+```bash
+retriever dump \
+  -connection "$CONNECTION_STRING" \
+  -out ./dumpdir \
+  -archive-out ./dump.tar
+```
+
+The TAR contains the manifest and its JSONL fragments. `-out` remains the
+collection directory; `-archive-out` adds a second artifact. Parquet sidecars,
+when requested, stay in the directory and are not included in the TAR.
+Existing archive files are refused, and partial archive files are removed if
+packaging fails.
+To load an unencrypted TAR, extract it into a collection directory and pass
+that directory to `retriever load -in`, or load the TAR directly with
+`retriever load -archive ./dump.tar`. The `retriever unpack` command accepts
+encrypted archives only.
+
+### Encrypted Archives
 
 Generate a recipient key pair before creating encrypted archives:
 
@@ -177,8 +199,8 @@ The private key is written as an unencrypted JSON key envelope with restrictive
 file permissions. Store it separately from archives and treat it as sensitive.
 Key generation refuses to replace existing key files.
 
-Pass `-archive-out` and `-recipient` to create a single encrypted TAR archive
-after a dump succeeds:
+Pass `-archive-out` with `-recipient` to write an encrypted TAR archive
+alongside the collection directory:
 
 ```bash
 retriever dump \
@@ -192,10 +214,10 @@ retriever dump \
 ```
 
 The archive layer uses an uncompressed TAR stream encrypted with HPKE using
-ML-KEM-1024, HKDF-SHA512, and AES-256-GCM. Fragment compression inside the dump
-directory remains controlled by `-compression`; the archive itself is not
-compressed. If archive creation fails, the command fails and removes partial
-archive output while leaving the completed dump directory for inspection.
+ML-KEM-1024, HKDF-SHA512, and AES-256-GCM. Fragment compression remains
+controlled by `-compression`; the archive itself is not compressed. If archive
+creation fails, the command removes partial archive output and leaves the
+completed collection directory for inspection.
 
 Unpack an encrypted archive with the private key:
 
@@ -247,7 +269,17 @@ retriever load \
   -in ./dumpdir
 ```
 
-Encrypted archives produced by `dump -archive-out` can be loaded directly:
+Unencrypted TAR archives can be loaded directly without a key:
+
+```bash
+retriever load \
+  -connection "$CONNECTION_STRING" \
+  -archive ./dump.tar
+```
+
+Archive format is detected from its contents. Supply `-identity` only for encrypted
+archives. Encrypted archives produced by `dump -archive-out -recipient` can be
+loaded directly:
 
 ```bash
 retriever load \
@@ -260,8 +292,8 @@ Load reads and validates `manifest.json`, then verifies every fragment checksum,
 JSONL record, and record count before performing database writes. It asserts
 destination graph schemas from the manifest metadata and loads all nodes before
 relationships. Graph names from the dump are preserved; load does not support
-overriding graph names. Direct archive loads decrypt and perform integrity-only
-unpack validation in a temporary collection directory, then run the same
+overriding graph names. Direct archive loads decrypt when needed and perform
+integrity-only unpack validation in a temporary collection directory, then run the same
 semantic preflight as directory loads before schema assertion or database
 writes.
 
@@ -289,7 +321,10 @@ reading, checksum verification, schema assertion, graph boundaries, node and
 relationship phase boundaries, periodic entity progress, and completion.
 
 Pass `-verify-metrics` to scan the loaded destination graph after load and
-compare it against the metrics stored in the manifest:
+compare it against the metrics stored in the manifest. This option requires a
+manifest with metrics; older collections may lack them. If metrics are missing,
+the command returns an error after loading the graph, leaving the destination
+populated:
 
 ```bash
 retriever load \

@@ -65,8 +65,8 @@ func TestOptionsValidate(t *testing.T) {
 
 	load.ArchiveReader = bytes.NewReader(nil)
 
-	if err := load.Validate(); err == nil {
-		t.Fatalf("expected missing archive identity")
+	if err := load.Validate(); err != nil {
+		t.Fatalf("valid plain archive load options: %v", err)
 	}
 
 	privateKey, _, err := generateArchiveKeyPairForOptions()
