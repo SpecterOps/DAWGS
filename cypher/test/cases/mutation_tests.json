@@ -1092,6 +1092,94 @@
         "query": "optional match (n:NodeKind1) set n.seen = true with n create (c:NodeKind2 {source: coalesce(n.name, 'missing')}) return c",
         "fitness": 3
       }
+    },
+    {
+      "name": "CI property and UNWIND type regression 1",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1.9, -1.5, 0.9, -0.9] as x return toInteger(x) as value order by value asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 2",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1.9, -1.5] as x create (n:NodeKind1 {value: toInteger(x)}) return n.value",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 3",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1.9, -1.5] as x with x as value create (n:NodeKind1 {value: toInteger(value)})",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) create (c:NodeKind2 {flag: n.flag, score: n.score, text: n.text}) return c",
+        "fitness": 13
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n order by n.score desc limit 2 create (c:NodeKind2 {score: (n.score)})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 6",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n.score as score create (c:NodeKind2 {score: score}) return c.score",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 7",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) create (n)-[c:EdgeKind2 {score: r.score}]->(m) return c.score",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 1",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) with n as item return item, item.name",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 2",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1] as x optional match (n:NodeKind1) with x, n as item return x, item.name",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 3",
+      "type": "string_match",
+      "details": {
+        "query": "with 1 as x optional match (n:NodeKind1) with x, n as item return x, item.name",
+        "fitness": -5
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 4",
+      "type": "string_match",
+      "details": {
+        "query": "with 1 as x unwind [2, 2] as y optional match (n:NodeKind1) with x, y, n as item return x, y, item.name",
+        "fitness": -5
+      }
     }
   ]
 }

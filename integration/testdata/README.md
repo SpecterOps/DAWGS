@@ -4,14 +4,36 @@ Files under `cases/` execute one Cypher query per case. Files under `templates/`
 share a fixture and query template across variants. Fixture-backed cases run in
 a write transaction that is always rolled back.
 
+Template files may declare top-level `node_kinds` and `edge_kinds` arrays for
+kinds used only by queries or post-state checks. These declarations register
+schema kinds without inserting fixture entities. Both integration runners and
+`cmd/plancorpus` merge them with fixture-derived kinds; a corpus must not depend
+on kinds left behind by another test or an earlier run.
+
+Fixtures use `properties`, `start_id` and `end_id`. Record assertions instead use
+`props`, `start` and `end`: `node_records` contains `{id, kinds, props}` and
+`relationship_records` contains `{start, end, kind, props}`. Unknown record fields
+are rejected, and the unit suite audits every case/template record expectation.
+
+`create_property_type_shapes.json` checks numeric, Boolean, string and missing
+property copies into node and relationship CREATE maps. Direct properties, WITH
+aliases, ordering and pagination run with and without RETURN. Pagination selects
+the middle of three numerically ordered inputs with `SKIP 1 LIMIT 1`;
+postconditions check copied values, unchanged fixture records and exact creation
+counts.
+PostgreSQL executes the corpus in both optimizer modes.
+
 Mutation cases use `assert: "no_error"` (or another primary result assertion)
 and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each
 post-state entry contains `cypher`, optional `params`, and `assert`.
 
 `to_integer_shapes.json` covers numeric truncation toward zero for literals,
-parameters, node/relationship properties, WITH aliases and UNWIND inputs. Controls
-include nulls, exact large integers and signed 64-bit limits supplied as strings.
+parameters, node/relationship properties, WITH aliases and UNWIND inputs. Cases
+include native float arrays, array parameters, alias continuations, integer and
+empty inputs, and UNWIND-to-CREATE mutations with complete fixture post-state.
+Controls include nulls, exact large integers and signed 64-bit limits supplied as
+strings.
 SET, filter and CREATE variants check complete fixture state and creation counts
 with and without RETURN. `TestPostgreSQLToIntegerCompilerModes` runs the shared
 corpus in both compiler modes. `TestToInteger` checks actual Go integer types
@@ -253,7 +275,9 @@ The PostgreSQL cache regression reuses its fixture with builder-only empty predi
 and exclusive/overlapping kind ASTs. It populates the cache in both orders and repeats
 requests with new mutation values to check returned IDs and complete stored properties.
 
-Tagged datetime parameters decode to `time.Time`:
+Tagged datetime parameters decode to `time.Time`, normalized to a UTC fixed offset
+without losing the instant or nanosecond precision. This avoids named-zone and
+offset tie-breaking in Neo4j comparisons and supports its Bolt datetime encoding:
 
 ```json
 {

@@ -36,6 +36,12 @@ import (
 
 // cypherTemplateFile describes the ordinary and metamorphic query families loaded from one template JSON file.
 type cypherTemplateFile struct {
+	// NodeKinds declares labels used only in queries or post-state assertions.
+	NodeKinds []string `json:"node_kinds,omitempty"`
+
+	// EdgeKinds declares relationship kinds absent from the inline fixtures.
+	EdgeKinds []string `json:"edge_kinds,omitempty"`
+
 	// Families contains independently asserted query-template families.
 	Families []cypherTemplateFamily `json:"families,omitempty"`
 
@@ -197,11 +203,13 @@ func loadCypherTemplateFiles(t *testing.T) []cypherTemplateFile {
 }
 
 // cypherTemplateKinds collects the node and relationship kinds used by every
-// inline template and metamorphic fixture.
+// inline template and metamorphic fixture, plus explicit schema declarations.
 func cypherTemplateKinds(templateFiles []cypherTemplateFile) (graph.Kinds, graph.Kinds) {
 	var nodeKinds, edgeKinds graph.Kinds
 
 	for _, templateFile := range templateFiles {
+		nodeKinds = nodeKinds.Add(graph.StringsToKinds(templateFile.NodeKinds)...)
+		edgeKinds = edgeKinds.Add(graph.StringsToKinds(templateFile.EdgeKinds)...)
 		for _, family := range templateFile.Families {
 			if family.Fixture != nil {
 				familyNodeKinds, familyEdgeKinds := family.Fixture.Kinds()

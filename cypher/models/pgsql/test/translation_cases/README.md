@@ -42,6 +42,11 @@ select s0.n0 as s
 from s0;
 ```
 
+`create_property_types.sql` checks JSON value preservation in CREATE maps for
+direct and parenthesized node/relationship properties and WITH aliases, including
+paginated inputs. Native UNWIND bindings retain their element types in both
+compiler modes; existing ordering and predicate fixtures reflect that type information.
+
 `with_modifiers.sql` covers read-only WITH ordering, SKIP and LIMIT, entity and
 scalar aliases, nested alias expressions, DISTINCT, aggregation, input predicates
 and WITH WHERE after pagination. It also checks literal row-stream projections,
@@ -57,7 +62,9 @@ updates and CREATE without RETURN. Related existing optional cases in `nodes.sql
 `leading_optional.sql` covers the one-row input seed for leading OPTIONAL MATCH,
 WHERE and pattern-predicate placement, directions, variable/zero-hop paths,
 wildcard path bindings, comma-separated patterns, chaining, aggregation,
-WITH/UNWIND, SET and CREATE without RETURN. The shared integration corpus also
+WITH/UNWIND, SET and CREATE without RETURN. Multipart seed controls cover leading
+and preceding WITH boundaries, aliases and pending UNWIND rows without referring
+to the enclosing CTE as an input. The shared integration corpus also
 checks exact mutation state and staged SET-to-CREATE continuations.
 
 `reused_relationship.sql` covers identity-constrained scans of reused fixed
@@ -154,9 +161,9 @@ SET/CREATE without RETURN. Same-type tests extract entity identity; cross-type
 tests preserve null and empty-list semantics without comparing numeric IDs.
 Direct aggregate entity-expression controls preserve their grouping scope.
 
-`to_integer.sql` covers truncation toward zero for numeric literals, WITH
-scalars, node/relationship properties, mutation filters, SET and CREATE without
-RETURN. Exact integer, integer-string and null controls retain their existing
+`to_integer.sql` covers truncation toward zero for numeric literals, native float
+UNWIND bindings, WITH scalars, node/relationship properties, mutation filters,
+SET and CREATE without RETURN. Exact integer, integer-string and null controls retain their existing
 casts. Related `nodes.sql`, `scalar_aggregation.sql` and
 `with_property_consumers.sql` cases now truncate JSONB numbers through exact
 numeric values before casting to int8.

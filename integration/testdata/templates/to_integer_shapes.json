@@ -1182,6 +1182,378 @@
               }
             }
           ]
+        },
+        {
+          "name": "UNWIND parameter floats",
+          "vars": {
+            "query": "UNWIND $xs AS x RETURN toInteger(x) AS value ORDER BY value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              -1,
+              0,
+              0,
+              1
+            ]
+          },
+          "params": {
+            "xs": [
+              1.9,
+              -1.5,
+              0.9,
+              -0.9
+            ]
+          }
+        },
+        {
+          "name": "UNWIND float alias",
+          "vars": {
+            "query": "UNWIND [1.9,-1.5,0.9,-0.9] AS x WITH x AS value RETURN toInteger(value) ORDER BY toInteger(value)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              -1,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "name": "UNWIND integer control",
+          "vars": {
+            "query": "UNWIND [1,-1,0] AS x RETURN toInteger(x) AS value ORDER BY value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              -1,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "name": "UNWIND empty control",
+          "vars": {
+            "query": "UNWIND [] AS x RETURN toInteger(x)"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "UNWIND floats CREATE without RETURN",
+          "vars": {
+            "query": "UNWIND [1.9,-1.5,0.9,-0.9] AS x CREATE (c:IntegerCreated {role:\"unwind\", value:toInteger(x)})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:\"unwind\"}) RETURN c.value ORDER BY c.value",
+              "assert": {
+                "ordered_scalar_values": [
+                  -1,
+                  0,
+                  0,
+                  1
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n.role <> \"unwind\" RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 6
+              }
+            }
+          ]
+        },
+        {
+          "name": "UNWIND floats CREATE alias without RETURN",
+          "vars": {
+            "query": "UNWIND [1.9,-1.5,0.9,-0.9] AS x WITH x AS value CREATE (c:IntegerCreated {role:\"unwind\", value:toInteger(value)})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:\"unwind\"}) RETURN c.value ORDER BY c.value",
+              "assert": {
+                "ordered_scalar_values": [
+                  -1,
+                  0,
+                  0,
+                  1
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n.role <> \"unwind\" RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 6
+              }
+            }
+          ]
+        },
+        {
+          "name": "UNWIND floats CREATE with RETURN",
+          "vars": {
+            "query": "UNWIND [1.9,-1.5,0.9,-0.9] AS x CREATE (c:IntegerCreated {role:\"unwind\", value:toInteger(x)}) RETURN c.value ORDER BY c.value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              -1,
+              0,
+              0,
+              1
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:\"unwind\"}) RETURN c.value ORDER BY c.value",
+              "assert": {
+                "ordered_scalar_values": [
+                  -1,
+                  0,
+                  0,
+                  1
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n.role <> \"unwind\" RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 6
+              }
+            }
+          ]
+        },
+        {
+          "name": "UNWIND floats CREATE alias with RETURN",
+          "vars": {
+            "query": "UNWIND [1.9,-1.5,0.9,-0.9] AS x WITH x AS value CREATE (c:IntegerCreated {role:\"unwind\", value:toInteger(value)}) RETURN c.value ORDER BY c.value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              -1,
+              0,
+              0,
+              1
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c:IntegerCreated {role:\"unwind\"}) RETURN c.value ORDER BY c.value",
+              "assert": {
+                "ordered_scalar_values": [
+                  -1,
+                  0,
+                  0,
+                  1
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n.role <> \"unwind\" RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "IntegerInput"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "IntegerInput",
+                      "IntegerCreated"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 8.2,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "IntegerEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 1.9,
+                      "y": -1.5,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 6
+              }
+            }
+          ]
         }
       ]
     }

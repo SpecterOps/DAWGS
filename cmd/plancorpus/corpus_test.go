@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -20,6 +21,19 @@ func TestLoadCorpus(t *testing.T) {
 	require.NotEmpty(t, suite.templateFiles)
 	require.NotEmpty(t, suite.nodeKinds)
 	require.NotEmpty(t, suite.edgeKinds)
+	require.Contains(t, suite.nodeKinds.Strings(), "VisibilitySummary")
+}
+
+func TestTemplateSchemaKinds(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "templates"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "templates", "schema.json"), []byte(`{
+		"node_kinds": ["QueryOnly"], "edge_kinds": ["QueryLink"]
+	}`), 0o600))
+	var suite corpus
+	require.NoError(t, suite.loadTemplateFiles(dir))
+	require.Equal(t, []string{"QueryOnly"}, suite.nodeKinds.Strings())
+	require.Equal(t, []string{"QueryLink"}, suite.edgeKinds.Strings())
 }
 
 // TestCorpusTemplatesParse verifies that every declared template variant renders without placeholders and parses as Cypher.

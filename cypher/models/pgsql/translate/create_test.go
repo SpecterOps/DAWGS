@@ -53,3 +53,25 @@ func TestLeadingMultipartClauseSources(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateCopiesPropertyValueTypes(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		for _, queryText := range []string{
+			`MATCH (n:Group) CREATE (c:User {score: n.score}) RETURN c.score`,
+			`MATCH (n:Group) WITH n ORDER BY n.score DESC SKIP 1 LIMIT 2 CREATE (c:User {score: (n.score)}) RETURN c.score`,
+			`MATCH (n:Group) WITH n.score AS value CREATE (c:User {score: value}) RETURN c.score`,
+			`MATCH (n:Group)-[r:MemberOf]->(m) CREATE (n)-[c:AdminTo {score: r.score}]->(m) RETURN c.score`,
+		} {
+			t.Run(string(mode)+"/"+queryText, func(t *testing.T) {
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), queryText)
+				require.NoError(t, err)
+				translation, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				require.NoError(t, err)
+				formatted, err := Translated(translation)
+				require.NoError(t, err)
+				require.Contains(t, formatted.Statement, "jsonb_build_object(")
+				require.NotContains(t, formatted.Statement, "->> E'score'", "CREATE must preserve JSON numbers instead of storing text")
+			})
+		}
+	}
+}

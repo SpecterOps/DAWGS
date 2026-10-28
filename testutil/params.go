@@ -142,7 +142,10 @@ func convertTaggedValue(rawType any, tagged map[string]any) (any, error) {
 			return nil, fmt.Errorf("datetime must contain only %q and %q", typeKey, valueKey)
 		}
 
-		return parsed, nil
+		// Compare corpus instants in a common zone: Neo4j also orders zone
+		// identities when instants are equal. Its Go driver recognizes
+		// "Offset" as a fixed-offset datetime on the wire.
+		return parsed.In(time.FixedZone("Offset", 0)), nil
 
 	case "string_list":
 		return convertStringList(tagged)

@@ -5,6 +5,8 @@
 It reads `integration/testdata/cases` and `integration/testdata/templates`, loads the same datasets and inline fixtures used by the integration tests, and writes backend-specific JSONL plan records plus markdown and JSON summaries.
 Fixture-backed `node_params` and `node_list_params` are resolved after each
 fixture load, preserving ID-anchored production query shapes in captured plans.
+Template-level `node_kinds` and `edge_kinds` register query-only schema kinds
+alongside fixture-derived kinds without adding fixture entities.
 
 Use this command to baseline PostgreSQL translator and optimizer changes. PostgreSQL captures include translated SQL,
 `EXPLAIN` output, plan operator counts, estimated plan cost, recursive CTE indicators, path materialization indicators,

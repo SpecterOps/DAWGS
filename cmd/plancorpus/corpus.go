@@ -21,9 +21,9 @@ type corpus struct {
 	datasetNames []string
 	// templateFiles retains decoded template files for corpus expansion.
 	templateFiles []templateFile
-	// nodeKinds contains every node kind declared by loaded fixtures.
+	// nodeKinds contains every node kind declared by fixtures and template schemas.
 	nodeKinds graph.Kinds
-	// edgeKinds contains every relationship kind declared by loaded fixtures.
+	// edgeKinds contains every relationship kind declared by fixtures and template schemas.
 	edgeKinds graph.Kinds
 }
 
@@ -63,6 +63,9 @@ type caseEntry struct {
 
 // templateFile models template and metamorphic query families from a corpus template file.
 type templateFile struct {
+	// NodeKinds and EdgeKinds register kinds used only by queries or assertions.
+	NodeKinds []string `json:"node_kinds,omitempty"`
+	EdgeKinds []string `json:"edge_kinds,omitempty"`
 	// path retains the source path used in errors and provenance.
 	path string
 	// Families lists query-template families decoded from the file.
@@ -193,6 +196,8 @@ func (s *corpus) loadTemplateFiles(datasetDir string) error {
 		}
 		file.path = filepath.ToSlash(path)
 		s.templateFiles = append(s.templateFiles, file)
+		s.nodeKinds = s.nodeKinds.Add(graph.StringsToKinds(file.NodeKinds)...)
+		s.edgeKinds = s.edgeKinds.Add(graph.StringsToKinds(file.EdgeKinds)...)
 
 		for _, family := range file.Families {
 			s.addFixtureKinds(family.Fixture)

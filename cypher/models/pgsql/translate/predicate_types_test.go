@@ -23,8 +23,6 @@ func TestPredicateTypeTranslation(t *testing.T) {
 			`MATCH (n) RETURN n.x CONTAINS n.y AS value`,
 			`MATCH (n) RETURN n.x =~ '1.*' AS value`,
 			`MATCH (n) WITH n.x AS x RETURN x CONTAINS '1' AS value`,
-			`UNWIND [123] AS x RETURN x STARTS WITH '1' AS value`,
-			`UNWIND ['123'] AS x RETURN x =~ '1.*' AS value`,
 		} {
 			t.Run(string(mode)+"/"+query, func(t *testing.T) {
 				parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
@@ -41,6 +39,26 @@ func TestPredicateTypeTranslation(t *testing.T) {
 					require.Contains(t, formatted.Statement, "cypher_compare(")
 					require.NotContains(t, formatted.Statement, "->>")
 				}
+			})
+		}
+	}
+}
+
+func TestUnwindStringPredicatesUseElementTypes(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		for _, tc := range []struct{ query, fragment string }{
+			{`UNWIND [123] AS x RETURN x STARTS WITH '1' AS value`, "(null)::text like"},
+			{`UNWIND ['123'] AS x RETURN x =~ '1.*' AS value`, "(i0)::text ~"},
+		} {
+			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
+				require.NoError(t, err)
+				result, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				require.NoError(t, err)
+				formatted, err := Translated(result)
+				require.NoError(t, err)
+				require.Contains(t, formatted.Statement, tc.fragment)
+				require.NotContains(t, formatted.Statement, "jsonb_typeof(", "native arrays supply a static element type")
 			})
 		}
 	}
