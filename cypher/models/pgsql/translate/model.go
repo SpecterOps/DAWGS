@@ -861,6 +861,8 @@ type QueryPart struct {
 	// repetition of some of the exported fields above which is intentional and may be a good refactor target
 	// in the future
 	patternPredicates []*pgsql.Future[*Pattern]
+	// pendingPatternPredicateFilter must be consumed before another MATCH changes frames.
+	pendingPatternPredicateFilter bool
 	// pathEdgeIDArrayFutures retains the path edge id array futures while QueryPart is assembled or evaluated.
 	pathEdgeIDArrayFutures []*pgsql.Future[*BoundIdentifier]
 	// properties retains the properties while QueryPart is assembled or evaluated.

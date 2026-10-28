@@ -334,3 +334,12 @@ without RETURN. PostgreSQL executes every variant in both compiler modes.
 result types, exact large integers, numeric-string/date conversion and invalid
 runtime types on both backends. The split variant uses nonempty inputs; the
 separate empty-string split finding remains open.
+
+`pattern_predicate_lifetime_shapes.json` checks MATCH WHERE pattern predicates
+followed by another MATCH, including relationship-kind and direction decoys,
+negation, multi-hop predicates, repeated predicates, compound Boolean filters,
+parameterized relationship properties, independent matches, OPTIONAL MATCH and
+WITH. SET and CREATE run with and without RETURN; postconditions check all
+fixture node/relationship records and created labels, values and counts.
+`TestPostgreSQLPatternPredicateLifetimeCompilerModes` runs the same 22 variants
+in both compiler modes. Every fixture transaction is rolled back.

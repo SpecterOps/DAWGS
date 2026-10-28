@@ -319,6 +319,9 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		}
 
 	case *cypher.Match:
+		if err := s.flushPatternPredicateFilter(); err != nil {
+			s.SetError(err)
+		}
 		s.query.CurrentPart().currentPattern = &Pattern{}
 
 	case graph.Kinds:
