@@ -274,8 +274,7 @@ Unencrypted TAR archives can be loaded directly without a key:
 ```bash
 retriever load \
   -connection "$CONNECTION_STRING" \
-  -archive ./dump.tar \
-  -verify-metrics
+  -archive ./dump.tar
 ```
 
 Archive format is detected from its contents. Supply `-identity` only for encrypted
@@ -322,7 +321,10 @@ reading, checksum verification, schema assertion, graph boundaries, node and
 relationship phase boundaries, periodic entity progress, and completion.
 
 Pass `-verify-metrics` to scan the loaded destination graph after load and
-compare it against the metrics stored in the manifest:
+compare it against the metrics stored in the manifest. This option requires a
+manifest with metrics; older collections may lack them. If metrics are missing,
+the command returns an error after loading the graph, leaving the destination
+populated:
 
 ```bash
 retriever load \
