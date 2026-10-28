@@ -59,6 +59,12 @@ OPTIONAL MATCH, including predicates, relationships, chained clauses, wildcard
 projections, counts, SET and CREATE with and without RETURN. Existing leading
 optional cases in `nodes.sql` and `multipart.sql` use the same null-preserving join.
 
+`leading_optional.sql` covers the one-row input seed for leading OPTIONAL MATCH,
+WHERE and pattern-predicate placement, directions, variable/zero-hop paths,
+wildcard path bindings, comma-separated patterns, chaining, aggregation,
+WITH/UNWIND, SET and CREATE without RETURN. The shared integration corpus also
+checks exact mutation state and staged SET-to-CREATE continuations.
+
 `reused_relationship.sql` covers identity-constrained scans of reused fixed
 relationships, WITH aliases, directions, bound endpoints, paths, continuations,
 pattern predicates, OPTIONAL MATCH updates and CREATE without RETURN. The related

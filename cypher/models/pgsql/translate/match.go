@@ -81,6 +81,8 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 // buildOptionalMatchInput numbers the incoming stream before deriving matches from it.
 // The materialized CTE gives both sides of the eventual outer join the same row
 // identities, including duplicate values and pending UNWIND rows.
+// With a synthetic origin frame, SELECT without FROM supplies the single
+// implicit input row for a leading OPTIONAL MATCH, even when the graph is empty.
 func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.Identifier, error) {
 	inputFrame, err := s.scope.PushFrame()
 	if err != nil {
@@ -121,7 +123,9 @@ func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.
 	identity.MaterializedBy(inputFrame)
 
 	var from []pgsql.FromClause
-	if !originFrame.Synthetic {
+	// The first multipart frame names the enclosing WITH result, not an input
+	// relation. Reading from it here would make the seed reference its own CTE.
+	if !originFrame.Synthetic && (originFrame != s.query.CurrentPart().Frame || originFrame.Previous != nil) {
 		from = append(from, pgsql.FromClause{Source: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{originFrame.Binding.Identifier},
 		}})
@@ -183,6 +187,21 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 		pgsql.OperatorEquals,
 		pgsql.CompoundIdentifier{optMatchFrame.Binding.Identifier, rowIdentity},
 	)
+	// Pattern-predicate futures become available after the match scan is built.
+	// Keep those remaining filters on the matched side of the outer join so a
+	// rejected match still produces the input's null-extended row.
+	remaining, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(optMatchFrame.Known())
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	if err := RewriteFrameBindings(s.scope, remaining.Expression); err != nil {
+		return pgsql.Query{}, err
+	}
+	optionalConstraints := pgsql.OptionalAnd(joinConstraints, pgsql.OptionalParenthetical(remaining.Expression))
+
+	// Paths can remain expressions over their node/relationship dependencies
+	// rather than exported columns. Preserve their visibility for RETURN *.
+	aggregationFrame.Visible.MergeSet(optMatchFrame.Visible)
 
 	// The identity is local to this OPTIONAL MATCH. A later optional clause
 	// numbers its own input after any fan-out, and DISTINCT/aggregation sees
@@ -239,7 +258,7 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 					},
 					JoinOperator: pgsql.JoinOperator{
 						JoinType:   pgsql.JoinTypeLeftOuter,
-						Constraint: joinConstraints,
+						Constraint: optionalConstraints,
 					},
 				}},
 			}},

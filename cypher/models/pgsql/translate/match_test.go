@@ -19,8 +19,9 @@ func TestOptionalMatchIdentityLifetime(t *testing.T) {
 			columns       []string
 		}{
 			{"leading node", "OPTIONAL MATCH (n:Group) RETURN *", 1, []string{"n"}},
-			{"leading traversal", "OPTIONAL MATCH (n:Group)-[r:MemberOf]->(m) RETURN *", 1, []string{"n", "r", "m"}},
-			{"leading chained", "OPTIONAL MATCH (n:Group) OPTIONAL MATCH (n)-[r:MemberOf]->(m) RETURN *", 2, []string{"n", "r", "m"}},
+			{"leading traversal", "OPTIONAL MATCH (n:Group)-[r:MemberOf]->(m) RETURN *", 1, []string{"m", "n", "r"}},
+			{"leading path", "OPTIONAL MATCH p = (n:Group)-[r:MemberOf]->(m) RETURN *", 1, []string{"m", "n", "p", "r"}},
+			{"leading chained optional", "OPTIONAL MATCH (n:Group) OPTIONAL MATCH (n)-[r:MemberOf]->(m) RETURN *", 2, []string{"m", "n", "r"}},
 			{"leading unwind", "UNWIND [1,1,1] AS x OPTIONAL MATCH (n:Group) RETURN *", 1, []string{"n", "x"}},
 			{"pending unwind", "MATCH (n:Group) UNWIND [1,1,1] AS x OPTIONAL MATCH (n)-[r:MemberOf]->(m) RETURN *", 1, []string{"m", "n", "r", "x"}},
 			{"chained optional", "MATCH (n:Group) OPTIONAL MATCH (n)-[r:MemberOf]->(m) OPTIONAL MATCH (m)-[s:MemberOf]->(p) RETURN *", 2, []string{"m", "n", "p", "r", "s"}},
@@ -45,6 +46,82 @@ func TestOptionalMatchIdentityLifetime(t *testing.T) {
 					columns = append(columns, projection.Alias.Value.String())
 				}
 				require.ElementsMatch(t, tc.columns, columns, "internal identities must not escape wildcard projection")
+			})
+		}
+	}
+}
+
+func TestLeadingOptionalMatchSeed(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		for _, queryText := range []string{
+			`OPTIONAL MATCH (n) RETURN n`,
+			`OPTIONAL MATCH (n:Group) WHERE n.name = 'missing' RETURN n, n.name`,
+			`OPTIONAL MATCH (n:Group)-[r:MemberOf]->(m) WHERE r.name = 'missing' RETURN n, r, m`,
+			`OPTIONAL MATCH (n:Group)<-[r:MemberOf]-(m) RETURN n, r, m`,
+			`OPTIONAL MATCH (n:Group)-[r:MemberOf]-(m) RETURN n, r, m`,
+			`OPTIONAL MATCH (n:Group)-[:MemberOf*1..2]->(m) RETURN n, m`,
+			`OPTIONAL MATCH (n:Group)-[:MemberOf*0..0]->(m) RETURN n, m`,
+			`OPTIONAL MATCH (n:Group), (m:User) WHERE m.name = 'missing' RETURN n, m`,
+			`OPTIONAL MATCH p = (n:Group)-[:MemberOf]->(m) RETURN p`,
+			`OPTIONAL MATCH (n:Group) WHERE (n)-[:MemberOf]->() RETURN n`,
+			`OPTIONAL MATCH (n:Group) RETURN count(*), count(n), collect(n)`,
+		} {
+			t.Run(string(mode)+"/"+queryText, func(t *testing.T) {
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), queryText)
+				require.NoError(t, err)
+				translation, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				require.NoError(t, err)
+				formatted, err := Translated(translation)
+				require.NoError(t, err)
+				query := translation.Statement.(pgsql.Query)
+				seed := query.CommonTableExpressions.Expressions[0]
+				require.NotNil(t, seed.Materialized, "the implicit input row must be shared with the optional join")
+				require.True(t, seed.Materialized.Materialized)
+				selectBody := seed.Query.Body.(pgsql.Select)
+				require.Empty(t, selectBody.From, "the implicit input must exist independently of graph contents")
+				require.Nil(t, selectBody.Where, "optional predicates must not filter the seed")
+				require.Len(t, selectBody.Projection, 1)
+				require.Contains(t, formatted.Statement, "left outer join")
+				require.Nil(t, query.Body.(pgsql.Select).Where, "optional predicates must not filter the null-extended row")
+			})
+		}
+	}
+}
+
+func TestLeadingOptionalMatchMultipartSeed(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		for _, queryText := range []string{
+			`OPTIONAL MATCH (n:Group) WITH n AS item RETURN item`,
+			`OPTIONAL MATCH (n:Group) WITH 1 AS x RETURN x`,
+			`OPTIONAL MATCH (n:Group) WITH DISTINCT n RETURN count(*)`,
+			`OPTIONAL MATCH (n:Group) SET n.seen = true WITH n CREATE (c:User {source: coalesce(n.name, 'missing')}) RETURN c`,
+			`OPTIONAL MATCH (n:Group) SET n.seen = true WITH n CREATE (c:User {source: coalesce(n.name, 'missing')})`,
+		} {
+			t.Run(string(mode)+"/"+queryText, func(t *testing.T) {
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), queryText)
+				require.NoError(t, err)
+				translation, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				require.NoError(t, err)
+				var query pgsql.Query
+				if len(translation.Stages) > 0 {
+					query = translation.Stages[0].Query
+				} else {
+					query = translation.Statement.(pgsql.Query)
+				}
+				for {
+					require.NotNil(t, query.CommonTableExpressions)
+					require.NotEmpty(t, query.CommonTableExpressions.Expressions)
+					first := query.CommonTableExpressions.Expressions[0]
+					if first.Materialized != nil {
+						require.True(t, first.Materialized.Materialized)
+						seed := first.Query.Body.(pgsql.Select)
+						require.Empty(t, seed.From, "the leading optional input must exist before the WITH result")
+						require.Nil(t, seed.Where)
+						require.Len(t, seed.Projection, 1)
+						break
+					}
+					query = first.Query
+				}
 			})
 		}
 	}
