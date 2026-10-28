@@ -3287,9 +3287,18 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 
 	// Dynamic filter SQL is executed inside PL/pgSQL and cannot see an outer
 	// translation frame. Materialize a single correlated endpoint in the outer
-	// query and use the existing array overload instead. Both-bound endpoints
+	// query before passing its IDs to the harness. Both-bound endpoints
 	// must retain their pair filter because independent arrays lose pair semantics.
 	if !hasPairFilter && s.usesBoundRootIDs() != s.usesBoundTerminalIDs() {
+		if !s.traversalStep.Expansion.Options.MaxDepth.Set {
+			// Open array overloads represent one endpoint pair. Render set
+			// filters in the outer query so the open harness can load all IDs
+			// without referencing the preceding translation frame itself.
+			return []pgsql.Expression{
+				endpointIDsFilterParameter(rootFilterStatement, hasRootFilter),
+				endpointIDsFilterParameter(terminalFilterStatement, hasTerminalFilter),
+			}, nil
+		}
 		return []pgsql.Expression{
 			endpointIDsArrayParameter(rootFilterStatement, hasRootFilter),
 			endpointIDsArrayParameter(terminalFilterStatement, hasTerminalFilter),
@@ -3336,6 +3345,23 @@ func (s *ExpansionBuilder) boundEndpointFilterParameters() ([]pgsql.Expression, 
 	}
 
 	return filterParameters, nil
+}
+
+// endpointIDsFilterParameter quotes endpoint IDs into filter SQL at the caller's
+// scope, where queries against a preceding translation frame remain visible.
+func endpointIDsFilterParameter(filterStatement pgsql.Insert, hasFilter bool) pgsql.Expression {
+	if !hasFilter {
+		return pgsql.NewTypeCast(pgsql.NewLiteral("", pgsql.Text), pgsql.Text)
+	}
+
+	return pgsql.FunctionCall{
+		Function: pgsql.Identifier("format"),
+		Parameters: []pgsql.Expression{
+			pgsql.NewLiteral("insert into "+filterStatement.Table.Name.String()+" (id) select unnest(%L::int8[])", pgsql.Text),
+			endpointIDsArrayParameter(filterStatement, true),
+		},
+		CastType: pgsql.Text,
+	}
 }
 
 func endpointIDsArrayParameter(filterStatement pgsql.Insert, hasFilter bool) pgsql.Expression {

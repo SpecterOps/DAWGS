@@ -5919,14 +5919,15 @@ begin
 
       -- Check to see if the root front is satisfied
       if exists(select 1 from next_front r where r.satisfied) then
-        -- Return all satisfied paths from the next front
+        -- Return every shortest witness at this depth before recording the
+        -- resolved pairs. Other terminals and roots must keep expanding.
         return query select r.* from next_front r where r.satisfied
           and not exists (select 1 from dawgs_asp_resolved_v2 p where p.root_id = r.root_id and p.terminal_id = r.next_id);
         insert into dawgs_asp_resolved_v2 select distinct r.root_id, r.next_id from next_front r where r.satisfied on conflict do nothing;
       end if;
 
       -- A root is complete only after every requested terminal has been
-    -- resolved and all witnesses in this layer have been returned.
+      -- resolved and all witnesses in this layer have been returned.
       if terminal_filter_count > 0 then
         delete from next_front f using (
           select p.root_id from dawgs_asp_resolved_v2 p
@@ -5987,14 +5988,15 @@ begin
 
       -- Check to see if the root front is satisfied
       if exists(select 1 from next_front r where r.satisfied) then
-        -- Return all satisfied paths from the next front
+        -- Return every shortest witness at this depth before recording the
+        -- resolved pairs. Other terminals and roots must keep expanding.
         return query select r.* from next_front r where r.satisfied
           and not exists (select 1 from dawgs_asp_resolved_v2 p where p.root_id = r.root_id and p.terminal_id = r.next_id);
         insert into dawgs_asp_resolved_v2 select distinct r.root_id, r.next_id from next_front r where r.satisfied on conflict do nothing;
       end if;
 
       -- A root is complete only after every requested terminal has been
-    -- resolved and all witnesses in this layer have been returned.
+      -- resolved and all witnesses in this layer have been returned.
       if terminal_filter_count > 0 then
         delete from next_front f using (
           select p.root_id from dawgs_asp_resolved_v2 p
