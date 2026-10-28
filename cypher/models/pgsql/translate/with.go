@@ -32,7 +32,7 @@ func (s *Translator) prepareWith(with *cypher.With) error {
 func (s *Translator) translateWith() error {
 	currentPart := s.query.CurrentPart()
 	boundaryPredicates := s.multipartWrites || currentPart.withModifiers
-	if boundaryPredicates && currentPart.projections.Frame == nil {
+	if currentPart.projections.Frame == nil {
 		// Literal projections still consume the incoming row stream. The
 		// placeholder frame of a leading WITH resolves to no physical source.
 		currentPart.projections.Frame = s.scope.CurrentFrame()

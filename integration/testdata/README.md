@@ -350,3 +350,13 @@ parameterized and missing endpoints, multiple earlier bindings, WITH boundaries,
 counts, and exact SET, REMOVE and CREATE selection with complete node/relationship
 post-state, including writes without RETURN.
 PostgreSQL runs the same variants in both compiler modes.
+
+`multipart_read_boundary_shapes.json` covers WITH → MATCH → WITH input-frame
+selection, aliases, carried properties and relationships, fixed and variable-length
+paths, independent inputs and carried predicates, both bound endpoints,
+directions, duplicate/empty inputs, DISTINCT,
+aggregation, pagination and literal projections. Carried predicates also preserve
+zero-hop and duplicate-input CREATE correlation. SET and CREATE cases compare
+complete original node/relationship records plus exact created labels and names,
+including writes without RETURN. PostgreSQL executes all variants in both compiler
+modes; the shared corpus has identical assertions on both backends.

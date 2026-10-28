@@ -1244,6 +1244,54 @@
         "query": "match (b:NodeKind1) match (c {name: 'c1'}) where (b)-[:EdgeKind1]->(c) create (:NodeKind2 {name: b.name}) return b, c",
         "fitness": 13
       }
+    },
+    {
+      "name": "Multipart read boundary 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1]->(c) with c return c",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "Multipart read boundary 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1*1..2]->(c) with c return c",
+        "fitness": -4
+      }
+    },
+    {
+      "name": "Multipart read boundary 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1]->(c) with c set c.seen = true",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "Multipart read boundary 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1]->(c) with c create (:NodeKind2 {name: c.name})",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Multipart read boundary 5",
+      "type": "string_match",
+      "details": {
+        "query": "unwind ['a', 'a', 'dead'] as name with name match (a:NodeKind1)-[:EdgeKind1*1..2]->(b) where a.name = name with name, b create (:NodeKind2 {name: name})",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "Multipart read boundary 6",
+      "type": "string_match",
+      "details": {
+        "query": "unwind ['a', 'dead'] as name with name match (a:NodeKind1)-[:EdgeKind1*0..2]->(b) where a.name = name with name, b return name, b",
+        "fitness": 2
+      }
     }
   ]
 }
