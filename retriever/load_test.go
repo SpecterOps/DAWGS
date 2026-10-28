@@ -1,6 +1,7 @@
 package retriever
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -583,6 +584,97 @@ func TestReadFragmentFilesRejectEmptySourceIDs(t *testing.T) {
 				Count: 1,
 			}, nil); err == nil || !strings.Contains(err.Error(), "empty "+name+" source ID") {
 				t.Fatalf("expected empty %s source ID error, got %v", name, err)
+			}
+		})
+	}
+}
+
+func TestPrepareLoadArchiveInput(t *testing.T) {
+	dumpDir := writeArchiveFixture(t)
+	privateKey, publicKey := generateTestArchiveKeyPair(t)
+	var plain, encrypted bytes.Buffer
+	if err := WriteCollectionTar(&plain, dumpDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteEncryptedCollectionArchive(&encrypted, dumpDir, publicKey); err != nil {
+		t.Fatal(err)
+	}
+	for _, encryptedInput := range []bool{false, true} {
+		name := "plain"
+		if encryptedInput {
+			name = "encrypted"
+		}
+		t.Run(name, func(t *testing.T) {
+			options := DefaultLoadOptions("")
+			options.ArchiveReader = bytes.NewBuffer(plain.Bytes())
+			if encryptedInput {
+				options.ArchiveReader = bytes.NewBuffer(encrypted.Bytes())
+				options.ArchiveIdentity = privateKey
+			}
+			prepared, cleanup, err := prepareLoadInput(options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+			if prepared.ArchiveReader != nil || prepared.ArchiveIdentity != nil {
+				t.Fatal("archive options not cleared")
+			}
+			if !equalFileTrees(readFileTree(t, dumpDir), readFileTree(t, prepared.InputDir)) {
+				t.Fatal("loaded archive differs from collection")
+			}
+			cleanup()
+			if _, err := os.Stat(prepared.InputDir); !os.IsNotExist(err) {
+				t.Fatalf("temporary input was not removed: %v", err)
+			}
+		})
+	}
+}
+
+func TestPrepareLoadArchiveInputFailureCleanup(t *testing.T) {
+	dumpDir := writeArchiveFixture(t)
+	privateKey, publicKey := generateTestArchiveKeyPair(t)
+	wrongKey, _ := generateTestArchiveKeyPair(t)
+	var plain, encrypted bytes.Buffer
+	if err := WriteCollectionTar(&plain, dumpDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteEncryptedCollectionArchive(&encrypted, dumpDir, publicKey); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"missing key", "wrong key", "plain with key", "invalid tar", "truncated tar"} {
+		t.Run(name, func(t *testing.T) {
+			options := DefaultLoadOptions("")
+			options.ArchiveReader = bytes.NewBuffer(encrypted.Bytes())
+			switch name {
+			case "wrong key":
+				options.ArchiveIdentity = wrongKey
+			case "plain with key":
+				options.ArchiveReader = bytes.NewBuffer(plain.Bytes())
+				options.ArchiveIdentity = privateKey
+			case "invalid tar":
+				options.ArchiveReader = strings.NewReader("invalid tar")
+			case "truncated tar":
+				options.ArchiveReader = bytes.NewBuffer(plain.Bytes()[:600])
+			}
+			var tempDir string
+			options.Progress = func(event ProgressEvent) {
+				if event.Operation == OperationLoad {
+					tempDir = event.OutputDir
+				}
+			}
+			_, cleanup, err := prepareLoadInput(options)
+			if err == nil {
+				cleanup()
+				t.Fatal("expected archive validation error")
+			}
+			if name == "missing key" && !strings.Contains(err.Error(), "pass -identity") {
+				t.Fatalf("expected actionable missing identity error: %v", err)
+			}
+			if tempDir == "" {
+				t.Fatal("missing temporary directory progress")
+			}
+			if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
+				t.Fatalf("failed archive left temporary input: %v", err)
 			}
 		})
 	}

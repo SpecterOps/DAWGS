@@ -142,8 +142,8 @@ func (s DumpOptions) validate() error {
 
 type LoadOptions struct {
 	InputDir         string
-	ArchiveReader    io.Reader
-	ArchiveIdentity  hpke.PrivateKey
+	ArchiveReader    io.Reader       // Plain TAR or encrypted retriever archive.
+	ArchiveIdentity  hpke.PrivateKey // Required only for encrypted archives.
 	BatchSize        int
 	ProgressInterval int64
 	VerifyMetrics    bool
@@ -168,10 +168,6 @@ func (s LoadOptions) Validate() error {
 
 	if inputDir == "" && !hasArchive {
 		return ValidationError{Message: "input directory or archive reader is required"}
-	}
-
-	if hasArchive && s.ArchiveIdentity == nil {
-		return ValidationError{Message: "archive reader requires archive identity"}
 	}
 
 	if !hasArchive && s.ArchiveIdentity != nil {

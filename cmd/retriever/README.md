@@ -181,8 +181,9 @@ when requested, stay in the directory and are not included in the TAR.
 Existing archive files are refused, and partial archive files are removed if
 packaging fails.
 To load an unencrypted TAR, extract it into a collection directory and pass
-that directory to `retriever load -in`. The `retriever unpack` and
-`retriever load -archive` commands currently accept encrypted archives only.
+that directory to `retriever load -in`, or load the TAR directly with
+`retriever load -archive ./dump.tar`. The `retriever unpack` command accepts
+encrypted archives only.
 
 ### Encrypted Archives
 
@@ -268,7 +269,18 @@ retriever load \
   -in ./dumpdir
 ```
 
-Encrypted archives produced by `dump -archive-out -recipient` can be loaded directly:
+Unencrypted TAR archives can be loaded directly without a key:
+
+```bash
+retriever load \
+  -connection "$CONNECTION_STRING" \
+  -archive ./dump.tar \
+  -verify-metrics
+```
+
+Archive format is detected from its contents. Supply `-identity` only for encrypted
+archives. Encrypted archives produced by `dump -archive-out -recipient` can be
+loaded directly:
 
 ```bash
 retriever load \
@@ -281,8 +293,8 @@ Load reads and validates `manifest.json`, then verifies every fragment checksum,
 JSONL record, and record count before performing database writes. It asserts
 destination graph schemas from the manifest metadata and loads all nodes before
 relationships. Graph names from the dump are preserved; load does not support
-overriding graph names. Direct archive loads decrypt and perform integrity-only
-unpack validation in a temporary collection directory, then run the same
+overriding graph names. Direct archive loads decrypt when needed and perform
+integrity-only unpack validation in a temporary collection directory, then run the same
 semantic preflight as directory loads before schema assertion or database
 writes.
 

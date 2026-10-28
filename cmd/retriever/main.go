@@ -266,8 +266,8 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 	flags.SetOutput(s.stderr)
 	commonDatabaseFlags(flags, &dbCfg)
 	flags.StringVar(&inputDir, "in", "", "Input collection directory.")
-	flags.StringVar(&archivePath, "archive", "", "Encrypted archive input path.")
-	flags.StringVar(&identityPath, "identity", "", "Recipient private key path for -archive.")
+	flags.StringVar(&archivePath, "archive", "", "Plain TAR or encrypted archive input path.")
+	flags.StringVar(&identityPath, "identity", "", "Recipient private key path for encrypted -archive.")
 	flags.IntVar(&cfg.BatchSize, "batch-size", cfg.BatchSize, "Database write batch size.")
 	flags.BoolVar(&cfg.VerifyMetrics, "verify-metrics", false, "Verify loaded graph metrics against the dump manifest after load.")
 	commonPprofFlag(flags, &pprofListen)
@@ -283,13 +283,12 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 			return fmt.Errorf("load accepts either -in or -archive, not both")
 		}
 
-		if strings.TrimSpace(identityPath) == "" {
-			return fmt.Errorf("-archive requires -identity")
-		}
-
-		identity, err := retriever.LoadArchivePrivateKey(identityPath)
-		if err != nil {
-			return err
+		if strings.TrimSpace(identityPath) != "" {
+			identity, err := retriever.LoadArchivePrivateKey(identityPath)
+			if err != nil {
+				return err
+			}
+			cfg.ArchiveIdentity = identity
 		}
 
 		archiveFile, err := os.Open(archivePath)
@@ -299,7 +298,6 @@ func (s commandRuntime) runLoad(ctx context.Context, args []string) error {
 		defer archiveFile.Close()
 
 		cfg.ArchiveReader = archiveFile
-		cfg.ArchiveIdentity = identity
 	} else if strings.TrimSpace(identityPath) != "" {
 		return fmt.Errorf("-identity requires -archive")
 	}
