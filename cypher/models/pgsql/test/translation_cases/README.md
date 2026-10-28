@@ -167,3 +167,9 @@ SET and CREATE without RETURN. Exact integer, integer-string and null controls r
 casts. Related `nodes.sql`, `scalar_aggregation.sql` and
 `with_property_consumers.sql` cases now truncate JSONB numbers through exact
 numeric values before casting to int8.
+
+`pattern_predicate_lifetime.sql` retains correlated predicates and relationship
+kinds across subsequent MATCH clauses. It covers negation, undirected and
+multi-hop predicates, repeated predicates, OPTIONAL MATCH, WITH, SET and CREATE
+without RETURN. Predicate futures are resolved once; any pending filter is
+consumed before a later MATCH changes its correlation frame.

@@ -399,6 +399,13 @@ Multipart OPTIONAL inputs read the preceding materialized boundary, preserving
 pending UNWIND rows without referencing the enclosing WITH CTE from within itself.
 Their live acceptance status is recorded in `variance_findings_priority.md`.
 
+Pattern predicates in MATCH WHERE retain their relationship kinds and correlated input across later MATCH
+clauses. Deferred filters are evaluated before the next MATCH changes the input frame, including before an
+OPTIONAL MATCH. The shared `pattern_predicate_lifetime_shapes` templates cover directed, undirected,
+negated and multi-hop predicates, repeated predicates, fan-out, and SET/CREATE post-state in both
+PostgreSQL compiler modes and Neo4j. Aggregate traversal-count optimization still explicitly rejects
+pattern predicates under the separate DAWGS-030 containment.
+
 Fixed relationship patterns that reuse a bound relationship retain its identity across MATCH clauses, WITH aliases,
 OPTIONAL MATCH and pattern predicates. Each SQL edge scan correlates its ID to the carried relationship; unrelated
 edges cannot multiply the input rows or downstream writes. The shared `reused_relationship_shapes` templates check

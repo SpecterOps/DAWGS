@@ -544,3 +544,9 @@ with s0 as (with ex0(root_id, next_id, depth, satisfied, is_cycle, path)
 select edges_to_path(variadic ep0)::pathcomposite as p
 from s0;
 ```
+
+Pattern-predicate futures belong to the MATCH that collected them and are
+resolved once. Before entering another MATCH, a pending predicate filter is
+consumed into a projection over its original frame. This keeps correlation
+references in scope and prevents later scans from consuming old filters into
+new joins. OPTIONAL MATCH consumes its own remaining filters in its outer join.

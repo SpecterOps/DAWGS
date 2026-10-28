@@ -62,6 +62,7 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 	}
 
 	if match.Optional {
+		currentQueryPart.pendingPatternPredicateFilter = false
 		return s.translateOptionalMatch(joinFrame, rowIdentity)
 	}
 
@@ -265,4 +266,45 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 	}
 
 	return query, nil
+}
+
+// flushPatternPredicateFilter evaluates the preceding MATCH's deferred WHERE
+// before another MATCH can consume it or move its correlated input out of scope.
+func (s *Translator) flushPatternPredicateFilter() error {
+	part := s.query.CurrentPart()
+	if !part.pendingPatternPredicateFilter {
+		return nil
+	}
+	part.pendingPatternPredicateFilter = false
+	source := s.scope.CurrentFrame()
+	remaining, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(source.Known())
+	if err != nil {
+		return err
+	}
+	if remaining.Expression == nil {
+		return nil
+	}
+	if err := RewriteFrameBindings(s.scope, remaining.Expression); err != nil {
+		return err
+	}
+	projection, err := buildVisibleProjections(s.scope)
+	if err != nil {
+		return err
+	}
+	frame, err := s.scope.PushFrame()
+	if err != nil {
+		return err
+	}
+	part.Model.AddCTE(pgsql.CommonTableExpression{
+		Alias: pgsql.TableAlias{Name: frame.Binding.Identifier},
+		Query: pgsql.Query{Body: pgsql.Select{
+			Projection: projection.Items,
+			From:       []pgsql.FromClause{{Source: pgsql.TableReference{Name: pgsql.CompoundIdentifier{source.Binding.Identifier}}}},
+			Where:      remaining.Expression,
+		}},
+	})
+	for _, binding := range projection.Bindings {
+		binding.MaterializedBy(frame)
+	}
+	return nil
 }

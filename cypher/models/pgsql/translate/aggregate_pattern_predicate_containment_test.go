@@ -13,9 +13,9 @@ import (
 // The aggregate traversal count lowering accepted MATCH WHERE clauses carrying
 // pattern predicates and then panicked while walking them with a predicate
 // translator that has no query parts. The lowering must reject those shapes
-// with a normal translation error: declining the optimization is not
-// containment because the generic multi-match path cannot translate the same
-// shape yet either (the separately tracked DAWGS-036 repair).
+// with a normal translation error. DAWGS-036 repairs generic predicate lifetime;
+// this test retains the specialized lowering's explicit rejection until its
+// fallback is separately qualified.
 func TestAggregateTraversalCountPatternPredicateReturnsTranslationError(t *testing.T) {
 	t.Parallel()
 
@@ -51,8 +51,7 @@ func TestAggregateTraversalCountPatternPredicateReturnsTranslationError(t *testi
 			require.Contains(t, err.Error(), "unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported")
 
 			// The lowering never runs with optimization disabled; the generic
-			// translation path stays untouched here and is tracked separately
-			// under DAWGS-036.
+			// translation path uses the predicate lifetime repair from DAWGS-036.
 			translation, err = TranslateWithOptions(context.Background(), query, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: OptimizerDisabled})
 			require.NoError(t, err)
 			require.Empty(t, translation.Optimization.PlannedLowerings)

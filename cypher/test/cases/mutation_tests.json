@@ -1180,6 +1180,38 @@
         "query": "with 1 as x unwind [2, 2] as y optional match (n:NodeKind1) with x, y, n as item return x, y, item.name",
         "fitness": -5
       }
+    },
+    {
+      "name": "Pattern predicate lifetime 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) return s, t",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Pattern predicate lifetime 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where not (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) return s, t",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Pattern predicate lifetime 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[r:EdgeKind2]->(t) set r.seen = true",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Pattern predicate lifetime 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) create (c:NodeKind2 {name: t.name})",
+        "fitness": 10
+      }
     }
   ]
 }

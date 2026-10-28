@@ -464,8 +464,9 @@ func (s *Translator) aggregateBindingPredicate(translator *Translator, match *cy
 
 	// Pattern predicates require an active query part to stash and rebuild their
 	// pattern; this translator walks the predicate without one. Reject the shape
-	// with a translation error instead of declining the lowering, since the
-	// generic multi-match path cannot yet translate it either (DAWGS-036).
+	// with the existing explicit translation error. DAWGS-036 repairs generic
+	// predicate lifetime; qualifying a fallback from this lowering remains a
+	// separate follow-up to DAWGS-030.
 	if containsPatternPredicate(match.Where) {
 		return nil, fmt.Errorf("unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported")
 	}
