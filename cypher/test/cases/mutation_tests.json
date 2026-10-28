@@ -1060,6 +1060,38 @@
         "query": "match (n:A) with n order by n.x desc skip 1 limit 2 create (c:B {value: n.x})",
         "fitness": 5
       }
+    },
+    {
+      "name": "Leading optional SET retains the null input row",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) set n.seen = true return n",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Leading optional relationship SET filters matches",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (a:NodeKind1)-[r:EdgeKind1]->(b:NodeKind2) where r.name = 'missing' set b.seen = true, r.seen = true return b",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Leading optional CREATE consumes null input",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) create (c:NodeKind2 {source: coalesce(n.name, 'missing')})",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Leading optional null update feeds multipart CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) set n.seen = true with n create (c:NodeKind2 {source: coalesce(n.name, 'missing')}) return c",
+        "fitness": 3
+      }
     }
   ]
 }
