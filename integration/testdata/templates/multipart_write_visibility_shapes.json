@@ -1,4 +1,5 @@
 {
+  "node_kinds": ["VisibilitySummary"],
   "families": [
     {
       "name": "multipart writes are visible to later clauses",

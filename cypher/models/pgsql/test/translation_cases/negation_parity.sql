@@ -41,10 +41,10 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 select true as value;
 
 -- case: unwind [1,2,3] as x with x where not not x > 1 return x order by x
-with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0 where (i0 > 1)) select s0.i0 as x from s0 order by s0.i0;
+with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0 where ((i0)::int8 > 1)) select s0.i0 as x from s0 order by s0.i0;
 
 -- case: unwind [1,2,3] as x return x, not not x > 1 as again order by x
-select i0 as x, i0 > 1 as again from unnest(array [1, 2, 3]::int8[]) as i0 order by x;
+select i0 as x, (i0)::int8 > 1 as again from unnest(array [1, 2, 3]::int8[]) as i0 order by x;
 
 -- case: match (n:NodeKind1) set n.flag = not not n.k > 1 return n
 -- pgsql_params:{"__strlit0":"flag","__strlit1":"null"}

@@ -56,3 +56,14 @@ with s0 as (with s1 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.pr
 -- case: MATCH (n:NodeKind1) WITH n.x AS x CREATE (c:NodeKind2 {value:toInteger(x)})
 -- pgsql_params:{"__strlit0":"node","__strlit1":"id","__strlit2":"value","__strlit3":"number"}
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s1.n0).properties -> E'x') as i0 from s1), s2 as (select s0.i0 as i0, nextval(pg_get_serial_sequence(@__strlit0::text, @__strlit1::text))::int8 as n1_id from s0), s3 as (insert into node (graph_id, id, kind_ids, properties) select 0, s2.n1_id, array [2]::int2[], jsonb_build_object(@__strlit2::text, case when jsonb_typeof(s2.i0) = @__strlit3::text then trunc((i0)::numeric)::int8 else (s2.i0 #>> array []::text[])::int8 end)::jsonb from s2 returning id as n1_id, (id, kind_ids, properties)::nodecomposite as n1), s4 as (select s2.i0 as i0, s3.n1 as n1 from s2, s3 where s3.n1_id = s2.n1_id) select 1;
+
+-- case: UNWIND [1.9,-1.5,0.9,-0.9] AS x RETURN toInteger(x) AS value ORDER BY value
+select trunc(i0)::int8 as value from unnest(array [1.9, - 1.5, 0.9, - 0.9]::float8[]) as i0 order by value;
+
+-- case: UNWIND [1.9,-1.5] AS x CREATE (n:NodeKind1 {value:toInteger(x)}) RETURN n.value
+-- pgsql_params:{"__strlit0":"node","__strlit1":"id","__strlit2":"value"}
+with s1 as (select i0 as i0, nextval(pg_get_serial_sequence(@__strlit0::text, @__strlit1::text))::int8 as n0_id from unnest(array [1.9, - 1.5]::float8[]) as i0), s2 as (insert into node (graph_id, id, kind_ids, properties) select 0, s1.n0_id, array [1]::int2[], jsonb_build_object(@__strlit2::text, trunc(s1.i0)::int8)::jsonb from s1 returning id as n0_id, (id, kind_ids, properties)::nodecomposite as n0), s3 as (select s1.i0 as i0, s2.n0 as n0 from s1, s2 where s2.n0_id = s1.n0_id) select ((s3.n0).properties -> E'value') as "n.value" from s3;
+
+-- case: UNWIND [1.9,-1.5] AS x WITH x AS value CREATE (n:NodeKind1 {value:toInteger(value)})
+-- pgsql_params:{"__strlit0":"node","__strlit1":"id","__strlit2":"value"}
+with s0 as (select i0 as i1 from unnest(array [1.9, - 1.5]::float8[]) as i0), s1 as (select s0.i1 as i1, nextval(pg_get_serial_sequence(@__strlit0::text, @__strlit1::text))::int8 as n0_id from s0), s2 as (insert into node (graph_id, id, kind_ids, properties) select 0, s1.n0_id, array [1]::int2[], jsonb_build_object(@__strlit2::text, trunc(s1.i1)::int8)::jsonb from s1 returning id as n0_id, (id, kind_ids, properties)::nodecomposite as n0), s3 as (select s1.i1 as i1, s2.n0 as n0 from s1, s2 where s2.n0_id = s1.n0_id) select 1;

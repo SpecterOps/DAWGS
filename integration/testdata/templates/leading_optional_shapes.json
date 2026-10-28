@@ -303,6 +303,72 @@
               }
             }
           ]
+        },
+        {
+          "name": "null row feeds with alias property",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) WITH n AS item RETURN item, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "unwind rows feed optional with alias",
+          "vars": {
+            "query": "UNWIND [1,1] AS x OPTIONAL MATCH (n:LeadingSource) WITH x, n AS item RETURN x, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "with row feeds optional with alias",
+          "vars": {
+            "query": "WITH 1 AS x OPTIONAL MATCH (n:LeadingSource) WITH x, n AS item RETURN x, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "with and unwind rows feed optional with alias",
+          "vars": {
+            "query": "WITH 1 AS x UNWIND [2,2] AS y OPTIONAL MATCH (n:LeadingSource) WITH x, y, n AS item RETURN x, y, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                2,
+                null
+              ],
+              [
+                1,
+                2,
+                null
+              ]
+            ]
+          }
         }
       ]
     },

@@ -84,6 +84,12 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 // With a synthetic origin frame, SELECT without FROM supplies the single
 // implicit input row for a leading OPTIONAL MATCH, even when the graph is empty.
 func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.Identifier, error) {
+	// A multipart boundary is materialized after its reading clauses. Read
+	// from its preceding frame while retaining pending UNWIND exports below.
+	sourceFrame := originFrame
+	if sourceFrame == s.query.CurrentPart().Frame {
+		sourceFrame = sourceFrame.Previous
+	}
 	inputFrame, err := s.scope.PushFrame()
 	if err != nil {
 		return nil, "", err
@@ -101,9 +107,9 @@ func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.
 
 	var projection pgsql.Projection
 	for _, exported := range originFrame.Exported.Slice() {
-		var expression pgsql.Expression = pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported}
-		if unwindIdentifiers.Contains(exported) {
-			expression = exported
+		var expression pgsql.Expression = exported
+		if sourceFrame != nil && !unwindIdentifiers.Contains(exported) {
+			expression = pgsql.CompoundIdentifier{sourceFrame.Binding.Identifier, exported}
 		}
 		projection = append(projection, &pgsql.AliasedExpression{
 			Expression: expression,
@@ -123,11 +129,9 @@ func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.
 	identity.MaterializedBy(inputFrame)
 
 	var from []pgsql.FromClause
-	// The first multipart frame names the enclosing WITH result, not an input
-	// relation. Reading from it here would make the seed reference its own CTE.
-	if !originFrame.Synthetic && (originFrame != s.query.CurrentPart().Frame || originFrame.Previous != nil) {
+	if sourceFrame != nil && !sourceFrame.Synthetic {
 		from = append(from, pgsql.FromClause{Source: pgsql.TableReference{
-			Name: pgsql.CompoundIdentifier{originFrame.Binding.Identifier},
+			Name: pgsql.CompoundIdentifier{sourceFrame.Binding.Identifier},
 		}})
 	}
 	from = append(from, unwindFromClauses(unwinds)...)
