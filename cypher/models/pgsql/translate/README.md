@@ -550,3 +550,15 @@ resolved once. Before entering another MATCH, a pending predicate filter is
 consumed into a projection over its original frame. This keeps correlation
 references in scope and prevents later scans from consuming old filters into
 new joins. OPTIONAL MATCH consumes its own remaining filters in its outer join.
+
+A multipart query part reserves a frame for its closing WITH output before its
+reading clauses are translated. That frame is not an input relation. New
+traversal frames link to the preceding materialized frame, while the scope stack
+retains the reserved frame for unwinding at the boundary. This applies to fixed
+hops, bound endpoints and expansions. Literal WITH projections also retain the
+current input frame so duplicate and empty streams preserve their cardinality.
+
+Ordinary expansion seeds retain root IDs rather than input-row identities.
+Predicates that reference an outer input therefore also gate the completed-path
+projection, including zero-hop results. This preserves the association between
+each path and its input values when the projection rejoins the prior frame.

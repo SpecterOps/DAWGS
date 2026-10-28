@@ -439,6 +439,13 @@ relationship once per input row. A newly introduced `x` remains local to that pa
 already exist. The shared `undirected_self_reference_shapes` templates check loop identities, duplicate and empty inputs,
 optional matches, returned paths and exact SET/CREATE state on both backends and in both PostgreSQL compiler modes.
 
+Read-only multipart queries consume the preceding WITH output at each MATCH and export only the next WITH's
+bindings. Traversals never read their own future output boundary. Literal WITH projections preserve duplicate
+and empty input streams. Expansion seed predicates involving an input row also filter completed paths for that row.
+The shared `multipart_read_boundary_shapes` templates check fixed and variable-length
+paths, directions, aliases, bound endpoints, aggregation, pagination and complete SET/CREATE post-state on Neo4j
+and in both PostgreSQL compiler modes.
+
 PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
 Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
 updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared

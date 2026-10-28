@@ -715,6 +715,10 @@ func (s *Translator) translateTraversalPatternPart(part *PatternPart, isolatedPr
 		if traversalStepFrame, err := s.scope.PushFrame(); err != nil {
 			return err
 		} else {
+			// The enclosing multipart frame names this part's future WITH
+			// output. Traversal builders and projection bookkeeping must read
+			// the preceding materialized input, never that output boundary.
+			traversalStepFrame.Previous, _ = s.previousValidFrame(traversalStepFrame)
 			// Assign the new scope frame to the traversal step
 			traversalStep.Frame = traversalStepFrame
 		}

@@ -173,3 +173,10 @@ kinds across subsequent MATCH clauses. It covers negation, undirected and
 multi-hop predicates, repeated predicates, OPTIONAL MATCH, WITH, SET and CREATE
 without RETURN. Predicate futures are resolved once; any pending filter is
 consumed before a later MATCH changes its correlation frame.
+
+`multipart_read_boundaries.sql` covers fixed, incoming, undirected, both-bound and
+variable-length traversals between WITH boundaries, aliases, consecutive
+boundaries, literal row preservation, predicates, pagination and downstream SET
+and CREATE without RETURN. Input-dependent seed predicates also filter completed
+paths, including zero-hop states and duplicate-input CREATE. Traversal frames skip the enclosing part's future
+output while keeping the scope stack available for boundary unwinding.

@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **57 items: 5 P1, 43 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **47 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **56 items: 5 P1, 42 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **48 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -166,7 +166,10 @@ type/boundary checks. Both backend integration and BDD gates pass, with **17
 enforced scenarios and zero enforced failures** on each backend. The 18
 report-only compatibility failures on each backend remain visible.
 
-**DAWGS-035 is the next implementation item.** The earlier P1 repairs and regex
+DAWGS-035 and DAWGS-046 now have live acceptance on both backends; their
+implementation and validation notes are in the
+[completion ledger](variance_findings_priority_complete.md#dawgs-046-multipart-read-boundaries--2026-10-28).
+**DAWGS-047 is the next implementation item.** The earlier P1 repairs and regex
 migration decision remain open in their existing lanes.
 
 ### Open follow-ups to completed actions
@@ -193,7 +196,7 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 57 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 56 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
 ### P1: Start first — 5 items
 
@@ -205,11 +208,10 @@ The 57 unfinished numbered work items appear once in this queue. Completed actio
 | 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
 | 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
 
-### P2: Next correctness and reliability wave — 43 items
+### P2: Next correctness and reliability wave — 42 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 53 | [DAWGS-046](variance_findings.md#dawgs-046) — WITH → MATCH → WITH builds a self-referencing CTE | Q | Repair | M | Fix read-only WITH/MATCH/WITH frame construction and out-of-scope/self CTE references. |
 | 54 | [DAWGS-047](variance_findings.md#dawgs-047) — ORDER BY alias expressions and internal-name collisions | Q | Repair | M | Rewrite nested ORDER BY alias expressions safely and separate user identifiers from internal binding names. |
 | 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
 | 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows. Duplicate multi-target delete CTE naming stays closed. |
