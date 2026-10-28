@@ -14,7 +14,7 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 	// so we can use this point for optional match outer joins
 	joinFrame := s.scope.CurrentFrame()
 	var rowIdentity pgsql.Identifier
-	if match.Optional && joinFrame != nil {
+	if match.Optional {
 		var err error
 		joinFrame, rowIdentity, err = s.buildOptionalMatchInput(joinFrame)
 		if err != nil {
@@ -61,11 +61,8 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 		return err
 	}
 
-	// If there is no valid previous frame, skip translating an `OPTIONAL MATCH`/treat as plain `MATCH`
 	if match.Optional {
-		if joinFrame != nil {
-			return s.translateOptionalMatch(joinFrame, rowIdentity)
-		}
+		return s.translateOptionalMatch(joinFrame, rowIdentity)
 	}
 
 	return nil
@@ -74,6 +71,8 @@ func (s *Translator) translateMatch(match *cypher.Match) error {
 // buildOptionalMatchInput numbers the incoming stream before deriving matches from it.
 // The materialized CTE gives both sides of the eventual outer join the same row
 // identities, including duplicate values and pending UNWIND rows.
+// Without an origin frame, SELECT without FROM supplies the single implicit
+// input row for a leading OPTIONAL MATCH, even when the graph is empty.
 func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.Identifier, error) {
 	inputFrame, err := s.scope.PushFrame()
 	if err != nil {
@@ -91,7 +90,11 @@ func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.
 	}
 
 	var projection pgsql.Projection
-	for _, exported := range originFrame.Exported.Slice() {
+	var inputIdentifiers []pgsql.Identifier
+	if originFrame != nil {
+		inputIdentifiers = originFrame.Exported.Slice()
+	}
+	for _, exported := range inputIdentifiers {
 		var expression pgsql.Expression = pgsql.CompoundIdentifier{originFrame.Binding.Identifier, exported}
 		if unwindIdentifiers.Contains(exported) {
 			expression = exported
@@ -114,7 +117,7 @@ func (s *Translator) buildOptionalMatchInput(originFrame *Frame) (*Frame, pgsql.
 	identity.MaterializedBy(inputFrame)
 
 	var from []pgsql.FromClause
-	if !originFrame.Synthetic {
+	if originFrame != nil && !originFrame.Synthetic {
 		from = append(from, pgsql.FromClause{Source: pgsql.TableReference{
 			Name: pgsql.CompoundIdentifier{originFrame.Binding.Identifier},
 		}})
@@ -165,8 +168,6 @@ func (s *Translator) translateOptionalMatch(joinFrame *Frame, rowIdentity pgsql.
 func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, originFrame *Frame, rowIdentity pgsql.Identifier) (pgsql.Query, error) {
 	optMatchFrame := aggregationFrame.Previous
 
-	// Leading OPTIONAL MATCH without an input frame follows the existing MATCH
-	// path and does not enter this merge.
 	if originFrame == nil {
 		return pgsql.Query{}, fmt.Errorf("could not get origin frame prior to OPTIONAL MATCH")
 	}
@@ -178,6 +179,21 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 		pgsql.OperatorEquals,
 		pgsql.CompoundIdentifier{optMatchFrame.Binding.Identifier, rowIdentity},
 	)
+	// Pattern-predicate futures become available after the match scan is built.
+	// Keep those remaining filters on the matched side of the outer join so a
+	// rejected match still produces the input's null-extended row.
+	remaining, err := s.treeTranslator.ConsumeConstraintsFromVisibleSet(optMatchFrame.Known())
+	if err != nil {
+		return pgsql.Query{}, err
+	}
+	if err := RewriteFrameBindings(s.scope, remaining.Expression); err != nil {
+		return pgsql.Query{}, err
+	}
+	optionalConstraints := pgsql.OptionalAnd(joinConstraints, pgsql.OptionalParenthetical(remaining.Expression))
+
+	// Paths can remain expressions over their node/relationship dependencies
+	// rather than exported columns. Preserve their visibility for RETURN *.
+	aggregationFrame.Visible.MergeSet(optMatchFrame.Visible)
 
 	// The identity is local to this OPTIONAL MATCH. A later optional clause
 	// numbers its own input after any fan-out, and DISTINCT/aggregation sees
@@ -234,7 +250,7 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 					},
 					JoinOperator: pgsql.JoinOperator{
 						JoinType:   pgsql.JoinTypeLeftOuter,
-						Constraint: joinConstraints,
+						Constraint: optionalConstraints,
 					},
 				}},
 			}},

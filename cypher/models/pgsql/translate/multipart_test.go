@@ -18,6 +18,8 @@ func TestMultipartMutationsPreserveStatementBoundaries(t *testing.T) {
 			query  string
 			stages int
 		}{
+			{name: "leading optional update and create", query: `OPTIONAL MATCH (n:User) SET n.x = 1 WITH n CREATE (c:User {source: coalesce(n.name, 'missing')}) RETURN c`, stages: 2},
+			{name: "leading optional create without return", query: `OPTIONAL MATCH (n:User) SET n.x = 1 WITH n CREATE (c:User {source: coalesce(n.name, 'missing')})`, stages: 2},
 			{name: "leading create", query: `CREATE (n:User {name: 'new'}) WITH n MATCH (m:User) RETURN count(m)`, stages: 2},
 			{name: "read prefix and create", query: `UNWIND [1, 2] AS x WITH x CREATE (n:User {x: x}) WITH n MATCH (m:User) RETURN count(m)`, stages: 2},
 			{name: "read part after mutation", query: `CREATE (n:User) WITH n WITH n RETURN n`, stages: 3},

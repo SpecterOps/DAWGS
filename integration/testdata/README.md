@@ -204,6 +204,16 @@ variant with each compiler mode explicitly. Read-only WITH pagination has dedica
 coverage in `with_modifier_shapes.json`; this corpus's pagination case uses the
 staged-write boundary.
 
+`leading_optional_shapes.json` checks the single implicit input row of a leading
+OPTIONAL MATCH, empty graphs, rejected WHERE and pattern predicates, fixed and
+variable paths, wildcard/path bindings, comma-separated patterns, aggregation,
+WITH/UNWIND and later mandatory/optional matches. Its 53 shared variants include
+SET and CREATE with and without RETURN, exact fixture node/relationship records,
+unchanged direction/kind/property/source/missing-property decoys and creation
+cardinality/values. `TestPostgreSQLLeadingOptionalCompilerModes` runs every
+variant in both compiler modes. Live acceptance requires running databases;
+its current status is recorded in the active variance plan.
+
 `undirected_continuation_shapes.json` checks paired endpoint orientations after fixed and variable-length prefixes,
 including incoming and undirected prefixes, opposite-direction parallel edges, self-loops, bound endpoints, paths,
 duplicate inputs, aliases, optional matches, property/kind filters and consecutive undirected hops. Mutations check

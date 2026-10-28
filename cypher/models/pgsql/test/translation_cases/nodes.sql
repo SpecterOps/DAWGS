@@ -490,7 +490,7 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s1 as materialized (select s0.n0 as n0, row_number() over () as i0 from s0), s2 as (select s1.i0 as i0, s1.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s1, node n1 where (nullif((n1.properties -> E'distinguishedname'), (@__strlit0::text)::jsonb)::jsonb = cypher_arithmetic(nullif(((s1.n0).properties -> E'unknown'), (@__strlit0::text)::jsonb)::jsonb, nullif((n1.properties -> E'unknown'), (@__strlit0::text)::jsonb)::jsonb, @__strlit1::text)::jsonb) and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]), s3 as (select s1.n0 as n0, s2.n1 as n1 from s1 left outer join s2 on s1.i0 = s2.i0) select s3.n0 as n, s3.n1 as m from s3;
 
 -- case: optional match (n:NodeKind1) return n
-with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0;
+with s0 as materialized (select row_number() over () as i0), s1 as (select s0.i0 as i0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from s0, node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s2 as (select s1.n0 as n0 from s0 left outer join s1 on s0.i0 = s1.i0) select s2.n0 as n from s2;
 
 -- case: match (n:NodeKind1) optional match (m:NodeKind2) where m.distinguishedname = n.unknown + m.unknown optional match (o:NodeKind2) where o.distinguishedname <> n.otherunknown return n, m, o
 -- pgsql_params:{"__strlit0":"null","__strlit1":"+"}

@@ -380,6 +380,12 @@ the input in a materialized relation and removes that internal identity after th
 `optional_row_identity_shapes` templates check fan-out, chained optional clauses, null bindings, aggregation,
 wildcards, variable-length paths and downstream writes on both backends and in both PostgreSQL compiler modes.
 
+A leading `OPTIONAL MATCH` starts with one implicit input row. If its complete pattern or WHERE predicate finds no
+match, it returns one row with null bindings; successful matches return their normal rows without an extra null row.
+Those rows remain available to aggregation, subsequent clauses and writes. The shared `leading_optional_shapes`
+templates cover empty graphs, rejected predicates, paths, chained optionals and complete SET/CREATE post-state.
+Their live acceptance status is recorded in `variance_findings_priority.md`.
+
 Fixed relationship patterns that reuse a bound relationship retain its identity across MATCH clauses, WITH aliases,
 OPTIONAL MATCH and pattern predicates. Each SQL edge scan correlates its ID to the carried relationship; unrelated
 edges cannot multiply the input rows or downstream writes. The shared `reused_relationship_shapes` templates check
