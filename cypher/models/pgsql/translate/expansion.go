@@ -4204,6 +4204,9 @@ func (s *Translator) buildExpansionPatternRoot(traversalStepContext TraversalSte
 	if projectionConstraints, err := s.buildExpansionProjectionConstraints(traversalStepContext); err != nil {
 		return pgsql.Query{}, err
 	} else {
+		// Seeds retain root IDs, so predicates involving an input row
+		// must also gate the paths joined back to that particular row.
+		projectionConstraints = pgsql.OptionalAnd(projectionConstraints, primerExternal)
 		projectionConstraints = pgsql.OptionalAnd(
 			projectionConstraints,
 			selfLoopIdentityConstraint(traversalStep, expansionModel.Frame.Binding.Identifier),
