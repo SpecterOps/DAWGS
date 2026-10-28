@@ -343,3 +343,10 @@ WITH. SET and CREATE run with and without RETURN; postconditions check all
 fixture node/relationship records and created labels, values and counts.
 `TestPostgreSQLPatternPredicateLifetimeCompilerModes` runs the same 22 variants
 in both compiler modes. Every fixture transaction is rolled back.
+
+`pattern_predicate_dependency_shapes.json` checks dependency-safe MATCH ordering
+for directed, incoming, undirected, negated and compound pattern predicates,
+parameterized and missing endpoints, multiple earlier bindings, WITH boundaries,
+counts, and exact SET, REMOVE and CREATE selection with complete node/relationship
+post-state, including writes without RETURN.
+PostgreSQL runs the same variants in both compiler modes.

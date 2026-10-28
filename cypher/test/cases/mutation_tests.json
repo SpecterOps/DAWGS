@@ -1212,6 +1212,38 @@
         "query": "match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) create (c:NodeKind2 {name: t.name})",
         "fitness": 10
       }
+    },
+    {
+      "name": "Pattern predicate dependency 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where (b)-[:EdgeKind1]->(c) return b, c",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Pattern predicate dependency 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where not (b)-[:EdgeKind1]->(c) return b, c",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Pattern predicate dependency 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where (b)-[:EdgeKind1]->(c) set b.seen = true return b, c",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Pattern predicate dependency 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where (b)-[:EdgeKind1]->(c) create (:NodeKind2 {name: b.name}) return b, c",
+        "fitness": 13
+      }
     }
   ]
 }

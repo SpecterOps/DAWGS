@@ -269,7 +269,8 @@ func (s *Translator) buildOptionalMatchAggregationStep(aggregationFrame *Frame, 
 }
 
 // flushPatternPredicateFilter evaluates the preceding MATCH's deferred WHERE
-// before another MATCH can consume it or move its correlated input out of scope.
+// before another MATCH or mutation can consume it or move its correlated input
+// out of scope.
 func (s *Translator) flushPatternPredicateFilter() error {
 	part := s.query.CurrentPart()
 	if !part.pendingPatternPredicateFilter {

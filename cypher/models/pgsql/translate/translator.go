@@ -266,7 +266,7 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 		*cypher.ReadingClause, *cypher.UnaryAddOrSubtractExpression, *cypher.PropertyLookup,
 		*cypher.Negation, *cypher.Where, *cypher.ListLiteral,
 		*cypher.FunctionInvocation, *cypher.Order, *cypher.RemoveItem, *cypher.SetItem,
-		*cypher.MapItem, *cypher.UpdatingClause, *cypher.Delete,
+		*cypher.MapItem, *cypher.Delete,
 		*cypher.Return, *cypher.Properties, *cypher.KindMatcher,
 		*cypher.IDInCollection:
 
@@ -286,6 +286,11 @@ func (s *Translator) Enter(expression cypher.SyntaxNode) {
 			// variable visits for the same syntax node must not resolve through
 			// the normal outer-scope lookup path.
 			s.unwindTargets[typedExpression.Variable] = struct{}{}
+		}
+
+	case *cypher.UpdatingClause:
+		if err := s.flushPatternPredicateFilter(); err != nil {
+			s.SetError(err)
 		}
 
 	case *cypher.Create:
