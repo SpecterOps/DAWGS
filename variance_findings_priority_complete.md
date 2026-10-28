@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-28**. This ledger preserves **46 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-28**. This ledger preserves **47 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (039/063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -54,6 +54,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 49 | DAWGS-040 | Repaired and live validated | Read-only WITH retains ordering and pagination, alias resolution and filtering after pagination. All 44 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including complete mutation-state checks. |
 | 50 | DAWGS-021 | Repaired and live validated | Leading OPTIONAL MATCH retains the implicit input row and matched-side predicates. All 57 current shared variants pass on Neo4j and in both PostgreSQL compiler modes; both BDD gates now pass all 17 enforced scenarios. |
 | 51 | DAWGS-036 | Reproduced, repaired and live validated | Resolve MATCH pattern-predicate futures once, retaining type constraints, and evaluate pending filters before another MATCH changes their correlation frame. All 22 new shared variants pass on Neo4j and in both PostgreSQL compiler modes, including repeated predicates and exact mutation-state checks. |
+| 52 | DAWGS-035 | Reproduced, repaired and live validated | Optimizer dependencies include node and relationship variables consumed by pattern predicates, keeping unresolved bindings pinned. Deferred MATCH filters are materialized before mutations. All 19 shared variants pass on both backends and in both PostgreSQL compiler modes, including exact mutation state and writes without RETURN; validation retries are recorded below. |
 
 ## Original queue details for completed actions
 
@@ -107,6 +108,7 @@ These describe the original requested action; completion status and actual outco
 | 49 | [DAWGS-040](variance_findings.md#dawgs-040) — WITH ordering, skip, and limit are ignored | Q | Repair | M | Retain ordering and pagination at read-only WITH boundaries and verify alias resolution and mutation selection. |
 | 50 | [DAWGS-021](variance_findings.md#dawgs-021) — Leading OPTIONAL MATCH loses the null row | Q | Repair | L | Preserve the implicit input row and matched-side filters through reads and writes. |
 | 51 | [DAWGS-036](variance_findings.md#dawgs-036) — A pattern predicate in a MATCH followed by another MATCH gives invalid SQL and drops the predicate's type filter | Q | Repair | L | Bind pattern predicates to valid frames and retain their relationship-type filters when later MATCH clauses are present. |
+| 52 | [DAWGS-035](variance_findings.md#dawgs-035) — Optimizer pattern reordering ignores pattern-predicate dependencies | Q | Repair | M | Include pattern-predicate dependencies in safe clause reordering; test that unresolved bindings remain pinned. |
 
 ## Implementation and validation notes
 
@@ -852,3 +854,93 @@ repository lint, final focused race-enabled compiler controls and
 The active queue now has **58 unfinished / 46 completed actions**. DAWGS-035 is
 the following implementation item. P1 repairs and the regex migration decision
 retain their existing priorities.
+
+### DAWGS-035 pattern-predicate dependencies and mutation boundary — 2026-10-28
+
+Original order **52**, Q / Repair / M. Optimizer dependency collection now reads
+node and relationship variables directly from pattern syntax, whose variable
+fields are omitted by the general syntax walker. Property
+expressions still contribute their normal references; deduplication, sorting,
+anonymous endpoints and wildcard handling retain their existing behavior.
+Consequently a selective MATCH cannot move ahead of an earlier binding consumed
+by its WHERE pattern predicate. Unresolved node, relationship and property
+references pin the clause, while independent-anchor reordering remains covered
+by the existing controls. The change stays within optimizer analysis and does
+not alter the shared walker.
+
+The mutation acceptance checks also exposed a remaining filter-lifetime boundary
+in both compiler modes: a terminal MATCH followed immediately by SET left its
+correlated predicate until RETURN, after the mutation had advanced the frame.
+Translation now flushes the pending MATCH filter on entry to an updating clause,
+before collecting mutation operands or allocating write frames. This extends
+DAWGS-036's preceding-MATCH materialization to mutation inputs. SET, REMOVE and
+CREATE must consume the filtered rows, including writes without RETURN.
+
+`pattern_predicate_dependency_shapes.json` supplies backend-equivalent cases for
+directed, incoming, undirected, negated, conjunctive and disjunctive predicates,
+parameterized and missing targets, multiple earlier endpoints, WITH boundaries,
+counts, exact SET targets on either endpoint, REMOVE and CREATE. Each mutation
+checks the complete node and relationship state; CREATE checks the original
+nodes plus the exact created label/value rows. Unit tests inspect dependency
+sets, clause scheduling and unresolved-binding pinning, and verify that predicate
+selection precedes the write CTE in both compiler modes. Four parser/analyzer
+mutation cases and four generated SQL goldens retain the source/fixture workflow.
+Existing SQL fixtures and existing mutation fitness values remain byte-identical
+after regeneration.
+
+Before repair, the dependency and scheduling unit regressions fail. The unchanged
+`7bcb429` checkout with only the first 17 shared variants and their test wrapper
+added fails **14 enabled / 6 disabled** PostgreSQL variants. Disabled read variants
+pass; the six mutation variants fail in both modes. The enabled failures include
+out-of-scope binding errors and incorrect read/mutation behavior. The earlier
+repair-only probe, before adding mutation-boundary materialization, passes the
+read variants but still fails the immediate SET variants in both modes. These
+separate captures distinguish the optimizer dependency defect from the terminal
+MATCH-to-mutation filter lifetime defect. All new shared fixtures run in rollback
+transactions.
+
+The final race-enabled unit gate passes **43 tested packages**, as does the
+unchanged `7bcb429` baseline in an isolated local clone. After merging repeated
+coverage locations, overall statement coverage increases from **33,089 / 49,407
+(66.9723%)** to **33,095 / 49,414 (66.9749%)**. Optimizer coverage increases from
+**2,527 / 2,781 (90.8666%)** to **2,532 / 2,786 (90.8830%)**. Translator coverage is
+**7,206 / 8,975 (80.2897%)** before and **7,207 / 8,977 (80.2829%)** after: its
+covered statement count increases while its percentage falls slightly; overall
+coverage does not decrease. The final comparison includes the regenerated
+parser/analyzer and SQL fixtures. Focused race tests, repository lint,
+integration-tagged vet and narrow `goimports` formatting pass.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc`, external linking,
+`GOMAXPROCS=4` and `GOFLAGS='-p=2 -ldflags=-linkmode=external'`. A repeated
+analyzer-regeneration build hit the shared environment's process limit; its
+sequential `GOMAXPROCS=2`, `-p=1` retry passes and reproduces identical fixtures.
+The qualifying unit runs pass without retries. Captures and coverage comparisons
+are under `.coverage/dawgs035/`; credentials are excluded from evidence.
+
+All **19 final shared variants** pass on Neo4j and in both PostgreSQL compiler
+modes: **57 backend/mode variant executions**, including both writes without
+RETURN. The focused verbose captures record 19 Neo4j and 38 PostgreSQL variant
+passes. Neo4j's complete `make test_all -o test` passes all **43 integration
+packages**, then BDD, reusing the separately completed unit gate. The initial
+PostgreSQL `make test_all -o test` also passes all 43 integration packages and
+BDD with the same production code and the first 17 new variants.
+
+The PostgreSQL repetition with the expanded fixtures reaches Go's **600-second
+package timeout** in graphbench while
+`TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace`
+has been running for 15 seconds. A retry was mistakenly started before that
+run's integration package finished. Both use the `integration_test` graph;
+concurrent resets caused deadlocks and left graphbench fixture rows visible to
+core post-state assertions. That overlapping retry and integration capture are
+invalid and do not qualify the repair. After the repeated run exits, the four
+suffix-route component tests pass sequentially in **22.064 seconds**, including
+the interrupted closure check. The entire fresh integration package then passes
+in **129.229 seconds**, including the final 19-variant corpus, followed by a
+passing PostgreSQL BDD rerun. The other 41 integration packages pass in the
+repeated full run. No test expectations, skips or production code were changed
+for these retries. Both backend BDD gates report **17 enforced scenarios, zero
+enforced failures**, and **18 report-only compatibility failures**.
+
+The active queue now has **57 unfinished / 47 completed actions**. DAWGS-046 is
+the following implementation item. The five pending P1 items and the separate
+aggregate-pattern-predicate optimization follow-up retain their existing status.

@@ -118,6 +118,15 @@ ordering and pagination. Pagination counts retain the existing literal-only
 contract. The shared read and mutation regressions and their live validation
 status are recorded in [the active variance plan](variance_findings_priority.md#dawgs-040-with-ordering-and-pagination--2026-10-27).
 
+### PostgreSQL pattern predicate dependencies
+
+MATCH reordering preserves the node and relationship bindings referenced by
+WHERE pattern predicates, including negated and compound predicates. A more
+selective MATCH waits for any earlier bindings its predicate consumes; unresolved
+bindings keep the clause pinned. Shared regressions cover returned rows and
+complete mutation state on Neo4j and in both PostgreSQL optimizer modes. See the
+[validation ledger](variance_findings_priority_complete.md#dawgs-035-pattern-predicate-dependencies-and-mutation-boundary--2026-10-28).
+
 ### PostgreSQL temporal parameters
 
 Go `time.Time` values whose location is `time.Local` map to PostgreSQL
