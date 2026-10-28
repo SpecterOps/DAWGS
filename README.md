@@ -159,7 +159,10 @@ boundaries are recorded in
 
 ### PostgreSQL properties carried through WITH
 
-Properties keep their stored value types across `WITH`. `toString` extracts string
+Properties keep their stored value types across `WITH` and when copied into node
+or relationship `CREATE` maps, including after ordering and pagination. Numeric
+and Boolean values stay numeric and Boolean; strings retain their contents.
+`toString` extracts string
 contents without JSON quotes or extra escaping; case conversion, split (including
 a carried delimiter), size, head/tail, scalar casts, comparisons and Boolean predicates
 consume the carried value. `size` counts Unicode characters in strings and elements
@@ -182,7 +185,8 @@ already lost during serialization. Helper costs and validation are recorded in
 
 `toInteger` truncates numeric inputs toward zero: `1.9` becomes `1`, `-1.5`
 becomes `-1`, and fractions between `-1` and `1` become `0`. This applies to
-literals, parameters, properties, WITH aliases and mutation expressions. Integer
+literals, parameters, properties, WITH aliases, native-array `UNWIND` bindings
+and mutation expressions. Integer
 inputs retain their exact signed 64-bit value, including values above 2^53.
 No schema migration is required. This repair covers numeric rounding; invalid
 strings and out-of-range conversion behavior remain separate compatibility limits.
@@ -250,6 +254,13 @@ Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j 
 tags, including PostgreSQL composite/JSON codec and graph-wipe tests. Tests scoped
 to another backend skip automatically. `make test_all` runs the unit, integration,
 and BDD suites for the selected backend; run it separately for each backend.
+
+The unit suite validates record-assertion fields across the integration corpus.
+Templates can declare `node_kinds` and `edge_kinds` for query-only schema kinds;
+see [the corpus format](integration/testdata/README.md). These declarations also
+apply to plan capture and do not insert fixture entities.
+Tagged corpus datetimes normalize to a UTC fixed offset for equivalent instant
+comparisons on both backends.
 
 PostgreSQL integration tests require `pg_stat_statements` in `shared_preload_libraries`
 before the server starts. The CI PostgreSQL integration service configures this through
@@ -384,6 +395,8 @@ A leading `OPTIONAL MATCH` starts with one implicit input row. If its complete p
 match, it returns one row with null bindings; successful matches return their normal rows without an extra null row.
 Those rows remain available to aggregation, subsequent clauses and writes. The shared `leading_optional_shapes`
 templates cover empty graphs, rejected predicates, paths, chained optionals and complete SET/CREATE post-state.
+Multipart OPTIONAL inputs read the preceding materialized boundary, preserving
+pending UNWIND rows without referencing the enclosing WITH CTE from within itself.
 Their live acceptance status is recorded in `variance_findings_priority.md`.
 
 Fixed relationship patterns that reuse a bound relationship retain its identity across MATCH clauses, WITH aliases,

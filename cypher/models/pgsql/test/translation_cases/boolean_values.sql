@@ -15,19 +15,19 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- case: unwind [1,2,3] as x return x, x > 1 and x < 3 as mid order by x
-select i0 as x, i0 > 1 and i0 < 3 as mid from unnest(array [1, 2, 3]::int8[]) as i0 order by x;
+select i0 as x, (i0)::int8 > 1 and (i0)::int8 < 3 as mid from unnest(array [1, 2, 3]::int8[]) as i0 order by x;
 
 -- case: unwind [1,2,3] as x with x return x, x > 0 and x < 3 and x <> 1 as mid order by x
-with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0) select s0.i0 as x, s0.i0 > 0 and s0.i0 < 3 and s0.i0 <> 1 as mid from s0 order by s0.i0;
+with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0) select s0.i0 as x, (s0.i0)::int8 > 0 and (s0.i0)::int8 < 3 and s0.i0 <> 1 as mid from s0 order by s0.i0;
 
 -- case: unwind [1,2,3] as x with x return x, x > 1 and x < 3 as mid, x = 1 or x = 3 as outer order by x
-with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0) select s0.i0 as x, s0.i0 > 1 and s0.i0 < 3 as mid, s0.i0 = 1 or s0.i0 = 3 as outer from s0 order by s0.i0;
+with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0) select s0.i0 as x, (s0.i0)::int8 > 1 and (s0.i0)::int8 < 3 as mid, s0.i0 = 1 or s0.i0 = 3 as outer from s0 order by s0.i0;
 
 -- case: unwind [1,2,3] as x with x, x > 1 and x < 3 as mid where x >= 1 and x <= 3 return x, mid order by x
-with s0 as (select i0 as i0, i0 > 1 and i0 < 3 as i1 from unnest(array [1, 2, 3]::int8[]) as i0 where (i0 >= 1 and i0 <= 3)) select s0.i0 as x, s0.i1 as mid from s0 order by s0.i0;
+with s0 as (select i0 as i0, (i0)::int8 > 1 and (i0)::int8 < 3 as i1 from unnest(array [1, 2, 3]::int8[]) as i0 where ((i0)::int8 >= 1 and (i0)::int8 <= 3)) select s0.i0 as x, s0.i1 as mid from s0 order by s0.i0;
 
 -- case: unwind [1,2,3] as x with x where coalesce(x > 1 and x < 3, false) return x order by x
-with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0 where (coalesce(i0 > 1 and i0 < 3, false)::bool)) select s0.i0 as x from s0 order by s0.i0;
+with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0 where (coalesce((i0)::int8 > 1 and (i0)::int8 < 3, false)::bool)) select s0.i0 as x from s0 order by s0.i0;
 
 -- case: match (n:NodeKind1) return n.k, n.k > 0 and n.k < 2 as mid
 -- pgsql_params:{"__strlit0":"null"}

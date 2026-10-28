@@ -77,7 +77,7 @@ func (s *Translator) translateUnwind(unwind *cypher.Unwind) error {
 		return fmt.Errorf("unable to lookup unwind variable binding %s", identifier)
 	} else {
 		arrayExpression = concreteEmptyArray(arrayExpression)
-		if arrayType == pgsql.JSONBArray {
+		if arrayType.IsArrayType() && arrayType.ArrayBaseType().IsKnown() {
 			binding.DataType = arrayType.ArrayBaseType()
 		}
 		if s.scope.CurrentFrame() == nil {

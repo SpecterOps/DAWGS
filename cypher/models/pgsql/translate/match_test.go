@@ -87,3 +87,35 @@ func TestLeadingOptionalMatchSeed(t *testing.T) {
 		}
 	}
 }
+
+func TestMultipartOptionalMatchInput(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		for _, tc := range []struct {
+			query    string
+			part     int
+			fromSize int
+		}{
+			{`OPTIONAL MATCH (n:Group) WITH n AS item RETURN item, item.name`, 0, 0},
+			{`UNWIND [1,1] AS x OPTIONAL MATCH (n:Group) WITH x, n AS item RETURN x, item.name`, 0, 1},
+			{`WITH 1 AS x OPTIONAL MATCH (n:Group) WITH x, n AS item RETURN x, item.name`, 1, 1},
+			{`WITH 1 AS x UNWIND [2,2] AS y OPTIONAL MATCH (n:Group) WITH x, y, n AS item RETURN x, y, item.name`, 1, 2},
+		} {
+			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
+				require.NoError(t, err)
+				translation, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				require.NoError(t, err)
+				query := translation.Statement.(pgsql.Query)
+				boundary := query.CommonTableExpressions.Expressions[tc.part]
+				seed := boundary.Query.CommonTableExpressions.Expressions[0]
+				require.NotNil(t, seed.Materialized)
+				from := seed.Query.Body.(pgsql.Select).From
+				require.Len(t, from, tc.fromSize)
+				if tc.part > 0 {
+					source := from[0].Source.(pgsql.TableReference)
+					require.Equal(t, query.CommonTableExpressions.Expressions[tc.part-1].Alias.Name, source.Name.Root(), "read the preceding boundary")
+				}
+			})
+		}
+	}
+}

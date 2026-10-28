@@ -33,8 +33,32 @@ func TestParamsDecodesTaggedDatetime(t *testing.T) {
 		"nested": [{"$type": "datetime", "value": "2025-02-03T04:05:06Z"}]
 	}`), &values))
 
-	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 123456789, time.UTC), values["threshold"])
-	require.Equal(t, []any{time.Date(2025, time.February, 3, 4, 5, 6, 0, time.UTC)}, values["nested"])
+	offset := time.FixedZone("Offset", 0)
+	require.Equal(t, time.Date(2026, time.January, 2, 3, 4, 5, 123456789, offset), values["threshold"])
+	require.Equal(t, []any{time.Date(2025, time.February, 3, 4, 5, 6, 0, offset)}, values["nested"])
+}
+
+func TestParamsDatetimeNormalizesOffsetsToUTC(t *testing.T) {
+	for _, text := range []string{
+		"2026-01-02T03:04:05.123456789Z",
+		"2026-01-02T04:04:05.123456789+01:00",
+		"2026-01-01T21:34:05.123456789-05:30",
+	} {
+		t.Run(text, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]any{"threshold": map[string]any{"$type": "datetime", "value": text}})
+			require.NoError(t, err)
+			var values Params
+			require.NoError(t, json.Unmarshal(raw, &values))
+			actual := values["threshold"].(time.Time)
+			want, err := time.Parse(time.RFC3339Nano, text)
+			require.NoError(t, err)
+			require.True(t, want.Equal(actual))
+			require.Equal(t, want.UTC().Format(time.RFC3339Nano), actual.Format(time.RFC3339Nano))
+			zone, offset := actual.Zone()
+			require.Equal(t, "Offset", zone)
+			require.Zero(t, offset)
+		})
+	}
 }
 
 // TestParamsDecodesNestedObjectsAsStandardMaps verifies untagged objects remain

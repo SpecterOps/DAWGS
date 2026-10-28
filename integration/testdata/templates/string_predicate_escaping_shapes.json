@@ -358,7 +358,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -369,7 +369,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -382,7 +382,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -394,7 +394,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -406,7 +406,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -418,7 +418,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -430,7 +430,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -442,7 +442,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -453,7 +453,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -467,59 +467,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -546,7 +546,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -557,7 +557,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -569,7 +569,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -581,7 +581,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -593,7 +593,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -605,7 +605,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -617,7 +617,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -629,7 +629,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -640,7 +640,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -654,10 +654,10 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_",
@@ -665,49 +665,49 @@
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -734,7 +734,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -745,7 +745,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -757,7 +757,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -769,7 +769,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -781,7 +781,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -793,7 +793,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -805,7 +805,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -817,7 +817,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -828,7 +828,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -842,59 +842,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -936,7 +936,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -947,7 +947,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -960,7 +960,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -972,7 +972,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -984,7 +984,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -996,7 +996,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -1008,7 +1008,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1020,7 +1020,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -1031,7 +1031,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -1045,59 +1045,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -1116,10 +1116,10 @@
           "assert": {
             "relationship_records": [
               {
-                "start_id": "root",
-                "end_id": "target",
+                "start": "root",
+                "end": "target",
                 "kind": "EscapeEdge",
-                "properties": {
+                "props": {
                   "role": "candidate",
                   "keep": "untouched",
                   "name": "A_",
@@ -1138,7 +1138,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -1149,7 +1149,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1161,7 +1161,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1173,7 +1173,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1185,7 +1185,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1197,7 +1197,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -1209,7 +1209,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1221,7 +1221,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -1232,7 +1232,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -1246,10 +1246,10 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_",
@@ -1257,49 +1257,49 @@
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -1333,7 +1333,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -1344,7 +1344,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1356,7 +1356,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1368,7 +1368,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1380,7 +1380,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1392,7 +1392,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -1404,7 +1404,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1416,7 +1416,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -1427,7 +1427,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -1441,59 +1441,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -1699,7 +1699,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -1710,7 +1710,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1723,7 +1723,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1735,7 +1735,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1747,7 +1747,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1759,7 +1759,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -1771,7 +1771,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1783,7 +1783,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -1794,7 +1794,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -1808,59 +1808,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -1887,7 +1887,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -1898,7 +1898,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1910,7 +1910,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1922,7 +1922,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1934,7 +1934,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1946,7 +1946,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -1958,7 +1958,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -1970,7 +1970,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -1981,7 +1981,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -1995,10 +1995,10 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_",
@@ -2006,49 +2006,49 @@
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -2075,7 +2075,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -2086,7 +2086,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2098,7 +2098,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2110,7 +2110,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2122,7 +2122,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2134,7 +2134,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -2146,7 +2146,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2158,7 +2158,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -2169,7 +2169,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -2183,59 +2183,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -2277,7 +2277,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -2288,7 +2288,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2301,7 +2301,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2313,7 +2313,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2325,7 +2325,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2337,7 +2337,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -2349,7 +2349,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2361,7 +2361,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -2372,7 +2372,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -2386,59 +2386,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -2457,10 +2457,10 @@
           "assert": {
             "relationship_records": [
               {
-                "start_id": "root",
-                "end_id": "target",
+                "start": "root",
+                "end": "target",
                 "kind": "EscapeEdge",
-                "properties": {
+                "props": {
                   "role": "candidate",
                   "keep": "untouched",
                   "name": "A_",
@@ -2479,7 +2479,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -2490,7 +2490,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2502,7 +2502,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2514,7 +2514,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2526,7 +2526,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2538,7 +2538,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -2550,7 +2550,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2562,7 +2562,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -2573,7 +2573,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -2587,10 +2587,10 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_",
@@ -2598,49 +2598,49 @@
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -2674,7 +2674,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -2685,7 +2685,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2697,7 +2697,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2709,7 +2709,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2721,7 +2721,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2733,7 +2733,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -2745,7 +2745,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -2757,7 +2757,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -2768,7 +2768,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -2782,59 +2782,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -3040,7 +3040,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -3051,7 +3051,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3064,7 +3064,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3076,7 +3076,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3088,7 +3088,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3100,7 +3100,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -3112,7 +3112,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3124,7 +3124,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -3135,7 +3135,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -3149,59 +3149,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -3228,7 +3228,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -3239,7 +3239,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3251,7 +3251,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3263,7 +3263,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3275,7 +3275,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3287,7 +3287,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -3299,7 +3299,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3311,7 +3311,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -3322,7 +3322,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -3336,10 +3336,10 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_",
@@ -3347,49 +3347,49 @@
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -3416,7 +3416,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -3427,7 +3427,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3439,7 +3439,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3451,7 +3451,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3463,7 +3463,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3475,7 +3475,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -3487,7 +3487,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3499,7 +3499,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -3510,7 +3510,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -3524,59 +3524,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -3618,7 +3618,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -3629,7 +3629,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3642,7 +3642,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3654,7 +3654,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3666,7 +3666,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3678,7 +3678,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -3690,7 +3690,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3702,7 +3702,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -3713,7 +3713,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -3727,59 +3727,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -3798,10 +3798,10 @@
           "assert": {
             "relationship_records": [
               {
-                "start_id": "root",
-                "end_id": "target",
+                "start": "root",
+                "end": "target",
                 "kind": "EscapeEdge",
-                "properties": {
+                "props": {
                   "role": "candidate",
                   "keep": "untouched",
                   "name": "A_",
@@ -3820,7 +3820,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -3831,7 +3831,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3843,7 +3843,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3855,7 +3855,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3867,7 +3867,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3879,7 +3879,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -3891,7 +3891,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -3903,7 +3903,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -3914,7 +3914,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -3928,10 +3928,10 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_",
@@ -3939,49 +3939,49 @@
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"
@@ -4015,7 +4015,7 @@
                     "kinds": [
                       "EscapeRoot"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "root",
                       "role": "root",
                       "keep": "untouched"
@@ -4026,7 +4026,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "target",
                       "role": "candidate",
                       "keep": "untouched",
@@ -4038,7 +4038,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "wildcard-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -4050,7 +4050,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "percent",
                       "role": "candidate",
                       "keep": "untouched",
@@ -4062,7 +4062,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "backslash",
                       "role": "candidate",
                       "keep": "untouched",
@@ -4074,7 +4074,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "role-decoy",
                       "role": "decoy",
                       "keep": "untouched",
@@ -4086,7 +4086,7 @@
                     "kinds": [
                       "EscapeOther"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "kind-decoy",
                       "role": "candidate",
                       "keep": "untouched",
@@ -4098,7 +4098,7 @@
                     "kinds": [
                       "EscapeInput"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "missing",
                       "role": "candidate",
                       "keep": "untouched"
@@ -4109,7 +4109,7 @@
                     "kinds": [
                       "EscapeCreated"
                     ],
-                    "properties": {
+                    "props": {
                       "tag": "created-kind",
                       "role": "decoy",
                       "keep": "untouched"
@@ -4123,59 +4123,59 @@
               "assert": {
                 "relationship_records": [
                   {
-                    "start_id": "root",
-                    "end_id": "target",
+                    "start": "root",
+                    "end": "target",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "wildcard-decoy",
+                    "start": "root",
+                    "end": "wildcard-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "AB"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "role-decoy",
+                    "start": "root",
+                    "end": "role-decoy",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "decoy",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "kind-decoy",
+                    "start": "root",
+                    "end": "kind-decoy",
                     "kind": "EscapeOtherEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched",
                       "name": "A_"
                     }
                   },
                   {
-                    "start_id": "root",
-                    "end_id": "missing",
+                    "start": "root",
+                    "end": "missing",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "keep": "untouched"
                     }
                   },
                   {
-                    "start_id": "target",
-                    "end_id": "root",
+                    "start": "target",
+                    "end": "root",
                     "kind": "EscapeEdge",
-                    "properties": {
+                    "props": {
                       "role": "candidate",
                       "name": "A_",
                       "keep": "untouched"

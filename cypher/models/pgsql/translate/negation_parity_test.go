@@ -61,12 +61,12 @@ func TestNegationParityTranslation(t *testing.T) {
 				{
 					"double negation in with where continuation",
 					`UNWIND [1,2,3] AS x WITH x WHERE NOT NOT x > 1 RETURN x ORDER BY x`,
-					`with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0 where (i0 > 1)) select s0.i0 as x from s0 order by s0.i0;`,
+					`with s0 as (select i0 as i0 from unnest(array [1, 2, 3]::int8[]) as i0 where ((i0)::int8 > 1)) select s0.i0 as x from s0 order by s0.i0;`,
 				},
 				{
 					"double negated projected predicate",
 					`UNWIND [1,2,3] AS x RETURN x, NOT NOT x > 1 AS again ORDER BY x`,
-					`select i0 as x, i0 > 1 as again from unnest(array [1, 2, 3]::int8[]) as i0 order by x;`,
+					`select i0 as x, (i0)::int8 > 1 as again from unnest(array [1, 2, 3]::int8[]) as i0 order by x;`,
 				},
 			} {
 				t.Run(tc.name, func(t *testing.T) {

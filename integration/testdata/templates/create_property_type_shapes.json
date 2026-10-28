@@ -1,0 +1,1510 @@
+{
+  "node_kinds": [
+    "CopyCreated"
+  ],
+  "edge_kinds": [
+    "CopyCreatedLink"
+  ],
+  "families": [
+    {
+      "name": "CREATE preserves copied property types",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "CopyInput"
+            ],
+            "properties": {
+              "tag": "source",
+              "role": "source",
+              "score": 2,
+              "fraction": 1.9,
+              "flag": true,
+              "text": "2",
+              "keep": "untouched"
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "CopyDecoy"
+            ],
+            "properties": {
+              "tag": "decoy",
+              "role": "decoy",
+              "score": 99,
+              "keep": "untouched"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "decoy",
+            "kind": "CopyInputLink",
+            "properties": {
+              "score": 2,
+              "fraction": -1.9,
+              "flag": false,
+              "text": "2",
+              "keep": "untouched"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node direct without RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput {role:'source'}) CREATE (c:CopyCreated {score:n.score, fraction:n.fraction, flag:n.flag, text:n.text, missing:n.missing})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CopyCreated) RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    1.9,
+                    true,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "node direct with RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput {role:'source'}) CREATE (c:CopyCreated {score:n.score, fraction:n.fraction, flag:n.flag, text:n.text, missing:n.missing}) RETURN c.score, c.fraction, c.flag, c.text, c.missing"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2,
+                1.9,
+                true,
+                "2",
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CopyCreated) RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    1.9,
+                    true,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "node aliases without RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput {role:'source'}) WITH n.score AS score, n.fraction AS fraction, n.flag AS flag, n.text AS text, n.missing AS missing CREATE (c:CopyCreated {score:score, fraction:fraction, flag:flag, text:text, missing:missing})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CopyCreated) RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    1.9,
+                    true,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "node aliases with RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput {role:'source'}) WITH n.score AS score, n.fraction AS fraction, n.flag AS flag, n.text AS text, n.missing AS missing CREATE (c:CopyCreated {score:score, fraction:fraction, flag:flag, text:text, missing:missing}) RETURN c.score, c.fraction, c.flag, c.text, c.missing"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2,
+                1.9,
+                true,
+                "2",
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CopyCreated) RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    1.9,
+                    true,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship direct without RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput)-[r:CopyInputLink]->(m:CopyDecoy) CREATE (n)-[c:CopyCreatedLink {score:r.score, fraction:r.fraction, flag:r.flag, text:r.text, missing:r.missing}]->(m)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[c:CopyCreatedLink]->() RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    -1.9,
+                    false,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship direct with RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput)-[r:CopyInputLink]->(m:CopyDecoy) CREATE (n)-[c:CopyCreatedLink {score:r.score, fraction:r.fraction, flag:r.flag, text:r.text, missing:r.missing}]->(m) RETURN c.score, c.fraction, c.flag, c.text, c.missing"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2,
+                -1.9,
+                false,
+                "2",
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[c:CopyCreatedLink]->() RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    -1.9,
+                    false,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship aliases without RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput)-[r:CopyInputLink]->(m:CopyDecoy) WITH n, m, r.score AS score, r.fraction AS fraction, r.flag AS flag, r.text AS text, r.missing AS missing CREATE (n)-[c:CopyCreatedLink {score:score, fraction:fraction, flag:flag, text:text, missing:missing}]->(m)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[c:CopyCreatedLink]->() RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    -1.9,
+                    false,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship aliases with RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput)-[r:CopyInputLink]->(m:CopyDecoy) WITH n, m, r.score AS score, r.fraction AS fraction, r.flag AS flag, r.text AS text, r.missing AS missing CREATE (n)-[c:CopyCreatedLink {score:score, fraction:fraction, flag:flag, text:text, missing:missing}]->(m) RETURN c.score, c.fraction, c.flag, c.text, c.missing"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2,
+                -1.9,
+                false,
+                "2",
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[c:CopyCreatedLink]->() RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    -1.9,
+                    false,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CREATE preserves copied property types after numeric pagination",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "CopyInput"
+            ],
+            "properties": {
+              "tag": "source",
+              "role": "source",
+              "score": 2,
+              "fraction": 1.9,
+              "flag": true,
+              "text": "2",
+              "keep": "untouched"
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "CopyDecoy"
+            ],
+            "properties": {
+              "tag": "decoy",
+              "role": "decoy",
+              "score": 99,
+              "keep": "untouched"
+            }
+          },
+          {
+            "id": "source-high",
+            "kinds": [
+              "CopyInput"
+            ],
+            "properties": {
+              "tag": "source-high",
+              "role": "source",
+              "score": 10,
+              "fraction": 10.5,
+              "flag": false,
+              "text": "10",
+              "keep": "untouched"
+            }
+          },
+          {
+            "id": "source-low",
+            "kinds": [
+              "CopyInput"
+            ],
+            "properties": {
+              "tag": "source-low",
+              "role": "source",
+              "score": -10,
+              "fraction": -9.5,
+              "flag": false,
+              "text": "-10",
+              "keep": "untouched"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "decoy",
+            "kind": "CopyInputLink",
+            "properties": {
+              "score": 2,
+              "fraction": -1.9,
+              "flag": false,
+              "text": "2",
+              "keep": "untouched"
+            }
+          },
+          {
+            "start_id": "source-high",
+            "end_id": "decoy",
+            "kind": "CopyInputLink",
+            "properties": {
+              "score": 10,
+              "fraction": 10.5,
+              "flag": true,
+              "text": "10",
+              "keep": "untouched"
+            }
+          },
+          {
+            "start_id": "source-low",
+            "end_id": "decoy",
+            "kind": "CopyInputLink",
+            "properties": {
+              "score": -10,
+              "fraction": -9.5,
+              "flag": true,
+              "text": "-10",
+              "keep": "untouched"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node page without RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput {role:'source'}) WITH n ORDER BY n.score DESC SKIP 1 LIMIT 1 CREATE (c:CopyCreated {score:(n.score), fraction:n.fraction, flag:n.flag, text:n.text, missing:n.missing})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-high",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-high",
+                      "role": "source",
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": false,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-low",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-low",
+                      "role": "source",
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": false,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-high",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": true,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-low",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": true,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CopyCreated) RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    1.9,
+                    true,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 3
+              }
+            }
+          ]
+        },
+        {
+          "name": "node page with RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput {role:'source'}) WITH n ORDER BY n.score DESC SKIP 1 LIMIT 1 CREATE (c:CopyCreated {score:(n.score), fraction:n.fraction, flag:n.flag, text:n.text, missing:n.missing}) RETURN c.score, c.fraction, c.flag, c.text, c.missing"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2,
+                1.9,
+                true,
+                "2",
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-high",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-high",
+                      "role": "source",
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": false,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-low",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-low",
+                      "role": "source",
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": false,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-high",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": true,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-low",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": true,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CopyCreated) RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    1.9,
+                    true,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 3
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship page without RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput)-[r:CopyInputLink]->(m:CopyDecoy) WITH n, r, m ORDER BY r.score DESC SKIP 1 LIMIT 1 CREATE (n)-[c:CopyCreatedLink {score:r.score, fraction:r.fraction, flag:r.flag, text:r.text, missing:r.missing}]->(m)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-high",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-high",
+                      "role": "source",
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": false,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-low",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-low",
+                      "role": "source",
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": false,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-high",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": true,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-low",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": true,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[c:CopyCreatedLink]->() RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    -1.9,
+                    false,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 4
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 4
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship page with RETURN",
+          "vars": {
+            "query": "MATCH (n:CopyInput)-[r:CopyInputLink]->(m:CopyDecoy) WITH n, r, m ORDER BY r.score DESC SKIP 1 LIMIT 1 CREATE (n)-[c:CopyCreatedLink {score:r.score, fraction:r.fraction, flag:r.flag, text:r.text, missing:r.missing}]->(m) RETURN c.score, c.fraction, c.flag, c.text, c.missing"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2,
+                -1.9,
+                false,
+                "2",
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source",
+                      "role": "source",
+                      "score": 2,
+                      "fraction": 1.9,
+                      "flag": true,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "CopyDecoy"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "role": "decoy",
+                      "score": 99,
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-high",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-high",
+                      "role": "source",
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": false,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "id": "source-low",
+                    "kinds": [
+                      "CopyInput"
+                    ],
+                    "props": {
+                      "tag": "source-low",
+                      "role": "source",
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": false,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:CopyInputLink]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 2,
+                      "fraction": -1.9,
+                      "flag": false,
+                      "text": "2",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-high",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": 10,
+                      "fraction": 10.5,
+                      "flag": true,
+                      "text": "10",
+                      "keep": "untouched"
+                    }
+                  },
+                  {
+                    "start": "source-low",
+                    "end": "decoy",
+                    "kind": "CopyInputLink",
+                    "props": {
+                      "score": -10,
+                      "fraction": -9.5,
+                      "flag": true,
+                      "text": "-10",
+                      "keep": "untouched"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[c:CopyCreatedLink]->() RETURN c.score, c.fraction, c.flag, c.text, c.missing",
+              "assert": {
+                "row_count": 1,
+                "row_values": [
+                  [
+                    2,
+                    -1.9,
+                    false,
+                    "2",
+                    null
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 4
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 4
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

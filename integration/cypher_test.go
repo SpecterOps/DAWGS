@@ -904,33 +904,6 @@ func assertContainsNodeWithProps(expected map[string]any) resultAssertion {
 	}
 }
 
-// edgeExpectation describes the stable identity, kind, and optional properties required of a relationship result.
-type edgeExpectation struct {
-	// Start is the expected fixture ID of the relationship's start node.
-	Start string `json:"start,omitempty"`
-
-	// End is the expected fixture ID of the relationship's end node.
-	End string `json:"end,omitempty"`
-
-	// Kind is the expected relationship kind.
-	Kind string `json:"kind,omitempty"`
-
-	// Props contains the expected relationship property subset.
-	Props map[string]any `json:"props,omitempty"`
-}
-
-// nodeExpectation describes the stable identity, kinds, and optional properties required of a node result.
-type nodeExpectation struct {
-	// ID is the expected fixture node identifier.
-	ID string `json:"id"`
-
-	// Kinds contains the expected node kinds independent of order.
-	Kinds []string `json:"kinds,omitempty"`
-
-	// Props contains the expected node property subset.
-	Props map[string]any `json:"props,omitempty"`
-}
-
 // assertContainsEdge requires any returned relationship to match expected endpoints, kind, and properties.
 func assertContainsEdge(expected edgeExpectation) resultAssertion {
 	return func(t *testing.T, result queryResult, ctx assertionContext) {

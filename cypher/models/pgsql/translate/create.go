@@ -324,6 +324,12 @@ func (s *Translator) buildPropertiesObject(properties TranslatedProperties) (pgs
 
 	for _, key := range keys {
 		value := properties.Map[key]
+		if lookup, ok := expressionToPropertyLookupBinaryExpression(unwrapParenthetical(value)); ok {
+			// CREATE consumes the stored JSON value, including its scalar type.
+			copy := *lookup
+			copy.Operator = pgsql.OperatorJSONField
+			value = &copy
+		}
 		if err := RewriteFrameBindings(s.scope, value); err != nil {
 			return nil, err
 		}
