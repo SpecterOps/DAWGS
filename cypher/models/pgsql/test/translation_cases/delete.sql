@@ -47,3 +47,15 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 -- case: match (n) where n.name = 'isolated' with n delete n
 -- pgsql_params:{"__strlit0":"string","__strlit1":"isolated"}
 with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text and (n0.properties ->> E'name') = @__strlit1::text))) select s1.n0 as n0 from s1), s2 as (delete from node n1 using s0 where (s0.n0).id = n1.id and cypher_assert_node_deletable(0, (s0.n0).id, array []::int8[], array []::int8[])::bool) select 1;
+
+-- case: match (n) delete n return count(*) as c
+with s0 as materialized (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0), s1 as (delete from node n1 using s0 where (s0.n0).id = n1.id and cypher_assert_node_deletable(0, (s0.n0).id, array []::int8[], array []::int8[])::bool) select count(*)::int8 as c from s0;
+
+-- case: match (n) detach delete n return 1 as x
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0), s1 as (delete from node n1 using s0 where (s0.n0).id = n1.id) select 1 as x from s0;
+
+-- case: match (n)-[r]->(m) delete r, n return count(*) as c
+with s0 as materialized (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from edge e0 join node n0 on n0.id = e0.start_id join node n1 on n1.id = e0.end_id), s1 as (delete from node n2 using s0 where (s0.n0).id = n2.id and cypher_assert_node_deletable(0, (s0.n0).id, array []::int8[] || array(select (s0.e0).id from s0 where (s0.e0).id is not null), array []::int8[])::bool), s2 as (delete from edge e1 using s0 where (s0.e0).id = e1.id) select count(*)::int8 as c from s0;
+
+-- case: match (n) with n, n.name as name detach delete n return name
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select s1.n0 as n0, ((s1.n0).properties -> E'name') as i0 from s1), s2 as (delete from node n1 using s0 where (s0.n0).id = n1.id) select s0.i0 as name from s0;

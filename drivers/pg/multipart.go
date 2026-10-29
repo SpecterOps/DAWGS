@@ -12,22 +12,42 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
-// hasMultipartWrites identifies WITH boundaries that follow a graph mutation.
-// Those boundaries require another PostgreSQL statement snapshot.
+// hasMultipartWrites identifies writes that need sequential PostgreSQL snapshots:
+// mutations before WITH, or a query part combining DELETE with other writes.
 func hasMultipartWrites(query *cypher.RegularQuery) bool {
-	if query == nil || query.SingleQuery == nil || query.SingleQuery.MultiPartQuery == nil {
+	if query == nil || query.SingleQuery == nil {
 		return false
 	}
-	for _, part := range query.SingleQuery.MultiPartQuery.Parts {
-		if part != nil && len(part.UpdatingClauses) > 0 {
-			return true
+	part := query.SingleQuery.SinglePartQuery
+	if multipart := query.SingleQuery.MultiPartQuery; multipart != nil {
+		for _, part := range multipart.Parts {
+			if part != nil && len(part.UpdatingClauses) > 0 {
+				return true
+			}
+		}
+		part = multipart.SinglePartQuery
+	}
+	if part == nil {
+		return false
+	}
+	hasDelete, hasWrite := false, false
+	for _, expression := range part.UpdatingClauses {
+		clause, ok := expression.(*cypher.UpdatingClause)
+		if !ok || clause == nil {
+			continue
+		}
+		switch clause.Clause.(type) {
+		case *cypher.Delete:
+			hasDelete = true
+		case *cypher.Create, *cypher.Set, *cypher.Remove, *cypher.Merge:
+			hasWrite = true
 		}
 	}
-	return false
+	return hasDelete && hasWrite
 }
 
 // queryMultipart keeps the entire Cypher write in the caller's transaction,
-// while giving each WITH boundary visibility of preceding graph mutations.
+// while giving WITH and DELETE boundaries visibility of preceding mutations.
 func (s *transaction) queryMultipart(query *cypher.RegularQuery, parameters map[string]any, graphID int32, profile SQLGenerationProfile) graph.Result {
 	defer func() { s.recordSQLGenerationProfile(profile) }()
 	s.invalidateTopologyRouteDecisions()

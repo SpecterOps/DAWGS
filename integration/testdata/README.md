@@ -39,6 +39,12 @@ tests check parent/partition cleanup, repeat upgrades and overlapping IDs across
 graphs; a forced hash-join control checks that deletion guards see only matched
 input rows.
 
+`delete_continuation_shapes.json` extends those controls with RETURN counts,
+constant and captured-scalar projections, duplicate/null/empty input streams,
+grouping, DISTINCT and pagination. SET/CREATE-to-DELETE and alias controls verify
+complete surviving records. PostgreSQL runs every variant in both compiler modes;
+committed fixtures check same-part SET/DELETE success, rejection and rollback.
+
 `to_integer_shapes.json` covers numeric truncation toward zero for literals,
 parameters, node/relationship properties, WITH aliases and UNWIND inputs. Cases
 include native float arrays, array parameters, alias continuations, integer and

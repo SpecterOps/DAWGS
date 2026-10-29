@@ -28,6 +28,9 @@ func TestDeleteNodeCommitAndRollback(t *testing.T) {
 			reject       bool
 			nodes, edges int64
 		}{
+			{"set then plain connected", "MATCH (n:DeleteCommitNode {name:'target'}) SET n.touched = true DELETE n RETURN count(*) AS c", true, 4, 5},
+			{"set then detach connected", "MATCH (n:DeleteCommitNode {name:'target'}) SET n.touched = true DETACH DELETE n RETURN count(*) AS c", false, 3, 1},
+			{"set then plain isolated", "MATCH (n:DeleteCommitNode {name:'isolated'}) SET n.touched = true DELETE n RETURN count(*) AS c", false, 3, 5},
 			{"plain connected", "MATCH (n:DeleteCommitNode {name:'target'}) DELETE n", true, 4, 5},
 			{"plain self loop", "MATCH (n:DeleteCommitNode {name:'target'})-[r:DeleteCommitEdge]->(n) DELETE n", true, 4, 5},
 			{"plain several connected", "MATCH (n:DeleteCommitNode) WHERE n.name <> 'isolated' DELETE n", true, 4, 5},
@@ -62,8 +65,7 @@ func TestDeleteNodeCommitAndRollback(t *testing.T) {
 					}))
 					err := session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
 						if tc.name == "plain write failure" {
-							// Check rollback of an earlier successful statement. Same-part
-							// SET/DELETE frame continuation is tracked separately under 043.
+							// Check rollback of an earlier successful statement.
 							prior := tx.Query("MATCH (n:DeleteCommitNode {name:'target'}) SET n.touched = true", nil)
 							for prior.Next() {
 							}

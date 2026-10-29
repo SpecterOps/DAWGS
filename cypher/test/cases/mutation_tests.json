@@ -1710,6 +1710,54 @@
       "details": {
         "query": "match (n:NodeKind2) where n.tag = 'target' unwind n.keep as x return x"
       }
+    },
+    {
+      "name": "DELETE continuation 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) delete n return count(*) as c",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DELETE continuation 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) detach delete n return 1 as x",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DELETE continuation 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (n)-[r]->(m) delete r, n return count(*) as c",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DELETE continuation 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) with n, n.name as name detach delete n return name",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "DELETE continuation 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) set n.x = 1 delete n return count(*) as c",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DELETE continuation 6",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:NodeKind1) delete n return count(*) as c",
+        "fitness": 2
+      }
     }
   ]
 }

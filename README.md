@@ -486,7 +486,13 @@ new partitions receive them on creation. Run `AssertSchema` when upgrading an ex
 updated compiler. The Go node-deletion and batch APIs retain their cascading behavior.
 The shared `delete_node_shapes` templates check complete surviving node and relationship state on both backends and
 in both PostgreSQL compiler modes. Committed-fixture checks additionally verify rollback, commit errors and physical
-PostgreSQL edge storage. Final DELETE projections and SET-to-DELETE continuations remain tracked separately under DAWGS-043.
+PostgreSQL edge storage. DELETE preserves the incoming rows for RETURN, including counts, captured scalars,
+null targets and repeated matches. Capture property values before deleting an entity when those values are needed
+later. The shared `delete_continuation_shapes` templates cover grouping, pagination and complete stored state.
+When a PostgreSQL query part creates or updates entities before DELETE, execution materializes its input rows at a
+statement boundary in the same transaction, so deletion observes the earlier writes. Failures roll back those writes;
+this path uses the same temporary-relation lifecycle as multipart mutations. Compiler consumers must use
+`TranslatedStatements` to execute staged results, as with multipart writes.
 
 PostgreSQL keeps `AND` operands within expressions in `RETURN`, `WITH`, function arguments and `SET`, preserving input
 rows. At `WHERE`, outer conjunctions become filter predicates. The shared `boolean_value_shapes` templates check
