@@ -108,6 +108,68 @@
         ]
       },
       "assert": {"ordered_row_values": [["admins", 2], ["staff", 1]]}
+    },
+    {
+      "name": "shortest path uses endpoint bound by prior match",
+      "cypher": "MATCH (:NodeKind1)-[:EdgeKind1]->(u:NodeKind2) MATCH p=shortestPath((u)-[:EdgeKind2*1..]->(d:NodeKind3)) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "d", "kinds": ["NodeKind3"], "properties": {}},
+          {"id": "x", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "y", "kinds": ["NodeKind2"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"},
+          {"start_id": "c", "end_id": "d", "kind": "EdgeKind2"},
+          {"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {"row_count": 1, "path_node_ids": [["b", "c", "d"]]}
+    },
+    {
+      "name": "all shortest paths resolves prior match roots independently",
+      "cypher": "MATCH (:NodeKind1)-[:EdgeKind1]->(u:NodeKind2) MATCH p=allShortestPaths((u)-[:EdgeKind2*1..]->(d:NodeKind3)) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "d", "kinds": ["NodeKind3"], "properties": {}},
+          {"id": "x", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "y", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "z", "kinds": ["NodeKind2"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "x", "end_id": "y", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "d", "kind": "EdgeKind2"},
+          {"start_id": "y", "end_id": "z", "kind": "EdgeKind2"},
+          {"start_id": "z", "end_id": "d", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"row_count": 2, "path_node_ids": [["b", "d"], ["y", "z", "d"]]}
+    },
+    {
+      "name": "all shortest paths text filters resolve roots independently",
+      "cypher": "MATCH p=allShortestPaths((u:NodeKind1)-[:EdgeKind2*1..]->(d:NodeKind3)) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "d", "kinds": ["NodeKind3"], "properties": {}},
+          {"id": "w", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "x", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "y", "kinds": ["NodeKind2"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "d", "kind": "EdgeKind2"},
+          {"start_id": "x", "end_id": "y", "kind": "EdgeKind2"},
+          {"start_id": "y", "end_id": "d", "kind": "EdgeKind2"}
+        ]
+      },
+      "assert": {"row_count": 2, "path_node_ids": [["a", "d"], ["x", "y", "d"]]}
     }
   ]
 }
