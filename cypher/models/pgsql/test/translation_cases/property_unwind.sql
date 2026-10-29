@@ -14,22 +14,6 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
--- Copyright 2026 Specter Ops, Inc.
---
--- Licensed under the Apache License, Version 2.0
--- you may not use this file except in compliance with the License.
--- You may obtain a copy of the License at
---
---     http://www.apache.org/licenses/LICENSE-2.0
---
--- Unless required by applicable law or agreed to in writing, software
--- distributed under the License is distributed on an "AS IS" BASIS,
--- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--- See the License for the specific language governing permissions and
--- limitations under the License.
---
--- SPDX-License-Identifier: Apache-2.0
-
 -- case: MATCH (n:NodeKind1) WHERE n.tag = 'a' UNWIND n.arr AS x RETURN x ORDER BY x
 -- pgsql_params:{"__strlit0":"string","__strlit1":"a","__strlit2":"null","__strlit3":"array","__strlit4":"[]"}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((jsonb_typeof((n0.properties -> E'tag')) = @__strlit0::text and (n0.properties ->> E'tag') = @__strlit1::text)) and n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select i0 as x from s0, unnest((array(select jsonb_array_elements(case when jsonb_typeof(nullif(nullif(((s0.n0).properties -> E'arr'), (@__strlit2::text)::jsonb)::jsonb, (@__strlit2::text)::jsonb)::jsonb) = @__strlit3::text then nullif(nullif(((s0.n0).properties -> E'arr'), (@__strlit2::text)::jsonb)::jsonb, (@__strlit2::text)::jsonb)::jsonb when nullif(nullif(((s0.n0).properties -> E'arr'), (@__strlit2::text)::jsonb)::jsonb, (@__strlit2::text)::jsonb)::jsonb is null then (@__strlit4::text)::jsonb else jsonb_build_array(nullif(nullif(((s0.n0).properties -> E'arr'), (@__strlit2::text)::jsonb)::jsonb, (@__strlit2::text)::jsonb)::jsonb)::jsonb end)))::jsonb[]) as i0 order by x;
