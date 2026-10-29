@@ -41,18 +41,6 @@ func (s *Translator) translateWith() error {
 		if err := s.buildDeletions(s.scope); err != nil {
 			return err
 		}
-		// DELETE has no RETURNING relation. WITH continues with the input
-		// rows while the top-level data-modifying CTE performs the deletion.
-		deletionFrames := map[*Frame]struct{}{}
-		for _, deletion := range currentPart.mutations.Deletions.Values() {
-			deletionFrames[deletion.Frame] = struct{}{}
-		}
-		for currentPart.projections.Frame != nil {
-			if _, deletionFrame := deletionFrames[currentPart.projections.Frame]; !deletionFrame {
-				break
-			}
-			currentPart.projections.Frame = currentPart.projections.Frame.Previous
-		}
 	}
 
 	if !currentPart.HasProjections() {

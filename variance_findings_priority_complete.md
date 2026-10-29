@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **51 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **52 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -59,6 +59,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 53 | DAWGS-046 | Reproduced, repaired and live validated | Traversal frames read the preceding materialized input instead of their enclosing WITH output. Literal WITH projections preserve duplicate and empty streams. All 33 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including complete SET/CREATE post-state and writes without RETURN. |
 | 54 | DAWGS-047 | Reproduced, repaired and live validated | Nested ORDER BY aliases expand through binding identities with preserved expression grouping; bare UNWIND inputs are qualified to avoid output-alias capture. DISTINCT carries hidden sort keys without changing visible columns or pagination. All 36 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact SET/CREATE post-state. See below. |
 | 55 | DAWGS-042 | Reproduced, repaired and live validated | Property-list UNWIND preserves JSON value types through direct properties, WITH aliases and nested lists. Pending inputs are materialized before SET, retaining duplicates and empty-input behavior. All 46 shared variants pass on Neo4j and in both PostgreSQL compiler modes, plus concrete committed-property checks. Complete backend qualification and formatter-fixture correction are recorded below. |
+| 56 | DAWGS-043 | Repaired and live validated | DELETE reserves a unique CTE name without advancing the input stream; RETURN preserves cardinality and captured values. Earlier SET/CREATE writes run before DELETE through the existing transaction-scoped staged executor. Shared complete-state and commit/rollback regressions pass on Neo4j and in both PostgreSQL compiler modes. Validation and scope are recorded below. |
 
 ## Original queue details for completed actions
 
@@ -117,6 +118,7 @@ These describe the original requested action; completion status and actual outco
 | 53 | [DAWGS-046](variance_findings.md#dawgs-046) — WITH → MATCH → WITH builds a self-referencing CTE | Q | Repair | M | Fix read-only WITH/MATCH/WITH frame construction and out-of-scope/self CTE references. |
 | 54 | [DAWGS-047](variance_findings.md#dawgs-047) — ORDER BY alias expressions and internal-name collisions | Q | Repair | M | Rewrite nested ORDER BY alias expressions safely and separate user identifiers from internal binding names. |
 | 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
+| 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows, including the SET-to-DELETE frame control recorded under completed 039. Duplicate multi-target delete CTE naming stays closed. |
 
 ## Implementation and validation notes
 
@@ -1349,3 +1351,102 @@ sequential BDD report writes. Credentials are excluded from evidence.
 The active queue now has **53 unfinished / 51 completed actions**.
 **DAWGS-043 is the next implementation item.** Earlier pending repairs and
 separate follow-ups retain their existing status.
+
+### DAWGS-043 DELETE continuation and write boundaries — 2026-10-29
+
+DELETE now reserves a unique mutation CTE name without leaving that frame on the
+scope stack. RETURN and WITH therefore consume the incoming row relation, rather
+than attempting to SELECT from a DELETE CTE without RETURNING. Deletion inputs
+resolve after CREATE/SET materialization, preserving the complete matched stream,
+including repeated targets, null optional targets and empty inputs. The earlier
+per-target unique naming repair remains intact; the WITH-only frame workaround
+is no longer necessary.
+
+Live SET-to-DELETE checks exposed a second mechanism after fixing the original
+invalid frame reference: sibling PostgreSQL UPDATE and DELETE CTEs can leave the
+updated row present. Translation now places a statement boundary before DELETE
+when preceding top-level CTEs contain INSERT or UPDATE. The existing staged
+executor materializes the complete incoming stream and runs DELETE in the same
+transaction. This handles direct targets and aliases, preserves earlier writes
+on surviving entities, and reuses existing temporary-table cleanup and failed-stage
+rollback handling. Ordinary DELETE-only statements retain a single statement.
+Staging preserves existing multipart boundaries, recursive WITH flags, parameters
+and final projection modifiers. The PostgreSQL `tx.Query` dispatcher also
+recognizes same-part DELETE combined with SET, REMOVE or CREATE and routes it
+through the existing staged executor; DELETE-only queries retain their normal
+compilation path. Detection has focused unit controls for ordinary, multipart
+and same-part queries. No default traversal or regex behavior changes.
+
+The new **42 backend-equivalent `delete_continuation_shapes` variants** check
+counts, constant and captured-scalar results, repeated/null/empty input rows,
+multiple and mixed deletion targets, DISTINCT, grouping, ordering and pagination.
+Every variant asserts complete surviving node and relationship records. SET and
+CREATE before DELETE, an updated alias of a deletion target, and existing WITH
+write boundaries exercise the staged path. All **126 backend/mode executions**
+pass on Neo4j and in both PostgreSQL compiler modes under the race detector.
+Three additional committed-fixture shapes, each run with commit and forced
+rollback, cover SET followed by rejected plain DELETE, successful DETACH DELETE
+and isolated-node deletion. They pass on both backends and in both PostgreSQL
+modes, checking persisted counts, original properties on rollback and physical
+PostgreSQL edge storage. The original twelve shapes remain passing controls.
+
+An overlay containing the original translator files from checkout
+`570ea11bd4a315e8ccf47ede565d6befb0c5bfa9` fails **32 of the initial
+33 variants in each PostgreSQL compiler mode**, chiefly with PostgreSQL's
+missing-RETURNING error. The intermediate frame-only repair additionally
+reproduces all six SET/DELETE post-state failures in each mode: the updated
+node/relationship remains stored. Both mechanisms pass after the completed
+repair. New translator unit regressions verify the input relation and staged
+statement boundary in both modes. Six parser/analyzer mutation cases and four
+SQL translation cases were regenerated through `CYSQL_UPDATE_CASES=true`; only
+the requested cases and their generated expectations were retained.
+
+The supported continuation checks use counts, constants and scalar values
+captured before deletion. They do not establish a new cross-backend contract for
+reading properties or decoding entities after those entities have been deleted.
+Dependent assignment-expression and caller-row ordering remain under DAWGS-045;
+this repair does not implement arbitrary same-part mutation sequencing. As with
+multipart mutations, staged plans bypass the ordinary single-statement cache.
+Staged queries use temporary storage proportional to the carried input stream; no
+application-scale throughput or memory qualification is claimed. README and the
+corpus documentation describe the behavior and statement boundary.
+
+The final race-enabled `make test` passes all **43 tested unit packages**.
+Counting repeated coverage locations once, statement coverage is
+**33,234 / 49,560 (67.0581%)**, up from the preceding action's
+**33,200 / 49,522 (67.0409%)**. Translator coverage is
+**7,323 / 9,106 (80.4195%)**. This final run refreshes the earlier broad run's
+profile after the staging and driver dispatch corrections were finalized. The complete Neo4j `make test_integration` passes all **43 tested
+packages**, including its full shared suite. Its BDD gate passes **17 enforced
+scenarios / zero enforced failures**, retaining **18 report-only compatibility
+failures**. The final focused race tests, lint, touched-file Go formatting,
+local Markdown file links and `git diff --check` pass.
+
+The initial PostgreSQL `make test_all` passes its full unit stage and 42 of 43
+integration packages, then fails ten new shared variants through ordinary
+`tx.Query`: its dispatcher originally recognized only multipart staged writes.
+The explicit-translation optimizer-mode regressions already passed, exposing
+this separate entry-point gap. Extending dispatch fixes all ten failures;
+the complete 42-variant corpus now passes through `tx.Query` too, along with
+both explicit compiler modes and the committed rollback controls. The affected
+driver/integration packages and full unit stage are rerun after this correction;
+the unaffected aggregate integration results remain valid. No shared assertions
+or backend skips were weakened.
+
+The resumed PostgreSQL `make test_integration` for `./drivers/pg ./integration`
+passes both complete affected packages, including the full shared suite;
+together with the initial aggregate's other passing packages, this completes
+all **43 tested integration packages**. The final full `make test` also passes
+all **43 tested unit packages** after the driver correction, with the coverage
+reported above. Final lint passes. Runs use each supplied connection separately,
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes.
+Captures are under `.coverage/dawgs043/`; credentials are excluded from evidence.
+The active queue now has **52 unfinished / 52 completed actions**.
+**DAWGS-023 is the next implementation item.**
+
+The final PostgreSQL `make test_bdd_integration` passes **17 enforced scenarios /
+zero enforced failures**, retaining **18 report-only compatibility failures**.
+This completes the resumed default `make test_all` stages after the dispatch
+repair. Both backends' full shared suites and BDD gates are qualified; no further
+code changes followed these successful final checks.

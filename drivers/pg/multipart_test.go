@@ -106,6 +106,12 @@ func TestMultipartWriteDetectionPreservesOrdinaryQueries(t *testing.T) {
 		staged bool
 	}{
 		{"CREATE (n) RETURN n", false},
+		{"MATCH (n) DELETE n RETURN count(*)", false},
+		{"MATCH (n) DELETE n DETACH DELETE n", false},
+		{"MATCH (n) SET n.x = 1 DELETE n RETURN count(*)", true},
+		{"MATCH (n) REMOVE n.x DELETE n", true},
+		{"CREATE (n) DELETE n", true},
+		{"MATCH (n) WITH n SET n.x = 1 DELETE n", true},
 		{"MATCH (n) WITH n RETURN n", false},
 		{"MATCH (n) WITH n CREATE (m) RETURN m", false},
 		{"CREATE (n) WITH n RETURN n", true},
