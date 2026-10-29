@@ -78,14 +78,16 @@ For a persistent, explicitly selected warm set that also applies to new physical
 to `pg.NewDriver` must have been created by `pg.NewPool` or `pg.NewPoolWithRuntimeConfig` so those lifecycle hooks are in
 place.
 
-### List indexing support
+### List indexing and slicing support
 
 The DAWGS Cypher parser rejects list indexing (`xs[0]`, including negative,
 parameterized and chained indexes) with `list indexing is not supported`.
-PostgreSQL text queries return this error before execution, including in write
-queries. Check parse errors before formatting an AST. Full indexing semantics
-remain pending. Neo4j text queries retain native indexing when the driver
-passes the original query through after a declined rewrite.
+List slicing (`xs[0..2]`, including omitted, negative and parameterized bounds)
+returns `list slicing is not supported`.
+PostgreSQL text queries return these errors before execution, including in write
+queries. Check parse errors before formatting an AST. Full indexing and slicing
+semantics remain pending. Neo4j text queries retain native indexing and slicing
+when the driver passes the original query through after a declined rewrite.
 
 ### PostgreSQL JSON result numbers
 

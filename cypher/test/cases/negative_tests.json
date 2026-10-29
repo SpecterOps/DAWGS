@@ -219,6 +219,20 @@
           "list indexing is not supported"
         ]
       }
+    },
+    {
+      "name": "Unsupported list slicing in projections and mutations",
+      "type": "negative_case",
+      "details": {
+        "queries": [
+          "RETURN [1,2,3][0..2] AS xs",
+          "WITH [1,2] AS xs RETURN xs[..] AS x",
+          "MATCH (n) SET n.value = [1,2][..1]",
+          "CREATE (n {value: [1,2][-1..]})",
+          "MATCH (n) WHERE size([0,1][..1]) = 1 DELETE n"
+        ],
+        "error_matchers": ["list slicing is not supported"]
+      }
     }
   ]
 }

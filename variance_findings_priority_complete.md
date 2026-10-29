@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **54 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **55 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -62,6 +62,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 56 | DAWGS-043 | Repaired and live validated | DELETE reserves a unique CTE name without advancing the input stream; RETURN preserves cardinality and captured values. Earlier SET/CREATE writes run before DELETE through the existing transaction-scoped staged executor. Shared complete-state and commit/rollback regressions pass on Neo4j and in both PostgreSQL compiler modes. Validation and scope are recorded below. |
 | 57 | DAWGS-023 | Repaired and live validated | Unknown match kinds no longer fail compilation or register metadata; conjunctions, alternatives, null predicates and mutation selection retain their semantics. Missing-kind plans bypass both translation caches so later registration is visible. Shared and driver-scoped validation is recorded below. |
 | 58 | DAWGS-001 | Contained and live validated | The shared parser rejects indexing with a located syntax error and isolates its subtree. Templated read/mutation regressions, both PostgreSQL compiler modes and Neo4j native controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass; statement coverage increases. Full indexing remains separate work. |
+| 59 | DAWGS-002 | Contained and live validated | The shared parser rejects slicing with a located syntax error and isolates its subtree. Templated read/mutation regressions cover omitted, negative, parameterized and chained bounds; both PostgreSQL compiler modes reject before writes and Neo4j native slicing remains supported. Full slicing remains separate work. |
 
 ## Original queue details for completed actions
 
@@ -123,6 +124,7 @@ These describe the original requested action; completion status and actual outco
 | 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows, including the SET-to-DELETE frame control recorded under completed 039. Duplicate multi-target delete CTE naming stays closed. |
 | 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
 | 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
+| 59 | [DAWGS-002](variance_findings.md#dawgs-002) — List slicing returns the upper bound | Q | Contain | S | Reject unsupported slicing explicitly now; full slicing should share list AST/type work with 001. |
 
 ## Implementation and validation notes
 
@@ -1607,3 +1609,68 @@ the successful broad checks. The final Markdown links, queue counts and
 The next implementation item is **DAWGS-002**, explicit list-slicing containment.
 The active queue has **50 unfinished / 54 completed actions**, with full indexing
 support retained as a separate follow-up.
+
+### DAWGS-002 list slicing containment — 2026-10-29
+
+The next action is complete as containment. `EnterOC_ListOperatorExpression`
+rejects slicing with `list slicing is not supported`, retaining the indexing
+error for single subscripts. Both rejected forms isolate their expression
+subtrees because the AST represents neither operation. Parser errors retain
+line/column locations. Full slicing is separate M/L work in the active plan,
+sharing the AST/type design with indexing.
+
+The templated frontend matrix covers 18 sliced operands in projection, WHERE,
+SET, DELETE and CREATE contexts, through unrestricted and default parser
+contexts and the Cypher formatter. It includes both omitted bounds, negative,
+null, parameterized, arithmetic and out-of-range bounds, chained operations,
+property operands and nested slices. Five source negative fixtures and compiler
+regressions in both PostgreSQL optimizer modes cover raw-text rejection and
+repeated requests without emitted SQL. The new frontend and compiler tests
+fail against the original source, which accepts slicing and can replace the
+operand with its final bound; focused race tests pass after containment.
+
+Driver-scoped PostgreSQL tests repeat five read/write shapes in both compiler
+modes and verify exact unchanged committed fixture state after every rejection.
+Neo4j rewrite controls retain the original query and parameters. Its live
+controls cover explicit, omitted, negative, out-of-range, null and parameterized
+bounds plus CREATE/SET list values. These differing backend support boundaries
+stay outside the shared core corpus. README and corpus documentation describe
+the errors and native Neo4j fallback.
+
+The complete race-enabled unit suite passes all **43 tested packages**.
+Deduplicated statement coverage rises from the DAWGS-001 checkout's recorded
+**33,264 / 49,571 (67.1038%)** to **33,265 / 49,572 (67.1044%)**.
+Frontend coverage rises from **493 / 527 (93.5484%)** to
+**494 / 528 (93.5606%)**; all added frontend statements are covered.
+Repository lint, touched-file `goimports`, Markdown file links, queue counts and
+`git diff --check` pass. Evidence is under `.coverage/dawgs002/`; credentials
+are excluded.
+
+The initial complete Neo4j integration run passes every package except the new
+slicing control: the live server rejects `xs[..]` because at least one bound is
+required. The positive expectation was corrected to assert that native syntax
+error; valid one-sided omitted bounds retain their result assertions. This is a
+test correction only; the parser containment is unchanged. The affected complete
+integration package is rerun below.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in each race-enabled unit/integration stage and the final BDD gate.
+The new driver-scoped rejection/committed-state controls pass in both compiler
+modes. Neo4j's initial complete integration run passes the other **42 tested
+packages**; after correcting the new native syntax expectation, the complete
+shared integration package passes under the same race/coverage flags. Both
+full shared integration suites pass on each backend. Neo4j's final
+**`make test_bdd_integration` passes**. Each BDD gate reports **17 enforced /
+zero failed**, retaining **18 report-only compatibility failures**.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`; BDD report writes are sequential.
+The final Markdown links, ledger counts and `git diff --check` pass. No
+production code changed after the successful unit checks; the only later Go
+edit corrected the Neo4j integration expectation and passed its complete
+package rerun.
+
+The active queue has **49 unfinished / 55 completed actions**.
+**DAWGS-017** (standalone CALL rejection) is the next implementation item;
+full list slicing remains an explicit follow-up.
