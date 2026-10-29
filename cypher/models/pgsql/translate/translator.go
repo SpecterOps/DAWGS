@@ -755,7 +755,7 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 type Result struct {
 	// Statement is the translated PostgreSQL AST.
 	Statement pgsql.Statement
-	// Stages preserves statement boundaries after nonfinal multipart mutations.
+	// Stages preserves statement boundaries around sequential mutations.
 	// Staged translations must be formatted and executed in order in one transaction.
 	Stages []QueryStage
 	// Parameters contains SQL parameters generated during translation.
@@ -1696,6 +1696,7 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 		return Result{}, nil, fmt.Errorf("forced shortest-path executor %q was selected but not emitted", options.ForceShortestPathExecutor)
 	}
 
+	stageWritesBeforeDelete(&translator.translation)
 	translator.recordSkippedLowerings()
 	return translator.translation, translator.parameterSources, nil
 }

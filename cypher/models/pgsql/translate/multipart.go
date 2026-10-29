@@ -9,7 +9,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/walk"
 )
 
-// QueryStage is one statement in a multipart query with sequential mutations.
+// QueryStage is one statement in a query with sequential mutations.
 // Binding names the output consumed by subsequent stages; the final stage has no binding.
 type QueryStage struct {
 	Binding pgsql.Identifier
@@ -225,4 +225,62 @@ func TranslatedStatements(translation Result, tablePrefix string) ([]format.Form
 		statements = append(statements, formatted)
 	}
 	return statements, nil
+}
+
+// stageWritesBeforeDelete avoids modifying one physical row twice in sibling
+// PostgreSQL data-modifying CTEs. The existing staged executor materializes the
+// complete input stream and runs the deletion in the same transaction.
+func stageWritesBeforeDelete(result *Result) {
+	stages := result.Stages
+	if len(stages) == 0 {
+		query, ok := result.Statement.(pgsql.Query)
+		if !ok {
+			return
+		}
+		stages = []QueryStage{{Query: query}}
+	}
+	var output []QueryStage
+	changed := false
+	for stageIndex, stage := range stages {
+		query := stage.Query
+		if query.CommonTableExpressions != nil {
+			ctes := query.CommonTableExpressions.Expressions
+			hasWrites := false
+			for index, cte := range ctes {
+				switch cte.Query.Body.(type) {
+				case pgsql.Insert, pgsql.Update:
+					hasWrites = true
+				case pgsql.Delete:
+					if hasWrites {
+						input := ctes[index-1].Alias.Name
+						if !changed {
+							output = append(output, stages[:stageIndex]...)
+						}
+						output = append(output, QueryStage{Binding: input, Query: pgsql.Query{
+							CommonTableExpressions: &pgsql.With{Recursive: query.CommonTableExpressions.Recursive, Expressions: ctes[:index]},
+							Body: pgsql.Select{
+								Projection: pgsql.Projection{pgsql.WildcardIdentifier},
+								From:       []pgsql.FromClause{{Source: input}},
+							},
+						}})
+						with := *query.CommonTableExpressions
+						with.Expressions = ctes[index:]
+						query.CommonTableExpressions = &with
+						changed = true
+					}
+					// All deletions in a query part share the same input stream.
+					goto nextStage
+				}
+			}
+		}
+	nextStage:
+		stage.Query = query
+		if changed {
+			output = append(output, stage)
+		}
+	}
+	if changed {
+		result.Stages = output
+		result.Statement = nil
+	}
 }

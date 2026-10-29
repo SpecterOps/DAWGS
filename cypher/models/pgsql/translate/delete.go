@@ -21,6 +21,11 @@ func (s *Translator) translateDelete(scope *Scope, cypherDelete *cypher.Delete) 
 					return err
 				} else {
 					deletion.Detach = cypherDelete.Detach
+					// A DELETE CTE has no row relation. Reserve its unique name
+					// without advancing the stream consumed by later clauses.
+					if err := scope.PopFrame(); err != nil {
+						return err
+					}
 				}
 			default:
 				return fmt.Errorf("unsupported delete expression: %T", expression)
@@ -31,16 +36,9 @@ func (s *Translator) translateDelete(scope *Scope, cypherDelete *cypher.Delete) 
 	return nil
 }
 
-// deletionSource skips mutation-only frames, which do not export input rows.
+// deletionSource resolves the completed row stream preceding the DELETE CTE.
 func (s *Translator) deletionSource(deletion *Delete) (*Frame, error) {
-	frames := map[*Frame]bool{}
-	for _, candidate := range s.query.CurrentPart().mutations.Deletions.Values() {
-		frames[candidate.Frame] = true
-	}
 	frame, ok := s.previousValidFrame(deletion.Frame)
-	for ok && frames[frame] {
-		frame, ok = s.previousValidFrame(frame)
-	}
 	if !ok {
 		return nil, fmt.Errorf("deletion %s has no input frame", deletion.TargetBinding.Identifier)
 	}
@@ -75,6 +73,11 @@ func (s *Translator) deletionIDs(nodes bool) (pgsql.Expression, error) {
 }
 
 func (s *Translator) buildDeletions(scope *Scope) error {
+	// Updates and creates are materialized after collecting all write clauses.
+	// Resolve DELETE inputs now so they consume that completed row stream.
+	for _, deletion := range s.query.CurrentPart().mutations.Deletions.Values() {
+		deletion.Frame.Previous = scope.CurrentFrame()
+	}
 	for _, identifierDeletion := range s.query.CurrentPart().mutations.Deletions.Values() {
 		sourceFrame, err := s.deletionSource(identifierDeletion)
 		if err != nil {
