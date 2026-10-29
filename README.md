@@ -190,6 +190,21 @@ representation. JSON cannot recover temporal or integral-float type information
 already lost during serialization. Helper costs and validation are recorded in
 [the variance ledger](variance_findings_priority_complete.md#dawgs-052-with-property-consumers--2026-10-26).
 
+### PostgreSQL property-list UNWIND
+
+`UNWIND` expands node and relationship property arrays without converting their
+numbers, Booleans or strings to text. WITH aliases and nested collected lists
+retain element types; each UNWIND expands one list level. Empty, missing and
+null inputs produce no rows, while a non-list property value produces one row.
+Duplicate elements retain their row multiplicity, including through SET and
+CREATE with or without RETURN. Native SQL-array inputs keep their existing path.
+
+No schema migration is required. The dynamic path materializes a SQL JSONB array
+for each input value; this change does not introduce an execution budget or
+qualify large-list performance. Stored JSON cannot recover type information
+already lost during serialization. Validation is recorded in the
+[completion ledger](variance_findings_priority_complete.md#dawgs-042-property-list-unwind--2026-10-29).
+
 ### PostgreSQL integer conversion
 
 `toInteger` truncates numeric inputs toward zero: `1.9` becomes `1`, `-1.5`

@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **50 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **51 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -58,6 +58,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 52 | DAWGS-035 | Reproduced, repaired and live validated | Optimizer dependencies include node and relationship variables consumed by pattern predicates, keeping unresolved bindings pinned. Deferred MATCH filters are materialized before mutations. All 19 shared variants pass on both backends and in both PostgreSQL compiler modes, including exact mutation state and writes without RETURN; validation retries are recorded below. |
 | 53 | DAWGS-046 | Reproduced, repaired and live validated | Traversal frames read the preceding materialized input instead of their enclosing WITH output. Literal WITH projections preserve duplicate and empty streams. All 33 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including complete SET/CREATE post-state and writes without RETURN. |
 | 54 | DAWGS-047 | Reproduced, repaired and live validated | Nested ORDER BY aliases expand through binding identities with preserved expression grouping; bare UNWIND inputs are qualified to avoid output-alias capture. DISTINCT carries hidden sort keys without changing visible columns or pagination. All 36 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact SET/CREATE post-state. See below. |
+| 55 | DAWGS-042 | Reproduced, repaired and live validated | Property-list UNWIND preserves JSON value types through direct properties, WITH aliases and nested lists. Pending inputs are materialized before SET, retaining duplicates and empty-input behavior. All 46 shared variants pass on Neo4j and in both PostgreSQL compiler modes, plus concrete committed-property checks. Complete backend qualification and formatter-fixture correction are recorded below. |
 
 ## Original queue details for completed actions
 
@@ -115,6 +116,7 @@ These describe the original requested action; completion status and actual outco
 | 52 | [DAWGS-035](variance_findings.md#dawgs-035) — Optimizer pattern reordering ignores pattern-predicate dependencies | Q | Repair | M | Include pattern-predicate dependencies in safe clause reordering; test that unresolved bindings remain pinned. |
 | 53 | [DAWGS-046](variance_findings.md#dawgs-046) — WITH → MATCH → WITH builds a self-referencing CTE | Q | Repair | M | Fix read-only WITH/MATCH/WITH frame construction and out-of-scope/self CTE references. |
 | 54 | [DAWGS-047](variance_findings.md#dawgs-047) — ORDER BY alias expressions and internal-name collisions | Q | Repair | M | Rewrite nested ORDER BY alias expressions safely and separate user identifiers from internal binding names. |
+| 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
 
 ## Implementation and validation notes
 
@@ -1253,4 +1255,97 @@ under `.coverage/dawgs047/`; credentials are excluded from evidence.
 
 The active queue now has **54 unfinished / 50 completed actions**.
 **DAWGS-042 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
+
+
+### DAWGS-042 property-list UNWIND — 2026-10-29
+
+Order **55**, Q / Repair / M.
+
+The retained `MATCH (n) UNWIND n.arr AS x RETURN x` shape passed extracted text
+to PostgreSQL `unnest`. `translateUnwind` now preserves direct property JSON and
+carried JSONB values, expands one list level with `jsonb_array_elements`, and
+materializes a `jsonb[]` for the existing UNWIND source renderer. The binding's
+JSONB element type reaches arithmetic, Boolean, text, projection and write
+consumers. Empty, missing and null inputs yield zero rows; dynamic non-list
+scalars yield a single row. Nested lists remain values until another UNWIND
+consumes them. Native SQL arrays retain their existing renderer and types.
+There is no schema change or exported interface change.
+
+The new direct `UNWIND … SET` unit control also exposed a pending-input defect:
+updates could reference the UNWIND binding without ever emitting its source.
+Before rendering updates, pending UNWIND inputs are now projected into a CTE,
+retaining duplicates and zero-row inputs. CREATE keeps its existing input-row
+materialization. This does not establish sequential evaluation of expressions
+that read earlier writes; the DAWGS-045 follow-up remains open.
+
+`property_unwind_shapes.json` supplies **46 shared variants**: node/relationship
+arrays, parentheses, repeated WITH aliases, one-level and nested expansion,
+scalar values, exact duplicate cardinality, OPTIONAL MATCH nulls, missing/empty
+lists, typed consumers, filtering, DISTINCT, aggregation, pagination and later
+MATCH. SET and CREATE run with and without RETURN and assert complete original
+node/relationship records, unchanged direction/kind/role/missing-property decoys
+and exact created values/counts. Direct SET checks row preservation and empty
+mutation behavior. All shared assertions are backend-equivalent.
+`TestPostgreSQLPropertyUnwindCompilerModes` executes the same corpus in both
+compiler modes. `TestPropertyUnwind` adds **54 committed-property cases** across
+node and relationship inputs, direct expansion, WITH aliases and collected-list
+expansion. These check concrete Go element types, exact integers above 2^53 and
+both signed 64-bit limits, floats, Booleans, JSON-looking strings and scalar,
+empty and missing inputs.
+
+The original-source live overlay fails **all 46 variants in each PostgreSQL
+compiler mode**. Seven new translation regressions also fail against the original
+source in each mode and pass after repair. Parser/analyzer mutation cases and the
+regenerated `property_unwind.sql` golden file cover the shared query shapes;
+focused translator, SQL-fixture, analyzer and frontend unit suites pass.
+Race-enabled live captures pass all **46 Neo4j variants**, **92 PostgreSQL
+compiler-mode variants** and **46 PostgreSQL default-runner variants**, plus
+the 54 committed-property cases on each backend.
+
+The dynamic path allocates an SQL JSONB array per input value before unnesting.
+The original direct-property path errors instead of producing usable results,
+so it supplies no valid performance baseline. Large-list runtime, allocations
+and peak memory are unmeasured; no new execution resource policy is claimed.
+Native-array expressions retain their established coercion rules, including
+coalesce expressions already converted to native arrays before UNWIND.
+Stored JSON cannot restore integral-float or temporal type information lost at
+serialization. Validation captures are under `.coverage/dawgs042/`; credentials
+are excluded from evidence.
+
+The first PostgreSQL `make test_all` stops after the unit stage because the
+new parser mutation queries use noncanonical keyword case, spacing and implicit
+sort directions. The complete Neo4j integration run passes 42 of 43 packages
+and fails the same formatter package. Canonicalizing only the new mutation
+source queries fixes this fixture error. Final race-enabled formatter, analyzer
+and frontend unit reruns pass, as does the complete Neo4j integration-tagged
+formatter package rerun. The other 42 Neo4j packages, including the full shared
+integration suite, passed in the aggregate run. The Neo4j BDD gate passes with
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**. Lint, Go formatting and `git diff --check` pass.
+
+The fresh PostgreSQL `make test_all` passed all **43 unit packages** before
+being interrupted during integration validation. Its unit statement coverage is
+**33,200 / 49,522 (67.0409%)**, up from **33,171 / 49,489 (67.0270%)**.
+Resuming the required integration and BDD stages separately completes the gate:
+PostgreSQL `make test_integration` passes all **43 tested packages**, and
+`make test_bdd_integration` passes **17 enforced scenarios / zero enforced
+failures**, retaining **18 report-only compatibility failures**. No repair
+changes were needed during this final qualification.
+
+Fresh Neo4j checks also pass all **46 shared variants**, the **54 committed-property
+cases**, and its BDD gate with **17 enforced scenarios / zero enforced failures**
+and **18 report-only compatibility failures**. The earlier complete Neo4j
+integration run and successful formatter-package rerun remain the full-backend
+qualification. Final lint, touched-file formatting verification and
+`git diff --check` pass. Captures are under `.coverage/dawgs042/`, including
+`pg-integration-resumed.log`, `pg-bdd-resumed.log`, `neo-templates-resumed.log`,
+`neo-resumed.log`, `neo-bdd-resumed.log` and `lint-resumed.log`.
+
+Runs use the supplied backend connection separately, `TZ=Etc/UTC CGO_ENABLED=1
+CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, with
+sequential BDD report writes. Credentials are excluded from evidence.
+
+The active queue now has **53 unfinished / 51 completed actions**.
+**DAWGS-043 is the next implementation item.** Earlier pending repairs and
 separate follow-ups retain their existing status.

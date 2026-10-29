@@ -1388,6 +1388,328 @@
         "query": "match (n:NodeKind1) with n, n.k as i0 order by i0 + 0 desc limit 1 create (:NodeKind2 {k: n.k})",
         "fitness": 5
       }
+    },
+    {
+      "name": "Property UNWIND 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind (n.arr) as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' with n.arr as xs unwind xs as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' with n.arr as xs with xs as ys unwind ys as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return x + 1 as value order by value asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 6",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x where x > 1 return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 7",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return distinct x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 8",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.text as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 9",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.flags as x return x and true as value order by value asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 10",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.floats as x return x / 2 as value order by value asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 11",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.single as x return x"
+      }
+    },
+    {
+      "name": "Property UNWIND 12",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.tag as x return x"
+      }
+    },
+    {
+      "name": "Property UNWIND 13",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.keep as x return x"
+      }
+    },
+    {
+      "name": "Property UNWIND 14",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' with collect(n.arr) as lists unwind lists as xs unwind xs as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 15",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind [1, 1] as duplicate unwind n.arr as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 16",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x order by x asc skip 1 limit 1 return x"
+      }
+    },
+    {
+      "name": "Property UNWIND 17",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x match (m:NodeKind2) where m.role = 'target' return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 18",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return collect(distinct x)"
+      }
+    },
+    {
+      "name": "Property UNWIND 19",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x return x"
+      }
+    },
+    {
+      "name": "Property UNWIND 20",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x return x"
+      }
+    },
+    {
+      "name": "Property UNWIND 21",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) unwind n.arr as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 22",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 23",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' with r.arr as xs unwind xs as x return x + 1 as value order by value asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 24",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x where x = 1 match (t:NodeKind2) where t.role = 'target' set t.value = x + 10"
+      }
+    },
+    {
+      "name": "Property UNWIND 25",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x with r, x where x = 3 set r.value = x + 10"
+      }
+    },
+    {
+      "name": "Property UNWIND 26",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x create (c:NodeKind2 {value: x})"
+      }
+    },
+    {
+      "name": "Property UNWIND 27",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x create (c:NodeKind2 {value: x})"
+      }
+    },
+    {
+      "name": "Property UNWIND 28",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x create (c:NodeKind2 {value: x})"
+      }
+    },
+    {
+      "name": "Property UNWIND 29",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x create (c:NodeKind2 {value: x})"
+      }
+    },
+    {
+      "name": "Property UNWIND 30",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x where x = 1 match (t:NodeKind2) where t.role = 'target' set t.value = x + 10 return t.value"
+      }
+    },
+    {
+      "name": "Property UNWIND 31",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x with r, x where x = 3 set r.value = x + 10 return r.value"
+      }
+    },
+    {
+      "name": "Property UNWIND 32",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x create (c:NodeKind2 {value: x}) return c.value as value order by value asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 33",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x create (c:NodeKind2 {value: x}) return c.value as value order by value asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 34",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x create (c:NodeKind2 {value: x}) return c"
+      }
+    },
+    {
+      "name": "Property UNWIND 35",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x create (c:NodeKind2 {value: x}) return c"
+      }
+    },
+    {
+      "name": "Property UNWIND 36",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x set n.value = x > 0"
+      }
+    },
+    {
+      "name": "Property UNWIND 37",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x set r.value = x > 0"
+      }
+    },
+    {
+      "name": "Property UNWIND 38",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x set n.value = 9"
+      }
+    },
+    {
+      "name": "Property UNWIND 39",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x set n.value = 9"
+      }
+    },
+    {
+      "name": "Property UNWIND 40",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x set n.value = x > 0 return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 41",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x set r.value = x > 0 return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 42",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x set n.value = 9 return n"
+      }
+    },
+    {
+      "name": "Property UNWIND 43",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x set n.value = 9 return n"
+      }
+    },
+    {
+      "name": "Property UNWIND 44",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as xs unwind xs as x return x order by x asc"
+      }
+    },
+    {
+      "name": "Property UNWIND 45",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) where n.tag = 'absent' unwind n.arr as x return x"
+      }
+    },
+    {
+      "name": "Property UNWIND 46",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind2) where n.tag = 'target' unwind n.keep as x return x"
+      }
     }
   ]
 }

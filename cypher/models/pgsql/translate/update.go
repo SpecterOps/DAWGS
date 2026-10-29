@@ -58,6 +58,10 @@ func (s *Translator) translateUpdates() error {
 		return err
 	}
 
+	if err := s.materializeUpdateUnwinds(); err != nil {
+		return err
+	}
+
 	for _, updateClause := range currentQueryPart.mutations.Updates.Values() {
 		writeBinding, err := s.scope.DefineNew(pgsql.Scope)
 		if err != nil {

@@ -192,3 +192,8 @@ cast and aggregate consumers, DISTINCT sort-key staging and pagination, includin
 hidden-key/user-alias collisions and a paginated SET continuation. Parser/analyzer
 mutation cases and the shared `order_alias_shapes` templates supply complementary
 formatting and live semantic coverage.
+
+`property_unwind.sql` covers JSONB-preserving node/relationship property expansion,
+WITH aliases, nested UNWIND, typed consumers, scalar/null/empty inputs and duplicate
+rows. SET and CREATE cases include writes without RETURN. Direct SET cases pin
+materialization of pending UNWIND inputs before update rendering.

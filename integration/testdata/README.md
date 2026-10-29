@@ -379,3 +379,13 @@ Ordered assertions distinguish SQL failures from silent order changes. SET and
 CREATE variants check complete original node records, creation values/cardinality
 and empty relationship state, with and without RETURN. PostgreSQL runs the same
 variants in both compiler modes.
+
+`property_unwind_shapes.json` checks node/relationship property lists, WITH aliases,
+nested collection expansion, exact duplicate cardinality, arithmetic/text/Boolean
+consumers, pagination, scalar inputs, empty/missing inputs and OPTIONAL MATCH nulls.
+SET and CREATE variants run with and without RETURN and check complete fixture
+state, unchanged direction/kind/property/missing-property decoys and created
+values/counts. Direct UNWIND-to-SET checks pending input rows and empty mutations.
+PostgreSQL executes all 46 variants in both compiler modes. `TestPropertyUnwind`
+checks committed node/relationship properties and actual Go element types,
+including both signed 64-bit limits, JSON-looking strings, scalar and empty inputs.

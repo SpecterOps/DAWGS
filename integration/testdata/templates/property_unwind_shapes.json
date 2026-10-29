@@ -1,0 +1,4397 @@
+{
+  "node_kinds": [
+    "UnwindCreated"
+  ],
+  "families": [
+    {
+      "name": "property lists and mutations",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "UnwindNode"
+            ],
+            "properties": {
+              "tag": "a",
+              "arr": [
+                1,
+                2,
+                2
+              ],
+              "text": [
+                "1",
+                "true",
+                "[1, 2]",
+                "\"q\""
+              ],
+              "flags": [
+                true,
+                false
+              ],
+              "floats": [
+                1.25,
+                2.5
+              ],
+              "single": 7
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "UnwindNode"
+            ],
+            "properties": {
+              "tag": "b",
+              "arr": []
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "UnwindNode"
+            ],
+            "properties": {
+              "tag": "missing"
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "UnwindOther"
+            ],
+            "properties": {
+              "tag": "decoy",
+              "arr": [
+                9
+              ]
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "UnwindTarget"
+            ],
+            "properties": {
+              "tag": "target",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "role",
+            "kinds": [
+              "UnwindTarget"
+            ],
+            "properties": {
+              "tag": "role",
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "id": "kind",
+            "kinds": [
+              "UnwindOther"
+            ],
+            "properties": {
+              "tag": "kind",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "absent",
+            "kinds": [
+              "UnwindTarget"
+            ],
+            "properties": {
+              "tag": "absent",
+              "keep": true
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "target",
+            "kind": "UnwindEdge",
+            "properties": {
+              "role": "target",
+              "arr": [
+                3,
+                4
+              ]
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "a",
+            "kind": "UnwindEdge",
+            "properties": {
+              "role": "target",
+              "arr": [
+                9
+              ]
+            }
+          },
+          {
+            "start_id": "a",
+            "end_id": "role",
+            "kind": "UnwindEdge",
+            "properties": {
+              "role": "keep",
+              "arr": [
+                9
+              ]
+            }
+          },
+          {
+            "start_id": "a",
+            "end_id": "kind",
+            "kind": "UnwindOtherEdge",
+            "properties": {
+              "role": "target",
+              "arr": [
+                9
+              ]
+            }
+          },
+          {
+            "start_id": "a",
+            "end_id": "absent",
+            "kind": "UnwindEdge",
+            "properties": {
+              "arr": [
+                9
+              ]
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node values",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "parenthesized",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND (n.arr) AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "carried alias",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' WITH n.arr AS xs UNWIND xs AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "repeated alias",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' WITH n.arr AS xs WITH xs AS ys UNWIND ys AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "arithmetic",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x RETURN x + 1 AS value ORDER BY value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ],
+              [
+                3
+              ],
+              [
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "name": "filter",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x WITH x WHERE x > 1 RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "distinct",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x RETURN DISTINCT x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "text types",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.text AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "\"q\""
+              ],
+              [
+                "1"
+              ],
+              [
+                "[1, 2]"
+              ],
+              [
+                "true"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "boolean types",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.flags AS x RETURN x AND true AS value ORDER BY value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                false
+              ],
+              [
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "float types",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.floats AS x RETURN x / 2 AS value ORDER BY value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0.625
+              ],
+              [
+                1.25
+              ]
+            ]
+          }
+        },
+        {
+          "name": "scalar property",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.single AS x RETURN x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                7
+              ]
+            ]
+          }
+        },
+        {
+          "name": "scalar string",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.tag AS x RETURN x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "a"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "scalar boolean",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.keep AS x RETURN x"
+          },
+          "assert": {
+            "row_values": []
+          }
+        },
+        {
+          "name": "nested collection",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' WITH collect(n.arr) AS lists UNWIND lists AS xs UNWIND xs AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "cartesian duplicate rows",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND [1,1] AS duplicate UNWIND n.arr AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "carried pagination",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x WITH x ORDER BY x SKIP 1 LIMIT 1 RETURN x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "later match",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x MATCH (m:UnwindTarget) WHERE m.role = 'target' RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "recollect",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x RETURN collect(DISTINCT x)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                [
+                  1,
+                  2
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty list",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'b' UNWIND n.arr AS x RETURN x"
+          },
+          "assert": {
+            "row_values": []
+          }
+        },
+        {
+          "name": "missing property",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'missing' UNWIND n.arr AS x RETURN x"
+          },
+          "assert": {
+            "row_values": []
+          }
+        },
+        {
+          "name": "all inputs",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) UNWIND n.arr AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "edge values",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' UNWIND r.arr AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ],
+              [
+                4
+              ]
+            ]
+          }
+        },
+        {
+          "name": "edge alias",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' WITH r.arr AS xs UNWIND xs AS x RETURN x + 1 AS value ORDER BY value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                4
+              ],
+              [
+                5
+              ]
+            ]
+          }
+        },
+        {
+          "name": "node set no return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x WITH x WHERE x = 1 MATCH (t:UnwindTarget) WHERE t.role = 'target' SET t.value = x + 10"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": 11
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge set no return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' UNWIND r.arr AS x WITH r,x WHERE x = 3 SET r.value = x + 10"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ],
+                      "value": 13
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node create no return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x CREATE (c:UnwindCreated {value:x})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UnwindCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN n.value AS value ORDER BY value",
+              "assert": {
+                "row_values": [
+                  [
+                    1
+                  ],
+                  [
+                    2
+                  ],
+                  [
+                    2
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge create no return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' UNWIND r.arr AS x CREATE (c:UnwindCreated {value:x})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UnwindCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN n.value AS value ORDER BY value",
+              "assert": {
+                "row_values": [
+                  [
+                    3
+                  ],
+                  [
+                    4
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "b empty create no return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'b' UNWIND n.arr AS x CREATE (c:UnwindCreated {value:x})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "missing empty create no return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'missing' UNWIND n.arr AS x CREATE (c:UnwindCreated {value:x})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "node set return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x WITH x WHERE x = 1 MATCH (t:UnwindTarget) WHERE t.role = 'target' SET t.value = x + 10 RETURN t.value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                11
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": 11
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge set return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' UNWIND r.arr AS x WITH r,x WHERE x = 3 SET r.value = x + 10 RETURN r.value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                13
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ],
+                      "value": 13
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node create return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x CREATE (c:UnwindCreated {value:x}) RETURN c.value AS value ORDER BY value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UnwindCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN n.value AS value ORDER BY value",
+              "assert": {
+                "row_values": [
+                  [
+                    1
+                  ],
+                  [
+                    2
+                  ],
+                  [
+                    2
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge create return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' UNWIND r.arr AS x CREATE (c:UnwindCreated {value:x}) RETURN c.value AS value ORDER BY value"
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ],
+              [
+                4
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:UnwindCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN n.value AS value ORDER BY value",
+              "assert": {
+                "row_values": [
+                  [
+                    3
+                  ],
+                  [
+                    4
+                  ]
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "b empty create return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'b' UNWIND n.arr AS x CREATE (c:UnwindCreated {value:x}) RETURN c"
+          },
+          "assert": {
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "missing empty create return",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'missing' UNWIND n.arr AS x CREATE (c:UnwindCreated {value:x}) RETURN c"
+          },
+          "assert": {
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:UnwindCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "node direct set False",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x SET n.value = x > 0"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7,
+                      "value": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge direct set False",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' UNWIND r.arr AS x SET r.value = x > 0"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ],
+                      "value": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "b direct empty set False",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'b' UNWIND n.arr AS x SET n.value = 9"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "missing direct empty set False",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'missing' UNWIND n.arr AS x SET n.value = 9"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node direct set True",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS x SET n.value = x > 0 RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7,
+                      "value": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge direct set True",
+          "vars": {
+            "query": "MATCH (n:UnwindNode)-[r:UnwindEdge]->(m:UnwindTarget) WHERE n.tag = 'a' AND r.role = 'target' UNWIND r.arr AS x SET r.value = x > 0 RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ],
+              [
+                4
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ],
+                      "value": true
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "b direct empty set True",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'b' UNWIND n.arr AS x SET n.value = 9 RETURN n"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "missing direct empty set True",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'missing' UNWIND n.arr AS x SET n.value = 9 RETURN n"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "arr": [
+                        1,
+                        2,
+                        2
+                      ],
+                      "text": [
+                        "1",
+                        "true",
+                        "[1, 2]",
+                        "\"q\""
+                      ],
+                      "flags": [
+                        true,
+                        false
+                      ],
+                      "floats": [
+                        1.25,
+                        2.5
+                      ],
+                      "single": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "arr": []
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "UnwindNode"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "decoy",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "UnwindOther"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "absent",
+                    "kinds": [
+                      "UnwindTarget"
+                    ],
+                    "props": {
+                      "tag": "absent",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "target",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        3,
+                        4
+                      ]
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "a",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "role",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "role": "keep",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind",
+                    "kind": "UnwindOtherEdge",
+                    "props": {
+                      "role": "target",
+                      "arr": [
+                        9
+                      ]
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "absent",
+                    "kind": "UnwindEdge",
+                    "props": {
+                      "arr": [
+                        9
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "repeated unwind scalar",
+          "vars": {
+            "query": "MATCH (n:UnwindNode) WHERE n.tag = 'a' UNWIND n.arr AS xs UNWIND xs AS x RETURN x ORDER BY x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "optional null input",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:UnwindNode) WHERE n.tag = 'absent' UNWIND n.arr AS x RETURN x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "scalar boolean value",
+          "vars": {
+            "query": "MATCH (n:UnwindTarget) WHERE n.tag = 'target' UNWIND n.keep AS x RETURN x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                true
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
