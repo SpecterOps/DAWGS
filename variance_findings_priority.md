@@ -2,7 +2,7 @@
 
 Prepared on **2026-10-22** from [variance_findings.md](variance_findings.md), validated against checkout **`0bf83edb8155d915c55f559bae212a4526e4607f`**. This document adds engineering judgment and delivery order to that evidence. It preserves the underlying dispositions: **90 retained findings, 4 needing runtime validation, 10 contract questions, and 9 resolved original findings**. The 22 additional observations have a separate queue.
 
-**Prioritize the confirmed deletion, schema-selection and pool-acquisition repairs, the pending regex migration decision, and the selected open-ended traversal implementation.** The largest sustained work is compiler semantics: row identity, predicate lifetime, type preservation, and traversal correctness. Smaller utility and error-handling fixes can ship while those programs develop.
+**Prioritize the confirmed schema-selection and pool-acquisition repairs, the pending regex migration decision, and the selected open-ended traversal implementation.** The largest sustained work is compiler semantics: row identity, predicate lifetime, type preservation, and traversal correctness. Smaller utility and error-handling fixes can ship while those programs develop.
 
 ## Priority and sizing rules
 
@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **56 items: 5 P1, 42 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **48 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **55 items: 4 P1, 42 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **49 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -45,52 +45,14 @@ The original 36 P1 rows formed several parallel work packages. Start the first a
 
 ## Open work ledger
 
-Completed actions, original queue details and their implementation/validation notes have moved to the [completion ledger](variance_findings_priority_complete.md). These five work items still have pending repairs or decisions. Reproduction and design completion do not close their runtime defects. Credentials are excluded from evidence.
+Completed actions, original queue details and their implementation/validation notes have moved to the [completion ledger](variance_findings_priority_complete.md). These four work items still have pending repairs or decisions. Reproduction and design completion do not close their runtime defects. Credentials are excluded from evidence.
 
 | Order | Finding | Status | Work and validation |
 | ---: | --- | --- | --- |
-| 2 | DAWGS-039 | Reproduction complete; repair open | PostgreSQL in both optimizer modes commits plain and DETACH DELETE with one node and one stored orphan edge remaining. Both roll back correctly. Neo4j rejects connected-node plain DELETE at commit and correctly detaches on DETACH DELETE. The separate parent trigger deletes another graph's edge when explicit endpoint IDs overlap. See the controlled fixtures below. |
 | 3 | DAWGS-063 | Reproduction complete; repair open | A fresh PostgreSQL manager selecting an existing graph by name through `ReadTransaction` drops both node and edge property indexes and uniqueness constraints (four objects total). The call succeeds and returns count 0. Selection/schema-reconciliation separation remains to implement. |
 | 14 | DAWGS-007 | Downstream audit and migration decision — pending | Preserve the current PostgreSQL substring-matching default while auditing downstream raw and parameterized regex usage, including negated filters and mutation targets. Decide the migration policy before changing matching scope. Assess literal/parameter escaping separately because its correction can also change results. |
 | 23 | DAWGS-019 | Design action complete; runtime repair open | Selected complete traversal semantics with explicit resource failure. A controlled chain confirms silent truncation in both PostgreSQL compiler modes: open queries omit depths 16/17 and SET/CREATE affect 15 rather than 17 rows. The design records the API guarantee, versioned migration, L implementation scope and resource/semantic acceptance gates. A separate optimized all-shortest scalar discrepancy remains open. See the policy and evidence below. |
 | 25 | DAWGS-065 | Reproduction complete; repair open | Live PostgreSQL probes confirm the nested acquisition. On a verified one-connection pool, CreateNode with an uncached kind waits its full context budget and returns `context deadline exceeded` without committing. With all connections held by registering transactions, one registration holds the schema write lock while waiting for a second connection, others block on the lock, and an unrelated reader holding its own connection stalls until a registration context expires. MapKinds misses wedge through the nested read path; cached-kind concurrency at the pool maximum completes. The probes are pinned as bounded driver-scoped regressions the connection-ownership repair must invert. See below. |
-
-### DAWGS-039 controlled fixture and outcome — 2026-10-22
-
-Use a disposable PostgreSQL graph with node kind `VarianceDeleteNode` and relationship kind `VarianceDeleteEdge`. Create two nodes and one outbound edge, equivalent to:
-
-```cypher
-CREATE (:VarianceDeleteNode {role: 'target'})
-       -[:VarianceDeleteEdge]->(:VarianceDeleteNode {role: 'survivor'})
-```
-
-Reset to this fixture before each check. Execute each query in a separate write transaction, consuming its result and checking the transaction/commit error:
-
-```cypher
-MATCH (n:VarianceDeleteNode {role: 'target'}) DELETE n
-MATCH (n:VarianceDeleteNode {role: 'target'}) DETACH DELETE n
-```
-
-For each query, repeat once with normal commit and once with a sentinel error returned from the transaction delegate after result consumption. On PostgreSQL repeat the whole matrix with `pg.SetOptimizedTranslation(false)` and `true`. Inspect physical storage through `SELECT count(*) FROM node WHERE graph_id = $1` and the equivalent query over `edge`; a Cypher relationship match would hide orphan edges. On Neo4j inspect fixture-label node and relationship counts after the transaction.
-
-| Backend / path | Commit outcome | Persisted nodes / edges | Forced rollback nodes / edges |
-| --- | --- | --- | --- |
-| PostgreSQL plain DELETE, either optimizer mode | Success (incorrect) | 1 / 1; stored edge has a missing endpoint | 2 / 1 |
-| PostgreSQL DETACH DELETE, either optimizer mode | Success with orphan edge (incorrect) | 1 / 1 | 2 / 1 |
-| Neo4j plain DELETE | `Neo.ClientError.Schema.ConstraintValidationFailed` at commit | 2 / 1 | 2 / 1 |
-| Neo4j DETACH DELETE | Success | 1 / 0 | 2 / 1 |
-
-For the separate parent-trigger fixture, create graph A with nodes `a,b` and edge `a→b`. Create graph B with nodes `a,c`, deliberately reusing A's explicit `a.id`, and edge `a→c`. The shared node can be inserted without altering kinds/properties using:
-
-```sql
-INSERT INTO node (id, graph_id, kind_ids, properties)
-SELECT id, $graph_b, kind_ids, properties
-FROM node WHERE graph_id = $graph_a AND id = $shared_id;
-
-DELETE FROM node WHERE graph_id = $graph_a AND id = $shared_id;
-```
-
-After deletion A has **1 node / 0 edges**; B has **2 nodes / 0 edges**. B should retain its edge. Repeating the parent deletion inside an explicit SQL transaction and rolling it back restores **2 nodes / 1 edge in each graph**. This confirms the previously source-only parent-delete caveat under resolved DAWGS-062; it does not reopen graph-partition routing. Repair must preserve plain-DELETE rejection, implement DETACH cleanup on partition paths, and scope parent-trigger edge removal by graph as well as endpoint ID. All probe graphs and their partitions were removed after inspection.
 
 ### DAWGS-063 controlled fixture and outcome — 2026-10-22
 
@@ -196,13 +158,12 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 56 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 55 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
-### P1: Start first — 5 items
+### P1: Start first — 4 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 2 | [DAWGS-039](variance_findings.md#dawgs-039) — Plain DELETE silently detaches connected nodes | Q | Repair | M | Repair the confirmed orphan-edge and cross-graph parent-trigger defects; preserve rollback and backend-specific plain/DETACH DELETE behavior. Controlled evidence is recorded above. |
 | 3 | [DAWGS-063](variance_findings.md#dawgs-063) — WithGraph drops existing indexes and constraints | D | Repair | M | Separate graph selection from schema reconciliation; preserve existing indexes and constraints during reads. The destructive read-triggered behavior is reproduced above. |
 | 14 | [DAWGS-007](variance_findings.md#dawgs-007) — Regex match is a substring search | Q | Decide | M | Downstream audit and migration decision: preserve the current default, audit raw/parameterized patterns and read/negated/mutation behavior, then choose an opt-in policy or versioned default migration. Assess literal/parameter escaping independently; both corrections can change results. |
 | 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
@@ -214,7 +175,7 @@ The 56 unfinished numbered work items appear once in this queue. Completed actio
 | ---: | --- | :---: | --- | :---: | --- |
 | 54 | [DAWGS-047](variance_findings.md#dawgs-047) — ORDER BY alias expressions and internal-name collisions | Q | Repair | M | Rewrite nested ORDER BY alias expressions safely and separate user identifiers from internal binding names. |
 | 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
-| 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows. Duplicate multi-target delete CTE naming stays closed. |
+| 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows, including the SET-to-DELETE frame control recorded under completed 039. Duplicate multi-target delete CTE naming stays closed. |
 | 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
 | 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
 | 59 | [DAWGS-002](variance_findings.md#dawgs-002) — List slicing returns the upper bound | Q | Contain | S | Reject unsupported slicing explicitly now; full slicing should share list AST/type work with 001. |
@@ -286,7 +247,7 @@ Specific sequencing constraints:
 1. **020 can precede 019.** Exact-length normalization is bounded; the default traversal cap needs a resource/completeness policy, cancellation behavior and performance qualification before it changes.
 2. **030 and 036 have separate failure paths.** An explicit translation error can contain the aggregate panic; declining optimization alone still reaches the generic pattern-predicate defect. Give both explicit completion checks, along with 028/035 predicate ownership.
 3. **041, 045, 043 and 106 are separate promises.** Input-row preservation, Cypher clause order, post-DELETE projection, and Go batch ordering share plumbing but each needs its own acceptance tests. Swapping one flush order does not establish arbitrary caller order.
-4. **063/071 should share graph-selection work.** Preserve fixed partition routing in 062. Test the distinct parent-table trigger caveat as part of 039's connected-node matrix rather than reopening every graph-scoped read.
+4. **063/071 should share graph-selection work.** Preserve fixed partition routing in 062. Preserve DAWGS-039's separate parent/partition trigger and connected-node deletion controls during graph-selection changes.
 5. **051/057 and 101 share representation rules, with different boundaries.** Result decoding must preserve string identity and exact values; import must also produce values accepted by both drivers. 105's numeric-cast API decision does not justify corrupting JSON input while it is pending.
 6. **059, 060, 061, 085 and 086 touch different emitters or rewrite paths.** Share Boolean/type/escaping controls without assuming one formatter patch fixes a hand-built upsert string. The repaired old OR cleanup caller in 059 stays out of the residual impact claim.
 7. **Cancellation and locking need complete lifetimes.** Fixing 072 must retain the originating error; 091 needs a controlled shutdown schedule before adding waits; 099 must avoid a new inversion or uncontrolled allocation cost. Cover early close, cancellation and error draining.
@@ -295,7 +256,7 @@ Specific sequencing constraints:
 
 ## Resolved original findings: regression controls
 
-The nine originally resolved findings and their protection notes are preserved in the [completion ledger](variance_findings_priority_complete.md#resolved-original-findings-keep-as-regression-controls). Keep those controls intact during adjacent work; DAWGS-062's parent-trigger caveat remains part of the open DAWGS-039 repair.
+The nine originally resolved findings and their protection notes are preserved in the [completion ledger](variance_findings_priority_complete.md#resolved-original-findings-keep-as-regression-controls). Keep those controls intact during adjacent work. DAWGS-062's parent-trigger caveat is repaired and covered by the [DAWGS-039 regression evidence](variance_findings_priority_complete.md#dawgs-039-node-delete-semantics-and-graph-scoped-cleanup--2026-10-28).
 
 ## Additional observations: attach to the owning workstream
 

@@ -79,6 +79,11 @@ func formatCreatePartitionTable(name, parent string, graphID int32) string {
 	return builder.String()
 }
 
+func formatCreateNodeDeleteTrigger(name string) string {
+	return join("create trigger delete_node_edges after delete on ", name,
+		" referencing old table as deleted_nodes for each statement execute function delete_node_edges()")
+}
+
 func formatConflictMatcher(propertyNames []string, defaultOnConflict string) string {
 	builder := strings.Builder{}
 	builder.WriteString("on conflict (")

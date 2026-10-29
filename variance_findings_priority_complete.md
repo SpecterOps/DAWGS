@@ -1,14 +1,15 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-28**. This ledger preserves **48 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-28**. This ledger preserves **49 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
-Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (039/063/019/065), and pending decision 007, remain in the active ledger.
+Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
 ## Completion ledger
 
 | Order | Finding | Status | Work and validation |
 | ---: | --- | --- | --- |
 | 1 | DAWGS-084 | Repaired and validated; initial broad-gate failure recorded | Removed the `TestMain` exit override. Untagged scenarios are enforced by default; unsupported upstream cases have explicit `@report-only` tags and still execute. Reports distinguish enforcement and compatibility results. Sequential BDD runs on both backends enforce 10 passing scenarios and expose 18 report-only failures. Race-enabled BDD unit tests and vet pass; package coverage increases from 74.0% to 80.8%, with 100% coverage of gate decisions. Both shared integration suites pass. Initial broad PostgreSQL commands failed on an unchanged timezone-sensitive unit test; later validation under 041 uses a distinct local-location name. |
+| 2 | DAWGS-039 | Repaired and live validated | Plain Cypher DELETE checks remaining incident edges against matched input and complete deletion target sets. DETACH cleanup runs on parent and partition paths and scopes endpoint IDs by graph. Shared complete-state templates, committed rollback fixtures and driver-scoped migration/isolation checks are recorded below. |
 | 4 | DAWGS-041 | Row-stream repair validated; image linker workaround recorded | UPDATE returns only the changed entity; a separate left-joined projection retains the complete input stream, duplicates and null targets. Assignments bind against each target's actual input frame. All 19 shared variants pass on Neo4j and in both PostgreSQL compiler modes; WITH continuation passes on both. Complete PostgreSQL unit tests and both complete backend integration runs pass with the race detector. BDD gates pass on both backends; PostgreSQL's final non-race BDD step needs external linking in this image. Mutation/SQL fixtures, v2 builder expectations, coverage, scope and exact validation conditions are recorded below. |
 | 5 | DAWGS-064 | Repaired and validated; aggregate retry recorded | Framed node/relationship identities retain kind, property names, value types and endpoint boundaries without sorting caller slices. Property hashing frames each key/type/value. Neo4j groups query shapes by structured strings, separating identity/add/remove roles and eliminating digest-only grouping. Focused race tests, vet and live kind-operation/relationship-identity regressions pass on both backends. Existing PostgreSQL relationship-create regression passes. Complete backend validation and the final graph-package retry are recorded below. |
 | 6 | DAWGS-070 | Repaired and validated | Neo4j node-update parameters copy the property map only when deletions exist and represent each deleted key with null, using existing `SET n += p.properties` behavior. Caller maps remain unchanged and rows with different deletions still share one query shape. Shared stored-state regressions pass on both backends; the corrected 1,000-node Neo4j regression and focused race tests pass. Complete integration and BDD checks pass with the recorded environment settings and graph-package retry. |
@@ -64,6 +65,7 @@ These describe the original requested action; completion status and actual outco
 | Order | Finding | Track | Action | Effort | Original next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
 | 1 | [DAWGS-084](variance_findings.md#dawgs-084) — BDD gate ignores upstream failures | V | Enable | M | Establish a useful supported-scenario gate and preserve ordinary Go-test failures. Keep unsupported upstream reporting explicit so the gate can qualify later repairs. |
+| 2 | [DAWGS-039](variance_findings.md#dawgs-039) — Plain DELETE silently detaches connected nodes | Q | Repair | M | Repair the confirmed orphan-edge and cross-graph parent-trigger defects; preserve rollback and backend-specific plain/DETACH DELETE behavior. Controlled evidence is recorded above. |
 | 4 | [DAWGS-041](variance_findings.md#dawgs-041) — SET loses updates and drops rows | Q | Repair | L | Preserve the original input row stream through chained updates so fan-out, repeated targets and null targets cannot lose later writes or rows. |
 | 5 | [DAWGS-064](variance_findings.md#dawgs-064) — Batch de-duplication keys collide | D | Repair | M | Repair remaining typed batch-key/digest distinctions, especially Neo4j add-kind versus remove-kind. The original PostgreSQL endpoint-pair create collision stays closed. |
 | 6 | [DAWGS-070](variance_findings.md#dawgs-070) — Neo4j batch.UpdateNodes ignores property deletions | D | Repair | M | Carry tracked property deletions into Neo4j batch updates; replace the integration expectation that currently preserves the deleted property. |
@@ -113,6 +115,134 @@ These describe the original requested action; completion status and actual outco
 | 53 | [DAWGS-046](variance_findings.md#dawgs-046) — WITH → MATCH → WITH builds a self-referencing CTE | Q | Repair | M | Fix read-only WITH/MATCH/WITH frame construction and out-of-scope/self CTE references. |
 
 ## Implementation and validation notes
+
+### DAWGS-039 node-delete semantics and graph-scoped cleanup — 2026-10-28
+
+PostgreSQL translation retains the Cypher DETACH flag. Plain node DELETE invokes
+`cypher_assert_node_deletable` against the statement snapshot and raises SQLSTATE
+`23503` if incident relationships remain. The check excludes all relationship
+IDs explicitly deleted by the query part and relationships incident to any
+DETACH target, across all input rows. Optional null targets are omitted. Plain
+DELETE materializes the matched input and checks its IDs rather than filtering
+the stored node scan; forced hash-join controls protect unrelated connected
+nodes from premature error evaluation. DETACH and relationship-only deletion
+retain their ordinary data-modifying CTEs. Final DELETE projections remain the
+separate open DAWGS-043 repair.
+
+The statement-level cleanup trigger matches `(graph_id, endpoint_id)` on both
+endpoint probes. Schema assertion installs it on existing node partitions, and
+`CreatePartitionTable` installs it for new node partitions with a separate
+statement in the same transaction, supporting prepared-statement connections. The downgrade removes
+partition triggers before dropping their function. Go node-deletion/batch APIs
+retain cascading cleanup. Existing databases must run `AssertSchema` before
+using the updated compiler. This repair preserves direct partition routing and
+does not introduce endpoint foreign keys or a new concurrent-write integrity
+contract. Input materialization and exclusion ID arrays scale with matched rows;
+no application-throughput improvement is claimed.
+
+The 19 backend-equivalent `delete_node_shapes` variants assert complete surviving
+node and relationship records for inbound/outbound/self-loop cleanup, several
+and repeated targets, explicit relationships across rows, mixed plain/detached
+targets, isolated/missing/null bindings and WITH continuations. All pass on Neo4j
+and in both PostgreSQL optimizer modes. Twelve committed-fixture shapes, each run
+with normal completion and forced rollback, check plain-DELETE rejection,
+DETACH success, explicit relationship targets, self-loops and missing targets.
+PostgreSQL additionally counts physical edge storage so orphaned rows cannot be
+hidden by endpoint joins.
+
+Driver-scoped schema tests cover fresh and repeat-upgraded partitions, parent
+and partition deletes, inbound/outbound/self-loop edges, overlapping node and
+edge IDs in another graph, savepoint rollback and downgrade cleanup. Endpoint
+scan checks compare counters before/after the guard so partition-index creation
+scans do not contaminate the assertion; sequential scans are disabled to require
+indexed access. Existing multi-node batch cleanup and no-edge-sequential-scan
+controls remain in place. Seven new SQL translation cases and six parser/analyzer mutation cases were
+regenerated through `CYSQL_UPDATE_CASES=true` and copied from their respective
+`updated_cases` directories. The pagination mutation fixture uses explicit ASC
+to match canonical formatter output.
+
+A same-part `MATCH (n) SET n.touched = true DELETE n` control exposes an
+existing invalid input-frame reference (`s1`) in the original translator as well
+as this tree. It remains under DAWGS-043. The committed rollback control performs
+SET in an earlier successful statement of the same transaction, then checks that
+plain DELETE rejection rolls that write back; it does not count the unrelated SQL
+failure as successful connected-node rejection.
+
+The final race-enabled `make test` passes all **43 unit packages**. Counting
+repeated coverage locations once, overall coverage increases from the recorded
+DAWGS-046 complete profile's **33,099 / 49,416 (66.9803%)** to
+**33,133 / 49,446 (67.0085%)**. Translator coverage increases from
+**7,211 / 8,979 (80.3096%)** to **7,234 / 9,005 (80.3331%)**. Six focused
+parser/analyzer, formatter, SQL-fixture, translator and PostgreSQL query unit
+packages also pass after fixture regeneration. Initial fixture setup needed an
+explicit ASC for canonical formatter output; its corrected rerun passes.
+
+Neo4j's complete race-enabled `make test_integration` passes all **43 packages**.
+The initial PostgreSQL `make test_all` passes its unit gate and **40 of 43
+integration packages**. Its failures are retained: combining partition creation
+and trigger installation into one SQL string fails on prepared-statement
+connections in two graphbench and two import tests; the added same-part
+SET/DELETE rollback shape also reaches the pre-existing DAWGS-043 input-frame
+failure in both compiler modes. Partition creation now executes two statements
+in one transaction, and the rollback control uses a prior successful statement.
+Final reruns pass all **26 driver-scoped graphbench integration tests**, the full
+import CLI, PostgreSQL driver and PostgreSQL query packages, all **19 shared
+variants per backend/mode**, all **48 PostgreSQL / 24 Neo4j** committed
+completion/rollback executions, and the forced-plan and storage cleanup controls.
+These runs qualify the final source across the backend matrix; the initial
+aggregate PostgreSQL attempt remains non-green in its capture.
+
+Final BDD gates pass on both backends: **17 enforced / 0 failed** each, retaining
+**18 report-only compatibility failures** each. Backend BDD runs
+are sequential and use the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and external
+linking settings. The unit/integration runs use each supplied connection without
+additional image settings. Repository lint, integration-tagged vet, `gofmt` and
+`git diff --check` pass. `make format` cannot find goimports in this session;
+formatting uses gofmt with canonical import blocks on every touched Go file.
+Captures and the final coverage comparison are under `.coverage/delete-*`.
+Credentials are excluded. No production changes follow the final gates.
+
+The active queue now has **55 unfinished / 49 completed actions**. The next
+remaining item by original global order is **DAWGS-063**, separating graph
+selection from schema reconciliation.
+
+### DAWGS-039 controlled fixture and outcome — 2026-10-22
+
+Use a disposable PostgreSQL graph with node kind `VarianceDeleteNode` and relationship kind `VarianceDeleteEdge`. Create two nodes and one outbound edge, equivalent to:
+
+```cypher
+CREATE (:VarianceDeleteNode {role: 'target'})
+       -[:VarianceDeleteEdge]->(:VarianceDeleteNode {role: 'survivor'})
+```
+
+Reset to this fixture before each check. Execute each query in a separate write transaction, consuming its result and checking the transaction/commit error:
+
+```cypher
+MATCH (n:VarianceDeleteNode {role: 'target'}) DELETE n
+MATCH (n:VarianceDeleteNode {role: 'target'}) DETACH DELETE n
+```
+
+For each query, repeat once with normal commit and once with a sentinel error returned from the transaction delegate after result consumption. On PostgreSQL repeat the whole matrix with `pg.SetOptimizedTranslation(false)` and `true`. Inspect physical storage through `SELECT count(*) FROM node WHERE graph_id = $1` and the equivalent query over `edge`; a Cypher relationship match would hide orphan edges. On Neo4j inspect fixture-label node and relationship counts after the transaction.
+
+| Backend / path | Commit outcome | Persisted nodes / edges | Forced rollback nodes / edges |
+| --- | --- | --- | --- |
+| PostgreSQL plain DELETE, either optimizer mode | Success (incorrect) | 1 / 1; stored edge has a missing endpoint | 2 / 1 |
+| PostgreSQL DETACH DELETE, either optimizer mode | Success with orphan edge (incorrect) | 1 / 1 | 2 / 1 |
+| Neo4j plain DELETE | `Neo.ClientError.Schema.ConstraintValidationFailed` at commit | 2 / 1 | 2 / 1 |
+| Neo4j DETACH DELETE | Success | 1 / 0 | 2 / 1 |
+
+For the separate parent-trigger fixture, create graph A with nodes `a,b` and edge `a→b`. Create graph B with nodes `a,c`, deliberately reusing A's explicit `a.id`, and edge `a→c`. The shared node can be inserted without altering kinds/properties using:
+
+```sql
+INSERT INTO node (id, graph_id, kind_ids, properties)
+SELECT id, $graph_b, kind_ids, properties
+FROM node WHERE graph_id = $graph_a AND id = $shared_id;
+
+DELETE FROM node WHERE graph_id = $graph_a AND id = $shared_id;
+```
+
+After deletion A has **1 node / 0 edges**; B has **2 nodes / 0 edges**. B should retain its edge. Repeating the parent deletion inside an explicit SQL transaction and rolling it back restores **2 nodes / 1 edge in each graph**. This confirms the previously source-only parent-delete caveat under resolved DAWGS-062; it does not reopen graph-partition routing. Repair must preserve plain-DELETE rejection, implement DETACH cleanup on partition paths, and scope parent-trigger edge removal by graph as well as endpoint ID. All probe graphs and their partitions were removed after inspection.
+
 
 ### DAWGS-084 implementation and checks — 2026-10-22
 

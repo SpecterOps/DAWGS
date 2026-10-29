@@ -455,6 +455,16 @@ source order, including alternating SET/REMOVE of the same key or label. The `up
 check exact final state, untouched decoys, fan-out and null targets. Assignment expressions retain their existing
 input-frame evaluation; expressions that depend on earlier writes should use a `WITH` boundary between clauses.
 
+Cypher plain `DELETE` rejects a node with remaining incident relationships; explicitly deleting all of those
+relationships in the same query part permits the node deletion. `DETACH DELETE` removes inbound, outbound and
+self-loop relationships together with the node. PostgreSQL cleanup stays within the selected graph, including when
+explicit node IDs overlap between graphs. Schema assertion upgrades cleanup triggers on existing node partitions;
+new partitions receive them on creation. Run `AssertSchema` when upgrading an existing database before using the
+updated compiler. The Go node-deletion and batch APIs retain their cascading behavior.
+The shared `delete_node_shapes` templates check complete surviving node and relationship state on both backends and
+in both PostgreSQL compiler modes. Committed-fixture checks additionally verify rollback, commit errors and physical
+PostgreSQL edge storage. Final DELETE projections and SET-to-DELETE continuations remain tracked separately under DAWGS-043.
+
 PostgreSQL keeps `AND` operands within expressions in `RETURN`, `WITH`, function arguments and `SET`, preserving input
 rows. At `WHERE`, outer conjunctions become filter predicates. The shared `boolean_value_shapes` templates check
 Boolean values, missing properties, node/relationship assignments and exact stored state on both backends and in both

@@ -21,6 +21,15 @@ from s0;
 
 ## Scope Management
 
+Plain node DELETE materializes its input before checking incident relationships.
+The check uses matched input IDs, keeping error evaluation away from unrelated
+stored nodes regardless of the DELETE join plan. Relationship exclusions cover
+all explicitly deleted edges and detached nodes in the query part, including
+other input rows; optional null targets are omitted from those ID arrays.
+The schema helper reads the statement snapshot so data-modifying CTE execution
+order cannot turn a connected-node plain DELETE into a detach. DETACH cleanup
+uses graph-scoped statement triggers on both parent tables and node partitions.
+
 Translation requires some amount of query planning and result dependency negotiation. This translation driver organizes
 openCypher query plans as an incrementally named variable in the SQL translation as `sN` where `N` is the scope's
 frame.

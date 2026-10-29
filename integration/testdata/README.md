@@ -28,6 +28,17 @@ and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each
 post-state entry contains `cypher`, optional `params`, and `assert`.
 
+`delete_node_shapes.json` checks plain deletion of isolated nodes, explicit
+relationship targets, DETACH cleanup of both directions and self-loops, mixed
+plain/detached targets, duplicate input rows, null and missing targets, and WITH
+boundaries. Every variant checks complete surviving node and relationship
+records. PostgreSQL runs every variant in both compiler modes. Separate committed
+fixtures check connected-node rejection, commit and rollback, and physical edge
+counts so endpoint joins cannot hide orphaned storage. Driver-scoped schema
+tests check parent/partition cleanup, repeat upgrades and overlapping IDs across
+graphs; a forced hash-join control checks that deletion guards see only matched
+input rows.
+
 `to_integer_shapes.json` covers numeric truncation toward zero for literals,
 parameters, node/relationship properties, WITH aliases and UNWIND inputs. Cases
 include native float arrays, array parameters, alias continuations, integer and

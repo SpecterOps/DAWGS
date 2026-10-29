@@ -257,6 +257,12 @@ func (s Query) CreatePartitionTable(name, parent string, graphID int32) (model.G
 	if err := s.exec(formatCreatePartitionTable(name, parent, graphID), nil); err != nil {
 		return model.GraphPartition{}, err
 	}
+	// Keep each command separate for pgx connections using prepared statements.
+	if parent == model.NodeTable {
+		if err := s.exec(formatCreateNodeDeleteTrigger(name), nil); err != nil {
+			return model.GraphPartition{}, err
+		}
+	}
 
 	return model.GraphPartition{
 		Name: name,
