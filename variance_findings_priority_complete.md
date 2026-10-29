@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **56 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **57 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -64,6 +64,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 58 | DAWGS-001 | Contained and live validated | The shared parser rejects indexing with a located syntax error and isolates its subtree. Templated read/mutation regressions, both PostgreSQL compiler modes and Neo4j native controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass; statement coverage increases. Full indexing remains separate work. |
 | 59 | DAWGS-002 | Contained and live validated | The shared parser rejects slicing with a located syntax error and isolates its subtree. Templated read/mutation regressions cover omitted, negative, parameterized and chained bounds; both PostgreSQL compiler modes reject before writes and Neo4j native slicing remains supported. Full slicing remains separate work. |
 | 60 | DAWGS-017 | Contained and validated | Standalone CALL returns a located unsupported error instead of a successful nil AST. Parser/template, PostgreSQL repeated-compilation and live rejection controls cover explicit/implicit invocation and YIELD; Neo4j native procedure execution remains available. See below. |
+| 61 | DAWGS-010 | Contained and live validated | Shortest-path expressions return a located parser error, isolating their subtree instead of projecting the terminal node. Templated read/mutation rejection, both PostgreSQL compiler modes, supported MATCH syntax and native Neo4j expression controls are covered below. Full expression support remains separate L work. |
 
 ## Original queue details for completed actions
 
@@ -127,6 +128,7 @@ These describe the original requested action; completion status and actual outco
 | 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
 | 59 | [DAWGS-002](variance_findings.md#dawgs-002) — List slicing returns the upper bound | Q | Contain | S | Reject unsupported slicing explicitly now; full slicing should share list AST/type work with 001. |
 | 60 | [DAWGS-017](variance_findings.md#dawgs-017) — A standalone CALL parses to `(nil, nil)`; formatting that nil query panics | Q | Contain | S | Return an explicit standalone CALL rejection or a nonnil supported AST; never format a successful nil query. |
+| 61 | [DAWGS-010](variance_findings.md#dawgs-010) — shortestPath used as an expression returns a node | Q | Contain | S | Reject unsupported shortestPath expression position instead of returning the terminal node. Full expression support is L feature work. |
 
 ## Implementation and validation notes
 
@@ -1741,3 +1743,62 @@ CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
 GOFLAGS='-ldflags=-linkmode=external'`; credentials are excluded from this ledger.
 BDD report writes are sequential. Final local Markdown links, ledger counts and
 `git diff --check` pass. No Go edits followed the successful aggregate runs.
+
+### DAWGS-010 shortest-path expression containment — 2026-10-29
+
+`AtomVisitor` now rejects shortest-path expressions with the located error
+`shortest-path expressions are not supported`. It ignores the unsupported
+subtree after reporting the error, so endpoint variables cannot replace the
+expression. Both `shortestPath` and `allShortestPaths` are covered. Supported
+MATCH patterns still use their dedicated pattern visitor. This completes the S
+containment action; full expression AST, formatting and execution support remain
+separate L feature work in the active plan.
+
+The frontend matrix applies eight read/mutation templates to both functions and
+three directed/incoming/undirected range shapes, checking explicit rejection
+with unrestricted and default contexts plus the parse/format helper. A separate
+assertion pins the line and column, and six controls preserve named, anonymous
+and optional shortest-path MATCH patterns. Six negative corpus fixtures cover
+RETURN, WITH, SET, CREATE and DELETE. PostgreSQL compile tests issue six shapes
+twice in each compiler mode, requiring the explicit error and empty SQL. Native
+Neo4j rewrite controls preserve the original text and parameters. An
+original-source Go overlay fails the location regression because the old parser
+returns no error; the new parser passes.
+
+Driver-scoped live PostgreSQL tests repeat six rejected queries in both compiler
+modes, including writes before an unsupported RETURN and SET/CREATE/DELETE
+expression consumers. Independent transactions verify the committed fixture's
+exact node names remain unchanged. Neo4j controls create a one-edge fixture in
+a rollback transaction and verify native shortest-path lengths through RETURN,
+WITH and SET. These support boundaries stay driver-scoped; the shared core
+corpus has no backend-specific assertions. README and corpus documentation
+record the boundary and the supported MATCH alternative.
+
+The complete race-enabled unit suite passes all **43 tested packages**.
+Deduplicated statement coverage increases from the DAWGS-017 checkout's recorded
+**33,269 / 49,575 (67.1084%)** to **33,272 / 49,578 (67.1104%)**.
+Frontend coverage increases from **497 / 531 (93.5970%)** to
+**500 / 534 (93.6330%)**; all three added statements are covered.
+Repository lint and touched-file `goimports` pass.
+
+Neo4j's complete **`make test_integration` passes all 43 tested packages**,
+including both shared integration suites and the native shortest-path expression
+controls. Its **`make test_bdd_integration` passes**, with **17 enforced / zero
+failed** and **18 report-only compatibility failures** retained. This BDD run
+finishes before PostgreSQL reaches its BDD stage, keeping report writes
+sequential.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in each race-enabled unit/integration stage and the final BDD gate.
+Both full shared integration suites pass. The new driver controls pass in both
+compiler modes, with repeated explicit rejections and unchanged committed graph
+state. Its BDD gate reports **17 enforced / zero failed**, retaining **18
+report-only compatibility failures**.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`; credentials are
+excluded from this ledger. BDD report writes are sequential. Final local
+Markdown file links, JSON fixture parsing, ledger counts and `git diff --check`
+pass. No Go edits followed the successful aggregate runs. The active queue has
+**47 items** (4 P1, 34 P2, 9 P3), the completion ledger has **57 actions**, and
+**DAWGS-013 is the next implementation item**.

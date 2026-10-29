@@ -194,3 +194,19 @@ func TestRewriteQueryPreservesStandaloneCall(t *testing.T) {
 		})
 	}
 }
+
+func TestRewriteQueryPreservesShortestPathExpressions(t *testing.T) {
+	for _, source := range []string{
+		"MATCH (a), (b) RETURN shortestPath((a)-[:R*]->(b)) AS p",
+		"MATCH (a), (b) RETURN allShortestPaths((a)-[:R*]->(b)) AS p",
+		"MATCH (a), (b) SET a.value = $value RETURN shortestPath((a)-[:R*]->(b)) AS p",
+	} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"value": int64(1)}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}

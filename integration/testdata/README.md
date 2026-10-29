@@ -37,6 +37,13 @@ PostgreSQL driver controls verify repeated errors and unchanged committed graph
 state. Neo4j driver controls execute native standalone procedures, including a
 parameterized invocation. Procedure support boundaries stay driver-scoped.
 
+Shortest-path expressions are rejected explicitly by the shared parser and
+PostgreSQL compiler. A templated parser matrix and negative corpus cover RETURN,
+WITH, WHERE, SET, CREATE and DELETE, including nested scalar consumers. Separate
+driver controls check unchanged committed PostgreSQL state in both compiler
+modes and native Neo4j expression execution. Shortest-path MATCH patterns retain
+their supported syntax. These support boundaries stay driver-scoped.
+
 Mutation cases use `assert: "no_error"` (or another primary result assertion)
 and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each
