@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-28**. This ledger preserves **49 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **50 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -23,7 +23,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 15 | DAWGS-006 | Reproduced, repaired and validated | Boolean operands remain within value expressions; predicate extraction occurs at WHERE. All 19 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact node/relationship post-state. An original-source overlay reproduces the wrong stored Boolean without RETURN. Ten new SQL cases, four parser/analyzer mutation cases and focused unit regressions cover the repair; existing SQL fixtures are unchanged. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. DAWGS-007 remains pending downstream evidence; its regex default is unchanged. |
 | 16 | DAWGS-028 | Reproduced, repaired and validated | Fixed continuation steps retain and render pending predicates over materialized expansion endpoints. All 25 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact paths, duplicate rows and complete mutation post-state. The original-source overlay fails 21 variants per mode. Nine SQL golden cases, four parser/analyzer mutation cases and renderer regressions cover the repair. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
 | 17 | DAWGS-024 | Reproduced, repaired and validated | OPTIONAL MATCH correlates derived matches to numbered input rows and removes the internal identity after the join. All 33 shared variants pass on Neo4j and in both PostgreSQL compiler modes. The original-source overlay fails 25 variants per mode, including excess CREATE post-state without RETURN. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass after correcting canonical spacing in the new parser fixtures. |
-| 18 | DAWGS-026 | Reproduced, repaired and validated | Reused fixed relationships get a fresh SQL edge alias constrained to the original relationship ID. All 35 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 26 variants per mode. SQL, parser/analyzer mutation, path and stored-state controls cover the repair. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
+| 18 | DAWGS-026 | Reproduced, repaired and validated | Reused fixed relationships get a fresh SQL edge alias constrained to the original relationship ID. All 36 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 26 variants per mode. SQL, parser/analyzer mutation, path and stored-state controls cover the repair. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
 | 19 | DAWGS-027 | Reproduced, repaired and validated | Undirected fixed continuations pair near/far endpoint orientations before frame binding. All 30 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the unchanged translator fails 22 variants per PostgreSQL mode. SQL, parser/analyzer mutation, path, self-loop and exact stored-state controls cover the repair. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
 | 20 | DAWGS-031 | Reproduced, repaired and validated | MATCH-local relationship history covers comma-separated parts and consecutive expansions. All 45 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original translator fails 33 enabled / 35 disabled variants. Mixed-step, exact-path, duplicate-input, optional-null and complete mutation-state controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. Fan-out counts and local compilation/EXPLAIN costs are recorded below. |
 | 21 | DAWGS-033 | Reproduced, repaired and validated | Repeated local endpoints require both edge endpoints to equal the node, preserving unrelated input rows. All 32 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original translator fails 21 variants per mode. Exact loop/path identities, duplicate/empty inputs, optional matches and complete mutation-state controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
@@ -57,6 +57,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 51 | DAWGS-036 | Reproduced, repaired and live validated | Resolve MATCH pattern-predicate futures once, retaining type constraints, and evaluate pending filters before another MATCH changes their correlation frame. All 22 new shared variants pass on Neo4j and in both PostgreSQL compiler modes, including repeated predicates and exact mutation-state checks. |
 | 52 | DAWGS-035 | Reproduced, repaired and live validated | Optimizer dependencies include node and relationship variables consumed by pattern predicates, keeping unresolved bindings pinned. Deferred MATCH filters are materialized before mutations. All 19 shared variants pass on both backends and in both PostgreSQL compiler modes, including exact mutation state and writes without RETURN; validation retries are recorded below. |
 | 53 | DAWGS-046 | Reproduced, repaired and live validated | Traversal frames read the preceding materialized input instead of their enclosing WITH output. Literal WITH projections preserve duplicate and empty streams. All 33 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including complete SET/CREATE post-state and writes without RETURN. |
+| 54 | DAWGS-047 | Reproduced, repaired and live validated | Nested ORDER BY aliases expand through binding identities with preserved expression grouping; bare UNWIND inputs are qualified to avoid output-alias capture. DISTINCT carries hidden sort keys without changing visible columns or pagination. All 36 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact SET/CREATE post-state. See below. |
 
 ## Original queue details for completed actions
 
@@ -113,6 +114,7 @@ These describe the original requested action; completion status and actual outco
 | 51 | [DAWGS-036](variance_findings.md#dawgs-036) — A pattern predicate in a MATCH followed by another MATCH gives invalid SQL and drops the predicate's type filter | Q | Repair | L | Bind pattern predicates to valid frames and retain their relationship-type filters when later MATCH clauses are present. |
 | 52 | [DAWGS-035](variance_findings.md#dawgs-035) — Optimizer pattern reordering ignores pattern-predicate dependencies | Q | Repair | M | Include pattern-predicate dependencies in safe clause reordering; test that unresolved bindings remain pinned. |
 | 53 | [DAWGS-046](variance_findings.md#dawgs-046) — WITH → MATCH → WITH builds a self-referencing CTE | Q | Repair | M | Fix read-only WITH/MATCH/WITH frame construction and out-of-scope/self CTE references. |
+| 54 | [DAWGS-047](variance_findings.md#dawgs-047) — ORDER BY alias expressions and internal-name collisions | Q | Repair | M | Rewrite nested ORDER BY alias expressions safely and separate user identifiers from internal binding names. |
 
 ## Implementation and validation notes
 
@@ -1161,4 +1163,94 @@ concurrency. No schema migration or public interface change is required.
 
 The active queue now has **56 unfinished / 48 completed actions**.
 **DAWGS-047 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
+
+### DAWGS-047 ORDER BY alias expressions and binding identity — 2026-10-29
+
+Order **54**, Q / Repair / M. PostgreSQL now resolves aliases nested inside ORDER
+BY expressions through their internal binding identities, substituting grouped
+projection expressions instead of unavailable output names. Parentheses preserve
+precedence when an alias computes arithmetic and is consumed by another
+expression or a cast. Bare materialized inputs retain their qualified frame
+reference, and bare leading-UNWIND inputs gain a qualified column reference so a
+user output alias such as `i0` cannot silently change the sort key.
+
+DISTINCT with ORDER BY carries the computed keys through an inner DISTINCT
+projection, then sorts and paginates outside it. Valid Cypher DISTINCT sort keys
+depend on projected values, so these keys preserve the distinct rows. Generated
+hidden names avoid user projection aliases; hidden keys never appear in result
+columns. This adds sort-key width to the DISTINCT projection and a SQL projection
+boundary; application-scale performance has not been qualified. No schema or
+public API change is required.
+
+`order_alias_shapes.json` supplies **36 backend-equivalent variants** covering
+arithmetic, casts, supported functions, grouped substitution/unary precedence,
+internal-name and quoted aliases, multiple aliases and sort keys, aggregate and
+DISTINCT projections, pagination, materialized inputs and duplicate/empty/null
+streams. Paginated SET and CREATE cases check complete original node records,
+exact created values/cardinality and relationship state, with and without RETURN.
+All **108 backend/mode variant executions** pass. An original-source Go overlay
+fails **31 of 36 variants in each PostgreSQL compiler mode**, reproducing both
+missing-column errors and silently incorrect ordered results. The five passing
+controls are retained unchanged.
+
+Sixteen ordinary compiler checks and six DISTINCT projection/pagination checks
+run across both optimizer modes. Six parser/analyzer mutation cases retain the
+repository's formatter spelling and regenerated fitness values; nine SQL goldens
+follow the existing fixture regeneration workflow. Focused compiler, SQL-fixture,
+analyzer, formatter and shared corpus-audit tests pass, as does repository lint.
+Validation uses each supplied connection separately with
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc` and
+`GOFLAGS='-ldflags=-linkmode=external'`. Credentials are excluded from evidence.
+
+Scope: this repair preserves the existing supported expression set. Exploratory
+`abs` and CASE cases hit existing compiler/frontend rejections and are excluded
+from conformance assertions. A numeric property alias under unary minus,
+`MATCH (n:OrderSource) RETURN n.k AS x ORDER BY -x`, now resolves the alias but
+still fails on PostgreSQL's unsupported `- jsonb` operation. That independent
+unary numeric typing follow-up remains in the active plan; native numeric alias
+negation passes the shared regression. These exploratory failures are separate
+from the original-source overlay's 31 alias/order regressions per mode.
+
+The final-source race-enabled `make test` passes all **43 tested unit packages**.
+Counting duplicate coverage locations once, the final complete unit profile covers
+**33,171 / 49,489 statements (67.0270%)**, retaining **67.0%** at the reported
+precision. Translator coverage is **7,272 / 9,048 (80.3714%)**. The first unit
+capture during implementation also passes; final qualification uses the subsequent
+complete unit run, supplemented by the final affected-package reruns for the
+one-line parenthesized-input qualification follow-up.
+
+The Neo4j-selected integration attempt compiles an intermediate translator while
+the last grouping edits are still underway. Its SQL-fixture package exposes six
+extra-parentheses mismatches in existing boolean/negation/shortest cases. The
+final-source integration-tagged, race-enabled rerun of that complete package
+passes. The initial mismatches remain in the validation capture. The complete shared
+integration package passes on Neo4j, and the final focused capture passes all
+36 variants, including the parenthesized-input follow-up.
+
+The PostgreSQL-selected `make test_all` passes all 43 unit packages and **42 of
+43 integration packages**. Its integration executable predates the final one-line
+qualification fix: the new parenthesized-input variant fails in the default
+shared runner and both explicit compiler modes. No other integration cases fail.
+The complete final-source, integration-tagged, race-enabled shared integration
+package rerun passes, including all three paths. The full PostgreSQL graphbench
+integration package also passes. Together with Neo4j's final SQL-fixture package
+rerun, these affected-package reruns qualify both complete backend matrices while
+retaining the initial aggregate failures in the captures.
+
+Final verbose captures record **36 Neo4j** and **72 PostgreSQL compiler-mode**
+variant passes, plus **36 PostgreSQL default-runner** passes. The shared assertions
+are identical across backends. The final affected-package unit reruns pass;
+combining their profile with the complete unit profile changes neither the
+reported statement totals nor coverage. The merge replaces the changed column
+span of one existing coverage block to avoid double-counting it.
+
+Sequential BDD gates pass on both backends: **17 enforced scenarios, zero
+enforced failures**, with **18 report-only compatibility failures** retained on
+each. Final repository lint, Go formatting and `git diff --check` pass.
+Validation logs, the original-source overlay outcome and coverage summary are
+under `.coverage/dawgs047/`; credentials are excluded from evidence.
+
+The active queue now has **54 unfinished / 50 completed actions**.
+**DAWGS-042 is the next implementation item.** Earlier pending repairs and
 separate follow-ups retain their existing status.
