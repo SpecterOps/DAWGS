@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/drivers/pg/query"
 	"github.com/specterops/dawgs/graph"
@@ -290,7 +290,7 @@ func (s *SchemaManager) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int1
 	if mappedKinds, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
 		return mappedKinds, nil
 	} else {
-		return nil, fmt.Errorf("unable to map kinds: %s", strings.Join(missingKinds.Strings(), ", "))
+		return nil, &pgsql.MissingKindsError{Kinds: missingKinds, KindIDs: mappedKinds}
 	}
 }
 

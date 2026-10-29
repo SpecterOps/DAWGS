@@ -53,6 +53,11 @@ its generation after successful schema assertion and kind refresh. Stable-snapsh
 only for the current physical connection and schema generation, then reinitialized after reset, closure, or generation
 change. For out-of-band schema changes that affect types or generated SQL, reset or recreate the pool before continuing.
 
+PostgreSQL MATCH treats unregistered node labels and relationship types as empty matches without registering them.
+Known relationship-type alternatives remain eligible; label conjunctions, negation and OPTIONAL MATCH retain their
+normal semantics. Lookup, cancellation and database failures still return errors. Plans that depend on missing kinds
+bypass translation retention so later registration is visible; CREATE retains its kind-registration behavior.
+
 Closed pools are collectable after callers release them.
 The pool/runtime registry and runtime's pool reference are weak, so retaining or reusing `Pool.Config()` does not
 retain closed original pools. `Driver.Close` still releases its state synchronously.

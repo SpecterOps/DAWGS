@@ -753,6 +753,9 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 
 // Result contains the translated PostgreSQL statement, parameters, graph target, and optimization diagnostics.
 type Result struct {
+	// HasMissingKinds marks plans that depend on absent kind definitions. Caches must
+	// bypass these plans so a later kind registration can change the match result.
+	HasMissingKinds bool
 	// Statement is the translated PostgreSQL AST.
 	Statement pgsql.Statement
 	// Stages preserves statement boundaries around sequential mutations.
@@ -1664,6 +1667,7 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 		return Result{}, nil, err
 	} else if translated {
 		translator.recordSkippedLowerings()
+		translator.translation.HasMissingKinds = *translator.kindMapper.missingKinds
 		return translator.translation, translator.parameterSources, nil
 	}
 
@@ -1671,6 +1675,7 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 		return Result{}, nil, err
 	} else if translated {
 		translator.recordSkippedLowerings()
+		translator.translation.HasMissingKinds = *translator.kindMapper.missingKinds
 		return translator.translation, translator.parameterSources, nil
 	}
 
@@ -1698,6 +1703,7 @@ func translateOptimized(ctx context.Context, optimizedPlan optimize.Plan, kindMa
 
 	stageWritesBeforeDelete(&translator.translation)
 	translator.recordSkippedLowerings()
+	translator.translation.HasMissingKinds = *translator.kindMapper.missingKinds
 	return translator.translation, translator.parameterSources, nil
 }
 

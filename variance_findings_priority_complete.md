@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **52 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **53 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -60,6 +60,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 54 | DAWGS-047 | Reproduced, repaired and live validated | Nested ORDER BY aliases expand through binding identities with preserved expression grouping; bare UNWIND inputs are qualified to avoid output-alias capture. DISTINCT carries hidden sort keys without changing visible columns or pagination. All 36 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact SET/CREATE post-state. See below. |
 | 55 | DAWGS-042 | Reproduced, repaired and live validated | Property-list UNWIND preserves JSON value types through direct properties, WITH aliases and nested lists. Pending inputs are materialized before SET, retaining duplicates and empty-input behavior. All 46 shared variants pass on Neo4j and in both PostgreSQL compiler modes, plus concrete committed-property checks. Complete backend qualification and formatter-fixture correction are recorded below. |
 | 56 | DAWGS-043 | Repaired and live validated | DELETE reserves a unique CTE name without advancing the input stream; RETURN preserves cardinality and captured values. Earlier SET/CREATE writes run before DELETE through the existing transaction-scoped staged executor. Shared complete-state and commit/rollback regressions pass on Neo4j and in both PostgreSQL compiler modes. Validation and scope are recorded below. |
+| 57 | DAWGS-023 | Repaired and live validated | Unknown match kinds no longer fail compilation or register metadata; conjunctions, alternatives, null predicates and mutation selection retain their semantics. Missing-kind plans bypass both translation caches so later registration is visible. Shared and driver-scoped validation is recorded below. |
 
 ## Original queue details for completed actions
 
@@ -119,6 +120,7 @@ These describe the original requested action; completion status and actual outco
 | 54 | [DAWGS-047](variance_findings.md#dawgs-047) — ORDER BY alias expressions and internal-name collisions | Q | Repair | M | Rewrite nested ORDER BY alias expressions safely and separate user identifiers from internal binding names. |
 | 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
 | 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows, including the SET-to-DELETE frame control recorded under completed 039. Duplicate multi-target delete CTE naming stays closed. |
+| 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
 
 ## Implementation and validation notes
 
@@ -1450,3 +1452,82 @@ zero enforced failures**, retaining **18 report-only compatibility failures**.
 This completes the resumed default `make test_all` stages after the dispatch
 repair. Both backends' full shared suites and BDD gates are qualified; no further
 code changes followed these successful final checks.
+
+### DAWGS-023 unknown match kinds — 2026-10-29
+
+PostgreSQL's production and in-memory kind mappers now report authoritative
+misses through `pgsql.MissingKindsError`, retaining resolved IDs in the error
+while preserving `MapKinds`' strict failure return. Match translation accepts
+only this typed miss; database, cancellation and deadline errors still propagate.
+No error-string matching or kind registration is used for lookup misses.
+
+Node patterns require all labels, so a missing label produces a false constraint.
+Relationship alternatives retain the known IDs and match nothing when none are
+known. Kind predicates use an empty overlap test for impossible conjunctions,
+preserving SQL NULL on optional null entities and correct negation. Count-store
+and aggregate-traversal lowerings share the same resolution rules. Unknown
+`type(r)` string comparisons retain the original string comparison when no ID
+exists. CREATE still asserts its new kinds; strict mutation kind mapping is
+unchanged.
+
+`Result.HasMissingKinds` marks plans that depend on absent kinds, including
+nested aggregate predicate translation. Both compiler and connection-local
+translation caches bypass those results so later registration cannot reuse a
+stale empty-match plan. Registered-kind plans retain their existing cache rules.
+This adds an error type and result diagnostic without changing mapper method
+signatures. Unknown-kind lookups still use the existing cache-refresh connection
+path; DAWGS-065's separate pool-acquisition repair remains open. No throughput
+qualification is claimed for repeated missing-kind lookups.
+
+The shared `unknown_kind_shapes` corpus has **38 backend-equivalent variants**
+covering empty node/edge matches, known-plus-unknown label conjunctions and
+relationship alternatives, bounded ordinary/shortest/all-shortest traversals,
+WHERE and projected predicates, negation, type-name comparisons, OPTIONAL MATCH
+and null entities. SET, DELETE and CREATE-from-empty-input variants check complete
+surviving node and relationship records; a negated SET control checks selected
+writes. PostgreSQL executes every variant in both compiler modes. An overlay of
+checkout `c2b206b630e498f6eea1a72a26ca9643aacfcbb6` fails all
+**38 variants in each PostgreSQL mode**
+with lookup/translation errors. No shared assertions or backend skips were weakened.
+
+Unit controls preserve originating lookup errors, verify strict versus match
+resolution and CREATE registration, and qualify both translation caches before
+and after registering a kind. A live PostgreSQL driver regression checks the
+kind table directly: two query/compile rounds produce no metadata rows, then
+registration plus insertion makes the exact previous query return count one
+through both entry points. Fixtures use a unique kind name and clean up the
+created node and kind. Three parser/analyzer mutation cases and nine SQL golden
+cases were regenerated with `CYSQL_UPDATE_CASES=true`; only the requested source
+cases and generated expectations were retained. README and corpus documentation
+describe the behavior and cache boundary.
+All **114 backend/mode executions** of the final 38-variant matrix pass under
+the race detector (Neo4j plus both PostgreSQL compiler modes), as does the
+PostgreSQL shared `tx.Query` entry path. The live metadata/recompilation check
+passes. All **43 tested unit packages** are qualified: the initial PostgreSQL
+`make test_all` unit stage passed 42 packages and failed only three new formatter
+fixtures whose uppercase keywords differed from canonical lowercase output.
+Correcting the source queries makes the complete formatter package and analyzer
+checks pass; no production code or expected semantics changed. The merged full
+unit and formatter-rerun profile counts each source location once and reports
+**33,253 / 49,566 (67.0883%)**, up from **33,234 / 49,560 (67.0581%)**.
+Translator coverage is **7,338 / 9,109 (80.5577%)**. Lint, touched-file Go
+formatting, local documentation links and `git diff --check` pass.
+
+The complete Neo4j `make test_integration` passes all **43 tested packages**,
+including the full shared suite and all new variants. Its BDD gate passes
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**.
+
+The resumed PostgreSQL `make test_integration` also passes all **43 tested
+packages**, including the full shared suite, both compiler modes and the live
+metadata/recompilation regression. Its final `make test_bdd_integration` passes
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**. Together with the unit and formatter checks above,
+these complete the default `make test_all` stages after the fixture correction.
+Both backend BDD report writes ran sequentially. Runs use each supplied
+connection separately with `TZ=Etc/UTC CGO_ENABLED=1
+CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`.
+Captures and the deduplicated coverage profile are under `.coverage/dawgs023/`;
+credentials are excluded from evidence. No further behavior changes followed
+these successful checks. The active queue now has **51 unfinished / 53 completed
+actions**. **DAWGS-001 is the next implementation item.**
