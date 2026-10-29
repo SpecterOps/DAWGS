@@ -182,3 +182,15 @@ func TestRewritePreservesListSlicing(t *testing.T) {
 		})
 	}
 }
+
+func TestRewriteQueryPreservesStandaloneCall(t *testing.T) {
+	for _, source := range []string{"CALL db.labels()", "CALL db.labels", "CALL db.labels() YIELD *", "CALL example.write($value)", "CALL db.labels() YIELD label WHERE label = $value"} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"value": "example"}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}
