@@ -1161,6 +1161,8 @@ type updateOperation struct {
 
 // Delete groups SQL model state that must remain consistent while translating delete.
 type Delete struct {
+	// Detach permits removal of incident relationships when deleting a node.
+	Detach bool
 	// Frame supplies the frame input to the Delete contract.
 	Frame *Frame
 	// TargetBinding supplies the target binding input to the Delete contract.

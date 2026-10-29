@@ -47,6 +47,12 @@ direct and parenthesized node/relationship properties and WITH aliases, includin
 paginated inputs. Native UNWIND bindings retain their element types in both
 compiler modes; existing ordering and predicate fixtures reflect that type information.
 
+`delete.sql` distinguishes plain node deletion from DETACH deletion and checks
+explicit relationship targets, multiple targets, mixed plain/detached targets,
+nullable optional bindings and WITH inputs. Plain node deletion materializes its
+input and checks for incident relationships outside the complete deletion target
+sets. Staged DELETE/read continuations run in the shared integration templates.
+
 `with_modifiers.sql` covers read-only WITH ordering, SKIP and LIMIT, entity and
 scalar aliases, nested alias expressions, DISTINCT, aggregation, input predicates
 and WITH WHERE after pagination. It also checks literal row-stream projections,

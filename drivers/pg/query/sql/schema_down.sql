@@ -9,6 +9,16 @@ drop trigger if exists bump_edge_traversal_epoch_delete on edge;
 drop trigger if exists bump_node_traversal_epoch_truncate on node;
 drop trigger if exists bump_edge_traversal_epoch_truncate on edge;
 drop trigger if exists delete_node_edges on node;
+do
+$$
+declare
+  partition_table regclass;
+begin
+  for partition_table in select inhrelid::regclass from pg_inherits where inhparent = 'node'::regclass loop
+    execute format('drop trigger if exists delete_node_edges on %s', partition_table);
+  end loop;
+end
+$$;
 drop function if exists delete_node_edges;
 drop function if exists public.create_graph_traversal_epoch;
 drop function if exists public.bump_graph_traversal_epoch_new;
@@ -16,6 +26,7 @@ drop function if exists public.bump_graph_traversal_epoch_old;
 drop function if exists public.bump_all_graph_traversal_epochs;
 
 -- Drop functions
+drop function if exists cypher_assert_node_deletable(int4, int8, int8[], int8[]);
 drop aggregate if exists cypher_min(jsonb);
 drop aggregate if exists cypher_max(jsonb);
 drop aggregate if exists cypher_sum(jsonb);
