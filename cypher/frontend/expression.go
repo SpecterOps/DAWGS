@@ -376,23 +376,23 @@ type NonArithmeticOperatorExpressionVisitor struct {
 }
 
 func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_ListOperatorExpression(ctx *parser.OC_ListOperatorExpressionContext) {
-	if !HasTokens(ctx, TokenTypeRange) {
-		s.ctx.AddErrors(SyntaxError{
-			Line:            ctx.GetStart().GetLine(),
-			Column:          ctx.GetStart().GetColumn(),
-			OffendingSymbol: ctx.GetText(),
-			Message:         "list indexing is not supported",
-		})
-		// The AST has no subscript node. Ignore the rejected index subtree so
-		// its atoms cannot replace the operand or disrupt later property lookups.
-		s.ctx.Enter(&BaseVisitor{})
+	operation := "indexing"
+	if HasTokens(ctx, TokenTypeRange) {
+		operation = "slicing"
 	}
+	s.ctx.AddErrors(SyntaxError{
+		Line:            ctx.GetStart().GetLine(),
+		Column:          ctx.GetStart().GetColumn(),
+		OffendingSymbol: ctx.GetText(),
+		Message:         "list " + operation + " is not supported",
+	})
+	// The AST has no subscript or slice node. Ignore the rejected subtree so
+	// its atoms cannot replace the operand or disrupt later property lookups.
+	s.ctx.Enter(&BaseVisitor{})
 }
 
 func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_ListOperatorExpression(ctx *parser.OC_ListOperatorExpressionContext) {
-	if !HasTokens(ctx, TokenTypeRange) {
-		s.ctx.Exit()
-	}
+	s.ctx.Exit()
 }
 
 func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_NodeLabels(ctx *parser.OC_NodeLabelsContext) {

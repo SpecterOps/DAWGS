@@ -166,3 +166,19 @@ func TestRewritePreservesListIndexing(t *testing.T) {
 		})
 	}
 }
+
+func TestRewritePreservesListSlicing(t *testing.T) {
+	for _, source := range []string{
+		"MATCH (n $props) RETURN n.values[0..2] AS value",
+		"MATCH (n) WHERE datetime(n.created) < $threshold RETURN n.values[-1..] AS value",
+		"WITH $values AS xs RETURN xs[$idx..] AS value",
+	} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"props": map[string]any{"name": "test"}, "values": []int64{1, 2}, "idx": int64(0), "threshold": "2026-01-01"}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}

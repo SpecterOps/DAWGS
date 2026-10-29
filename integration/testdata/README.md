@@ -23,11 +23,11 @@ postconditions check copied values, unchanged fixture records and exact creation
 counts.
 PostgreSQL executes the corpus in both optimizer modes.
 
-List indexing is explicitly unsupported by the shared DAWGS parser and PostgreSQL
+List indexing and slicing are explicitly unsupported by the shared DAWGS parser and PostgreSQL
 text compiler. Parser negative fixtures and a templated unit matrix cover read,
 SET, CREATE and DELETE contexts. Driver-scoped live tests check PostgreSQL
 rejection before execution and unchanged committed state in both compiler modes;
-Neo4j native indexing has separate driver-scoped controls. These differing support
+Neo4j native indexing and slicing have separate driver-scoped controls. These differing support
 boundaries do not use backend-specific assertions in the shared corpus.
 
 Mutation cases use `assert: "no_error"` (or another primary result assertion)
