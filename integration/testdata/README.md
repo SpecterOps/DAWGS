@@ -30,6 +30,13 @@ rejection before execution and unchanged committed state in both compiler modes;
 Neo4j native indexing and slicing have separate driver-scoped controls. These differing support
 boundaries do not use backend-specific assertions in the shared corpus.
 
+Standalone `CALL` is likewise rejected explicitly by the shared parser and
+PostgreSQL compiler, including implicit invocations and `YIELD`. Parser negative
+fixtures and a templated syntax matrix cover read and write procedure names;
+PostgreSQL driver controls verify repeated errors and unchanged committed graph
+state. Neo4j driver controls execute native standalone procedures, including a
+parameterized invocation. Procedure support boundaries stay driver-scoped.
+
 Mutation cases use `assert: "no_error"` (or another primary result assertion)
 and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each

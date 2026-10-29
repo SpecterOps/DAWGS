@@ -233,6 +233,21 @@
         ],
         "error_matchers": ["list slicing is not supported"]
       }
+    },
+    {
+      "name": "Unsupported standalone procedure calls",
+      "type": "negative_case",
+      "details": {
+        "queries": [
+          "CALL db.labels()",
+          "CALL db.labels",
+          "CALL db.labels() YIELD *",
+          "CALL db.labels() YIELD label AS name WHERE name = 'x'",
+          "CALL example.write($value)",
+          "CALL example.write({value: 1})"
+        ],
+        "error_matchers": ["standalone CALL is not supported"]
+      }
     }
   ]
 }
