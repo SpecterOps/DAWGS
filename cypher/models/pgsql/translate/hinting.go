@@ -2,6 +2,7 @@ package translate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -277,6 +278,8 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 
 // contextAwareKindMapper adapts request-scoped kind resolution to translation helpers that do not accept a context.
 type contextAwareKindMapper struct {
+	// missingKinds is shared with nested predicate translators for cache qualification.
+	missingKinds *bool
 	// ctx carries cancellation and deadlines into kind-name lookups.
 	ctx context.Context
 	// kindMapper performs the underlying graph kind-name resolution.
@@ -288,14 +291,26 @@ type contextAwareKindMapper struct {
 // newContextAwareKindMapper wraps a mapper with request context and retains the associated translation parameter map.
 func newContextAwareKindMapper(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any) *contextAwareKindMapper {
 	return &contextAwareKindMapper{
-		ctx:        ctx,
-		kindMapper: kindMapper,
-		parameters: parameters,
+		missingKinds: new(bool),
+		ctx:          ctx,
+		kindMapper:   kindMapper,
+		parameters:   parameters,
 	}
 }
 
 func (s *contextAwareKindMapper) MapKinds(kinds graph.Kinds) ([]int16, error) {
 	return s.kindMapper.MapKinds(s.ctx, kinds)
+}
+
+// MapMatchKinds distinguishes unknown names from lookup failures without registering kinds.
+func (s *contextAwareKindMapper) MapMatchKinds(kinds graph.Kinds) ([]int16, bool, error) {
+	ids, err := s.MapKinds(kinds)
+	var missing *pgsql.MissingKindsError
+	if errors.As(err, &missing) {
+		*s.missingKinds = true
+		return missing.KindIDs, true, nil
+	}
+	return ids, false, err
 }
 
 func (s *contextAwareKindMapper) AssertKinds(kinds graph.Kinds) ([]int16, error) {
@@ -323,7 +338,7 @@ func literalKindID(kindMapper *contextAwareKindMapper, literal pgsql.Literal) (p
 		return pgsql.Literal{}, false, err
 	}
 
-	kindIDs, err := kindMapper.MapKinds(kinds)
+	kindIDs, _, err := kindMapper.MapMatchKinds(kinds)
 	if err != nil {
 		return pgsql.Literal{}, false, err
 	}

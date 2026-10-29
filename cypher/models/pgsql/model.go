@@ -13,8 +13,22 @@ import (
 // KindMapper is an interface that represents a service that can map a given slice of graph.Kind to a slice of
 // int16 numeric identifiers.
 type KindMapper interface {
+	// MapKinds returns MissingKindsError for authoritative misses. Other errors
+	// remain execution failures, including when translating match predicates.
 	MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error)
 	AssertKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error)
+}
+
+// MissingKindsError reports an authoritative lookup miss after any cache refresh.
+// KindIDs contains only the resolved kinds, in input order. Callers requiring all
+// kinds must still treat this as an error; match translation can apply AND/OR semantics.
+type MissingKindsError struct {
+	Kinds   graph.Kinds
+	KindIDs []int16
+}
+
+func (s *MissingKindsError) Error() string {
+	return fmt.Sprintf("unable to map kinds: %s", strings.Join(s.Kinds.Strings(), ", "))
 }
 
 // FormattingLiteral is a syntax node that is used as a transparent formatting syntax node. The formatter will

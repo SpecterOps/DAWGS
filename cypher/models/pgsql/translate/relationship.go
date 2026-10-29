@@ -38,7 +38,7 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 
 		// Capture the kind matchers for this relationship pattern
 		if len(relationshipPattern.Kinds) > 0 {
-			if kindIDs, err := s.kindMapper.MapKinds(relationshipPattern.Kinds); err != nil {
+			if kindIDs, _, err := s.kindMapper.MapMatchKinds(relationshipPattern.Kinds); err != nil {
 				return fmt.Errorf("failed to translate kinds: %w", err)
 			} else {
 				for _, edgeBinding := range edgeBindings {

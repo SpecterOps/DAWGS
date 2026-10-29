@@ -35,6 +35,7 @@ type translationCacheKey struct {
 }
 
 type translationCacheBuildResult struct {
+	hasMissingKinds   bool
 	parameters        map[string]any
 	parameterSources  map[string]string
 	literalParameters map[string]string
@@ -336,7 +337,7 @@ func cloneTranslationCacheKey(key translationCacheKey) translationCacheKey {
 }
 
 func cacheableCompilation(sql string, result translationCacheBuildResult, parameters map[string]any, err error) (translationCacheEntry, bool) {
-	if err != nil {
+	if err != nil || result.hasMissingKinds {
 		return translationCacheEntry{}, false
 	}
 	if len(result.parameters) != (len(result.parameterSources) + len(result.literalParameters)) {
