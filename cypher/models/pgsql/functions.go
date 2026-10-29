@@ -54,6 +54,10 @@ const (
 
 	// FunctionJSONBBuildObject identifies PostgreSQL's JSONB object constructor.
 	FunctionJSONBBuildObject Identifier = "jsonb_build_object"
+	// FunctionJSONBBuildArray constructs an array without reinterpreting element types.
+	FunctionJSONBBuildArray Identifier = "jsonb_build_array"
+	// FunctionJSONBArrayElements expands JSON arrays while preserving element types.
+	FunctionJSONBArrayElements Identifier = "jsonb_array_elements"
 
 	// FunctionJSONBArrayLength identifies PostgreSQL's JSONB array-length function.
 	FunctionJSONBArrayLength Identifier = "jsonb_array_length"

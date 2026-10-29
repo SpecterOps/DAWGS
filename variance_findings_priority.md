@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **54 items: 4 P1, 41 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **50 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **53 items: 4 P1, 40 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **51 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -137,8 +137,16 @@ implementation and validation notes are in the
 DAWGS-047 now has live acceptance on both backends and in both PostgreSQL compiler
 modes; its implementation and validation notes are in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-047-order-by-alias-expressions-and-binding-identity--2026-10-29).
-**DAWGS-042 is the next implementation item.** The earlier P1 repairs and regex
-migration decision remain open in their existing lanes.
+The earlier P1 repairs and regex migration decision remain open in their existing
+lanes.
+
+### DAWGS-042 live acceptance — 2026-10-29
+
+DAWGS-042 now has live acceptance on both backends and in both PostgreSQL compiler
+modes. Its implementation, regression evidence and complete validation results
+are in the [completion ledger](variance_findings_priority_complete.md#dawgs-042-property-list-unwind--2026-10-29).
+**DAWGS-043 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
 
 ### Open follow-ups to completed actions
 
@@ -165,7 +173,7 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 54 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 53 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
 ### P1: Start first — 4 items
 
@@ -176,11 +184,10 @@ The 54 unfinished numbered work items appear once in this queue. Completed actio
 | 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
 | 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
 
-### P2: Next correctness and reliability wave — 41 items
+### P2: Next correctness and reliability wave — 40 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
 | 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows, including the SET-to-DELETE frame control recorded under completed 039. Duplicate multi-target delete CTE naming stays closed. |
 | 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
 | 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
