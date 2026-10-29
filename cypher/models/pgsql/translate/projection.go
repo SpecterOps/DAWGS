@@ -1310,16 +1310,89 @@ func projectionAliasBindings(scope *Scope, projections []*Projection) map[pgsql.
 	return aliases
 }
 
-// rewriteOrderByProjectionAlias replaces an internal ORDER BY identifier with its visible projection alias.
-func rewriteOrderByProjectionAlias(orderBy *pgsql.OrderBy, aliases map[pgsql.Identifier]pgsql.Identifier) {
-	identifier, isIdentifier := orderBy.Expression.(pgsql.Identifier)
-	if !isIdentifier {
-		return
+// resolveTailOrderBy expands projection aliases inside expressions. PostgreSQL
+// only accepts an output-column alias as a whole sort item; nested references
+// must use the expression that computes that output.
+func (s *Translator) resolveTailOrderBy(part *QueryPart, projection pgsql.Projection) error {
+	visibleAliases := projectionAliasBindings(s.scope, part.projections.Items)
+	expressions := projectionAliasExpressions(projection)
+	aliases := map[pgsql.Identifier]pgsql.Expression{}
+	for binding, alias := range visibleAliases {
+		aliases[binding] = pgsql.NewParenthetical(expressions[alias])
 	}
+	// Key substitutions by binding identity so user aliases cannot capture input
+	// bindings whose generated names happen to have the same spelling.
+	for _, item := range part.SortItems {
+		if identifier, bare := item.Expression.(pgsql.Identifier); bare {
+			if binding, found := s.scope.Lookup(identifier); found && binding.LastProjection != nil {
+				if err := RewriteFrameBindings(s.scope, item); err != nil {
+					return err
+				}
+				continue
+			}
+			if alias, projected := visibleAliases[identifier]; projected && !part.projections.Distinct {
+				item.Expression = alias
+				continue
+			}
+		}
+		item.Expression = rewriteCurrentFrameProjectionReferences(item.Expression, "", aliases)
+		if err := RewriteFrameBindings(s.scope, item); err != nil {
+			return err
+		}
+		// A leading UNWIND exposes a bare column. Qualify it to stop SQL's
+		// output-alias precedence from changing ORDER BY's input identity.
+		if identifier, bare := unwrapParenthetical(item.Expression).(pgsql.Identifier); bare {
+			if binding, found := s.scope.Lookup(identifier); found && binding.LastProjection == nil {
+				item.Expression = pgsql.CompoundIdentifier{identifier, identifier}
+			}
+		}
+	}
+	return nil
+}
 
-	if alias, isProjectionAlias := aliases[identifier]; isProjectionAlias {
-		orderBy.Expression = alias
+// distinctTailOrderBy sorts projected values outside DISTINCT, where SQL permits
+// expressions over output aliases. The inner query carries the computed keys.
+func (s *Translator) distinctTailOrderBy(part *QueryPart, projection pgsql.Select) error {
+	binding, err := s.scope.DefineNew(pgsql.Scope)
+	if err != nil {
+		return err
 	}
+	output := pgsql.Projection{}
+	for _, item := range part.projections.Items {
+		reference := pgsql.CompoundIdentifier{binding.Identifier, item.Alias.Value}
+		output = append(output, &pgsql.AliasedExpression{Expression: reference, Alias: item.Alias})
+	}
+	if err := s.resolveTailOrderBy(part, projection.Projection); err != nil {
+		return err
+	}
+	projection.Projection = append(pgsql.Projection(nil), projection.Projection...)
+	for _, item := range part.SortItems {
+		key, err := s.scope.DefineNew(pgsql.UnknownDataType)
+		if err != nil {
+			return err
+		}
+		for _, collision := projectionAliasExpressions(projection.Projection)[key.Identifier]; collision; {
+			key, err = s.scope.DefineNew(pgsql.UnknownDataType)
+			if err != nil {
+				return err
+			}
+			_, collision = projectionAliasExpressions(projection.Projection)[key.Identifier]
+		}
+		// Valid DISTINCT sort keys depend only on the projected values.
+		// Carrying those keys through DISTINCT preserves the distinct rows.
+		projection.Projection = append(projection.Projection, &pgsql.AliasedExpression{
+			Expression: item.Expression, Alias: pgsql.AsOptionalIdentifier(key.Identifier),
+		})
+		item.Expression = pgsql.CompoundIdentifier{binding.Identifier, key.Identifier}
+	}
+	part.Model.Body = pgsql.Select{
+		Projection: output,
+		From: []pgsql.FromClause{{Source: pgsql.AliasedExpression{
+			Expression: pgsql.NewParenthetical(pgsql.Query{Body: projection}),
+			Alias:      pgsql.AsOptionalIdentifier(binding.Identifier),
+		}}},
+	}
+	return nil
 }
 
 // pathCompositeReferenceCount records how a path and each of its component arrays are reused by a projection stage.
@@ -1644,16 +1717,12 @@ func (s *Translator) buildTailProjection() error {
 	}
 
 	if len(currentPart.SortItems) > 0 {
-		projectionAliases := projectionAliasBindings(s.scope, currentPart.projections.Items)
-
-		// If there are expressions in the order by of the current query part they will need to be visited to ensure
-		// that frame references are rewritten
-		for _, orderByExpression := range currentPart.SortItems {
-			if err := RewriteFrameBindings(s.scope, orderByExpression); err != nil {
+		if singlePartQuerySelect.Distinct {
+			if err := s.distinctTailOrderBy(currentPart, singlePartQuerySelect); err != nil {
 				return err
 			}
-
-			rewriteOrderByProjectionAlias(orderByExpression, projectionAliases)
+		} else if err := s.resolveTailOrderBy(currentPart, singlePartQuerySelect.Projection); err != nil {
+			return err
 		}
 
 		currentPart.Model.OrderBy = currentPart.SortItems

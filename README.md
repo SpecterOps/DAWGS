@@ -446,6 +446,14 @@ The shared `multipart_read_boundary_shapes` templates check fixed and variable-l
 paths, directions, aliases, bound endpoints, aggregation, pagination and complete SET/CREATE post-state on Neo4j
 and in both PostgreSQL compiler modes.
 
+`ORDER BY` resolves projection aliases inside arithmetic and supported function expressions.
+User aliases such as `i0`, `n0` and `s0` retain their Cypher meaning even when they
+match generated SQL names. DISTINCT ordering carries computed sort keys through
+an internal projection without exposing extra result columns; pagination follows
+deduplication. The shared `order_alias_shapes` templates cover ordered results,
+collisions, duplicate/null inputs and exact paginated SET/CREATE state on both
+backends and in both PostgreSQL compiler modes.
+
 PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
 Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
 updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared

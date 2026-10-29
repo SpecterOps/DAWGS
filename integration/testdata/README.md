@@ -371,3 +371,11 @@ zero-hop and duplicate-input CREATE correlation. SET and CREATE cases compare
 complete original node/relationship records plus exact created labels and names,
 including writes without RETURN. PostgreSQL executes all variants in both compiler
 modes; the shared corpus has identical assertions on both backends.
+
+`order_alias_shapes.json` checks nested RETURN aliases in arithmetic, casts and
+supported functions, alias/input collisions, quoted identifiers, multiple sort
+keys, DISTINCT and aggregates, duplicate/empty/null inputs and pagination.
+Ordered assertions distinguish SQL failures from silent order changes. SET and
+CREATE variants check complete original node records, creation values/cardinality
+and empty relationship state, with and without RETURN. PostgreSQL runs the same
+variants in both compiler modes.
