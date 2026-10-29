@@ -297,10 +297,10 @@ func TestDBContextResetBeforeScenarioReturnsCleanupError(t *testing.T) {
 			require.True(t, database.writeTransactionCalled)
 			require.Equal(t, testContext, database.writeTransactionContext)
 			require.Equal(t, test.expectDelete, nodeQuery.deleteCalled)
-			require.Equal(t, snapshot, databaseContext.beforeExecution)
-			require.Same(t, result, databaseContext.actualResult)
-			require.Equal(t, 2, databaseContext.rowCount)
-			require.Equal(t, [][]string{{"stale"}}, databaseContext.actualRows)
+			require.Equal(t, graphSnapshot{}, databaseContext.beforeExecution)
+			require.Nil(t, databaseContext.actualResult)
+			require.Zero(t, databaseContext.rowCount)
+			require.Nil(t, databaseContext.actualRows)
 		})
 	}
 }
@@ -328,13 +328,13 @@ func TestDBContextResetBeforeScenarioReturnsSessionError(t *testing.T) {
 	require.ErrorIs(t, err, openErr)
 	require.ErrorContains(t, err, "failed to establish database connection error")
 	require.Equal(t, testContext, returnedContext)
-	require.Same(t, database, databaseContext.db)
+	require.Nil(t, databaseContext.db)
 	require.False(t, database.writeTransactionCalled)
 	require.Equal(t, []string{"existing fixture"}, databaseContext.testData)
-	require.Equal(t, snapshot, databaseContext.beforeExecution)
-	require.Same(t, result, databaseContext.actualResult)
-	require.Equal(t, 2, databaseContext.rowCount)
-	require.Equal(t, [][]string{{"stale"}}, databaseContext.actualRows)
+	require.Equal(t, graphSnapshot{NodesCount: 0, RelationshipsCount: 0}, databaseContext.beforeExecution)
+	require.Nil(t, databaseContext.actualResult)
+	require.Equal(t, 0, databaseContext.rowCount)
+	require.Nil(t, databaseContext.actualRows)
 }
 
 func TestDBContextExecutingQuery(t *testing.T) {
