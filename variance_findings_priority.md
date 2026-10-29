@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **52 items: 4 P1, 39 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **52 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **51 items: 4 P1, 38 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **53 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -155,7 +155,17 @@ DELETE uses the existing transaction-scoped staged executor so PostgreSQL observ
 the earlier writes. Implementation, shared mutation/template regressions and live
 validation are recorded in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-043-delete-continuation-and-write-boundaries--2026-10-29).
-**DAWGS-023 is the next implementation item.** Earlier pending repairs and
+DAWGS-023 is completed below. **DAWGS-001 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
+
+### DAWGS-023 live acceptance — 2026-10-29
+
+Unknown match kinds now produce empty matches without registration. Known
+alternatives, conjunctions, negation, OPTIONAL MATCH and null predicates retain
+their semantics. Plans that depend on missing kinds bypass translation caches
+so later registration is visible. Implementation and validation evidence are in
+the [completion ledger](variance_findings_priority_complete.md#dawgs-023-unknown-match-kinds--2026-10-29).
+**DAWGS-001 is the next implementation item.** Earlier pending repairs and
 separate follow-ups retain their existing status.
 
 ### Open follow-ups to completed actions
@@ -183,7 +193,7 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 52 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 51 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
 ### P1: Start first — 4 items
 
@@ -194,11 +204,10 @@ The 52 unfinished numbered work items appear once in this queue. Completed actio
 | 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
 | 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
 
-### P2: Next correctness and reliability wave — 39 items
+### P2: Next correctness and reliability wave — 38 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
 | 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
 | 59 | [DAWGS-002](variance_findings.md#dawgs-002) — List slicing returns the upper bound | Q | Contain | S | Reject unsupported slicing explicitly now; full slicing should share list AST/type work with 001. |
 | 60 | [DAWGS-017](variance_findings.md#dawgs-017) — A standalone CALL parses to `(nil, nil)`; formatting that nil query panics | Q | Contain | S | Return an explicit standalone CALL rejection or a nonnil supported AST; never format a successful nil query. |

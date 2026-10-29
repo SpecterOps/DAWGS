@@ -52,6 +52,7 @@ func (s *Translator) translateAggregateTraversalCount(query *cypher.RegularQuery
 func (s *Translator) newAggregatePredicateTranslator() *Translator {
 	translator := NewTranslator(s.ctx, s.kindMapper.kindMapper, s.parameters, s.graphID)
 	translator.scope.generator = s.scope.generator
+	translator.kindMapper.missingKinds = s.kindMapper.missingKinds
 
 	return translator
 }
@@ -495,25 +496,7 @@ func (s *Translator) aggregateBindingPredicate(translator *Translator, match *cy
 }
 
 func (s *Translator) aggregateNodeKindConstraint(alias pgsql.Identifier, kinds graph.Kinds) (pgsql.Expression, error) {
-	if len(kinds) == 0 {
-		return nil, nil
-	}
-
-	kindIDs, err := s.kindMapper.MapKinds(kinds)
-	if err != nil {
-		return nil, err
-	}
-
-	kindIDsLiteral, err := pgsql.AsLiteral(kindIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	return pgsql.NewBinaryExpression(
-		pgsql.CompoundIdentifier{alias, pgsql.ColumnKindIDs},
-		pgsql.OperatorPGArrayLHSContainsRHS,
-		kindIDsLiteral,
-	), nil
+	return s.nodeKindConstraint(alias, kinds)
 }
 
 func (s *Translator) aggregateEdgeKindConstraint(alias pgsql.Identifier, kinds graph.Kinds) (pgsql.Expression, error) {
@@ -521,7 +504,7 @@ func (s *Translator) aggregateEdgeKindConstraint(alias pgsql.Identifier, kinds g
 		return nil, nil
 	}
 
-	kindIDs, err := s.kindMapper.MapKinds(kinds)
+	kindIDs, _, err := s.kindMapper.MapMatchKinds(kinds)
 	if err != nil {
 		return nil, err
 	}

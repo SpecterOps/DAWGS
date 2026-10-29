@@ -395,3 +395,10 @@ values/counts. Direct UNWIND-to-SET checks pending input rows and empty mutation
 PostgreSQL executes all 46 variants in both compiler modes. `TestPropertyUnwind`
 checks committed node/relationship properties and actual Go element types,
 including both signed 64-bit limits, JSON-looking strings, scalar and empty inputs.
+
+`unknown_kind_shapes.json` leaves its unknown kind undeclared and checks empty
+node/relationship matches, mixed alternatives, label conjunctions, bounded
+expansions, negation, type-name comparisons, OPTIONAL MATCH and null predicates.
+SET, DELETE and CREATE-from-empty-input variants check complete fixture state.
+PostgreSQL runs all variants in both compiler modes; driver-scoped checks verify
+that matches leave kind metadata unchanged and recompile after registration.

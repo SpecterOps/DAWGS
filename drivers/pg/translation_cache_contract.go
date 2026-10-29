@@ -63,6 +63,9 @@ func translationParameterTypeKey(parameters map[string]any) string {
 }
 
 func cacheableTranslation(result translate.Result, parameters map[string]any) bool {
+	if result.HasMissingKinds {
+		return false
+	}
 	if len(result.Parameters) != len(result.ParameterSources)+len(result.LiteralParameters) {
 		return false
 	}

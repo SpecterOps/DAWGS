@@ -84,15 +84,11 @@ func (s *Translator) translateNodePatternToStep(nodePattern *cypher.NodePattern,
 
 	// Check for kind constraints
 	if len(nodePattern.Kinds) > 0 {
-		if kindIDs, err := s.kindMapper.MapKinds(nodePattern.Kinds); err != nil {
+		constraint, err := s.nodeKindConstraint(bindingResult.Binding.Identifier, nodePattern.Kinds)
+		if err != nil {
 			return fmt.Errorf("failed to translate kinds: %w", err)
-		} else if kindIDsLiteral, err := pgsql.AsLiteral(kindIDs); err != nil {
-			return err
-		} else if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(bindingResult.Binding.Identifier), pgsql.NewBinaryExpression(
-			pgsql.CompoundIdentifier{bindingResult.Binding.Identifier, pgsql.ColumnKindIDs},
-			pgsql.OperatorPGArrayLHSContainsRHS,
-			kindIDsLiteral,
-		)); err != nil {
+		}
+		if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(bindingResult.Binding.Identifier), constraint); err != nil {
 			return err
 		}
 	}

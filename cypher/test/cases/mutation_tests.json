@@ -1804,6 +1804,30 @@
         "query": "create (n:NodeKind1) delete n return count(*) as c",
         "fitness": 2
       }
+    },
+    {
+      "name": "Unknown kind mutation: MATCH (n:DAWGS023NeverRegistered) SET n.touched = true RETURN count(*) AS c",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DAWGS023NeverRegistered) set n.touched = true return count(*) as c",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Unknown kind mutation: MATCH (n:NodeKind1:DAWGS023NeverRegistered) DETACH DELETE n RETURN count(*) AS c",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1:DAWGS023NeverRegistered) detach delete n return count(*) as c",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Unknown kind mutation: MATCH ()-[r:DAWGS023NeverRegistered]->() DELETE r RETURN count(*) AS c",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:DAWGS023NeverRegistered]->() delete r return count(*) as c",
+        "fitness": 1
+      }
     }
   ]
 }
