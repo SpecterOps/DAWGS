@@ -52,6 +52,12 @@ type dbContext struct {
 
 // resetBeforeScenario clears persistent graph data and scenario-local result state.
 func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+	c.db = nil
+	c.beforeExecution = graphSnapshot{}
+	c.actualResult = nil
+	c.rowCount = 0
+	c.actualRows = nil
+
 	openSession := c.openSession
 	if openSession == nil {
 		openSession = integration.OpenSession
@@ -72,17 +78,17 @@ func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) 
 	if err := c.anEmptyGraph(ctx); err != nil {
 		return ctx, fmt.Errorf("reset graph before scenario: %w", err)
 	}
-
-	c.beforeExecution = graphSnapshot{}
-	c.actualResult = nil
-	c.rowCount = 0
-	c.actualRows = nil
-
 	return ctx, nil
 }
 
 func (c *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-	if err := c.db.Close(context.Background()); err != nil {
+	if c.db == nil {
+		return ctx, nil
+	}
+
+	db := c.db
+	c.db = nil
+	if err := db.Close(context.Background()); err != nil {
 		return ctx, err
 	}
 	return ctx, nil
