@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **53 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **54 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -61,6 +61,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 55 | DAWGS-042 | Reproduced, repaired and live validated | Property-list UNWIND preserves JSON value types through direct properties, WITH aliases and nested lists. Pending inputs are materialized before SET, retaining duplicates and empty-input behavior. All 46 shared variants pass on Neo4j and in both PostgreSQL compiler modes, plus concrete committed-property checks. Complete backend qualification and formatter-fixture correction are recorded below. |
 | 56 | DAWGS-043 | Repaired and live validated | DELETE reserves a unique CTE name without advancing the input stream; RETURN preserves cardinality and captured values. Earlier SET/CREATE writes run before DELETE through the existing transaction-scoped staged executor. Shared complete-state and commit/rollback regressions pass on Neo4j and in both PostgreSQL compiler modes. Validation and scope are recorded below. |
 | 57 | DAWGS-023 | Repaired and live validated | Unknown match kinds no longer fail compilation or register metadata; conjunctions, alternatives, null predicates and mutation selection retain their semantics. Missing-kind plans bypass both translation caches so later registration is visible. Shared and driver-scoped validation is recorded below. |
+| 58 | DAWGS-001 | Contained and live validated | The shared parser rejects indexing with a located syntax error and isolates its subtree. Templated read/mutation regressions, both PostgreSQL compiler modes and Neo4j native controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass; statement coverage increases. Full indexing remains separate work. |
 
 ## Original queue details for completed actions
 
@@ -121,6 +122,7 @@ These describe the original requested action; completion status and actual outco
 | 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
 | 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows, including the SET-to-DELETE frame control recorded under completed 039. Duplicate multi-target delete CTE naming stays closed. |
 | 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
+| 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
 
 ## Implementation and validation notes
 
@@ -1531,3 +1533,77 @@ Captures and the deduplicated coverage profile are under `.coverage/dawgs023/`;
 credentials are excluded from evidence. No further behavior changes followed
 these successful checks. The active queue now has **51 unfinished / 53 completed
 actions**. **DAWGS-001 is the next implementation item.**
+
+### DAWGS-001 list indexing containment — 2026-10-29
+
+The AST has no list-subscript node. Previously, visiting an index's atom replaced
+its operand, so `WITH [1,2] AS xs RETURN xs[0] AS x` became a projection of zero
+in both SQL and formatted Cypher. The non-arithmetic expression visitor now
+returns a located `SyntaxError` with `list indexing is not supported`. A base
+visitor isolates the rejected subtree so its atoms cannot overwrite the operand
+or disrupt a later property lookup. The grammar's direct range token distinguishes
+slicing, which remains DAWGS-002's separate containment item. Full indexing,
+including null, negative and out-of-range behavior, remains M/L work in the
+active follow-ups. This completes containment rather than feature support.
+
+`cypher/frontend/list_index_test.go` crosses 16 index expressions with five query
+templates (80 variants), checking unrestricted/default parsing and the formatter
+entry point. Variants cover literal, parameter, null, negative, out-of-range,
+computed, nested and chained indexes; trailing property lookups; a string
+containing `..`; and a slice nested inside an index. Templates cover projection,
+WHERE, SET, CREATE and DELETE. Controls retain ordinary list literals, aliases,
+UNWIND, IN, list-valued assignments and property lookups, and check the exact
+error location. Four fixture-backed negative cases cover projection and mutations.
+No SQL golden output is emitted for rejected syntax, and no shared backend
+assertions or skips were changed.
+
+`drivers/pg/list_index_test.go` checks six read/mutation queries in both compiler
+modes, twice per query to exercise repeated compilation. The original production
+source supplied through a Go overlay fails the canonical parser regression and
+all twelve compiler/query-mode combinations: the old code accepts them without
+an error. The contained implementation passes under the race detector.
+Driver-scoped live PostgreSQL regressions check five indexed read/write shapes
+in both compiler modes, twice per query. Every request returns the explicit
+error and no rows; independent read transactions after each shape verify that
+both fixture nodes retain their exact names and no extra node was created.
+
+Neo4j keeps its existing original-text fallback after a parse failure. Rewrite
+unit controls preserve the original indexed query and parameters even when a
+pattern-map or temporal rewrite would otherwise be considered. Live Neo4j
+controls verify positive, negative, out-of-range, null and parameter indexes and
+CREATE/SET stored values. The driver-scoped support checks do not introduce
+backend-specific assertions into the shared core corpus. README and integration
+corpus documentation describe the boundary.
+
+The complete race-enabled unit suite passes all **43 tested packages**. A clean
+detached checkout of `3d062e7` supplies the unit baseline: deduplicated statement
+coverage rises from **33,252 / 49,566 (67.0863%)** to
+**33,264 / 49,571 (67.1038%)**. Frontend coverage rises from
+**488 / 522 (93.4866%)** to **493 / 527 (93.5484%)**; all five added statements
+are covered. The initial coverage-overlay attempt is excluded because its
+profile included edited-source locations; the clean checkout comparison is the
+recorded baseline. The original-source overlay remains valid for the focused
+non-coverage failure reproductions above.
+
+The complete Neo4j-selected `make test_integration` passes all **43 tested
+packages**, including the full shared query/mutation/template suites. Its
+`make test_bdd_integration` also passes: **17 enforced scenarios / zero enforced
+failures**, retaining **18 report-only compatibility failures**. PostgreSQL's
+complete `make test_all` passes its race-enabled unit and integration stages
+(**43 tested packages each**) and final BDD stage. Its BDD gate also reports
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**. Both full shared integration suites pass on each
+backend, and the PostgreSQL driver controls cover both compiler modes.
+
+Focused unit and both live backend checks pass, as do repository lint,
+touched-file `goimports` formatting and `git diff --check`. Validation uses each
+supplied connection separately with `TZ=Etc/UTC CGO_ENABLED=1
+CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`;
+BDD report writes are sequential. Evidence and the deduplicated coverage counts
+are under `.coverage/dawgs001/`; credentials are excluded. No Go edits followed
+the successful broad checks. The final Markdown links, queue counts and
+`git diff --check` pass.
+
+The next implementation item is **DAWGS-002**, explicit list-slicing containment.
+The active queue has **50 unfinished / 54 completed actions**, with full indexing
+support retained as a separate follow-up.
