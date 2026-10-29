@@ -248,6 +248,21 @@
         ],
         "error_matchers": ["standalone CALL is not supported"]
       }
+    },
+    {
+      "name": "Unsupported shortest-path expressions in projections and mutations",
+      "type": "negative_case",
+      "details": {
+        "queries": [
+          "MATCH (a), (b) RETURN shortestPath((a)-[:R*]->(b)) AS p",
+          "MATCH (a), (b) RETURN allShortestPaths((a)-[:R*]->(b)) AS p",
+          "MATCH (a), (b) WITH shortestPath((a)-[:R*]->(b)) AS p RETURN p",
+          "MATCH (a), (b) SET a.value = length(shortestPath((a)-[:R*]->(b)))",
+          "MATCH (a), (b) CREATE (:Created {value: length(shortestPath((a)-[:R*]->(b)))})",
+          "MATCH (a), (b) WHERE shortestPath((a)-[:R*]->(b)) IS NOT NULL DELETE a"
+        ],
+        "error_matchers": ["shortest-path expressions are not supported"]
+      }
     }
   ]
 }

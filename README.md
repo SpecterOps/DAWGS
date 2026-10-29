@@ -87,6 +87,15 @@ errors before formatting an AST. Neo4j text queries retain native procedure
 execution through the driver. Full shared-parser procedure support remains
 pending; in-query `CALL` is a separate support boundary.
 
+### Shortest-path expressions
+
+The DAWGS Cypher parser rejects `shortestPath(...)` and `allShortestPaths(...)`
+in expression positions with `shortest-path expressions are not supported`.
+PostgreSQL returns this error before execution, including in write queries.
+Use the supported MATCH pattern form, such as
+`MATCH p = shortestPath((a)-[:R*1..3]->(b)) RETURN p`.
+Neo4j text queries retain native expression execution through the driver.
+
 ### List indexing and slicing support
 
 The DAWGS Cypher parser rejects list indexing (`xs[0]`, including negative,
