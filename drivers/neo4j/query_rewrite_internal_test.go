@@ -148,3 +148,21 @@ func TestRewriteQuery_PreservesIntegralFloatLiterals(t *testing.T) {
 	require.Contains(t, query, "[1.0, 2.5] as c")
 	require.Contains(t, query, "1000.0 as b")
 }
+
+// Unsupported subscripts must keep the original text for Neo4j rather than
+// allowing a different rewrite to emit the parser's former lossy AST.
+func TestRewritePreservesListIndexing(t *testing.T) {
+	for _, source := range []string{
+		"MATCH (n $props) RETURN n.values[0] AS value",
+		"MATCH (n) WHERE datetime(n.created) < $threshold RETURN n.values[-1] AS value",
+		"WITH $values AS xs RETURN xs[$idx] AS value",
+	} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"props": map[string]any{"name": "test"}, "values": []int64{1, 2}, "idx": int64(0), "threshold": "2026-01-01"}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}

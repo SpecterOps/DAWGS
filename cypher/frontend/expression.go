@@ -375,6 +375,26 @@ type NonArithmeticOperatorExpressionVisitor struct {
 	PropertyKeyName string
 }
 
+func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_ListOperatorExpression(ctx *parser.OC_ListOperatorExpressionContext) {
+	if !HasTokens(ctx, TokenTypeRange) {
+		s.ctx.AddErrors(SyntaxError{
+			Line:            ctx.GetStart().GetLine(),
+			Column:          ctx.GetStart().GetColumn(),
+			OffendingSymbol: ctx.GetText(),
+			Message:         "list indexing is not supported",
+		})
+		// The AST has no subscript node. Ignore the rejected index subtree so
+		// its atoms cannot replace the operand or disrupt later property lookups.
+		s.ctx.Enter(&BaseVisitor{})
+	}
+}
+
+func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_ListOperatorExpression(ctx *parser.OC_ListOperatorExpressionContext) {
+	if !HasTokens(ctx, TokenTypeRange) {
+		s.ctx.Exit()
+	}
+}
+
 func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_NodeLabels(ctx *parser.OC_NodeLabelsContext) {
 	s.Expression = &cypher.KindMatcher{
 		Reference: s.Expression,
