@@ -92,6 +92,7 @@ func TestPostgreSQLDeleteRelationshipsByKinds(t *testing.T) {
 	}
 
 	t.Run("deletes relationships of the given kind and leaves nodes", func(t *testing.T) {
+		t.Cleanup(func() { ClearGraph(t, db, ctx) })
 		createFixture()
 
 		if err := deleter.DeleteRelationshipsByKinds(ctx, graph.Kinds{edgeKindA}); err != nil {
@@ -108,10 +109,10 @@ func TestPostgreSQLDeleteRelationshipsByKinds(t *testing.T) {
 			t.Fatalf("node count: got %d, want 3", count)
 		}
 
-		ClearGraph(t, db, ctx)
 	})
 
 	t.Run("multiple kinds delete every matching relationship", func(t *testing.T) {
+		t.Cleanup(func() { ClearGraph(t, db, ctx) })
 		createFixture()
 
 		if err := deleter.DeleteRelationshipsByKinds(ctx, graph.Kinds{edgeKindA, edgeKindB}); err != nil {
@@ -125,10 +126,10 @@ func TestPostgreSQLDeleteRelationshipsByKinds(t *testing.T) {
 			t.Fatalf("node count: got %d, want 3", count)
 		}
 
-		ClearGraph(t, db, ctx)
 	})
 
 	t.Run("undefined and empty kinds are a safe no-op", func(t *testing.T) {
+		t.Cleanup(func() { ClearGraph(t, db, ctx) })
 		createFixture()
 
 		if err := deleter.DeleteRelationshipsByKinds(ctx, graph.Kinds{missing}); err != nil {
@@ -145,6 +146,5 @@ func TestPostgreSQLDeleteRelationshipsByKinds(t *testing.T) {
 			t.Fatalf("edge count after no-op delete: got %d, want 3", count)
 		}
 
-		ClearGraph(t, db, ctx)
 	})
 }

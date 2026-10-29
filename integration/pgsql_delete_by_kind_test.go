@@ -89,6 +89,11 @@ func TestPostgreSQLDeleteNodesByKinds(t *testing.T) {
 	}
 
 	t.Run("includeAny deletes matching kinds and cascades edges", func(t *testing.T) {
+		t.Cleanup(func() {
+			if err := deleter.DeleteNodesByKinds(ctx, nil, nil); err != nil {
+				t.Fatalf("failed to clean up nodes between subtests: %v", err)
+			}
+		})
 		createFixture()
 
 		if err := deleter.DeleteNodesByKinds(ctx, graph.Kinds{kindA}, nil); err != nil {
@@ -105,10 +110,14 @@ func TestPostgreSQLDeleteNodesByKinds(t *testing.T) {
 			t.Fatalf("edge count after cascade: got %d, want 0", count)
 		}
 
-		cleanupAll(t, ctx, deleter)
 	})
 
 	t.Run("excludeAny protects matching kinds", func(t *testing.T) {
+		t.Cleanup(func() {
+			if err := deleter.DeleteNodesByKinds(ctx, nil, nil); err != nil {
+				t.Fatalf("failed to clean up nodes between subtests: %v", err)
+			}
+		})
 		createFixture()
 
 		// Delete every node except those carrying kindB.
@@ -123,10 +132,14 @@ func TestPostgreSQLDeleteNodesByKinds(t *testing.T) {
 			t.Fatalf("kindB node count: got %d, want 2", count)
 		}
 
-		cleanupAll(t, ctx, deleter)
 	})
 
 	t.Run("undefined include kinds are a safe no-op", func(t *testing.T) {
+		t.Cleanup(func() {
+			if err := deleter.DeleteNodesByKinds(ctx, nil, nil); err != nil {
+				t.Fatalf("failed to clean up nodes between subtests: %v", err)
+			}
+		})
 		createFixture()
 
 		if err := deleter.DeleteNodesByKinds(ctx, graph.Kinds{missing}, nil); err != nil {
@@ -137,10 +150,14 @@ func TestPostgreSQLDeleteNodesByKinds(t *testing.T) {
 			t.Fatalf("node count after no-op delete: got %d, want 4", count)
 		}
 
-		cleanupAll(t, ctx, deleter)
 	})
 
 	t.Run("undefined exclude kinds fail closed and delete nothing", func(t *testing.T) {
+		t.Cleanup(func() {
+			if err := deleter.DeleteNodesByKinds(ctx, nil, nil); err != nil {
+				t.Fatalf("failed to clean up nodes between subtests: %v", err)
+			}
+		})
 		createFixture()
 
 		// An unresolved exclusion would otherwise collapse to an unguarded delete; the driver must refuse instead.
@@ -152,15 +169,5 @@ func TestPostgreSQLDeleteNodesByKinds(t *testing.T) {
 			t.Fatalf("node count after failed delete: got %d, want 4", count)
 		}
 
-		cleanupAll(t, ctx, deleter)
 	})
-}
-
-// cleanupAll removes every node between subtests so each starts from an empty graph.
-func cleanupAll(t *testing.T, ctx context.Context, deleter nodesByKindDeleter) {
-	t.Helper()
-
-	if err := deleter.DeleteNodesByKinds(ctx, nil, nil); err != nil {
-		t.Fatalf("failed to clean up nodes between subtests: %v", err)
-	}
 }
