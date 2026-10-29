@@ -78,6 +78,15 @@ For a persistent, explicitly selected warm set that also applies to new physical
 to `pg.NewDriver` must have been created by `pg.NewPool` or `pg.NewPoolWithRuntimeConfig` so those lifecycle hooks are in
 place.
 
+### List indexing support
+
+The DAWGS Cypher parser rejects list indexing (`xs[0]`, including negative,
+parameterized and chained indexes) with `list indexing is not supported`.
+PostgreSQL text queries return this error before execution, including in write
+queries. Check parse errors before formatting an AST. Full indexing semantics
+remain pending. Neo4j text queries retain native indexing when the driver
+passes the original query through after a declined rewrite.
+
 ### PostgreSQL JSON result numbers
 
 PostgreSQL JSON/JSONB query results decode integer tokens as exact signed 64-bit `int64`

@@ -204,6 +204,21 @@
           "line 1:0 oC_PeriodicCommitHint rule is not supported"
         ]
       }
+    },
+    {
+      "name": "Unsupported list indexing in projections and mutations",
+      "type": "negative_case",
+      "details": {
+        "queries": [
+          "WITH [1,2] AS xs RETURN xs[0] AS x",
+          "MATCH (n) SET n.value = [1,2][0]",
+          "CREATE (n {value: [1,2][-1]})",
+          "MATCH (n) WHERE [0,1][0] = 0 DELETE n"
+        ],
+        "error_matchers": [
+          "list indexing is not supported"
+        ]
+      }
     }
   ]
 }
