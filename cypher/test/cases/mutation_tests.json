@@ -1292,6 +1292,54 @@
         "query": "unwind ['a', 'dead'] as name with name match (a:NodeKind1)-[:EdgeKind1*0..2]->(b) where a.name = name with name, b return name, b",
         "fitness": 2
       }
+    },
+    {
+      "name": "DAWGS-039 plain isolated deletion",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode {name: 'isolated'}) delete n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "DAWGS-039 detach incident relationships",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode {name: 'target'}) detach delete n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "DAWGS-039 explicit relationship targets",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode)-[r]-() delete n, r",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "DAWGS-039 optional null relationship target",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode) optional match (n)-[r]->() delete r, n",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-039 mixed plain and detach targets",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode)-[]->(m:DeleteNode) delete n detach delete m",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-039 paginated deletion input",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode) with n order by n.name asc skip 1 limit 1 delete n",
+        "fitness": 0
+      }
     }
   ]
 }

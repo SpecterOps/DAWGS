@@ -1,0 +1,1971 @@
+{
+  "families": [
+    {
+      "name": "Node deletion semantics",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "DeleteNode"
+            ],
+            "properties": {
+              "name": "target"
+            }
+          },
+          {
+            "id": "in",
+            "kinds": [
+              "DeleteNode"
+            ],
+            "properties": {
+              "name": "in"
+            }
+          },
+          {
+            "id": "out",
+            "kinds": [
+              "DeleteNode"
+            ],
+            "properties": {
+              "name": "out"
+            }
+          },
+          {
+            "id": "left",
+            "kinds": [
+              "DeleteNode"
+            ],
+            "properties": {
+              "name": "left"
+            }
+          },
+          {
+            "id": "right",
+            "kinds": [
+              "DeleteNode"
+            ],
+            "properties": {
+              "name": "right"
+            }
+          },
+          {
+            "id": "isolated",
+            "kinds": [
+              "DeleteNode"
+            ],
+            "properties": {
+              "name": "isolated"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "in",
+            "end_id": "target",
+            "kind": "DeleteEdge",
+            "properties": {
+              "name": "incoming"
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "out",
+            "kind": "DeleteEdge",
+            "properties": {
+              "name": "outgoing"
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "target",
+            "kind": "DeleteEdge",
+            "properties": {
+              "name": "loop"
+            }
+          },
+          {
+            "start_id": "out",
+            "end_id": "target",
+            "kind": "DeleteOtherEdge",
+            "properties": {
+              "name": "reverse"
+            }
+          },
+          {
+            "start_id": "left",
+            "end_id": "right",
+            "kind": "DeleteEdge",
+            "properties": {
+              "name": "survivor"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "detach every incident direction and kind",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'target'}) DETACH DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "detach incoming endpoint",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'out'}) DETACH DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 3
+              }
+            }
+          ]
+        },
+        {
+          "name": "detach several targets",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'target'}), (m:DeleteNode {name:'out'}) DETACH DELETE n, m"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 4
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "detach repeated input rows",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x MATCH (n:DeleteNode {name:'target'}) DETACH DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain isolated node",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'isolated'}) DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain missing node",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'missing'}) DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 6
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "detach missing node",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'missing'}) DETACH DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 6
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain null optional node",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:DeleteNode {name:'missing'}) DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 6
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "detach null optional node",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:DeleteNode {name:'missing'}) DETACH DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 6
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit incident relationships across rows",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'target'})-[r]-() DELETE n, r"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit incident relationships reversed target order",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'target'})-[r]-() DELETE r, n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain node with null optional relationship",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'isolated'}) OPTIONAL MATCH (n)-[r]-() DELETE r, n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain and detached adjacent nodes",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'left'})-[]->(m:DeleteNode {name:'right'}) DELETE n DETACH DELETE m"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 4
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  }
+                ],
+                "row_count": 4
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship only control",
+          "vars": {
+            "query": "MATCH ()-[r:DeleteEdge {name:'outgoing'}]->() DELETE r"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 6
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 4
+              }
+            }
+          ]
+        },
+        {
+          "name": "detach through WITH",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'target'}) WITH n DETACH DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "delete then read boundary",
+          "vars": {
+            "query": "MATCH (n:DeleteNode {name:'target'}) DETACH DELETE n WITH 1 AS x MATCH (m:DeleteNode {name:'isolated'}) DELETE m"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  }
+                ],
+                "row_count": 4
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain isolated after WITH pagination",
+          "vars": {
+            "query": "MATCH (n:DeleteNode) WITH n ORDER BY n.name SKIP 1 LIMIT 1 DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain empty page",
+          "vars": {
+            "query": "MATCH (n:DeleteNode) WITH n ORDER BY n.name LIMIT 0 DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  }
+                ],
+                "row_count": 6
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        },
+        {
+          "name": "plain isolated after WITH filter",
+          "vars": {
+            "query": "MATCH (n:DeleteNode) WITH n WHERE n.name='isolated' DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:DeleteNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "in",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "in"
+                    }
+                  },
+                  {
+                    "id": "out",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "out"
+                    }
+                  },
+                  {
+                    "id": "left",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "left"
+                    }
+                  },
+                  {
+                    "id": "right",
+                    "kinds": [
+                      "DeleteNode"
+                    ],
+                    "props": {
+                      "name": "right"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "in",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "incoming"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "out",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "outgoing"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "target",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "loop"
+                    }
+                  },
+                  {
+                    "start": "out",
+                    "end": "target",
+                    "kind": "DeleteOtherEdge",
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "start": "left",
+                    "end": "right",
+                    "kind": "DeleteEdge",
+                    "props": {
+                      "name": "survivor"
+                    }
+                  }
+                ],
+                "row_count": 5
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

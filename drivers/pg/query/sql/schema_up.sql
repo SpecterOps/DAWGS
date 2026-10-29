@@ -280,18 +280,18 @@ $$
   end
 $$;
 
--- delete_node_edges is a trigger and associated plpgsql function to cascade delete edges when attached nodes are
--- deleted. While this could be done with a foreign key relationship, it would scope the cascade delete to individual
--- node partitions and therefore require the graph_id value of each node as part of the delete statement. The trigger is
--- statement-level and reads the deleted rows from a transition table so that deleting many nodes in a single statement
+-- delete_node_edges cascades incident-edge cleanup for the Go deletion APIs and Cypher DETACH DELETE. The parent
+-- and each node partition have their own statement-level trigger, since direct partition deletes do not fire the
+-- parent's statement trigger. Graph ownership comes from the deleted rows, never from endpoint IDs alone. Each trigger
+-- reads the deleted rows from a transition table so that deleting many nodes in a single statement
 -- fires the cascading edge delete once rather than once per row. The start_id and end_id deletes are issued as separate
 -- statements because an OR across two transition table subqueries cannot be planned as index lookups and forces a
 -- sequential scan of every edge partition.
 create or replace function delete_node_edges() returns trigger as
 $$
 begin
-  delete from edge e using deleted_nodes d where e.start_id = d.id;
-  delete from edge e using deleted_nodes d where e.end_id = d.id;
+  delete from edge e using deleted_nodes d where e.graph_id = d.graph_id and e.start_id = d.id;
+  delete from edge e using deleted_nodes d where e.graph_id = d.graph_id and e.end_id = d.id;
   return null;
 end
 $$
@@ -308,6 +308,45 @@ create trigger delete_node_edges
   referencing old table as deleted_nodes
   for each statement
 execute procedure delete_node_edges();
+
+-- Statement triggers are not inherited by partitions. Upgrade existing node
+-- partitions as well as the parent; newly created partitions install the same
+-- trigger through CreatePartitionTable.
+do
+$$
+declare
+  partition_table regclass;
+begin
+  for partition_table in select inhrelid::regclass from pg_inherits where inhparent = 'node'::regclass loop
+    execute format('drop trigger if exists delete_node_edges on %s', partition_table);
+    execute format('create trigger delete_node_edges after delete on %s referencing old table as deleted_nodes for each statement execute function delete_node_edges()', partition_table);
+  end loop;
+end
+$$;
+
+-- Cypher plain DELETE rejects incident edges unless this query part also
+-- deletes them explicitly or detaches their other endpoint. STABLE keeps this
+-- check on the statement snapshot, independent of data-modifying CTE order.
+-- The two endpoint probes retain indexed access for large edge tables.
+create or replace function cypher_assert_node_deletable(target_graph_id int4, target_node_id int8,
+                                                       deleted_edge_ids int8[], detached_node_ids int8[])
+returns boolean as
+$$
+begin
+  if exists (select 1 from edge e
+             where e.graph_id = target_graph_id and e.start_id = target_node_id
+               and e.id <> all(deleted_edge_ids)
+               and e.start_id <> all(detached_node_ids) and e.end_id <> all(detached_node_ids))
+     or exists (select 1 from edge e
+                where e.graph_id = target_graph_id and e.end_id = target_node_id
+                  and e.id <> all(deleted_edge_ids)
+                  and e.start_id <> all(detached_node_ids) and e.end_id <> all(detached_node_ids)) then
+    raise exception 'Cannot delete node % because it still has relationships. Use DETACH DELETE to delete its relationships.', target_node_id
+      using errcode = 'foreign_key_violation';
+  end if;
+  return true;
+end
+$$ language plpgsql stable;
 
 -- Each mutating statement advances the affected graph's topology epoch in the
 -- same transaction. Multiple statements may advance it more than once; that
