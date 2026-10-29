@@ -3640,6 +3640,16 @@ func rewriteCurrentFrameProjectionReferences(expression pgsql.Expression, frameI
 	}
 
 	switch typedExpression := expression.(type) {
+	case pgsql.Identifier:
+		// An empty frame selects unqualified references, used when resolving
+		// projection aliases before they have a materialized SQL frame.
+		if frameID == "" {
+			if replacement, found := aliases[typedExpression]; found {
+				return replacement
+			}
+		}
+		return typedExpression
+
 	case pgsql.CompoundIdentifier:
 		if len(typedExpression) == 2 && typedExpression[0] == frameID {
 			if replacement, hasReplacement := aliases[typedExpression[1]]; hasReplacement {

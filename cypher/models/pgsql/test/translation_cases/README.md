@@ -186,3 +186,9 @@ boundaries, literal row preservation, predicates, pagination and downstream SET
 and CREATE without RETURN. Input-dependent seed predicates also filter completed
 paths, including zero-hop states and duplicate-input CREATE. Traversal frames skip the enclosing part's future
 output while keeping the scope stack available for boundary unwinding.
+
+`order_aliases.sql` covers nested ORDER BY aliases, input/output name collisions,
+cast and aggregate consumers, DISTINCT sort-key staging and pagination, including
+hidden-key/user-alias collisions and a paginated SET continuation. Parser/analyzer
+mutation cases and the shared `order_alias_shapes` templates supply complementary
+formatting and live semantic coverage.

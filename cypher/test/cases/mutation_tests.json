@@ -1340,6 +1340,54 @@
         "query": "match (n:DeleteNode) with n order by n.name asc skip 1 limit 1 delete n",
         "fitness": 0
       }
+    },
+    {
+      "name": "Order alias identity 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) return n.k as x order by x + 0 asc",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Order alias identity 2",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 2, 3] as x return 10 - x as i0 order by x asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Order alias identity 3",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 2, 3] as x return 10 - x as i0 order by toString(i0) asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Order alias identity 4",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 2] as x return distinct 10 - x as i2 order by i2 + 0 asc",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Order alias identity 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.k as i0 order by i0 + 0 desc limit 1 set n.seen = true return n.k as s0 order by s0 + 0 asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Order alias identity 6",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.k as i0 order by i0 + 0 desc limit 1 create (:NodeKind2 {k: n.k})",
+        "fitness": 5
+      }
     }
   ]
 }
