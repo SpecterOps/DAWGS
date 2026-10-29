@@ -404,6 +404,22 @@ type QueryVisitor struct {
 	Query *cypher.RegularQuery
 }
 
+// Standalone procedures have no representation in RegularQuery. Reject them
+// before callers can mistake a nil AST for a successfully parsed query.
+func (s *QueryVisitor) EnterOC_StandaloneCall(ctx *parser.OC_StandaloneCallContext) {
+	s.ctx.AddErrors(SyntaxError{
+		Line:            ctx.GetStart().GetLine(),
+		Column:          ctx.GetStart().GetColumn(),
+		OffendingSymbol: ctx.GetText(),
+		Message:         "standalone CALL is not supported",
+	})
+	s.ctx.Enter(&BaseVisitor{})
+}
+
+func (s *QueryVisitor) ExitOC_StandaloneCall(ctx *parser.OC_StandaloneCallContext) {
+	s.ctx.Exit()
+}
+
 func (s *QueryVisitor) EnterOC_RegularQuery(ctx *parser.OC_RegularQueryContext) {
 	s.Query = cypher.NewRegularQuery()
 }

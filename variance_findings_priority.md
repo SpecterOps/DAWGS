@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **49 items: 4 P1, 36 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **55 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **48 items: 4 P1, 35 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **56 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -155,7 +155,7 @@ DELETE uses the existing transaction-scoped staged executor so PostgreSQL observ
 the earlier writes. Implementation, shared mutation/template regressions and live
 validation are recorded in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-043-delete-continuation-and-write-boundaries--2026-10-29).
-DAWGS-023 is completed below. **DAWGS-017 is the next implementation item.** Earlier pending repairs and
+DAWGS-023 is completed below. **DAWGS-010 is the next implementation item.** Earlier pending repairs and
 separate follow-ups retain their existing status.
 
 ### DAWGS-023 live acceptance — 2026-10-29
@@ -165,7 +165,7 @@ alternatives, conjunctions, negation, OPTIONAL MATCH and null predicates retain
 their semantics. Plans that depend on missing kinds bypass translation caches
 so later registration is visible. Implementation and validation evidence are in
 the [completion ledger](variance_findings_priority_complete.md#dawgs-023-unknown-match-kinds--2026-10-29).
-**DAWGS-017 is the next implementation item.** Earlier pending repairs and
+**DAWGS-010 is the next implementation item.** Earlier pending repairs and
 separate follow-ups retain their existing status.
 
 ### DAWGS-001 containment — 2026-10-29
@@ -175,7 +175,7 @@ The templated parser/mutation matrix and live driver controls cover rejection,
 unchanged committed state and Neo4j native pass-through. Implementation and
 validation evidence are in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-001-list-indexing-containment--2026-10-29).
-**DAWGS-017 is the next implementation item.** Full indexing support remains a
+**DAWGS-010 is the next implementation item.** Full indexing support remains a
 separate follow-up below; slicing containment is completed below.
 
 ### DAWGS-002 containment — 2026-10-29
@@ -185,13 +185,23 @@ Templated parser/mutation regressions and driver-scoped live controls cover
 rejection, unchanged committed state and Neo4j native slicing. Implementation
 and validation evidence are in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-002-list-slicing-containment--2026-10-29).
-**DAWGS-017 is the next implementation item.** Full slicing support remains a
+**DAWGS-010 is the next implementation item.** Full slicing support remains a
 separate follow-up below.
+
+### DAWGS-017 containment — 2026-10-29
+
+Standalone `CALL` now returns an explicit located parser error, including implicit
+invocations and `YIELD`, so callers cannot mistake a nil AST for success.
+Implementation, parser/compiler regressions and live backend validation are in
+the [completion ledger](variance_findings_priority_complete.md#dawgs-017-standalone-call-containment--2026-10-29).
+**DAWGS-010 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
 
 ### Open follow-ups to completed actions
 
 | Finding | Remaining work | Completed evidence |
 | --- | --- | --- |
+| DAWGS-017 | Full standalone procedure AST and execution support remain separate feature work coordinated with in-query procedures under 103. The completed containment rejects standalone CALL explicitly; native Neo4j text execution remains available. | [Standalone CALL containment](variance_findings_priority_complete.md#dawgs-017-standalone-call-containment--2026-10-29) |
 | DAWGS-002 | Full list slicing support remains separate M/L work: add a slice AST and preserve null, negative, omitted and out-of-range bounds across formatting and PostgreSQL translation, sharing list AST/type design with 001. The completed containment rejects slicing explicitly. | [Slicing containment](variance_findings_priority_complete.md#dawgs-002-list-slicing-containment--2026-10-29) |
 | DAWGS-001 | Full list indexing support remains separate M/L work: add a subscript AST and preserve null, negative and out-of-range semantics across formatting and PostgreSQL translation, sharing list AST/type design with 002. The completed containment rejects indexing explicitly. | [Indexing containment](variance_findings_priority_complete.md#dawgs-001-list-indexing-containment--2026-10-29) |
 | DAWGS-045 | Full sequential evaluation of assignment expressions, caller-row sequencing of non-idempotent writes, and writes through aliases of the same entity remain open. With initial `n.x = 0`, `SET n.x = 1 REMOVE n.x SET n.y = coalesce(n.x, -1) RETURN n.y` returns 0 on PostgreSQL and -1 on Neo4j; inserting `WITH n` before the last SET returns -1 on both. Preserve separate regressions. | [Ordered intent repair and sequencing probe](variance_findings_priority_complete.md#dawgs-045-ordered-intent-repair-and-checks--2026-10-22) |
@@ -215,7 +225,7 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 49 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 48 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
 ### P1: Start first — 4 items
 
@@ -226,11 +236,10 @@ The 49 unfinished numbered work items appear once in this queue. Completed actio
 | 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
 | 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
 
-### P2: Next correctness and reliability wave — 36 items
+### P2: Next correctness and reliability wave — 35 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 60 | [DAWGS-017](variance_findings.md#dawgs-017) — A standalone CALL parses to `(nil, nil)`; formatting that nil query panics | Q | Contain | S | Return an explicit standalone CALL rejection or a nonnil supported AST; never format a successful nil query. |
 | 61 | [DAWGS-010](variance_findings.md#dawgs-010) — shortestPath used as an expression returns a node | Q | Contain | S | Reject unsupported shortestPath expression position instead of returning the terminal node. Full expression support is L feature work. |
 | 62 | [DAWGS-013](variance_findings.md#dawgs-013) — `CREATE UNIQUE` and `LOAD CSV` are accepted and dropped | Q | Contain | S | Reject silently dropped CREATE UNIQUE/LOAD CSV at the text compiler boundary; formatter rejection alone does not close the raw-text path. |
 | 63 | [DAWGS-103](variance_findings.md#dawgs-103) — In-query CALL omitted from generated SQL | Q | Contain | S | Reject accepted in-query CALL on unrestricted compiler paths; preserve existing DefaultCypherContext restrictions. Full procedure execution is separate XL feature work. |

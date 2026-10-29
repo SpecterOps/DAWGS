@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **55 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **56 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -63,6 +63,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 57 | DAWGS-023 | Repaired and live validated | Unknown match kinds no longer fail compilation or register metadata; conjunctions, alternatives, null predicates and mutation selection retain their semantics. Missing-kind plans bypass both translation caches so later registration is visible. Shared and driver-scoped validation is recorded below. |
 | 58 | DAWGS-001 | Contained and live validated | The shared parser rejects indexing with a located syntax error and isolates its subtree. Templated read/mutation regressions, both PostgreSQL compiler modes and Neo4j native controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass; statement coverage increases. Full indexing remains separate work. |
 | 59 | DAWGS-002 | Contained and live validated | The shared parser rejects slicing with a located syntax error and isolates its subtree. Templated read/mutation regressions cover omitted, negative, parameterized and chained bounds; both PostgreSQL compiler modes reject before writes and Neo4j native slicing remains supported. Full slicing remains separate work. |
+| 60 | DAWGS-017 | Contained and validated | Standalone CALL returns a located unsupported error instead of a successful nil AST. Parser/template, PostgreSQL repeated-compilation and live rejection controls cover explicit/implicit invocation and YIELD; Neo4j native procedure execution remains available. See below. |
 
 ## Original queue details for completed actions
 
@@ -125,6 +126,7 @@ These describe the original requested action; completion status and actual outco
 | 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
 | 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
 | 59 | [DAWGS-002](variance_findings.md#dawgs-002) — List slicing returns the upper bound | Q | Contain | S | Reject unsupported slicing explicitly now; full slicing should share list AST/type work with 001. |
+| 60 | [DAWGS-017](variance_findings.md#dawgs-017) — A standalone CALL parses to `(nil, nil)`; formatting that nil query panics | Q | Contain | S | Return an explicit standalone CALL rejection or a nonnil supported AST; never format a successful nil query. |
 
 ## Implementation and validation notes
 
@@ -1674,3 +1676,68 @@ package rerun.
 The active queue has **49 unfinished / 55 completed actions**.
 **DAWGS-017** (standalone CALL rejection) is the next implementation item;
 full list slicing remains an explicit follow-up.
+
+### DAWGS-017 standalone CALL containment — 2026-10-29
+
+`QueryVisitor` now rejects `oC_StandaloneCall` with the located error
+`standalone CALL is not supported` and ignores the unsupported subtree. Explicit
+and implicit procedure invocation, wildcard/named/aliased `YIELD`, literal and
+parameterized arguments, comments, case and terminators no longer return a
+successful nil `RegularQuery`. Callers that check parser errors never pass that
+nil query to the formatter. This completes the S containment action; procedure
+AST/execution support remains separate feature work, coordinated with 103.
+In-query `CALL` is unchanged and retains its own queue entry.
+
+The frontend matrix applies three source templates to seven invocation shapes
+with both unrestricted and default contexts, checks nil AST plus explicit error,
+and exercises the parse/format helper. A separate location assertion pins line
+and column. Six negative corpus fixtures cover read and write procedure names,
+including parameterized and map arguments. PostgreSQL compile tests cover five
+shapes twice in each compiler mode, checking the explicit error and empty SQL.
+Neo4j rewrite regressions preserve raw queries and parameters. An original-source
+Go overlay fails the frontend's `CALL db.labels()` assertion because parsing
+returns no error, and fails the compiler assertion because it returns the old
+`unable to negotiate cypher model type` error instead of the explicit rejection.
+The new source passes these focused regressions under the race detector.
+
+Driver-scoped live PostgreSQL controls issue each of five rejected shapes twice
+in each compiler mode and independently verify the committed fixture's exact
+node names remain unchanged. Neo4j controls execute explicit and implicit
+`dbms.components` calls, check the returned component name, and execute
+parameterized `db.awaitIndexes($timeout)` with no result rows. No procedure
+installation is needed. The initial Neo4j probe incorrectly expected standalone
+`YIELD ... WHERE` to execute; this server explicitly rejects that syntax. The
+positive control was replaced with the supported parameterized procedure call;
+the shared parser still explicitly rejects both shapes. These support boundaries
+remain driver-scoped and add no backend-specific assertions to the shared core
+corpus. README and corpus documentation describe the unsupported boundary and
+native Neo4j execution.
+
+The complete race-enabled unit suite passes all **43 tested packages**.
+Deduplicated statement coverage increases from the DAWGS-002 checkout's recorded
+**33,265 / 49,572 (67.1044%)** to **33,269 / 49,575 (67.1084%)**.
+Frontend coverage increases from **494 / 528 (93.5606%)** to
+**497 / 531 (93.5970%)**; all three added statements are covered.
+Repository lint, touched-file `goimports`, local Markdown file links, ledger
+counts and `git diff --check` pass. The active queue has **48 items** (4 P1,
+35 P2, 9 P3), the completion ledger has **56 actions**, and the next ordered
+implementation item is **DAWGS-010**.
+
+Neo4j's complete **`make test_integration` passes all 43 tested packages**,
+including both shared integration suites and the new native procedure controls.
+Its **`make test_bdd_integration` passes**, with **17 enforced / zero failed**
+and **18 report-only compatibility failures** retained. This BDD run finishes
+before PostgreSQL reaches its BDD stage, keeping report writes sequential.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in each race-enabled unit/integration stage and the final BDD gate.
+Both full shared integration suites pass. The new driver controls pass in both
+compiler modes, with repeated explicit rejections and unchanged committed graph
+state. Its BDD gate also reports **17 enforced / zero failed**, retaining
+**18 report-only compatibility failures**.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`; credentials are excluded from this ledger.
+BDD report writes are sequential. Final local Markdown links, ledger counts and
+`git diff --check` pass. No Go edits followed the successful aggregate runs.
