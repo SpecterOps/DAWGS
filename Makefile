@@ -97,7 +97,7 @@ test_all: test test_integration test_bdd_integration
 
 test_integration: $(METRICS_DIR)
 	@echo "Running all integration tests..."
-	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -coverprofile=$(INTEGRATION_COVERAGE_PROFILE) -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -coverpkg=$(COVERPKG) -coverprofile=$(INTEGRATION_COVERAGE_PROFILE) -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 test_bdd_integration: $(METRICS_DIR)
 	@echo "Running all BDD integration tests..."
 	@$(GO_CMD) test -v -tags 'bdd_integration' -count=1 ./bdd
