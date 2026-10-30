@@ -1068,7 +1068,7 @@ func TestLoweringPlanReportsConservativeFixedSuffixSearchStrategy(t *testing.T) 
 // TestLoweringPlanSelectsGuardedEndpointSeededExpansion verifies guarded endpoint seeding for one statement-wide variable expansion.
 func TestLoweringPlanSelectsGuardedEndpointSeededExpansion(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)
+		MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g:Group)
 		WHERE g.objectid ENDS WITH $suffix
 		RETURN p
 		LIMIT 1000
@@ -1115,10 +1115,10 @@ func TestLoweringPlanSelectsGuardedEndpointSeededExpansion(t *testing.T) {
 // guarded fixed-prefix region.
 func TestEndpointSeededExpansionKeepsIndependentMultipartRegionQualified(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH (s)-[:MemberOf*0..]->(excluded:Group)
+		MATCH (s)-[:MemberOf*0..15]->(excluded:Group)
 		WHERE excluded.objectid ENDS WITH '-516'
 		WITH collect(s) AS exclude
-		MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)
+		MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g:Group)
 		WHERE g.objectid ENDS WITH $suffix AND NOT c IN exclude
 		RETURN p
 	`)
@@ -1153,47 +1153,47 @@ func TestGuardedEndpointSeededExpansionFallbackReasons(t *testing.T) {
 	}{
 		{
 			name:   "terminal not selective",
-			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) RETURN p`,
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g:Group) RETURN p`,
 			reason: ExpansionSearchFallbackTerminalNotSelective,
 		},
 		{
 			name:   "zero depth",
-			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*0..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*0..15]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`,
 			reason: ExpansionSearchFallbackZeroDepth,
 		},
 		{
 			name:   "directionless prefix",
-			query:  `MATCH p = (c:Computer)-[:HasSession]-(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			query:  `MATCH p = (c:Computer)-[:HasSession]-(:User)-[:MemberOf*1..15]->(g:Group) WHERE g.objectid ENDS WITH '-512' RETURN p`,
 			reason: ExpansionSearchFallbackDirectionlessPrefix,
 		},
 		{
 			name:   "correlated terminal",
-			query:  `MATCH (g:Group) MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			query:  `MATCH (g:Group) MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
 			reason: ExpansionSearchFallbackCorrelatedTerminal,
 		},
 		{
 			name:   "terminal bound by prefix",
-			query:  `MATCH p = (g:Group)-[:HasSession]->(:User)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			query:  `MATCH p = (g:Group)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
 			reason: ExpansionSearchFallbackCorrelatedTerminal,
 		},
 		{
 			name:   "terminal repeats expansion root",
-			query:  `MATCH p = (c:Computer)-[:HasSession]->(g:Group)-[:MemberOf*1..]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(g:Group)-[:MemberOf*1..15]->(g) WHERE g.objectid ENDS WITH '-512' RETURN p`,
 			reason: ExpansionSearchFallbackCorrelatedTerminal,
 		},
 		{
 			name:   "correlated terminal predicate",
-			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND g.tenant = c.tenant RETURN p`,
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g:Group) WHERE g.objectid ENDS WITH '-512' AND g.tenant = c.tenant RETURN p`,
 			reason: ExpansionSearchFallbackCorrelatedTerminal,
 		},
 		{
 			name:   "nonterminal expansion",
-			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group)-[:AdminTo]->() WHERE g.objectid ENDS WITH '-512' RETURN p`,
+			query:  `MATCH p = (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g:Group)-[:AdminTo]->() WHERE g.objectid ENDS WITH '-512' RETURN p`,
 			reason: ExpansionSearchFallbackExpansionNotTerminal,
 		},
 		{
 			name:   "mutation",
-			query:  `MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..]->(g:Group) WHERE g.objectid ENDS WITH '-512' CREATE (:Computer) RETURN g`,
+			query:  `MATCH (c:Computer)-[:HasSession]->(:User)-[:MemberOf*1..15]->(g:Group) WHERE g.objectid ENDS WITH '-512' CREATE (:Computer) RETURN g`,
 			reason: ExpansionSearchFallbackMutation,
 		},
 	} {
@@ -1960,7 +1960,7 @@ func TestLoweringPlanReportsAggregateTraversalCountForBoundExpansionCount(t *tes
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (u:User)
 		WHERE u.hasspn = true AND u.enabled = true
-		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 		WITH DISTINCT u, COUNT(c) AS adminCount
 		RETURN u
 		ORDER BY adminCount DESC
@@ -2003,7 +2003,7 @@ func TestLoweringPlanReportsAggregateTraversalCountForRowCount(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (u:User)
 		WHERE u.hasspn = true AND u.enabled = true
-		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 		WITH DISTINCT u, COUNT(*) AS adminCount
 		RETURN u
 		ORDER BY adminCount DESC
@@ -2024,7 +2024,7 @@ func TestLoweringPlanReportsAggregateTraversalCountWhenReturningCountAlias(t *te
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (u:User)
 		WHERE u.hasspn = true
-		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 		WITH DISTINCT u, COUNT(c) AS adminCount
 		RETURN u AS user, adminCount AS privileges
 		ORDER BY privileges DESC
@@ -2050,7 +2050,7 @@ func TestLoweringPlanReportsAggregateTraversalCountWithTerminalFilter(t *testing
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
 		MATCH (u:User)
 		WHERE u.hasspn = true
-		MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+		MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 		WHERE c.enabled = true
 		WITH DISTINCT u, COUNT(c) AS adminCount
 		RETURN u
@@ -2224,7 +2224,7 @@ func TestLoweringPlanSelectsQualifiedSingletonDistanceExecutor(t *testing.T) {
 func TestLoweringPlanSelectsBoundPairAllShortestDAGExecutor(t *testing.T) {
 	t.Parallel()
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = allShortestPaths((s)-[*1..]->(e))
+		MATCH p = allShortestPaths((s)-[*1..15]->(e))
 		WHERE id(s) = $start_id AND id(e) = $end_id
 		RETURN p
 	`)
@@ -2250,7 +2250,7 @@ func TestLoweringPlanSelectsBoundPairAllShortestDAGExecutor(t *testing.T) {
 	require.True(t, decision.StructurallyEligible)
 	require.True(t, decision.StaticallyEligible)
 	require.Equal(t, int64(1), decision.MinimumDepth)
-	require.Equal(t, defaultShortestPathExpansionDepth, decision.MaximumDepth)
+	require.Equal(t, int64(15), decision.MaximumDepth)
 	require.Equal(t, defaultShortestPathStateLimit, decision.StateLimit)
 	require.Equal(t, defaultShortestPathFrontierLimit, decision.FrontierLimit)
 	require.Equal(t, defaultShortestPathPredecessorLimit, decision.PredecessorLimit)
@@ -2457,12 +2457,12 @@ func TestLoweringPlanShortestExecutorUsesPolicyBoundForOpenMaximum(t *testing.T)
 			require.NoError(t, err)
 			require.Len(t, plan.LoweringPlan.ShortestPathExecutor, 1)
 			decision := plan.LoweringPlan.ShortestPathExecutor[0]
-			require.True(t, decision.StructurallyEligible)
-			require.Equal(t, int64(15), decision.MaximumDepth)
-			require.Equal(t, ShortestPathMaximumDepthPolicyDefault, decision.MaximumDepthSource)
-			require.Equal(t, test.executor, decision.SelectedExecutor)
-			require.Equal(t, ShortestPathSelectorStaticV7Contained, decision.SelectorVersion)
-			require.Empty(t, decision.FallbackReason)
+			require.False(t, decision.StructurallyEligible)
+			require.Equal(t, int64(0), decision.MaximumDepth)
+			require.Equal(t, ShortestPathMaximumDepthUnbounded, decision.MaximumDepthSource)
+			require.Equal(t, ShortestPathExecutorIncumbentWorkspace, decision.SelectedExecutor)
+			require.Equal(t, "sp-static-v3", decision.SelectorVersion)
+			require.Equal(t, ShortestPathFallbackUnsupportedDepth, decision.FallbackReason)
 		})
 	}
 }

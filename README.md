@@ -1,5 +1,16 @@
 # DAWGS
 
+PostgreSQL `WithGraph` selects an existing graph without creating partitions or
+reconciling indexes/constraints. Missing graphs return an error. Use explicit
+schema assertion to create or reconcile a graph; explicit assertion also applies
+to previously cached graphs. Kind registration and mapping inside transactions
+use the connection already owned by that transaction. New kind IDs become shared
+metadata only after commit, so rollback does not leave cached nonexistent IDs.
+
+Neo4j batch upserts quote kind and identity-property names, including spaces,
+keywords, Unicode and embedded backticks. Repeated relationship upserts retain
+the same identity and update their existing entities.
+
 Database Abstraction Wrapper for Graph Schemas
 
 ![A Corgi Treat](logo_small.png)
@@ -460,10 +471,48 @@ Relationship expansions written as `*k` normalize to the exact range `*k..k`, in
 above 15. Formatting preserves that exact range, and PostgreSQL uses the requested upper bound. Whitespace and
 comments within ranges are accepted. The shared `exact_expansion_length_shapes` templates check exact lengths,
 paths and mutation selection on both backends and in both PostgreSQL compiler modes. Open-ended PostgreSQL
-traversals still use the existing effective maximum depth of 15.
-The selected [open-ended traversal policy](docs/open_ended_traversal_policy.md) requires complete query semantics or
-an explicit error when resources are exhausted. Work on the compiler, SQL harnesses and resource accounting remains
-open; the current cap can omit longer matches and downstream writes without an error.
+traversals preserve an absent maximum, including paths beyond 15 hops. Ordinary
+traversals exhaust relationship-unique trails; open shortest searches use a
+budgeted breadth-first workspace. Explicit Cypher bounds remain inclusive semantic
+limits. Open ranges do not select executors that require a finite upper bound.
+
+Run ordinary schema assertion before using the upgraded compiler: it installs the
+versioned open-search harnesses and admission helper. Open traversal admission
+allows 100,000 candidate trail states and 64 MiB of cumulative estimated trail
+state (128 bytes plus 8 bytes per relationship per admitted candidate). These are
+execution budgets, not a maximum depth or a measurement of PostgreSQL process
+memory. Exhaustion raises SQLSTATE `54000`; results remain provisional until the
+stream is drained/closed and its error checked. A failed write cannot commit,
+including preceding multipart stages. Context cancellation remains available.
+Operators may set positive PostgreSQL session/transaction settings
+`dawgs.traversal_state_limit` and `dawgs.traversal_byte_limit`; accounting is fresh
+for each driver query and shared by its multipart stages. Increasing budgets can
+increase execution time and temporary storage substantially. See the
+[open-ended traversal policy](docs/open_ended_traversal_policy.md).
+
+This changes successful results and mutation targets: queries can now reach
+entities beyond depth 15. Add an explicit `*1..15` bound where that was intended.
+Generic undirected shortest-path execution remains outside the existing support
+boundary; this repair preserves supported traversal directions.
+
+Bounded PostgreSQL `shortestPath` calls with singleton IDs use the current
+endpoint arrays throughout search, including bounds above 64. Their generated
+fragments cannot read generic endpoint-filter tables, and the bidirectional
+harness verifies endpoint IDs before returning or stopping. A prior query on a
+pooled connection cannot supply this call's terminal filter. Seeded self-endpoint
+checks first establish that the root belongs to the filtered seed relation, so
+unrelated edge rows cannot raise an endpoint error before the seed join.
+Install the updated
+SQL functions through ordinary schema assertion when deploying the compiler;
+existing graph data and temporary-table layouts need no migration. The shared
+`bounded_shortest_endpoint_shapes` corpus checks paths, scalar lengths, endpoint
+predicates and mutation targets on both backends and in both PostgreSQL compiler
+modes. Driver regressions cover fresh connections, filter-table reuse, changing
+parameters across leases, and complete 128-edge witnesses.
+Separate PostgreSQL issues with bounded all-shortest zero-hop results and
+`shortestPath` followed by `SET ... RETURN p` remain recorded in the
+[validation ledger](variance_findings_priority_complete.md#bounded-shortest-path-workspace-repair--2026-10-30).
+
 
 Predicates comparing variable-length traversal endpoints remain active when a fixed hop follows the expansion.
 The shared `expansion_endpoint_predicate_shapes` templates check filters, path multiplicity, zero hops, inbound

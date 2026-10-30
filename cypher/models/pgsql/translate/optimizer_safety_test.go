@@ -345,7 +345,7 @@ func TestForcedSuffixSeededReverseEmitsNativeReverseTrailState(t *testing.T) {
 // TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied verifies that qualified endpoint seeding emits bounded probes and reports application.
 func TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied(t *testing.T) {
 	translation := optimizerSafetyTranslationWithParameters(t, `
-		MATCH p = (c:Computer)-[:AdminTo]->(:User)-[:MemberOf*1..]->(g:Group)
+		MATCH p = (c:Computer)-[:AdminTo]->(:User)-[:MemberOf*1..15]->(g:Group)
 		WHERE g.objectid ENDS WITH $suffix
 		RETURN p
 		LIMIT 1000
@@ -393,7 +393,7 @@ func TestEndpointSeededReverseIsAutomaticallyGuardedAndApplied(t *testing.T) {
 // TestProductionEndpointSeededKillSwitchRestoresStepwiseSQL verifies production endpoint seeded kill switch restores stepwise sql behavior.
 func TestProductionEndpointSeededKillSwitchRestoresStepwiseSQL(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = (c:Computer)-[:AdminTo]->(:User)-[:MemberOf*1..]->(g:Group)
+		MATCH p = (c:Computer)-[:AdminTo]->(:User)-[:MemberOf*1..15]->(g:Group)
 		WHERE g.objectid ENDS WITH $suffix
 		RETURN p LIMIT 1000
 	`)
@@ -579,11 +579,11 @@ func TestImplicitMaximumShortestPathReportsPolicyDepthProvenance(t *testing.T) {
 	`)
 	outcome := requireTraversalTargetOutcome(t, translation.Optimization, optimize.LoweringShortestPathExecutor,
 		optimize.TraversalStepTarget{QueryPartIndex: 0, ClauseIndex: 0, PatternIndex: 0, StepIndex: 0})
-	require.Equal(t, string(optimize.ShortestPathExecutorS3Unidirectional), outcome.Applied)
-	require.Equal(t, optimize.ShortestPathSelectorStaticV7Contained, outcome.SelectorVersion)
+	require.Empty(t, outcome.Applied)
+	require.Equal(t, "sp-static-v3", outcome.SelectorVersion)
 	require.NotNil(t, outcome.MaximumDepth)
-	require.Equal(t, int64(15), *outcome.MaximumDepth)
-	require.Equal(t, string(optimize.ShortestPathMaximumDepthPolicyDefault), outcome.MaximumDepthSource)
+	require.Equal(t, int64(0), *outcome.MaximumDepth)
+	require.Equal(t, string(optimize.ShortestPathMaximumDepthUnbounded), outcome.MaximumDepthSource)
 }
 
 // TestGreedyProjectionMaterializesShortestPathAndEntities verifies that RETURN * hydrates the path and every visible endpoint.
@@ -724,7 +724,7 @@ func TestShortestExecutorV4SelectsCompactMultiKindPathAndKeepsS3Distance(t *test
 // TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor verifies typed predecessor-DAG execution for bound all-shortest paths.
 func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *testing.T) {
 	translation := optimizerSafetyTranslationWithParameters(t, `
-		MATCH p = allShortestPaths((s)-[*1..]->(e))
+		MATCH p = allShortestPaths((s)-[*1..15]->(e))
 		WHERE id(s) = $start_id AND id(e) = $end_id
 		RETURN p
 	`, map[string]any{"start_id": int64(1), "end_id": int64(2)})
@@ -2505,7 +2505,7 @@ func TestOptimizerSafetyAggregateTraversalCountUsesIDOnlySourceAnchoredShape(t *
 	translation := optimizerSafetyTranslation(t, `
 MATCH (u:User)
 WHERE u.hasspn = true AND u.enabled = true
-MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 WITH DISTINCT u, COUNT(c) AS adminCount
 RETURN u
 ORDER BY adminCount DESC
@@ -2596,7 +2596,7 @@ func TestOptimizerSafetyAggregateTraversalCountAcceptsRowCount(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
 MATCH (u:User)
 WHERE u.hasspn = true AND u.enabled = true
-MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 WITH DISTINCT u, COUNT(*) AS adminCount
 RETURN u
 ORDER BY adminCount DESC
@@ -2641,7 +2641,7 @@ func TestOptimizerSafetyAggregateTraversalCountSupportsInboundSourceAnchoring(t 
 	translation := optimizerSafetyTranslation(t, `
 MATCH (u:User)
 WHERE u.hasspn = true
-MATCH (u)<-[:MemberOf|AdminTo*1..]-(c:Computer)
+MATCH (u)<-[:MemberOf|AdminTo*1..15]-(c:Computer)
 WITH DISTINCT u, COUNT(c) AS adminCount
 RETURN u
 ORDER BY adminCount DESC
@@ -2663,7 +2663,7 @@ func TestOptimizerSafetyAggregateTraversalCountReturnsCountAlias(t *testing.T) {
 	translation := optimizerSafetyTranslation(t, `
 MATCH (u:User)
 WHERE u.hasspn = true
-MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 WITH DISTINCT u, COUNT(c) AS adminCount
 RETURN u AS user, adminCount AS privileges
 ORDER BY privileges DESC
@@ -2686,7 +2686,7 @@ func TestOptimizerSafetyAggregateTraversalCountFoldsTerminalFilter(t *testing.T)
 	translation := optimizerSafetyTranslation(t, `
 MATCH (u:User)
 WHERE u.hasspn = true
-MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 WHERE c.enabled = true
 WITH DISTINCT u, COUNT(c) AS adminCount
 RETURN u
@@ -2710,7 +2710,7 @@ func TestOptimizerSafetyAggregateTraversalCountUsesDistinctPredicateParameters(t
 	translation := optimizerSafetyTranslationWithParameters(t, `
 MATCH (u:User)
 WHERE u.enabled = $sourceEnabled
-MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 WHERE c.enabled = $terminalEnabled
 WITH DISTINCT u, COUNT(c) AS adminCount
 RETURN u
@@ -2743,7 +2743,7 @@ func TestOptimizerSafetyAggregateTraversalCountReusesPredicateParameter(t *testi
 	translation := optimizerSafetyTranslationWithParameters(t, `
 MATCH (u:User)
 WHERE u.enabled = $enabled
-MATCH (u)-[:MemberOf|AdminTo*1..]->(c:Computer)
+MATCH (u)-[:MemberOf|AdminTo*1..15]->(c:Computer)
 WHERE c.enabled = $enabled
 WITH DISTINCT u, COUNT(c) AS adminCount
 RETURN u
@@ -2923,7 +2923,7 @@ func TestOptimizerSafetyShortestPathStrategyUsesPlannedBidirectionalSearch(t *te
 	t.Parallel()
 
 	translation := optimizerSafetyTranslation(t, `
-MATCH p = allShortestPaths((s)-[:MemberOf*1..]->(e))
+MATCH p = allShortestPaths((s)-[:MemberOf*1..15]->(e))
 WHERE s.name = 'source' AND e.name = 'target'
 RETURN p
 	`)

@@ -5570,7 +5570,7 @@ begin
   perform create_traversal_filter_tables(root_ids, terminal_ids);
   select count(*) into terminal_filter_count from traversal_terminal_filter;
 
-  while forward_front_depth < max_depth and
+  while (max_depth < 0 or forward_front_depth < max_depth) and
         (path_limit <= 0 or paths_count < path_limit) and
         (forward_front_depth = 0 or exists(select 1 from forward_front))
     loop
@@ -5717,7 +5717,7 @@ begin
   perform create_traversal_filter_tables(root_filter, terminal_filter);
   select count(*) into terminal_filter_count from traversal_terminal_filter;
 
-  while forward_front_depth < max_depth and
+  while (max_depth < 0 or forward_front_depth < max_depth) and
         (path_limit <= 0 or paths_count < path_limit) and
         (forward_front_depth = 0 or exists(select 1 from forward_front))
     loop
@@ -5892,14 +5892,18 @@ $$
 #variable_conflict use_column
 declare
   forward_front_depth int4 := 0;
+  terminal_filter_count int8 := 0;
 begin
   raise debug 'unidirectional_asp_harness start';
+  create temporary table if not exists dawgs_asp_resolved_v2 (root_id int8, terminal_id int8, primary key(root_id, terminal_id)) on commit preserve rows;
+  truncate dawgs_asp_resolved_v2;
 
   -- Defines two tables to represent pathspace of the recursive expansion
   perform create_unidirectional_pathspace_tables();
   perform create_traversal_filter_tables(root_ids, terminal_ids);
+  select count(*) into terminal_filter_count from traversal_terminal_filter;
 
-  while forward_front_depth < max_depth and (forward_front_depth = 0 or exists(select 1 from forward_front))
+  while (max_depth < 0 or forward_front_depth < max_depth) and (forward_front_depth = 0 or exists(select 1 from forward_front))
     loop
     -- If this is the first expansion of this frontier, perform the primer query - otherwise perform the
     -- recursive expansion query
@@ -5916,11 +5920,19 @@ begin
       -- Check to see if the root front is satisfied
       if exists(select 1 from next_front r where r.satisfied) then
         -- Return all satisfied paths from the next front
-        return query select * from next_front r where r.satisfied;
-        exit;
+        return query select r.* from next_front r where r.satisfied
+          and not exists (select 1 from dawgs_asp_resolved_v2 p where p.root_id = r.root_id and p.terminal_id = r.next_id);
+        insert into dawgs_asp_resolved_v2 select distinct r.root_id, r.next_id from next_front r where r.satisfied on conflict do nothing;
       end if;
 
-      -- Swap the next_front table into the forward_front
+      -- A root is complete only after every requested terminal has been
+    -- resolved and all witnesses in this layer have been returned.
+      if terminal_filter_count > 0 then
+        delete from next_front f using (
+          select p.root_id from dawgs_asp_resolved_v2 p
+          group by p.root_id having count(*) >= terminal_filter_count
+        ) resolved where f.root_id = resolved.root_id;
+      end if;
       perform swap_forward_front();
     end loop;
 
@@ -5948,14 +5960,18 @@ $$
 #variable_conflict use_column
 declare
   forward_front_depth int4 := 0;
+  terminal_filter_count int8 := 0;
 begin
   raise debug 'unidirectional_asp_harness start';
+  create temporary table if not exists dawgs_asp_resolved_v2 (root_id int8, terminal_id int8, primary key(root_id, terminal_id)) on commit preserve rows;
+  truncate dawgs_asp_resolved_v2;
 
   -- Defines two tables to represent pathspace of the recursive expansion
   perform create_unidirectional_pathspace_tables();
   perform create_traversal_filter_tables(root_filter, terminal_filter);
+  select count(*) into terminal_filter_count from traversal_terminal_filter;
 
-  while forward_front_depth < max_depth and (forward_front_depth = 0 or exists(select 1 from forward_front))
+  while (max_depth < 0 or forward_front_depth < max_depth) and (forward_front_depth = 0 or exists(select 1 from forward_front))
     loop
     -- If this is the first expansion of this frontier, perform the primer query - otherwise perform the
     -- recursive expansion query
@@ -5972,11 +5988,19 @@ begin
       -- Check to see if the root front is satisfied
       if exists(select 1 from next_front r where r.satisfied) then
         -- Return all satisfied paths from the next front
-        return query select * from next_front r where r.satisfied;
-        exit;
+        return query select r.* from next_front r where r.satisfied
+          and not exists (select 1 from dawgs_asp_resolved_v2 p where p.root_id = r.root_id and p.terminal_id = r.next_id);
+        insert into dawgs_asp_resolved_v2 select distinct r.root_id, r.next_id from next_front r where r.satisfied on conflict do nothing;
       end if;
 
-      -- Swap the next_front table into the forward_front
+      -- A root is complete only after every requested terminal has been
+    -- resolved and all witnesses in this layer have been returned.
+      if terminal_filter_count > 0 then
+        delete from next_front f using (
+          select p.root_id from dawgs_asp_resolved_v2 p
+          group by p.root_id having count(*) >= terminal_filter_count
+        ) resolved where f.root_id = resolved.root_id;
+      end if;
       perform swap_forward_front();
     end loop;
 
@@ -6650,7 +6674,12 @@ begin
         from pg_temp.bsp_forward_front f
         on conflict on constraint bsp_forward_visited_pkey do nothing;
 
-        if exists(select 1 from pg_temp.bsp_forward_front r where r.satisfied) then
+        -- Array-mode success must belong to this call's endpoints, even if a
+        -- fragment incorrectly marks another candidate satisfied. Apply the same
+        -- check before stopping and returning so rejected hits keep searching.
+        if exists(select 1 from pg_temp.bsp_forward_front r
+                  where r.satisfied and (not use_array_parameters or
+                    (r.root_id = any(root_ids) and r.next_id = any(terminal_ids)))) then
           if use_pair_filter then
             -- A direct forward hit resolves only the requested pairs it satisfies.
             -- Frontiers for completed roots/terminals are pruned below.
@@ -6693,7 +6722,8 @@ begin
                                                                     r.is_cycle,
                                                                     r.path
                          from pg_temp.bsp_forward_front r
-                         where r.satisfied
+                         where r.satisfied and (not use_array_parameters or
+                           (r.root_id = any(root_ids) and r.next_id = any(terminal_ids)))
                          order by r.root_id, r.next_id, r.depth
                          limit case when path_limit > 0 then path_limit else null end;
             exit;
@@ -6754,7 +6784,12 @@ begin
         from pg_temp.bsp_backward_front f
         on conflict on constraint bsp_backward_visited_pkey do nothing;
 
-        if exists(select 1 from pg_temp.bsp_backward_front r where r.satisfied) then
+        -- Array-mode success must belong to this call's endpoints, even if a
+        -- fragment incorrectly marks another candidate satisfied. Apply the same
+        -- check before stopping and returning so rejected hits keep searching.
+        if exists(select 1 from pg_temp.bsp_backward_front r
+                  where r.satisfied and (not use_array_parameters or
+                    (r.next_id = any(root_ids) and r.root_id = any(terminal_ids)))) then
           if use_pair_filter then
             -- Symmetric direct hit from the terminal side; swap root/terminal
             -- columns back into the function's result shape.
@@ -6795,7 +6830,8 @@ begin
                                                                     r.is_cycle,
                                                                     r.path
                          from pg_temp.bsp_backward_front r
-                         where r.satisfied
+                         where r.satisfied and (not use_array_parameters or
+                           (r.next_id = any(root_ids) and r.root_id = any(terminal_ids)))
                          order by r.next_id, r.root_id, r.depth
                          limit case when path_limit > 0 then path_limit else null end;
             exit;
@@ -6852,6 +6888,8 @@ begin
                                                                f.path || b.path
                      from pg_temp.bsp_forward_front f
                             join pg_temp.bsp_backward_front b on f.next_id = b.next_id
+                     where not use_array_parameters or
+                       (f.root_id = any(root_ids) and b.root_id = any(terminal_ids))
                      order by f.root_id, b.root_id, f.depth + b.depth
                      limit case when path_limit > 0 then path_limit else null end;
         get diagnostics matched_count = row_count;
@@ -7353,3 +7391,446 @@ begin
   return value;
 end;
 $$ language plpgsql immutable parallel safe strict;
+
+-- Versioned open traversal boundary: bound presence is independent of its value.
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                            root_ids int8[], terminal_ids int8[], path_limit int8, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_sp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, root_ids, terminal_ids, path_limit);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                            root_ids int8[], terminal_ids int8[], max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if cardinality(root_ids) = 0 or cardinality(terminal_ids) = 0 then return; end if;
+ if cardinality(root_ids) <> 1 or cardinality(terminal_ids) <> 1 then
+  raise exception using errcode = '22023', message = 'open shortest array execution requires one endpoint pair';
+ end if;
+ if root_ids[1] is null or terminal_ids[1] is null then return; end if;
+ return query select * from public.unidirectional_sp_harness_v2(forward_primer, forward_recursive, max_depth,
+ ''::text, ''::text, format('insert into traversal_pair_filter (root_id, terminal_id) values (%L, %L)', root_ids[1], terminal_ids[1]), max_is_bound);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                            root_ids int8[], path_limit int8, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_sp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, root_ids, path_limit);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                            root_filter text, terminal_filter text, path_limit int8, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_sp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, root_filter, terminal_filter, path_limit);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                            root_filter text, terminal_filter text, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_sp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, root_filter, terminal_filter);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                            root_ids int8[], max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_sp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, root_ids);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                            path_limit int8, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_sp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, path_limit);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_sp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_asp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                             root_ids int8[], terminal_ids int8[], max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if cardinality(root_ids) = 0 or cardinality(terminal_ids) = 0 then return; end if;
+ if cardinality(root_ids) <> 1 or cardinality(terminal_ids) <> 1 then
+  raise exception using errcode = '22023', message = 'open shortest array execution requires one endpoint pair';
+ end if;
+ if root_ids[1] is null or terminal_ids[1] is null then return; end if;
+ return query select * from public.unidirectional_asp_harness_v2(forward_primer, forward_recursive, max_depth,
+ ''::text, ''::text, format('insert into traversal_pair_filter (root_id, terminal_id) values (%L, %L)', root_ids[1], terminal_ids[1]), max_is_bound);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_asp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                             root_filter text, terminal_filter text, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_asp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, root_filter, terminal_filter);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_asp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+                                                             root_ids int8[], max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_asp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end, root_ids);
+ end;
+ $$ language plpgsql volatile strict;
+
+create or replace function public.unidirectional_asp_harness_v2(forward_primer text, forward_recursive text, max_depth int8, max_is_bound bool)
+ returns table (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          ) as $$
+ begin
+ if max_is_bound and (max_depth < 0 or max_depth > 2147483647) then
+ raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+ end if;
+ return query select * from public.unidirectional_asp_harness(forward_primer, forward_recursive, case when max_is_bound then max_depth::int4 else -1 end);
+ end;
+ $$ language plpgsql volatile strict;
+
+-- Account all admitted trail states, including their ordered edge arrays. Counts
+-- are cumulative across stages sharing a driver query token, never a depth cap.
+create or replace function public.dawgs_admit_traversal_v1(trail_depth int8, candidate_id int8)
+returns bool as $$
+declare
+ token text := coalesce(nullif(current_setting('dawgs.traversal_token', true), ''), statement_timestamp()::text);
+ states int8 := 0;
+ bytes int8 := 0;
+ state_limit int8 := coalesce(nullif(current_setting('dawgs.traversal_state_limit', true), '')::int8, 100000);
+ byte_limit int8 := coalesce(nullif(current_setting('dawgs.traversal_byte_limit', true), '')::int8, 67108864);
+ charge int8;
+begin
+ if current_setting('dawgs.traversal_account_token', true) = token then
+  states := coalesce(nullif(current_setting('dawgs.traversal_states', true), '')::int8, 0);
+  bytes := coalesce(nullif(current_setting('dawgs.traversal_bytes', true), '')::int8, 0);
+ end if;
+ if trail_depth < 0 or trail_depth > 2147483646 or state_limit <= 0 or byte_limit <= 0 then
+  raise exception using errcode = '54000', message = 'DAWGS traversal resource limit exceeded';
+ end if;
+ charge := 128 + 8 * trail_depth;
+ if states >= state_limit or charge > byte_limit or bytes > byte_limit - charge then
+  raise exception using errcode = '54000', message = 'DAWGS traversal resource limit exceeded';
+ end if;
+ perform set_config('dawgs.traversal_account_token', token, true);
+ perform set_config('dawgs.traversal_states', (states + 1)::text, true);
+ perform set_config('dawgs.traversal_bytes', (bytes + charge)::text, true);
+ return true;
+end;
+$$ language plpgsql volatile strict;
+
+-- Correlated endpoint-pair overload; preserve the caller's pair filter.
+create or replace function public.unidirectional_sp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+ root_filter text, terminal_filter text, pair_filter text, max_is_bound bool)
+ returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+#variable_conflict use_column
+declare
+  path_limit int8 := 0;
+  forward_front_depth   int4 := 0;
+  terminal_filter_count int8 := 0;
+  inserted_path_count   int8 := 0;
+  paths_count           int8 := 0;
+begin
+  if max_is_bound then
+    if max_depth < 0 or max_depth > 2147483646 then
+      raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+    end if;
+  else
+    max_depth := -1;
+  end if;
+  raise debug 'Shortest Path Harness starting';
+
+  -- Create all tables necessary to drive traversal
+  perform create_unidirectional_shortest_path_tables();
+  perform create_traversal_filter_tables(root_filter, terminal_filter, pair_filter);
+  select count(*) into terminal_filter_count from traversal_terminal_filter;
+
+  while (max_depth < 0 or forward_front_depth < max_depth) and
+        (path_limit <= 0 or paths_count < path_limit) and
+        (forward_front_depth = 0 or exists(select 1 from forward_front))
+    loop
+      if forward_front_depth = 0 then
+        execute forward_primer;
+
+        -- Insert all root nodes as visited
+        insert into visited (root_id, id) select distinct f.root_id, f.root_id from next_front f on conflict on constraint visited_pkey do nothing;
+      else
+        execute forward_recursive;
+      end if;
+
+      forward_front_depth = forward_front_depth + 1;
+
+      -- Swap the next_front table into the forward_front
+      -- Remove cycles and non-conformant satisfaction checks
+      delete from next_front f where f.is_cycle;
+      delete from next_front f where f.satisfied is null;
+      delete from next_front f using visited v where f.root_id = v.root_id and f.next_id = v.id;
+
+      raise debug 'Expansion step %', forward_front_depth;
+
+      -- Insert new newly visited nodes into the visited table
+      insert into visited (root_id, id) select distinct f.root_id, f.next_id from next_front f on conflict on constraint visited_pkey do nothing;
+
+      -- Copy pathspace over into the next front
+      truncate table forward_front;
+
+      insert into forward_front
+      select distinct on (f.root_id, f.next_id) f.root_id, f.next_id, f.depth, f.satisfied, f.is_cycle, f.path
+      from next_front f
+      order by f.root_id, f.next_id, f.depth;
+
+      -- Copy newly satisfied paths into the path table
+      if path_limit > 0 then
+        insert into paths
+        select f.root_id, f.next_id, f.depth, f.satisfied, f.is_cycle, f.path
+        from forward_front f
+        where f.satisfied
+        limit path_limit - paths_count;
+      else
+        insert into paths
+        select f.root_id, f.next_id, f.depth, f.satisfied, f.is_cycle, f.path
+        from forward_front f
+        where f.satisfied;
+      end if;
+      get diagnostics inserted_path_count = row_count;
+      paths_count = paths_count + inserted_path_count;
+
+      if terminal_filter_count > 0 then
+        insert into resolved_roots (root_id)
+        select p.root_id
+        from paths p
+        group by p.root_id
+        having count(distinct p.next_id) >= terminal_filter_count
+        on conflict on constraint resolved_roots_pkey do nothing;
+
+        delete from forward_front f using resolved_roots r where f.root_id = r.root_id;
+      end if;
+
+      -- Empty the next front last to capture the next expansion
+      truncate table next_front;
+    end loop;
+
+  if path_limit > 0 then
+    return query select * from paths limit path_limit;
+  else
+    return query select * from paths;
+  end if;
+
+  -- This bare return is not an error. This closes this function's resultset, and the return above will
+  -- be treated as a yield and continue execution once the result cursor is exhausted.
+  return;
+end;
+$$
+  language plpgsql
+  volatile
+  strict;
+
+-- Correlated endpoint-pair overload; preserve the caller's pair filter.
+create or replace function public.unidirectional_asp_harness_v2(forward_primer text, forward_recursive text, max_depth int8,
+ root_filter text, terminal_filter text, pair_filter text, max_is_bound bool)
+ returns table
+          (
+            root_id   int8,
+            next_id   int8,
+            depth     int4,
+            satisfied bool,
+            is_cycle  bool,
+            path      int8[]
+          )
+as
+$$
+#variable_conflict use_column
+declare
+  forward_front_depth int4 := 0;
+  terminal_filter_count int8 := 0;
+begin
+  if max_is_bound then
+    if max_depth < 0 or max_depth > 2147483646 then
+      raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+    end if;
+  else
+    max_depth := -1;
+  end if;
+  raise debug 'unidirectional_asp_harness start';
+  create temporary table if not exists dawgs_asp_resolved_v2 (root_id int8, terminal_id int8, primary key(root_id, terminal_id)) on commit preserve rows;
+  truncate dawgs_asp_resolved_v2;
+
+  -- Defines two tables to represent pathspace of the recursive expansion
+  perform create_unidirectional_pathspace_tables();
+  perform create_traversal_filter_tables(root_filter, terminal_filter, pair_filter);
+  select count(*) into terminal_filter_count from traversal_terminal_filter;
+
+  while (max_depth < 0 or forward_front_depth < max_depth) and (forward_front_depth = 0 or exists(select 1 from forward_front))
+    loop
+    -- If this is the first expansion of this frontier, perform the primer query - otherwise perform the
+    -- recursive expansion query
+      if forward_front_depth = 0 then
+        execute forward_primer;
+      else
+        execute forward_recursive;
+      end if;
+
+      forward_front_depth = forward_front_depth + 1;
+
+      raise debug 'Expansion step %', forward_front_depth;
+
+      -- Check to see if the root front is satisfied
+      if exists(select 1 from next_front r where r.satisfied) then
+        -- Return all satisfied paths from the next front
+        return query select r.* from next_front r where r.satisfied
+          and not exists (select 1 from dawgs_asp_resolved_v2 p where p.root_id = r.root_id and p.terminal_id = r.next_id);
+        insert into dawgs_asp_resolved_v2 select distinct r.root_id, r.next_id from next_front r where r.satisfied on conflict do nothing;
+      end if;
+
+      -- A root is complete only after every requested terminal has been
+    -- resolved and all witnesses in this layer have been returned.
+      if terminal_filter_count > 0 then
+        delete from next_front f using (
+          select p.root_id from dawgs_asp_resolved_v2 p
+          group by p.root_id having count(*) >= terminal_filter_count
+        ) resolved where f.root_id = resolved.root_id;
+      end if;
+      perform swap_forward_front();
+    end loop;
+
+  -- This bare return is not an error. This closes this function's resultset, and the return above will
+  -- be treated as a yield and continue execution once the result cursor is exhausted.
+  return;
+end;
+$$
+  language plpgsql volatile
+                   strict;

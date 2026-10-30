@@ -99,6 +99,12 @@ func TestGraphBenchS1DistancePrototypeIsBoundedAndGraphScoped(t *testing.T) {
 	start := strings.Index(sqlSchemaUp, "create or replace function public.graphbench_s1_distance_bfs")
 	require.NotEqual(t, -1, start)
 	prototype := sqlSchemaUp[start:]
+	// Inspect this function's body, including when unrelated helpers follow it.
+	bodyStart := strings.Index(prototype, "$$")
+	require.NotEqual(t, -1, bodyStart)
+	bodyEnd := strings.Index(prototype[bodyStart+2:], "$$")
+	require.NotEqual(t, -1, bodyEnd)
+	prototype = prototype[:bodyStart+2+bodyEnd+2]
 
 	require.Contains(t, prototype, "edge.graph_id = target_graph_id")
 	require.Contains(t, prototype, "cardinality(visited) + cardinality(next_frontier) > state_limit")

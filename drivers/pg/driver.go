@@ -315,11 +315,7 @@ func (s *Driver) FetchKinds(_ context.Context) (graph.Kinds, error) {
 
 // RefreshKinds discards and reloads the driver's in-memory kind mapping.
 func (s *Driver) RefreshKinds(ctx context.Context) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
-	// Wipe this map to be rebuilt in the fetch call below
-	s.SchemaManager.kindIDsByKind = map[int16]graph.Kind{}
 	if err := s.SchemaManager.Fetch(ctx); err != nil {
 		return err
 	}
@@ -399,13 +395,12 @@ func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16
 	}
 	s.lock.RUnlock()
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	if err := s.Fetch(ctx); err != nil {
 		return nil, nil, err
 	}
 
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	kindIDs, missingKinds := s.mapKinds(kinds)
 	return kindIDs, missingKinds, nil
 }

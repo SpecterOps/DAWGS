@@ -585,6 +585,12 @@ func (s *Translator) translatePathLengthFunction(functionInvocation *cypher.Func
 		var edges pgsql.Expression
 		if binding.LastProjection == nil {
 			edges, err = pathCompositeEdgeIDArrayExpression(s.scope, binding)
+			for _, dependency := range binding.Dependencies {
+				if dependency.DataType == pgsql.PathComposite {
+					edges, err = pathCompositeEdgesExpression(s.scope, binding)
+					break
+				}
+			}
 		} else {
 			edges = pgsql.RowColumnReference{
 				Identifier: pgsql.CompoundIdentifier{binding.LastProjection.Binding.Identifier, binding.Identifier},

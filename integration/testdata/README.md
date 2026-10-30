@@ -460,3 +460,27 @@ write variants with and without RETURN verify all source records and creation
 counts. PostgreSQL executes the same assertions in both compiler modes.
 `TestResultAliasSpelling` checks `Result.Keys()` directly, including aliases that
 differ only by case and implicit expressions containing multiple backtick names.
+
+`open_traversal_shapes.json` checks ordinary, shortest and all-shortest searches
+at depths 15–17, open/minimum-only/explicit bounds, scalar lengths and complete
+path witnesses. Branching cases preserve all shortest witnesses and endpoint
+pairs at different depths, earlier bound endpoints and duplicate input rows;
+cyclic fixtures enumerate relationship-unique trails,
+including zero hops. SET and CREATE run with and without RETURN and verify all
+original node/relationship records plus created cardinality, including disconnected,
+direction, kind and identity decoys. PostgreSQL executes both compiler modes.
+Separate PostgreSQL driver tests force state and byte exhaustion and check rollback
+of preceding multipart writes; Neo4j driver-scoped controls check repeated upserts
+with escaped kind and identity-property names.
+
+`bounded_shortest_endpoint_shapes.json` checks explicit bounds 64, 65 and 128
+with scalar and complete path projections in both supported directions.
+Endpoint property/label filters, null IDs, disconnected pairs, shortest zero-hop
+paths and complete mutation post-state use identical expectations on both
+backends. PostgreSQL executes both compiler modes. Driver-scoped regressions
+separately check fresh and reused physical connections, a property-filtered
+query followed by different explicit-ID requests, a complete 128-edge path, and
+malformed SQL fragments that must not return or stop at unrelated endpoints.
+Property-filtered open shortest searches additionally check that self-endpoint
+errors apply only to eligible roots, including terminals with outgoing edges,
+wrong-direction empty results, inbound searches and exact mutation targets.

@@ -76,7 +76,7 @@ const (
 	maxExactRangeExpansionDepth int64 = 2
 
 	// defaultShortestPathExpansionDepth supplies the maximum depth for an otherwise open shortest-path range.
-	defaultShortestPathExpansionDepth int64 = 15
+	defaultShortestPathExpansionDepth int64 = 0
 
 	// defaultShortestPathStateLimit caps intermediate states admitted by guarded experimental executors.
 	defaultShortestPathStateLimit int64 = ShortestPathI2QualifiedStateLimit
@@ -238,7 +238,7 @@ func appendEndpointSeededExpansionDecisions(plan *LoweringPlan, queryPartIndex i
 				if step.Relationship.Range.StartIndex != nil {
 					minDepth = *step.Relationship.Range.StartIndex
 				}
-				maxDepth := int64(15)
+				maxDepth := int64(0)
 				if step.Relationship.Range.EndIndex != nil {
 					maxDepth = *step.Relationship.Range.EndIndex
 				}
@@ -1069,15 +1069,13 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 				}
 				maxDepth := defaultShortestPathExpansionDepth
 				boundedDepth := step.Relationship.Range.EndIndex != nil
-				maximumDepthSource := ShortestPathMaximumDepthPolicyDefault
+				maximumDepthSource := ShortestPathMaximumDepthUnbounded
 				if boundedDepth {
 					maxDepth = *step.Relationship.Range.EndIndex
 					maximumDepthSource = ShortestPathMaximumDepthExplicit
 				}
-				// PostgreSQL already caps syntax-open recursive traversal at
-				// defaultShortestPathExpansionDepth. Preserve that public behavior
-				// while allowing the same effective finite bound to use S3/S4.
-				supportedDepth := (minDepth == 0 || minDepth == 1) && maxDepth >= minDepth && maxDepth <= 64
+				// Open maxima use the complete budgeted workspace executor.
+				supportedDepth := boundedDepth && (minDepth == 0 || minDepth == 1) && maxDepth >= minDepth && maxDepth <= 64
 				directionSupported := step.Relationship.Direction != graph.DirectionBoth
 				relationshipVariableObserved := step.Relationship.Variable != nil && referencesSourceIdentifier(sourceReferences, step.Relationship.Variable.Symbol)
 				noRelationshipVariable := step.Relationship.Variable == nil || (patternPart.AllShortestPathsPattern && !relationshipVariableObserved)
@@ -3384,7 +3382,7 @@ func aggregateTraversalFinalProjection(queryPart *cypher.SinglePartQuery, source
 
 // aggregateTraversalDepthBounds returns finite minimum and maximum depths for a countable relationship range.
 func aggregateTraversalDepthBounds(patternRange *cypher.PatternRange) (int64, int64, bool) {
-	if patternRange == nil {
+	if patternRange == nil || patternRange.EndIndex == nil {
 		return 0, 0, false
 	}
 
@@ -3396,7 +3394,7 @@ func aggregateTraversalDepthBounds(patternRange *cypher.PatternRange) (int64, in
 		return 0, 0, false
 	}
 
-	maxDepth := int64(15)
+	maxDepth := int64(0)
 	if patternRange.EndIndex != nil {
 		maxDepth = *patternRange.EndIndex
 	}

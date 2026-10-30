@@ -12,6 +12,8 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 
 	for _, dependency := range pathBinding.Dependencies {
 		switch dependency.DataType {
+		case pgsql.PathComposite:
+			edgeArrayReferences = append(edgeArrayReferences, pathCompositeColumnReference(scope, dependency, pgsql.ColumnEdges))
 		case pgsql.ExpansionPath:
 			if edgeArrayReference, err := expansionPathEdgeArrayExpression(scope, dependency); err != nil {
 				return nil, err

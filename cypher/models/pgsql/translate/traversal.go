@@ -193,6 +193,11 @@ func (s *Translator) shortestPathFilterDecisionsForStep(part *PatternPart, stepI
 
 // applyShortestPathFilterMaterialization enables terminal or endpoint-pair filters selected for the source step.
 func (s *Translator) applyShortestPathFilterMaterialization(part *PatternPart, stepIndex int, traversalStep *TraversalStep, expansionModel *Expansion) {
+	// Singleton calls pass current endpoint arrays to the harness. Generic
+	// filter tables belong exclusively to its text-filter overload.
+	if expansionModel.UsesSingletonEndpointPair() {
+		return
+	}
 	for _, decision := range s.shortestPathFilterDecisionsForStep(part, stepIndex) {
 		switch decision.Mode {
 		case optimize.ShortestPathFilterTerminal:
