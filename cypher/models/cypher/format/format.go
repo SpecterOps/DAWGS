@@ -572,6 +572,11 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 				}
 			}
 
+			// XOR binds less tightly than AND in Cypher. Preserve the AST
+			// grouping without changing the builder's exported return type.
+			if _, isXor := joinedExpression.(*cypher.ExclusiveDisjunction); isXor {
+				joinedExpression = &cypher.Parenthetical{Expression: joinedExpression}
+			}
 			if err := s.WriteExpression(output, joinedExpression); err != nil {
 				return err
 			}

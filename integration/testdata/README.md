@@ -446,3 +446,9 @@ results. SET, CREATE and DELETE variants with and without RETURN check exact
 selection and complete remaining/unchanged fixture records. PostgreSQL executes
 all 29 variants in both compiler modes. Native namespaced functions are checked
 separately on Neo4j, without requiring APOC on the shared test backends.
+
+`xor_grouping_shapes.json` checks left/right AND operands, negation and three-way
+XOR across all 27 true/false/missing-property combinations. Read and SET variants
+(with and without RETURN) assert exact selected records and complete stored state.
+`TestBuilderXorGrouping` executes equivalent legacy builder predicates against
+both backends; PostgreSQL runs both builder and text cases in both compiler modes.

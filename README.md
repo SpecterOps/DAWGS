@@ -21,6 +21,9 @@ Legacy query-builder relationship-kind filters preserve Boolean scope: conjuncti
 filters intersect their allowed kinds, disjoint filters match no relationships, and
 OR, XOR and NOT keep their predicates in WHERE. This also prevents mutations from
 affecting relationships selected only by an incorrect union of kinds.
+Legacy builder Boolean filters also preserve XOR grouping inside AND, including
+negated groups. PostgreSQL groups both XOR comparison operands and the lowered
+Boolean result, so read and mutation predicates retain the same selection.
 
 Neo4j raw-query rewrites for pattern-map parameters and temporal comparisons preserve
 qualified function names, conjunctive label predicates (`n:A:B`) and floating-point

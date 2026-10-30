@@ -695,7 +695,7 @@ func (s *Translator) Exit(expression cypher.SyntaxNode) {
 
 	case *cypher.ExclusiveDisjunction:
 		for remaining := booleanOperandCount(typedExpression) - 1; remaining > 0; remaining-- {
-			if err := s.treeTranslator.CompleteBinaryExpression(s.scope, pgsql.OperatorNotEquals); err != nil {
+			if err := s.treeTranslator.CompleteExclusiveDisjunction(s.scope); err != nil {
 				s.SetError(err)
 			}
 		}
