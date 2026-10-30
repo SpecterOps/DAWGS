@@ -432,3 +432,10 @@ expansions, negation, type-name comparisons, OPTIONAL MATCH and null predicates.
 SET, DELETE and CREATE-from-empty-input variants check complete fixture state.
 PostgreSQL runs all variants in both compiler modes; driver-scoped checks verify
 that matches leave kind metadata unchanged and recompile after registration.
+
+`relationship_kind_conjunction_shapes.json` checks disjoint, overlapping, repeated
+and nested relationship-kind filters, with OR and NOT controls. Its 21 shared
+read/SET variants assert complete node and relationship state, including direction,
+endpoint, kind and missing-property decoys. `TestBuilderRelationshipKindConjunction`
+renders the corresponding legacy builder ASTs and reuses every fixture and
+assertion on both backends; PostgreSQL runs both compiler modes.
