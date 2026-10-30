@@ -216,7 +216,10 @@ func TestCompileRegularQuerySeparatesTextAndExclusiveKindASTs(t *testing.T) {
 			compileText := func() string {
 				sql, _, err := manager.compileText(context.Background(), prepared.source, nil, 7)
 				require.NoError(t, err)
-				require.Contains(t, sql, " or ")
+				// Formatting now preserves the exclusive matcher's all-label
+				// semantics; the text parser expresses it as two AND terms.
+				require.Contains(t, sql, " and ")
+				require.NotContains(t, sql, " or ")
 				return sql
 			}
 			first, second := compileBuilder, compileText
