@@ -87,14 +87,17 @@ the query, including preceding writes. Check parse errors before formatting an
 AST. Neo4j text queries pass through to the native server, which determines
 syntax support and CSV access. Full shared support remains pending.
 
-### Standalone procedure calls
+### Procedure calls
 
 The DAWGS Cypher parser rejects standalone `CALL` with
 `standalone CALL is not supported`, including implicit invocations and `YIELD`.
 PostgreSQL text compilation returns this error before execution. Check parse
 errors before formatting an AST. Neo4j text queries retain native procedure
 execution through the driver. Full shared-parser procedure support remains
-pending; in-query `CALL` is a separate support boundary.
+pending. In-query `CALL` also returns a located `in-query CALL is not supported`
+error, including calls with arguments, `YIELD` and filters. PostgreSQL rejects
+the whole query before executing preceding writes. Native Neo4j in-query
+procedure execution remains available.
 
 ### Shortest-path expressions
 
