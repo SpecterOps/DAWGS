@@ -2527,12 +2527,12 @@ LIMIT 100
 	require.Contains(t, lowerQuery, "traversal(root_id, next_id, depth, path)")
 	require.Contains(t, lowerQuery, "terminal_nodes(id) as materialized")
 	require.Contains(t, lowerQuery, "terminal_hits(root_id)")
-	require.Contains(t, lowerQuery, "ranked(root_id, admincount)")
+	require.Contains(t, lowerQuery, `ranked(root_id, "admincount")`)
 	require.Contains(t, lowerQuery, "join edge e on e.start_id = candidate_sources.root_id")
 	require.Contains(t, lowerQuery, "e.start_id = traversal.next_id")
 	require.Contains(t, lowerQuery, "e.id != all (traversal.path)")
 	require.Contains(t, lowerQuery, "join terminal_nodes on terminal_nodes.id = traversal.next_id")
-	require.Contains(t, lowerQuery, "count(*)::int8 as admincount")
+	require.Contains(t, lowerQuery, `count(*)::int8 as "admincount"`)
 	require.Contains(t, lowerQuery, "group by terminal_hits.root_id")
 	require.Contains(t, lowerQuery, "from ranked join node source_node on source_node.id = ranked.root_id")
 	require.NotContains(t, lowerQuery, "group by (")
@@ -2608,7 +2608,7 @@ LIMIT 100
 
 	requirePlannedOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
-	require.Contains(t, normalizedQuery, "count(*)::int8 as admincount")
+	require.Contains(t, normalizedQuery, `count(*)::int8 as "admincount"`)
 	require.Contains(t, normalizedQuery, "group by terminal_hits.root_id")
 }
 
@@ -2675,8 +2675,8 @@ LIMIT 100
 
 	requireOptimizationLowering(t, translation.Optimization, optimize.LoweringAggregateTraversalCount)
 	require.Contains(t, normalizedQuery, "(source_node.id, source_node.kind_ids, source_node.properties)::nodecomposite as user")
-	require.Contains(t, normalizedQuery, "ranked.admincount as privileges")
-	require.Contains(t, normalizedQuery, "order by ranked.admincount desc")
+	require.Contains(t, normalizedQuery, `ranked."admincount" as privileges`)
+	require.Contains(t, normalizedQuery, `order by ranked."admincount" desc`)
 }
 
 // TestOptimizerSafetyAggregateTraversalCountFoldsTerminalFilter verifies optimizer safety aggregate traversal count folds terminal filter behavior.

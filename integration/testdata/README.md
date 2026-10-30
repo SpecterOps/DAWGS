@@ -452,3 +452,11 @@ XOR across all 27 true/false/missing-property combinations. Read and SET variant
 (with and without RETURN) assert exact selected records and complete stored state.
 `TestBuilderXorGrouping` executes equivalent legacy builder predicates against
 both backends; PostgreSQL runs both builder and text cases in both compiler modes.
+
+`result_alias_shapes.json` checks case-sensitive and escaped result aliases
+(spaces, doubled backticks, double quotes, SQL keywords, Unicode and a quoted
+asterisk). Read, WITH, SET and CREATE variants preserve exact column spelling;
+write variants with and without RETURN verify all source records and creation
+counts. PostgreSQL executes the same assertions in both compiler modes.
+`TestResultAliasSpelling` checks `Result.Keys()` directly, including aliases that
+differ only by case and implicit expressions containing multiple backtick names.
