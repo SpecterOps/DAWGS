@@ -204,6 +204,24 @@ func (s *BaseVisitor) EnterOC_Explain(c *parser.OC_ExplainContext) {
 	s.newUnsupportedRuleError(c)
 }
 
+func (s *BaseVisitor) EnterOC_LoadCSV(c *parser.OC_LoadCSVContext) {
+	s.ctx.AddErrors(SyntaxError{
+		Line:            c.GetStart().GetLine(),
+		Column:          c.GetStart().GetColumn(),
+		OffendingSymbol: c.GetText(),
+		Message:         "LOAD CSV is not supported",
+	})
+}
+
+func (s *BaseVisitor) EnterOC_CreateUnique(c *parser.OC_CreateUniqueContext) {
+	s.ctx.AddErrors(SyntaxError{
+		Line:            c.GetStart().GetLine(),
+		Column:          c.GetStart().GetColumn(),
+		OffendingSymbol: c.GetText(),
+		Message:         "CREATE UNIQUE is not supported",
+	})
+}
+
 /**************** EMPTY STUBS ON BASEVISITOR  */
 func (s *BaseVisitor) VisitTerminal(node antlr.TerminalNode) {}
 
@@ -276,8 +294,6 @@ func (s *BaseVisitor) EnterOC_RelationshipPropertyExistenceConstraint(c *parser.
 func (s *BaseVisitor) EnterOC_RelationshipPatternSyntax(c *parser.OC_RelationshipPatternSyntaxContext) {
 }
 
-func (s *BaseVisitor) EnterOC_LoadCSV(c *parser.OC_LoadCSVContext) {}
-
 func (s *BaseVisitor) EnterOC_Match(c *parser.OC_MatchContext) {}
 
 func (s *BaseVisitor) EnterOC_Unwind(c *parser.OC_UnwindContext) {}
@@ -287,8 +303,6 @@ func (s *BaseVisitor) EnterOC_Merge(c *parser.OC_MergeContext) {}
 func (s *BaseVisitor) EnterOC_MergeAction(c *parser.OC_MergeActionContext) {}
 
 func (s *BaseVisitor) EnterOC_Create(c *parser.OC_CreateContext) {}
-
-func (s *BaseVisitor) EnterOC_CreateUnique(c *parser.OC_CreateUniqueContext) {}
 
 func (s *BaseVisitor) EnterOC_Set(c *parser.OC_SetContext) {}
 
