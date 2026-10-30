@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **45 items: 4 P1, 32 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **59 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **44 items: 4 P1, 31 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **60 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -219,6 +219,18 @@ Implementation and validation evidence are in the
 DAWGS-103 containment is completed below. Full shared support for these
 clauses remains a separate follow-up below.
 
+### DAWGS-059 relationship-kind conjunction repair — 2026-10-30
+
+Legacy Neo4j builder filters now intersect conjunctive relationship-kind lists.
+Disjoint lists retain an explicit false predicate instead of becoming an OR;
+OR, XOR and NOT branch predicates remain in WHERE. Shared read/SET fixtures
+and rendered-builder checks assert exact returned relationships and complete
+stored state on both backends. Implementation and validation evidence are in
+the [completion ledger](variance_findings_priority_complete.md#dawgs-059-relationship-kind-conjunction-repair--2026-10-30).
+DAWGS-103 containment is also completed below; **DAWGS-060 is the
+next implementation item**. Earlier pending repairs and separate
+follow-ups retain their existing status.
+
 ### DAWGS-103 containment — 2026-10-30
 
 In-query `CALL` now returns an explicit located parser error instead of being
@@ -226,7 +238,7 @@ omitted from PostgreSQL execution. Read/mutation templates cover arguments,
 YIELD filters, WITH boundaries and preceding writes. Implementation and
 validation evidence are in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-103-in-query-call-containment--2026-10-30).
-**DAWGS-059 is the next implementation item.** Full shared procedure execution
+**DAWGS-060 is the next implementation item.** Full shared procedure execution
 remains a separate follow-up below.
 
 ### Open follow-ups to completed actions
@@ -260,7 +272,7 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 45 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 44 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
 ### P1: Start first — 4 items
 
@@ -271,11 +283,10 @@ The 45 unfinished numbered work items appear once in this queue. Completed actio
 | 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
 | 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
 
-### P2: Next correctness and reliability wave — 32 items
+### P2: Next correctness and reliability wave — 31 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 64 | [DAWGS-059](variance_findings.md#dawgs-059) — Neo4j builder rewrite changes Boolean kind predicates | B | Repair | M | Repair the remaining relationship-kind conjunction becoming R|T. The original OR-based Enterprise caller is fixed and supplies no current residual exposure claim. |
 | 65 | [DAWGS-060](variance_findings.md#dawgs-060) — tx.Query rewrite re-emits a lossy AST | B | Repair | L | Preserve namespaces, conjunctive WHERE labels and integral float types whenever pattern-map rewriting re-emits the AST. Vendor hints/prefixes need a separate support promise. |
 | 66 | [DAWGS-085](variance_findings.md#dawgs-085) — Xor rendering loses builder grouping | B | Repair | S | Parenthesize/group XOR consistently when embedded in AND; cover both backend render/translation paths. |
 | 67 | [DAWGS-055](variance_findings.md#dawgs-055) — Result aliases are emitted unquoted | R | Repair | S | Preserve case and decoded alias spelling when quoting result-column identifiers; unusual aliases now avoid the old syntax failure. |

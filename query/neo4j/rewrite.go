@@ -3,6 +3,7 @@ package neo4j
 import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/walk"
+	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query"
 )
 
@@ -58,7 +59,8 @@ func (s *ExpressionListRewriter) hasNegationAncestor() bool {
 // hasDisjunctionAncestor reports whether traversal is currently nested beneath a disjunction.
 func (s *ExpressionListRewriter) hasDisjunctionAncestor() bool {
 	for idx := len(s.descentStack) - 1; idx >= 0; idx-- {
-		if _, isDisjunction := s.descentStack[idx].(*cypher.Disjunction); isDisjunction {
+		switch s.descentStack[idx].(type) {
+		case *cypher.Disjunction, *cypher.ExclusiveDisjunction:
 			return true
 		}
 	}
@@ -167,7 +169,25 @@ func (s *ExpressionListRewriter) Exit(node cypher.SyntaxNode) {
 				s.SetErrorf("expected an expression list AST node")
 			} else {
 				firstRelationshipPattern := lastMatch.FirstRelationshipPattern()
-				firstRelationshipPattern.Kinds = append(firstRelationshipPattern.Kinds, typedNode.Kinds...)
+				// Each pattern kind list is an OR. Separate positive predicates
+				// are conjunctive, so combine them by intersection, never union.
+				kinds := typedNode.Kinds
+				if len(firstRelationshipPattern.Kinds) > 0 {
+					kinds = make(graph.Kinds, 0, len(firstRelationshipPattern.Kinds))
+					for _, kind := range firstRelationshipPattern.Kinds {
+						if typedNode.Kinds.ContainsOneOf(kind) {
+							kinds = kinds.Add(kind)
+						}
+					}
+				}
+
+				if len(kinds) == 0 {
+					// An empty pattern kind list means unrestricted, not impossible.
+					// Keep the previous restriction and explicitly reject the row.
+					ancestorExpressionList.Replace(ancestorExpressionList.IndexOf(node), query.Literal(false))
+					return
+				}
+				firstRelationshipPattern.Kinds = kinds.Copy()
 
 				ancestorExpressionList.Remove(node)
 			}

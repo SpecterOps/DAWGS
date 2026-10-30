@@ -17,6 +17,11 @@ and parameter-source mappings, never request values or defaults, and fail closed
 Cached query text is released by LRU eviction or driver close, and diagnostics expose aggregate counters without query
 text.
 
+Legacy query-builder relationship-kind filters preserve Boolean scope: conjunctive
+filters intersect their allowed kinds, disjoint filters match no relationships, and
+OR, XOR and NOT keep their predicates in WHERE. This also prevents mutations from
+affecting relationships selected only by an incorrect union of kinds.
+
 ### PostgreSQL connection-local translation cache
 
 The PostgreSQL driver uses connection-local SQL translation caches. Pool construction owns the required connection
