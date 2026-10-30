@@ -82,6 +82,7 @@ func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) 
 }
 
 func (c *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+	c.resetBeforeScenario(ctx, nil)
 	if c.db == nil {
 		return ctx, nil
 	}
