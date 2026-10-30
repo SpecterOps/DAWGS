@@ -465,3 +465,33 @@ func TestCypherEmitter_FloatLiteralsKeepFloatingPointSpelling(t *testing.T) {
 		require.Equal(t, "return $STRIPPED as a", buffer.String())
 	})
 }
+
+func TestCypherEmitterKindMatcherSemantics(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		kinds     graph.Kinds
+		exclusive bool
+		want      string
+	}{
+		{"all labels", graph.StringsToKinds([]string{"A", "B"}), true, "(n:A and n:B)"},
+		{"any label", graph.StringsToKinds([]string{"A", "B"}), false, "(n:A or n:B)"},
+		{"one label", graph.Kinds{graph.StringKind("A")}, true, "n:A"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			err := format.NewCypherEmitter(false).WriteExpression(&output, cypher.NewKindMatcher(&cypher.Variable{Symbol: "n"}, tc.kinds, tc.exclusive))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, output.String())
+		})
+	}
+}
+
+func TestCypherEmitterFunctionNamespaces(t *testing.T) {
+	for _, source := range []string{"return sum([1, 2])", "return apoc.sum([1, 2])", "return apoc.coll.sum([1, 2])"} {
+		parsed, err := frontend.ParseCypher(frontend.NewContext(), source)
+		require.NoError(t, err)
+		output, err := format.RegularQuery(parsed, false)
+		require.NoError(t, err)
+		require.Equal(t, source, output)
+	}
+}

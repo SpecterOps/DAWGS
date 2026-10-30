@@ -1,0 +1,2021 @@
+{
+  "node_kinds": [
+    "RewriteMade"
+  ],
+  "families": [
+    {
+      "name": "Raw rewrite semantics",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "both",
+            "kinds": [
+              "RewriteA",
+              "RewriteB"
+            ],
+            "properties": {
+              "name": "both",
+              "tag": "probe"
+            }
+          },
+          {
+            "id": "a",
+            "kinds": [
+              "RewriteA"
+            ],
+            "properties": {
+              "name": "a",
+              "tag": "probe"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "RewriteB"
+            ],
+            "properties": {
+              "name": "b",
+              "tag": "probe"
+            }
+          },
+          {
+            "id": "neither",
+            "kinds": [
+              "RewriteOther"
+            ],
+            "properties": {
+              "name": "neither",
+              "tag": "probe"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "all",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB RETURN n.name ORDER BY n.name"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                "both"
+              ]
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "all SET",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB SET n.mark = 3.0 / 2.0"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "all SET return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB SET n.mark = 3.0 / 2.0 RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "all CREATE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0})"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "all CREATE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0}) RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "all DELETE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB DELETE n"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a"
+                  ],
+                  [
+                    "b"
+                  ],
+                  [
+                    "neither"
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "all DELETE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB DELETE n RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a"
+                  ],
+                  [
+                    "b"
+                  ],
+                  [
+                    "neither"
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated",
+          "vars": {
+            "query": "MATCH (n $props) WHERE NOT n:RewriteA:RewriteB RETURN n.name ORDER BY n.name"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ],
+              [
+                "neither"
+              ]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "negated SET",
+          "vars": {
+            "query": "MATCH (n $props) WHERE NOT n:RewriteA:RewriteB SET n.mark = 3.0 / 2.0"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated SET return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE NOT n:RewriteA:RewriteB SET n.mark = 3.0 / 2.0 RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated CREATE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE NOT n:RewriteA:RewriteB CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0})"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated CREATE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE NOT n:RewriteA:RewriteB CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0}) RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated DELETE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE NOT n:RewriteA:RewriteB DELETE n"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated DELETE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE NOT n:RewriteA:RewriteB DELETE n RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "or",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB OR n:RewriteOther RETURN n.name ORDER BY n.name"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                "both"
+              ],
+              [
+                "neither"
+              ]
+            ],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "or SET",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB OR n:RewriteOther SET n.mark = 3.0 / 2.0"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "or SET return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB OR n:RewriteOther SET n.mark = 3.0 / 2.0 RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "or CREATE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB OR n:RewriteOther CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0})"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "or CREATE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB OR n:RewriteOther CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0}) RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "both",
+                    1.5
+                  ],
+                  [
+                    "neither",
+                    1.5
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "or DELETE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB OR n:RewriteOther DELETE n"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a"
+                  ],
+                  [
+                    "b"
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "or DELETE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB OR n:RewriteOther DELETE n RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a"
+                  ],
+                  [
+                    "b"
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit_or",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA OR n:RewriteB RETURN n.name ORDER BY n.name"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ],
+              [
+                "both"
+              ]
+            ],
+            "row_count": 3
+          }
+        },
+        {
+          "name": "explicit_or SET",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA OR n:RewriteB SET n.mark = 3.0 / 2.0"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit_or SET return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA OR n:RewriteB SET n.mark = 3.0 / 2.0 RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.mark IS NOT NULL RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe",
+                      "mark": 1.5
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit_or CREATE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA OR n:RewriteB CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0})"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit_or CREATE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA OR n:RewriteB CREATE (m:RewriteMade {name: n.name, mark: 3.0 / 2.0}) RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:RewriteMade) RETURN n.name, n.mark ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "a",
+                    1.5
+                  ],
+                  [
+                    "b",
+                    1.5
+                  ],
+                  [
+                    "both",
+                    1.5
+                  ]
+                ],
+                "row_count": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE NOT n:RewriteMade RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "both",
+                    "kinds": [
+                      "RewriteA",
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "both",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "RewriteA"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "RewriteB"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "tag": "probe"
+                    }
+                  },
+                  {
+                    "id": "neither",
+                    "kinds": [
+                      "RewriteOther"
+                    ],
+                    "props": {
+                      "name": "neither",
+                      "tag": "probe"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit_or DELETE",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA OR n:RewriteB DELETE n"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "neither"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "explicit_or DELETE return",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA OR n:RewriteB DELETE n RETURN count(*) AS c"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                3
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n.name ORDER BY n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    "neither"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "row_values": [
+                  [
+                    0
+                  ]
+                ],
+                "row_count": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "float projections",
+          "vars": {
+            "query": "MATCH (n $props) WHERE n:RewriteA:RewriteB RETURN 3.0 / 2.0, [1.0, 2.5], 1e3"
+          },
+          "params": {
+            "props": {
+              "tag": "probe"
+            }
+          },
+          "assert": {
+            "row_values": [
+              [
+                1.5,
+                [
+                  1.0,
+                  2.5
+                ],
+                1000.0
+              ]
+            ],
+            "row_count": 1
+          }
+        }
+      ]
+    }
+  ]
+}

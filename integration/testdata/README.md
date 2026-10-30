@@ -439,3 +439,10 @@ read/SET variants assert complete node and relationship state, including directi
 endpoint, kind and missing-property decoys. `TestBuilderRelationshipKindConjunction`
 renders the corresponding legacy builder ASTs and reuses every fixture and
 assertion on both backends; PostgreSQL runs both compiler modes.
+
+`raw_rewrite_semantics_shapes.json` forces pattern-map parameter rewriting and
+checks conjunctive labels, negation, mixed AND/OR predicates and floating-point
+results. SET, CREATE and DELETE variants with and without RETURN check exact
+selection and complete remaining/unchanged fixture records. PostgreSQL executes
+all 29 variants in both compiler modes. Native namespaced functions are checked
+separately on Neo4j, without requiring APOC on the shared test backends.
