@@ -148,8 +148,8 @@ func Test_cypherBuildNodeUpdateQueryBatch(t *testing.T) {
 		}
 
 		expectedQueries = []string{
-			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:Fool, n:Asset;",
-			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:Fool remove n:User;",
+			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:`Fool`, n:`Asset`;",
+			"unwind $p as p match (n) where id(n) = p.id set n += p.properties, n:`Fool` remove n:`User`;",
 		}
 
 		queries, parameters = cypherBuildNodeUpdateQueryBatch(nodes)

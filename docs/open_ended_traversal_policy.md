@@ -4,7 +4,65 @@ Engineering decision: **2026-10-24**, against checkout **`56413e1`**.
 
 **Select complete traversal semantics, with explicit errors when execution cannot finish within its resources.** An omitted upper bound must not become a successful search of only the first 15 levels. Callers can request a semantic depth limit with an explicit Cypher upper bound. A resource budget limits execution and can cause failure; it does not change which paths the query asks for.
 
-This completes the design action in the [priority ledger](../variance_findings_priority.md). Implementation and rollout remain open. Current PostgreSQL execution still applies the depth-15 cap. This decision does not change the Neo4j driver or claim downstream application validation.
+The runtime implementation is recorded below. The historical investigation remains
+as the before-repair evidence; it does not describe current execution. This change
+does not alter the Neo4j driver or claim downstream application validation.
+
+## Runtime implementation — 2026-10-30
+
+Ordinary open recursion has no depth predicate. Open shortest searches select the
+forward breadth-first workspace and cross a `_v2` SQL boundary carrying an explicit
+`max_is_bound` flag independently of the numeric depth. Qualified bounded executors
+remain available for explicit maxima; open ranges cannot inherit their old policy
+default through planning or cached SQL. The existing per-process caches are rebuilt
+on upgrade, and the new function names cause a missing schema upgrade to fail
+explicitly. Bounded promotion manifests cannot qualify an open range.
+
+Each admitted candidate charges a monotone state count and `128 + 8 * depth` bytes
+of estimated trail state before frontier materialization. Defaults are 100,000
+states and 64 MiB cumulative estimated trail bytes. This cumulative estimate
+covers trail arrays and bounds the admitted frontier/pathspace; it is not an exact
+process-memory measurement. Rejected candidates may be charged conservatively.
+Positive `dawgs.traversal_state_limit` and `dawgs.traversal_byte_limit` PostgreSQL
+settings override admission budgets. The driver gives each Cypher/builder query a
+fresh execution token, shared across multipart stages; direct SQL without a driver token uses the statement
+timestamp. Both budget exhaustion and depth representation exhaustion raise
+SQLSTATE `54000`. Context cancellation provides an independent time limit.
+
+Correlated input endpoints cross the function boundary as individual ID pairs;
+dynamic SQL does not reference the enclosing CTE. A zero-depth branch preserves
+empty paths and duplicate input rows. All-shortest workspace discovery records resolved endpoint pairs without stopping
+at the first pair's depth. Hydrated path dependencies contribute their edges to
+scalar length calculations. Existing unsupported generic undirected shortest
+queries remain explicit errors. Reads, writes, incoming traversals, complete path
+witnesses, multiple endpoint pairs, branching multiplicity, finite cycles and
+zero-hop trails have shared regression assertions. Driver-scoped tests exercise
+state/byte exhaustion and verify rollback of earlier staged writes even when a
+caller consumes the error.
+
+Upgrade by asserting schema before issuing new compiled queries. Queries and
+writes may now include paths beyond depth 15; use explicit Cypher bounds to retain
+an intended semantic cutoff. Lower budgets or cancel execution to control resources;
+do not restore a silent cutoff. Rollback of the application binary restores its
+historical behavior; the additional SQL wrappers are additive. Application-scale
+performance, workload-specific budget sizing, and downstream replay still require
+release qualification for the consuming service.
+
+The bounded singleton bidirectional workspace repair selects endpoint-array mode
+before applying filter-materialization decisions. Array fragments test current endpoint
+parameters and cannot reference generic filter relations. The SQL harness checks
+the requested endpoint arrays before accepting direct or midpoint success and
+before early termination. This also prevents stale generic terminal filters on
+reused connections from returning a path to a previous query's endpoint. Schema
+assertion installs the updated functions; no graph-data or temporary-table layout
+migration is required. Fresh-connection controls include a one-edge path with
+bound 65 and a 128-edge witness with bound 128. Reuse controls first run a valid
+property-filtered query ending at depth 17, then request different explicit-ID
+pairs across leases on the same physical connection.
+Seeded self-endpoint checks also prove membership in the filtered root relation
+inside a CASE before evaluating the error branch. This keeps unrelated edge rows
+from raising an error when PostgreSQL evaluates that predicate before the seed
+join. Shared property-filtered read and mutation cases cover both directions.
 
 ## Selected contract
 
@@ -85,7 +143,7 @@ RETURN length(p)
 
 With `end_id` identifying `n16`, optimized translation returns one row containing **0**, disabled translation and Neo4j return **16**, and `RETURN p` returns the correct 16-relationship path in all three executions. This is an independent projection discrepancy, not evidence that explicit traversal stopped early. Root cause and repair remain open. Preserve this control in the implementation's scalar/path matrix instead of using the optimized scalar as a completeness oracle. This new observation does not alter the original triage counts.
 
-## Implementation boundary and cost
+## Historical implementation boundary and cost
 
 The cap has several independent consumers. Updating one constant or replacing 15 with a large integer cannot implement this contract.
 

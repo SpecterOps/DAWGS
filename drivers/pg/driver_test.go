@@ -9,6 +9,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAssertSchemaCancellationLeavesMetadataUnchanged(t *testing.T) {
+	pool, err := NewPoolWithRuntimeConfig(context.Background(), testPoolConfig(t), RuntimeConfig{
+		Pool: &PoolConfig{MinConnections: 0, MaxConnections: 1},
+	})
+	require.NoError(t, err)
+	driver := NewDriver(0, pool)
+	t.Cleanup(func() { require.NoError(t, driver.Close(context.Background())) })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	definition := graph.Graph{Name: "cancelled_schema"}
+	require.ErrorIs(t, driver.AssertSchema(ctx, graph.Schema{
+		Graphs:       []graph.Graph{definition, {Name: "cancelled_secondary"}},
+		DefaultGraph: definition,
+	}), context.Canceled)
+	require.Empty(t, driver.graphs)
+	_, hasDefault := driver.DefaultGraph()
+	require.False(t, hasDefault)
+	require.Zero(t, pool.Stat().TotalConns(), "cancelled assertion must not connect to the database")
+}
+
 // TestBuildNodeDeleteStatement covers the statement/argument construction for DeleteNodesByKinds, including the guard
 // that prevents an unresolved exclusion from widening the delete into an unguarded wipe.
 func TestBuildNodeDeleteStatement(t *testing.T) {

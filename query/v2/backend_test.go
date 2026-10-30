@@ -338,7 +338,7 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			).Return(
 				v2.Path(),
 			),
-			expectedHarness: "bidirectional_sp_harness",
+			expectedHarness: "unidirectional_sp_harness_v2",
 		},
 		"all shortest paths": {
 			builder: v2.New().WithAllShortestPaths().Where(
@@ -348,7 +348,7 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			).Return(
 				v2.Path(),
 			),
-			expectedHarness: "all_shortest_paths_dag",
+			expectedHarness: "unidirectional_asp_harness_v2",
 		},
 	}
 
@@ -363,27 +363,25 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			sql, err := translate.Translated(translation)
 			require.NoError(t, err)
 			require.Contains(t, sql.Statement, testCase.expectedHarness)
-			require.Contains(t, sql.Statement, "n0.id = @pi0::int8")
-			require.Contains(t, sql.Statement, "n1.id = @pi1::int8")
-			require.Contains(t, sql.Statement, "singleton_endpoints")
-
-			if name == "shortest path" {
-				require.Contains(t, sql.Statement, "ordered_edge_ids_to_path")
-				serializedHarnessQueryHasKindConstraint := false
-				for _, parameterValue := range translation.Parameters {
-					if serializedQuery, typeOK := parameterValue.(string); typeOK && strings.Contains(serializedQuery, "array [1]::int2[]") {
-						serializedHarnessQueryHasKindConstraint = true
-						break
-					}
+			require.NotContains(t, sql.Statement, "singleton_endpoints")
+			require.Contains(t, sql.Statement, "false)", "open bound presence is explicit")
+			require.Contains(t, sql.Statement, "ordered_edge_ids_to_path")
+			fragments := ""
+			for _, value := range translation.Parameters {
+				if fragment, ok := value.(string); ok {
+					fragments += fragment + "\n"
 				}
-				require.True(t, serializedHarnessQueryHasKindConstraint, "expected serialized shortest-path harness query to contain edge kind constraint: %#v", translation.Parameters)
-			} else {
-				require.Contains(t, sql.Statement, "array [1]::int2[]")
-				require.Contains(t, sql.Statement, "generate_subscripts(s1.path, 1)")
-				require.Contains(t, sql.Statement, "m0_hydrated.hydrated_count = cardinality(s1.path)")
-				require.NotContains(t, sql.Statement, "ordered_edge_ids_to_path")
-				require.NotContains(t, sql.Statement, "bidirectional_asp_harness")
 			}
+			for _, value := range sql.Parameters {
+				if fragment, ok := value.(string); ok {
+					fragments += fragment + "\n"
+				}
+			}
+			require.Contains(t, fragments, "array [1]::int2[]")
+			require.Contains(t, fragments, "n0.id = 1")
+			require.Contains(t, fragments, "n1.id = 2")
+			require.Contains(t, fragments, "dawgs_admit_traversal_v1")
+
 		})
 	}
 }

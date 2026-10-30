@@ -154,7 +154,7 @@ func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 func TestPathLengthUsesOrderedEdgeIDsWithoutHydration(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
-	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = 1 AND id(e) = 2 RETURN length(p)`)
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = shortestPath((s)-[*1..15]->(e)) WHERE id(s) = 1 AND id(e) = 2 RETURN length(p)`)
 	require.NoError(t, err)
 
 	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
@@ -337,8 +337,8 @@ func TestBoundPairShortestPathUsesStableSingletonArrays(t *testing.T) {
 		return translation, formatted.Statement
 	}
 
-	first, firstSQL := translateQuery(`MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = 1 AND id(e) = 2 RETURN p LIMIT 1`)
-	second, secondSQL := translateQuery(`MATCH p = shortestPath((s)-[*1..]->(e)) WHERE id(s) = 41 AND id(e) = 42 RETURN p LIMIT 1`)
+	first, firstSQL := translateQuery(`MATCH p = shortestPath((s)-[*1..15]->(e)) WHERE id(s) = 1 AND id(e) = 2 RETURN p LIMIT 1`)
+	second, secondSQL := translateQuery(`MATCH p = shortestPath((s)-[*1..15]->(e)) WHERE id(s) = 41 AND id(e) = 42 RETURN p LIMIT 1`)
 
 	require.Equal(t, firstSQL, secondSQL)
 	require.Contains(t, firstSQL, "shortest_path_compact(")
@@ -463,4 +463,14 @@ func TestReturnedCollectNodeKeepsCompositeArray(t *testing.T) {
 	require.Contains(t, normalized, "array []::nodecomposite[]")
 	require.NotContains(t, normalized, "array_agg((n0).id)")
 	requireNoOptimizationLowering(t, translation.Optimization, "CollectIDMembership")
+}
+
+// A hydrated all-shortest dependency must contribute its edges to length(p).
+func TestAllShortestLengthUsesHydratedDependency(t *testing.T) {
+	translation := optimizerSafetyTranslation(t, `MATCH p=allShortestPaths((s)-[:MemberOf*1..17]->(e)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p)`)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted.Statement, "all_shortest_paths_dag")
+	require.Contains(t, formatted.Statement, ".edges)")
+	require.NotContains(t, formatted.Statement, "cardinality(array []")
 }

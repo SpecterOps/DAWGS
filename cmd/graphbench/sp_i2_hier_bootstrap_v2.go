@@ -181,14 +181,14 @@ func bootstrapSPI2RoundMedianV2(
 	}
 	alpha := (1 - confidence) / 2
 	return RatioInterval{
-			Estimate: candidatePoint / baselinePoint,
-			Lower:    math.Exp(quantile(logRatios, alpha)),
-			Upper:    math.Exp(quantile(logRatios, 1-alpha)),
-		}, DurationInterval{
-			Estimate: time.Duration(baselinePoint - candidatePoint),
-			Lower:    time.Duration(quantile(savings, alpha)),
-			Upper:    time.Duration(quantile(savings, 1-alpha)),
-		}, nil
+		Estimate: candidatePoint / baselinePoint,
+		Lower:    math.Exp(quantile(logRatios, alpha)),
+		Upper:    math.Exp(quantile(logRatios, 1-alpha)),
+	}, DurationInterval{
+		Estimate: time.Duration(baselinePoint - candidatePoint),
+		Lower:    time.Duration(quantile(savings, alpha)),
+		Upper:    time.Duration(quantile(savings, 1-alpha)),
+	}, nil
 }
 
 func validateSPI2HierarchicalInputs(baseline, candidate roundSamples, probability, confidence float64, replicates int) ([]int, error) {
