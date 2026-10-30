@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **58 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **59 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -66,6 +66,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 60 | DAWGS-017 | Contained and validated | Standalone CALL returns a located unsupported error instead of a successful nil AST. Parser/template, PostgreSQL repeated-compilation and live rejection controls cover explicit/implicit invocation and YIELD; Neo4j native procedure execution remains available. See below. |
 | 61 | DAWGS-010 | Contained and live validated | Shortest-path expressions return a located parser error, isolating their subtree instead of projecting the terminal node. Templated read/mutation rejection, both PostgreSQL compiler modes, supported MATCH syntax and native Neo4j expression controls are covered below. Full expression support remains separate L work. |
 | 62 | DAWGS-013 | Contained and live validated | CREATE UNIQUE and LOAD CSV return located parser errors before PostgreSQL text execution. Read/mutation templates, repeated compilation and live committed-state controls pass in both compiler modes. Neo4j text and parameters retain native server diagnostics. Full shared support remains separate work. |
+| 63 | DAWGS-103 | Contained and live validated | In-query CALL returns a located parser error before PostgreSQL text execution. Templated reads/mutations, repeated compilation and committed-state controls cover both compiler modes. Native Neo4j procedures retain arguments and YIELD results. Full shared procedure support remains separate XL work. |
 
 ## Original queue details for completed actions
 
@@ -131,6 +132,7 @@ These describe the original requested action; completion status and actual outco
 | 60 | [DAWGS-017](variance_findings.md#dawgs-017) — A standalone CALL parses to `(nil, nil)`; formatting that nil query panics | Q | Contain | S | Return an explicit standalone CALL rejection or a nonnil supported AST; never format a successful nil query. |
 | 61 | [DAWGS-010](variance_findings.md#dawgs-010) — shortestPath used as an expression returns a node | Q | Contain | S | Reject unsupported shortestPath expression position instead of returning the terminal node. Full expression support is L feature work. |
 | 62 | [DAWGS-013](variance_findings.md#dawgs-013) — `CREATE UNIQUE` and `LOAD CSV` are accepted and dropped | Q | Contain | S | Reject silently dropped CREATE UNIQUE/LOAD CSV at the text compiler boundary; formatter rejection alone does not close the raw-text path. |
+| 63 | [DAWGS-103](variance_findings.md#dawgs-103) — In-query CALL omitted from generated SQL | Q | Contain | S | Reject accepted in-query CALL on unrestricted compiler paths; preserve existing DefaultCypherContext restrictions. Full procedure execution is separate XL feature work. |
 
 ## Implementation and validation notes
 
@@ -1869,3 +1871,94 @@ coverage increases from **500 / 534 (93.6330%)** to **503 / 536 (93.8433%)**.
 Both newly added rejection callbacks are fully covered. Final affected-package
 race/coverage checks and repository lint also pass. No Go edits follow the final
 complete unit run.
+
+### DAWGS-103 in-query CALL containment — 2026-10-30
+
+`ReadingClauseVisitor` now reports a located `in-query CALL is not supported`
+error and isolates the invocation subtree. Procedure arguments and YIELD
+filters cannot contaminate the surrounding AST. PostgreSQL compilation checks
+parse errors before translation, so a call cannot silently disappear while
+other clauses execute. DefaultCypherContext's existing procedure restrictions
+remain active. This completes the S containment action; full shared procedure
+AST, formatting and execution support remains separate XL work under 103/017.
+Callers must check parse errors before using or formatting a partial AST.
+
+The frontend matrix covers 54 templates through unrestricted/default contexts
+and parse/format, including arguments, parameters, maps, nested expressions,
+YIELD aliases/filters, case, WITH boundaries and SET/CREATE/DELETE. The exact
+location regression fails against an original-source Go overlay (the original
+parser returns no error) and passes after repair. Eight additional read/mutation
+queries are in the negative parser corpus. PostgreSQL tests compile 27 shapes
+twice per compiler mode, requiring explicit errors, empty SQL and no panic.
+
+Live PostgreSQL controls repeat all 27 shapes twice in each compiler mode.
+They consume the query error and commit the transaction, then independently
+verify exact node names and relationship state. Preceding SET and CREATE must
+never dispatch. Neo4j rewrite controls preserve text and parameters through
+both rewrite entry points, including pattern-map candidates. Live native
+Neo4j calls retain parameter values and YIELD aliases/filters. These backend
+support boundaries use scoped tests outside the backend-equivalent corpus.
+
+README documents the containment. The active queue now has 45 items (4 P1,
+32 P2, 9 P3), this ledger has 59 completed actions, and DAWGS-059 is the next
+implementation item. Earlier pending repairs and separate follow-ups retain
+their status. Credentials are excluded from evidence.
+
+Focused parser/compiler/rewrite controls and live controls pass under the race
+detector. The final PostgreSQL focused rerun includes the leading-CALL/RETURN
+shape (27 queries per mode); earlier full-gate builds had the preceding 24-query
+matrix. Repository lint, touched-file `goimports`, negative-corpus JSON,
+local Markdown links, queue counts and `git diff --check` pass.
+
+The PostgreSQL-selected `make test_all` does **not** pass: its unit stage times
+out after ten minutes in the unchanged `cmd/graphbench` package, running
+`TestSPI2QualificationRejectsCanonicalEvidenceAndScheduleTampering`. All other
+42 unit packages pass. Neo4j-selected `make test_integration` also times out in
+GraphBench, running
+`TestSPI2QualificationConfirmationRequiresAndPassesFrozenDiscovery`; remaining
+package results are recorded below. These failures are
+not DAWGS-103 conformance passes. The independent PostgreSQL integration rerun
+excludes only `cmd/graphbench` through `MAIN_PACKAGES`, leaving both shared
+integration suites and driver packages selected.
+
+Both backend-selected `make test_bdd_integration` gates pass sequentially:
+17 enforced / zero failed, with 18 report-only compatibility failures retained.
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`.
+
+Frontend unit statement coverage increases from the preceding ledger gate's
+503/536 (93.8433%) to 506/539 (93.8776%); all three added runtime statements
+are covered. The timed-out unit run's overall coverage is incomplete and cannot
+establish a comparable complete-repository total. Full-gate qualification
+remains limited by the GraphBench timeouts and database-state failures below.
+
+The broad Neo4j integration run also fails in `TestCypherTemplates` with
+fixture IDs absent from its assertion map and in the 2,001-row WRITE-05
+relationship-update boundary with a native `ConstraintsChanged` transaction
+error. These are recorded as failures, not a passing shared-suite qualification;
+concurrent database changes are suggested by the server error but not fully
+attributed. The new native in-query CALL controls pass. A representative
+shared-template/direct-write retry is recorded below.
+
+Neo4j's broad integration run finishes with 41 passing packages and two failing
+packages (GraphBench and integration). The representative relationship-uniqueness
+template and WRITE-05 size-2001 retry passes under the race detector (55.9 s).
+
+The PostgreSQL integration rerun excluding GraphBench finishes with 41 passing
+packages and a failing integration package. Failures are WRITE-01 size-8001
+relationship setup and carried-property SUM (`40P01` deadlocks), overlapping-ID
+membership setup (`23503` referencing `p5_adjacency_v1`), and WipeGraph (`0A000`,
+TRUNCATE blocked by a referencing foreign key). The adjacency schema is outside
+this change; no unrelated database objects were removed to make checks pass.
+The PostgreSQL shared Cypher/template suites pass in this run. Targeted retries
+for these failures and the full Neo4j template suite are recorded below.
+
+Final targeted retries: PostgreSQL's relationship-delete boundary and SUM tests
+pass, while overlapping-ID membership and WipeGraph still fail on the adjacency
+foreign-key conditions above. Neo4j's full `TestCypherTemplates` retry still
+fails with two fixture IDs missing from its assertion map (74.6 s), despite the
+passing representative retry. No expectations were weakened and no database
+schema cleanup was used to hide these failures. Broad qualification therefore
+remains incomplete; DAWGS-103's focused parser/compiler/live and both BDD gates
+pass. The final patch contains only this containment, its regressions and docs.
