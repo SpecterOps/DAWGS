@@ -82,7 +82,7 @@ func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[st
 func TestExclusiveDisjunctionTranslates(t *testing.T) {
 	formatted := translatePredicateQuery(t, `MATCH (n:NodeKind1) WHERE true XOR false RETURN n`, nil)
 
-	require.Contains(t, formatted, "true != false")
+	require.Contains(t, formatted, "(true) != (false)")
 }
 
 func TestDynamicStringPredicatesUseEscapedLikePatterns(t *testing.T) {
@@ -350,6 +350,20 @@ func TestSelfReferentialPatternDoesNotPanic(t *testing.T) {
 
 			_, err = Translated(translation)
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestExclusiveDisjunctionPreservesComparisonGrouping(t *testing.T) {
+	for _, tc := range []struct{ name, predicate, expected string }{
+		{"comparisons", "(true = false XOR false = false) AND true", "((true = false) != (false = false))"},
+		{"three operands", "true XOR false XOR true", "(true) != (((false) != (true)))"},
+		{"and operand", "(true AND false) XOR true", "((true and false)) != (true)"},
+		{"null operand", "null XOR true", "(null) != (true)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			formatted := translatePredicateQuery(t, "MATCH (n:NodeKind1) WHERE "+tc.predicate+" RETURN n", nil)
+			require.Contains(t, formatted, tc.expected)
 		})
 	}
 }

@@ -1,0 +1,3380 @@
+{
+  "families": [
+    {
+      "name": "xor grouping",
+      "template": "MATCH (n:XorNode) WHERE {{predicate}} {{action}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "0",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "b": false,
+              "c": false,
+              "name": "0"
+            }
+          },
+          {
+            "id": "1",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "b": false,
+              "c": true,
+              "name": "1"
+            }
+          },
+          {
+            "id": "2",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "b": false,
+              "name": "2"
+            }
+          },
+          {
+            "id": "3",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "b": true,
+              "c": false,
+              "name": "3"
+            }
+          },
+          {
+            "id": "4",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "b": true,
+              "c": true,
+              "name": "4"
+            }
+          },
+          {
+            "id": "5",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "b": true,
+              "name": "5"
+            }
+          },
+          {
+            "id": "6",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "c": false,
+              "name": "6"
+            }
+          },
+          {
+            "id": "7",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "c": true,
+              "name": "7"
+            }
+          },
+          {
+            "id": "8",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": false,
+              "name": "8"
+            }
+          },
+          {
+            "id": "9",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "b": false,
+              "c": false,
+              "name": "9"
+            }
+          },
+          {
+            "id": "10",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "b": false,
+              "c": true,
+              "name": "10"
+            }
+          },
+          {
+            "id": "11",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "b": false,
+              "name": "11"
+            }
+          },
+          {
+            "id": "12",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "b": true,
+              "c": false,
+              "name": "12"
+            }
+          },
+          {
+            "id": "13",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "b": true,
+              "c": true,
+              "name": "13"
+            }
+          },
+          {
+            "id": "14",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "b": true,
+              "name": "14"
+            }
+          },
+          {
+            "id": "15",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "c": false,
+              "name": "15"
+            }
+          },
+          {
+            "id": "16",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "c": true,
+              "name": "16"
+            }
+          },
+          {
+            "id": "17",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "a": true,
+              "name": "17"
+            }
+          },
+          {
+            "id": "18",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "b": false,
+              "c": false,
+              "name": "18"
+            }
+          },
+          {
+            "id": "19",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "b": false,
+              "c": true,
+              "name": "19"
+            }
+          },
+          {
+            "id": "20",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "b": false,
+              "name": "20"
+            }
+          },
+          {
+            "id": "21",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "b": true,
+              "c": false,
+              "name": "21"
+            }
+          },
+          {
+            "id": "22",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "b": true,
+              "c": true,
+              "name": "22"
+            }
+          },
+          {
+            "id": "23",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "b": true,
+              "name": "23"
+            }
+          },
+          {
+            "id": "24",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "c": false,
+              "name": "24"
+            }
+          },
+          {
+            "id": "25",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "c": true,
+              "name": "25"
+            }
+          },
+          {
+            "id": "26",
+            "kinds": [
+              "XorNode"
+            ],
+            "properties": {
+              "name": "26"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "left/read",
+          "vars": {
+            "predicate": "(n.a = true XOR n.b = true) AND n.c = true",
+            "action": "RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "4",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": true,
+                  "c": true,
+                  "name": "4"
+                }
+              },
+              {
+                "id": "10",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": true,
+                  "name": "10"
+                }
+              }
+            ]
+          },
+          "post_assertions": []
+        },
+        {
+          "name": "left/set",
+          "vars": {
+            "predicate": "(n.a = true XOR n.b = true) AND n.c = true",
+            "action": "SET n.marked = true RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "4",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": true,
+                  "c": true,
+                  "name": "4",
+                  "marked": true
+                }
+              },
+              {
+                "id": "10",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": true,
+                  "name": "10",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0"
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1"
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2"
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3"
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6"
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9"
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12"
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13"
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14"
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15"
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18"
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21"
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24"
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "left/set without return",
+          "vars": {
+            "predicate": "(n.a = true XOR n.b = true) AND n.c = true",
+            "action": "SET n.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0"
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1"
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2"
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3"
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6"
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9"
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12"
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13"
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14"
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15"
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18"
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21"
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24"
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "right/read",
+          "vars": {
+            "predicate": "n.c = true AND (n.a = true XOR n.b = true)",
+            "action": "RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "4",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": true,
+                  "c": true,
+                  "name": "4"
+                }
+              },
+              {
+                "id": "10",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": true,
+                  "name": "10"
+                }
+              }
+            ]
+          },
+          "post_assertions": []
+        },
+        {
+          "name": "right/set",
+          "vars": {
+            "predicate": "n.c = true AND (n.a = true XOR n.b = true)",
+            "action": "SET n.marked = true RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "4",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": true,
+                  "c": true,
+                  "name": "4",
+                  "marked": true
+                }
+              },
+              {
+                "id": "10",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": true,
+                  "name": "10",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0"
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1"
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2"
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3"
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6"
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9"
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12"
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13"
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14"
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15"
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18"
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21"
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24"
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "right/set without return",
+          "vars": {
+            "predicate": "n.c = true AND (n.a = true XOR n.b = true)",
+            "action": "SET n.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0"
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1"
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2"
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3"
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6"
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9"
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12"
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13"
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14"
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15"
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18"
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21"
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24"
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated/read",
+          "vars": {
+            "predicate": "NOT ((n.a = true XOR n.b = true) AND n.c = true)",
+            "action": "RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "0",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": false,
+                  "c": false,
+                  "name": "0"
+                }
+              },
+              {
+                "id": "1",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": false,
+                  "c": true,
+                  "name": "1"
+                }
+              },
+              {
+                "id": "2",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": false,
+                  "name": "2"
+                }
+              },
+              {
+                "id": "3",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": true,
+                  "c": false,
+                  "name": "3"
+                }
+              },
+              {
+                "id": "6",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "c": false,
+                  "name": "6"
+                }
+              },
+              {
+                "id": "9",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": false,
+                  "name": "9"
+                }
+              },
+              {
+                "id": "12",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "c": false,
+                  "name": "12"
+                }
+              },
+              {
+                "id": "13",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "c": true,
+                  "name": "13"
+                }
+              },
+              {
+                "id": "14",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "name": "14"
+                }
+              },
+              {
+                "id": "15",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "c": false,
+                  "name": "15"
+                }
+              },
+              {
+                "id": "18",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "b": false,
+                  "c": false,
+                  "name": "18"
+                }
+              },
+              {
+                "id": "21",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "b": true,
+                  "c": false,
+                  "name": "21"
+                }
+              },
+              {
+                "id": "24",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "c": false,
+                  "name": "24"
+                }
+              }
+            ]
+          },
+          "post_assertions": []
+        },
+        {
+          "name": "negated/set",
+          "vars": {
+            "predicate": "NOT ((n.a = true XOR n.b = true) AND n.c = true)",
+            "action": "SET n.marked = true RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "0",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": false,
+                  "c": false,
+                  "name": "0",
+                  "marked": true
+                }
+              },
+              {
+                "id": "1",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": false,
+                  "c": true,
+                  "name": "1",
+                  "marked": true
+                }
+              },
+              {
+                "id": "2",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": false,
+                  "name": "2",
+                  "marked": true
+                }
+              },
+              {
+                "id": "3",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "b": true,
+                  "c": false,
+                  "name": "3",
+                  "marked": true
+                }
+              },
+              {
+                "id": "6",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": false,
+                  "c": false,
+                  "name": "6",
+                  "marked": true
+                }
+              },
+              {
+                "id": "9",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": false,
+                  "name": "9",
+                  "marked": true
+                }
+              },
+              {
+                "id": "12",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "c": false,
+                  "name": "12",
+                  "marked": true
+                }
+              },
+              {
+                "id": "13",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "c": true,
+                  "name": "13",
+                  "marked": true
+                }
+              },
+              {
+                "id": "14",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "name": "14",
+                  "marked": true
+                }
+              },
+              {
+                "id": "15",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "c": false,
+                  "name": "15",
+                  "marked": true
+                }
+              },
+              {
+                "id": "18",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "b": false,
+                  "c": false,
+                  "name": "18",
+                  "marked": true
+                }
+              },
+              {
+                "id": "21",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "b": true,
+                  "c": false,
+                  "name": "21",
+                  "marked": true
+                }
+              },
+              {
+                "id": "24",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "c": false,
+                  "name": "24",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4"
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10"
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated/set without return",
+          "vars": {
+            "predicate": "NOT ((n.a = true XOR n.b = true) AND n.c = true)",
+            "action": "SET n.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4"
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10"
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "three/read",
+          "vars": {
+            "predicate": "(n.a = true XOR n.b = true XOR n.c = true) AND n.a = true",
+            "action": "RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "9",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": false,
+                  "name": "9"
+                }
+              },
+              {
+                "id": "13",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "c": true,
+                  "name": "13"
+                }
+              }
+            ]
+          },
+          "post_assertions": []
+        },
+        {
+          "name": "three/set",
+          "vars": {
+            "predicate": "(n.a = true XOR n.b = true XOR n.c = true) AND n.a = true",
+            "action": "SET n.marked = true RETURN n"
+          },
+          "assert": {
+            "node_records": [
+              {
+                "id": "9",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": false,
+                  "c": false,
+                  "name": "9",
+                  "marked": true
+                }
+              },
+              {
+                "id": "13",
+                "kinds": [
+                  "XorNode"
+                ],
+                "props": {
+                  "a": true,
+                  "b": true,
+                  "c": true,
+                  "name": "13",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0"
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1"
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2"
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3"
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4"
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6"
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10"
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12"
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14"
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15"
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18"
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21"
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24"
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "three/set without return",
+          "vars": {
+            "predicate": "(n.a = true XOR n.b = true XOR n.c = true) AND n.a = true",
+            "action": "SET n.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:XorNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "0",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": false,
+                      "name": "0"
+                    }
+                  },
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "c": true,
+                      "name": "1"
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": false,
+                      "name": "2"
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": false,
+                      "name": "3"
+                    }
+                  },
+                  {
+                    "id": "4",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "c": true,
+                      "name": "4"
+                    }
+                  },
+                  {
+                    "id": "5",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "b": true,
+                      "name": "5"
+                    }
+                  },
+                  {
+                    "id": "6",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": false,
+                      "name": "6"
+                    }
+                  },
+                  {
+                    "id": "7",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "c": true,
+                      "name": "7"
+                    }
+                  },
+                  {
+                    "id": "8",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": false,
+                      "name": "8"
+                    }
+                  },
+                  {
+                    "id": "9",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": false,
+                      "name": "9",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "10",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "c": true,
+                      "name": "10"
+                    }
+                  },
+                  {
+                    "id": "11",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": false,
+                      "name": "11"
+                    }
+                  },
+                  {
+                    "id": "12",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": false,
+                      "name": "12"
+                    }
+                  },
+                  {
+                    "id": "13",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "c": true,
+                      "name": "13",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "id": "14",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "b": true,
+                      "name": "14"
+                    }
+                  },
+                  {
+                    "id": "15",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": false,
+                      "name": "15"
+                    }
+                  },
+                  {
+                    "id": "16",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "c": true,
+                      "name": "16"
+                    }
+                  },
+                  {
+                    "id": "17",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "a": true,
+                      "name": "17"
+                    }
+                  },
+                  {
+                    "id": "18",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": false,
+                      "name": "18"
+                    }
+                  },
+                  {
+                    "id": "19",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "c": true,
+                      "name": "19"
+                    }
+                  },
+                  {
+                    "id": "20",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": false,
+                      "name": "20"
+                    }
+                  },
+                  {
+                    "id": "21",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": false,
+                      "name": "21"
+                    }
+                  },
+                  {
+                    "id": "22",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "c": true,
+                      "name": "22"
+                    }
+                  },
+                  {
+                    "id": "23",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "b": true,
+                      "name": "23"
+                    }
+                  },
+                  {
+                    "id": "24",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": false,
+                      "name": "24"
+                    }
+                  },
+                  {
+                    "id": "25",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "c": true,
+                      "name": "25"
+                    }
+                  },
+                  {
+                    "id": "26",
+                    "kinds": [
+                      "XorNode"
+                    ],
+                    "props": {
+                      "name": "26"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

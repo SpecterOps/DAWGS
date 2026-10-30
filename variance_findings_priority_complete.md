@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **61 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **62 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -69,6 +69,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 63 | DAWGS-103 | Contained and live validated | In-query CALL returns a located parser error before PostgreSQL text execution. Templated reads/mutations, repeated compilation and committed-state controls cover both compiler modes. Native Neo4j procedures retain arguments and YIELD results. Full shared procedure support remains separate XL work. |
 | 64 | DAWGS-059 | Repaired and live validated; gate retries recorded | Positive conjunctive relationship-kind filters intersect their allowed kinds; disjoint sets become an explicit false predicate. OR, XOR and NOT predicates keep their logical ancestry. Render, shared read/SET templates and live builder-state validation are recorded below. |
 | 65 | DAWGS-060 | Repaired and live validated; gate retry recorded | The Cypher formatter preserves qualified function separators and uses AND for parsed all-label predicates while retaining OR for builder any-kind filters. Original-source regressions reproduce both defects; 29 shared variants and a native namespaced-function control pass live. Vendor hints/prefixes remain a separate compatibility follow-up. |
+| 66 | DAWGS-085 | Repaired and live validated | XOR groups retain parentheses when embedded in AND; PostgreSQL groups both comparison operands and the lowered result. Seven builder render controls and four SQL translation controls accompany 12 shared read/SET variants over 27 Boolean/null combinations. Original-source overlays reproduce wrong selection on both backends and invalid PostgreSQL comparison SQL. See below. |
 
 ## Original queue details for completed actions
 
@@ -137,6 +138,7 @@ These describe the original requested action; completion status and actual outco
 | 63 | [DAWGS-103](variance_findings.md#dawgs-103) — In-query CALL omitted from generated SQL | Q | Contain | S | Reject accepted in-query CALL on unrestricted compiler paths; preserve existing DefaultCypherContext restrictions. Full procedure execution is separate XL feature work. |
 | 64 | [DAWGS-059](variance_findings.md#dawgs-059) — Neo4j builder rewrite changes Boolean kind predicates | B | Repair | M | Repair the remaining relationship-kind conjunction becoming R|T. The original OR-based Enterprise caller is fixed and supplies no current residual exposure claim. |
 | 65 | [DAWGS-060](variance_findings.md#dawgs-060) — tx.Query rewrite re-emits a lossy AST | B | Repair | L | Preserve namespaces, conjunctive WHERE labels and integral float types whenever pattern-map rewriting re-emits the AST. Vendor hints/prefixes need a separate support promise. |
+| 66 | [DAWGS-085](variance_findings.md#dawgs-085) — Xor rendering loses builder grouping | B | Repair | S | Parenthesize/group XOR consistently when embedded in AND; cover both backend render/translation paths. |
 
 ## Implementation and validation notes
 
@@ -1977,7 +1979,7 @@ and nested conjunctions retain every restriction. An empty intersection must
 not clear the pattern kinds, because an empty pattern kind list is unrestricted.
 OR and NOT ancestry guards remain intact; XOR now receives the same guard as
 OR so its branch predicates cannot be hoisted into a global restriction.
-DAWGS-085's separate XOR grouping inside AND remains open.
+DAWGS-085's separate XOR grouping inside AND is now [completed below](#dawgs-085-xor-grouping-repair--2026-10-30).
 
 The table-driven render matrix has **33 read, SET, DELETE and all-shortest-path
 variants**. It checks disjoint, overlapping (both orders), repeated and nested
@@ -2127,8 +2129,76 @@ GOFLAGS='-ldflags=-linkmode=external'`; BDD report writes are sequential.
 Evidence is under `.coverage/dawgs060/`. Touched-file `goimports`, corpus record
 audits, local Markdown links, ledger counts and `git diff --check` pass.
 
-The active queue now has **43 items (4 P1, 30 P2, 9 P3)**, and the completion
-ledger has **61 completed actions**. The next implementation item is
-**DAWGS-085**, XOR grouping in builder rendering. Earlier pending repairs and
+At completion of DAWGS-060, the active queue had **43 items (4 P1, 30 P2, 9 P3)**,
+and the completion ledger had **61 completed actions**. Its next implementation
+item, **DAWGS-085**, is now [completed below](#dawgs-085-xor-grouping-repair--2026-10-30). Earlier pending repairs and
 separate follow-ups retain their existing status. Credentials are excluded from
 evidence.
+
+### DAWGS-085 XOR grouping repair — 2026-10-30
+
+The Cypher emitter groups an `ExclusiveDisjunction` that is a direct operand of
+`Conjunction`, preserving the AST's intent through nested AND groups and negation.
+The exported `query.Xor` return type remains unchanged; standalone XOR retains
+its existing rendering. Seven rendered-builder controls cover left/right and
+nested AND, negation, three XOR operands, standalone XOR and AND inside XOR.
+
+Live qualification also exposed an independent lowering defect in the same
+predicate path: PostgreSQL emitted comparison XOR as `a = true != b = true`,
+which is invalid SQL. `CompleteExclusiveDisjunction` now groups both operands
+before applying the existing inequality lowering and groups the resulting
+Boolean expression. This also preserves three-operand XOR and AND operand
+boundaries without changing ordinary inequality translation. Four additional
+translation controls cover comparison operands, three XOR operands, an AND
+operand and a null operand.
+
+`xor_grouping_shapes.json` supplies **12 shared variants** over **27 fixture
+nodes**, exhausting the true/false/missing-property combinations for three
+properties. Left/right AND, negation and three-way XOR each run as a read, SET
+with RETURN and SET without RETURN. Assertions compare exact selected records
+and every fixture node after mutation. `TestBuilderXorGrouping` executes the
+same expectations using rendered legacy builder ASTs. Both text and builder
+variants pass on Neo4j and in each PostgreSQL compiler mode (**72 backend/mode
+variant executions**). No backend-specific expected assertions or skips were
+added to the shared corpus.
+
+Read-only overlays isolate the original defects. Restoring only the original
+Cypher formatter fails five of seven render controls and **all 12 builder
+variants on Neo4j and all 12 in each PostgreSQL mode**, even with repaired SQL
+lowering. Restoring only the original PostgreSQL expression/translator sources
+fails **all 12 text variants in each compiler mode** with syntax errors near
+`!=`, while retaining the repaired Cypher formatter. These controls demonstrate
+both wrong row/mutation selection and the independent SQL rendering failure.
+
+The complete race-enabled unit stage passes all **43 tested packages**.
+Deduplicated statement coverage is **33,314 / 49,610 (67.1518%)**, above the
+checkout's recorded **33,304 / 49,596 (67.1506%)**. Neo4j's separate BDD gate
+passes with **17 enforced / zero failed** and **18 report-only compatibility
+failures** retained.
+Neo4j's complete `make test_integration` also passes all **43 tested packages**,
+including both full shared case/template suites.
+
+PostgreSQL-selected `make test_all` passes its full unit stage and **42 of 43
+integration packages**, including the full shared integration package
+(**191.653 s**) and both compiler-mode matrices. Its `cmd/graphbench` package
+reports one failed top-level test:
+`TestPostgreSQLBidirectionalOperationalPoolMatrix/pool-8` encounters PostgreSQL
+`out of shared memory` (SQLSTATE 53200) in its eight-connection concurrency
+smoke, matching the previous DAWGS-060 aggregate failure. After the aggregate
+finishes, the exact top-level test passes in isolation under the race detector
+(**4.825 s**), without product, fixture or assertion changes. This qualifies the
+package set across the aggregate and isolated retry; the aggregate remains
+recorded as failed rather than a clean first-run pass.
+
+PostgreSQL's separately invoked `make test_bdd_integration` passes with
+**17 enforced / zero failed** and **18 report-only compatibility failures**
+retained. Validation uses each supplied connection separately, with
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`; BDD report writes are sequential.
+Evidence is under `.coverage/dawgs085/`. Touched-file `goimports`, shared record
+audits, local Markdown file targets, ledger counts and `git diff --check` pass.
+
+The active queue has **42 items (4 P1, 29 P2, 9 P3)**, and this ledger has
+**62 completed actions**. **DAWGS-055** is the next implementation item.
+Earlier pending repairs and separate follow-ups retain their existing status.
+Credentials are excluded from evidence.

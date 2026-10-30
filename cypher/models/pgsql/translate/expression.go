@@ -1498,6 +1498,26 @@ func booleanOperandCount(expressions cypher.ExpressionList) int {
 	return count
 }
 
+// CompleteExclusiveDisjunction lowers Boolean XOR to inequality while preserving
+// both operand and result grouping: SQL comparisons cannot be chained.
+func (s *ExpressionTreeTranslator) CompleteExclusiveDisjunction(scope *Scope) error {
+	operands, err := s.popBinaryExpressionOperands(pgsql.OperatorNotEquals)
+	if err != nil {
+		return err
+	}
+	s.PushOperand(pgsql.NewParenthetical(operands.LOperand))
+	s.PushOperand(pgsql.NewParenthetical(operands.ROperand))
+	if err := s.CompleteBinaryExpression(scope, pgsql.OperatorNotEquals); err != nil {
+		return err
+	}
+	result, err := s.treeBuilder.PopOperand(s.kindMapper)
+	if err != nil {
+		return err
+	}
+	s.PushOperand(pgsql.NewParenthetical(result))
+	return nil
+}
+
 func (s *ExpressionTreeTranslator) CompleteBinaryExpression(scope *Scope, operator pgsql.Operator) error {
 	newExpression, err := s.popBinaryExpressionOperands(operator)
 	if err != nil {
