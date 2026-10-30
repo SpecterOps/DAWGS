@@ -277,6 +277,22 @@ func NewReadingClauseVisitor() *ReadingClauseVisitor {
 	}
 }
 
+// Procedure calls have no shared AST or execution representation. Isolate the
+// invocation subtree so arguments and YIELD filters cannot alter the query AST.
+func (s *ReadingClauseVisitor) EnterOC_InQueryCall(ctx *parser.OC_InQueryCallContext) {
+	s.ctx.AddErrors(SyntaxError{
+		Line:            ctx.GetStart().GetLine(),
+		Column:          ctx.GetStart().GetColumn(),
+		OffendingSymbol: ctx.GetText(),
+		Message:         "in-query CALL is not supported",
+	})
+	s.ctx.Enter(&BaseVisitor{})
+}
+
+func (s *ReadingClauseVisitor) ExitOC_InQueryCall(ctx *parser.OC_InQueryCallContext) {
+	s.ctx.Exit()
+}
+
 func (s *ReadingClauseVisitor) EnterOC_Match(ctx *parser.OC_MatchContext) {
 	s.ctx.Enter(NewMatchVisitor(ctx))
 }

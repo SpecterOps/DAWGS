@@ -230,3 +230,19 @@ func TestRewriteQueryPreservesShortestPathExpressions(t *testing.T) {
 		})
 	}
 }
+
+func TestRewriteInQueryCallPreservesNativeText(t *testing.T) {
+	params := map[string]any{"props": map[string]any{"name": "start"}, "value": int64(1)}
+	for _, source := range []string{
+		"MATCH (n) CALL test.doNothing() RETURN n",
+		"MATCH (n $props) CALL test.write($value) RETURN n",
+		"WITH $value AS x CALL dbms.components() YIELD name RETURN x, name",
+	} {
+		for _, rewrite := range []func(string, map[string]any) (string, map[string]any, error){rewriteQuery, rewritePatternPropertyParameters} {
+			query, parameters, err := rewrite(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, query)
+			require.Equal(t, params, parameters)
+		}
+	}
+}

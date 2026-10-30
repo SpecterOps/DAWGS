@@ -301,6 +301,25 @@
           "LOAD CSV is not supported"
         ]
       }
+    },
+    {
+      "name": "Unsupported in-query CALL in reads and mutations",
+      "type": "negative_case",
+      "details": {
+        "queries": [
+          "MATCH (n) CALL test.doNothing() RETURN n",
+          "WITH 1 AS x CALL test.write($value) RETURN x",
+          "MATCH (n) CALL db.labels() YIELD label AS name WHERE name = 'x' RETURN n",
+          "MATCH (n) CALL test.doNothing() SET n.value = 1",
+          "MATCH (n) CALL test.doNothing() CREATE (:Created)",
+          "MATCH (n) CALL test.doNothing() DETACH DELETE n",
+          "CREATE (:Created) WITH 1 AS x CALL test.doNothing() RETURN x",
+          "MATCH (n) SET n.value = 1 WITH n CALL test.doNothing() RETURN n"
+        ],
+        "error_matchers": [
+          "in-query CALL is not supported"
+        ]
+      }
     }
   ]
 }
