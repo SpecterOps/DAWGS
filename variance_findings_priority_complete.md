@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **62 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **63 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -70,6 +70,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 64 | DAWGS-059 | Repaired and live validated; gate retries recorded | Positive conjunctive relationship-kind filters intersect their allowed kinds; disjoint sets become an explicit false predicate. OR, XOR and NOT predicates keep their logical ancestry. Render, shared read/SET templates and live builder-state validation are recorded below. |
 | 65 | DAWGS-060 | Repaired and live validated; gate retry recorded | The Cypher formatter preserves qualified function separators and uses AND for parsed all-label predicates while retaining OR for builder any-kind filters. Original-source regressions reproduce both defects; 29 shared variants and a native namespaced-function control pass live. Vendor hints/prefixes remain a separate compatibility follow-up. |
 | 66 | DAWGS-085 | Repaired and live validated | XOR groups retain parentheses when embedded in AND; PostgreSQL groups both comparison operands and the lowered result. Seven builder render controls and four SQL translation controls accompany 12 shared read/SET variants over 27 Boolean/null combinations. Original-source overlays reproduce wrong selection on both backends and invalid PostgreSQL comparison SQL. See below. |
+| 67 | DAWGS-055 | Repaired and live validated; PostgreSQL gate limitation recorded | PostgreSQL identifier rendering preserves case, decodes escaped Cypher names and doubles embedded SQL quotes. CTE names use the same rendering. Forty-two backend-equivalent read/WITH/SET/CREATE templates and direct result-key controls pass on Neo4j and in both PostgreSQL compiler modes; original-source overlays reproduce the incorrect keys. See below. |
 
 ## Original queue details for completed actions
 
@@ -139,6 +140,7 @@ These describe the original requested action; completion status and actual outco
 | 64 | [DAWGS-059](variance_findings.md#dawgs-059) — Neo4j builder rewrite changes Boolean kind predicates | B | Repair | M | Repair the remaining relationship-kind conjunction becoming R|T. The original OR-based Enterprise caller is fixed and supplies no current residual exposure claim. |
 | 65 | [DAWGS-060](variance_findings.md#dawgs-060) — tx.Query rewrite re-emits a lossy AST | B | Repair | L | Preserve namespaces, conjunctive WHERE labels and integral float types whenever pattern-map rewriting re-emits the AST. Vendor hints/prefixes need a separate support promise. |
 | 66 | [DAWGS-085](variance_findings.md#dawgs-085) — Xor rendering loses builder grouping | B | Repair | S | Parenthesize/group XOR consistently when embedded in AND; cover both backend render/translation paths. |
+| 67 | [DAWGS-055](variance_findings.md#dawgs-055) — Result aliases are emitted unquoted | R | Repair | S | Preserve case and decoded alias spelling when quoting result-column identifiers; unusual aliases now avoid the old syntax failure. |
 
 ## Implementation and validation notes
 
@@ -2202,3 +2204,80 @@ The active queue has **42 items (4 P1, 29 P2, 9 P3)**, and this ledger has
 **62 completed actions**. **DAWGS-055** is the next implementation item.
 Earlier pending repairs and separate follow-ups retain their existing status.
 Credentials are excluded from evidence.
+
+### DAWGS-055 result alias spelling — 2026-10-30
+
+Order **67**, P2 / R / Repair / S. PostgreSQL previously returned `objectid`
+for `AS objectId` and literal backticks for escaped aliases such as
+``AS `object id` ``. `formatIdentifier` now quotes names containing uppercase
+characters, decodes a single escaped Cypher identifier (including doubled
+backticks), and doubles embedded SQL double quotes. Escaped `*` remains an
+identifier; the unescaped wildcard still renders as `*`. Implicit expression
+names such as `` `a` + `b` `` retain their full spelling rather than being
+decoded as one identifier. CTE/table alias names use the same formatter as
+references and declared CTE columns, preserving mixed-case binding consistency.
+
+Ten formatter controls and 40 translation read/mutation controls cover quoting
+and execution paths in both optimizer modes. Two existing SQL goldens were
+regenerated through `CYSQL_UPDATE_CASES=true` and the repository's
+`updated_cases` copy workflow; nearby optimizer shape expectations now include
+mixed-case identifier quotes. README documents the caller-visible correction:
+clients that relied on lowercase folding must look up the requested alias.
+No exported signatures or schema changed. The separate identifier round-trip
+observation O09 and Neo4j hand-built upsert escaping under 061 retain their
+existing scopes.
+
+`result_alias_shapes.json` adds **42 shared variants**: seven alias spellings
+across reads, WITH, SET and CREATE, including mutations without RETURN.
+Assertions verify exact column names/values, complete source node records and
+creation cardinality, preserving identical backend expectations. All variants
+pass on Neo4j and in each PostgreSQL compiler mode (**126 backend/mode variant
+executions**). `TestResultAliasSpelling` independently checks `Result.Keys()`
+for standalone and WITH/ORDER BY output, case-distinct columns and implicit
+backtick expressions (**16 queries per backend/mode, 48 executions**). Literal
+integer values use numeric comparison because PostgreSQL returns `int32` here
+and Neo4j returns `int64`; column spelling assertions remain exact.
+
+A read-only Go overlay restores only the original formatter, leaving the
+working tree intact. **28 of 42 shared variants fail in each PostgreSQL mode**
+and **15 of 16 direct key controls fail in each mode**; mutations without RETURN
+and the implicit-expression control remain positive controls. New formatter and
+translator unit regressions also fail against the original source. With the
+repair, focused race-enabled formatter/translator/golden tests and both live
+backend checks pass. Evidence is under `.coverage/dawgs055/`.
+
+The complete race-enabled unit stage passes all **43 tested packages**.
+Deduplicated statement coverage is **33,324 / 49,617 (67.1625%)**, above the
+checkout's recorded **33,314 / 49,610 (67.1518%)**. Touched-file `goimports`,
+repository lint, integration-tagged vet for affected packages, local Markdown
+file targets, ledger counts and `git diff --check` pass.
+
+Neo4j's complete `make test_integration` passes all **43 tested packages**,
+including both complete shared case/template suites (**254.559 s** for the
+shared integration package). Its separate `make test_bdd_integration` also
+passes. Both separately run BDD gates report **17 enforced / zero failed**
+and retain **18 report-only compatibility failures** each; their report writes
+are sequential.
+
+PostgreSQL-selected `make test_all` passes its complete unit stage and **42 of
+43 integration packages**. The shared integration package executes its full
+case/template suites and both compiler-mode matrices, but fails one top-level
+test, `TestWipeGraph` (**228.646 s** for the package). All three truncate variants
+encounter `out of shared memory` (SQLSTATE 53200). An isolated retry retains
+the same resource failure; its first variant additionally observes six fixture
+nodes instead of three because the failed truncation left secondary-graph data.
+Restoring the original formatter through the read-only overlay retains the
+truncate resource failure (and the subsequent fixture-count residue). No product,
+fixture or assertion changes were made for this unrelated failure. The aggregate
+remains **failed**, and the full PostgreSQL gate is not qualified as passing.
+Because make stopped before the BDD stage, that gate was invoked separately
+and passes as recorded above. The final focused PostgreSQL alias rerun passes
+after the aggregate failure (**3.071 s**).
+
+Validation uses each supplied connection separately with
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`. The active queue has **41 items
+(4 P1, 28 P2, 9 P3)** and this ledger has **63 completed actions**.
+**DAWGS-061** is the next implementation item. Earlier pending repairs and
+separate follow-ups retain their existing status. Credentials are excluded
+from evidence.
