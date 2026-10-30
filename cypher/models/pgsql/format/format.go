@@ -22,15 +22,29 @@ type OutputBuilder struct {
 	TargetGraphID          int32
 }
 
-// formatIdentifier preserves the wildcard and quotes names containing characters outside the formatter's unquoted ASCII subset.
+// formatIdentifier decodes escaped Cypher names and quotes identifiers whose
+// spelling would change under PostgreSQL folding or requires SQL escaping.
 func formatIdentifier(identifier pgsql.Identifier) string {
 	value := identifier.String()
-	if value == pgsql.WildcardIdentifier.String() {
+	escaped := cypher.IsEscapedPropertyKeyName(value)
+	if escaped {
+		// Implicit expression names can start and end with backticks without
+		// naming a single identifier, for example `a` + `b`.
+		escaped = !strings.Contains(strings.ReplaceAll(value[1:len(value)-1], "``", ""), "`")
+	}
+	if escaped {
+		value = cypher.UnescapePropertyKeyName(value)
+	}
+	if !escaped && value == pgsql.WildcardIdentifier.String() {
 		return value
 	}
 
+	if escaped || value == "" {
+		return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+	}
+
 	for idx, character := range value {
-		valid := character == '_' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
+		valid := character == '_' || character >= 'a' && character <= 'z'
 		if idx > 0 {
 			valid = valid || character >= '0' && character <= '9' || character == '$'
 		}
@@ -916,7 +930,7 @@ func formatFromClauses(builder *OutputBuilder, fromClauses []pgsql.FromClause) e
 
 // formatTableAlias writes an alias and its optional record-shape column list.
 func formatTableAlias(builder *OutputBuilder, tableAlias pgsql.TableAlias) error {
-	builder.Write(tableAlias.Name)
+	builder.Write(formatIdentifier(tableAlias.Name))
 
 	if tableAlias.Shape != nil {
 		builder.Write("(")

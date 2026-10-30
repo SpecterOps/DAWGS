@@ -134,6 +134,15 @@ queries. Check parse errors before formatting an AST. Full indexing and slicing
 semantics remain pending. Neo4j text queries retain native indexing and slicing
 when the driver passes the original query through after a declined rewrite.
 
+PostgreSQL result-column aliases preserve case and decoded Cypher spelling in
+`Result.Keys()`: `AS objectId` returns `objectId`, and ``AS `object id` ``
+returns `object id`. Backtick escapes and embedded double quotes are translated
+to SQL identifier quoting, including aliases carried through WITH and ORDER BY.
+Callers that relied on lowercase folding of mixed-case aliases must use their
+requested spelling when looking up result columns. The shared
+`result_alias_shapes` templates cover reads and SET/CREATE post-state; direct
+result-key checks run on both backends and in both PostgreSQL compiler modes.
+
 ### PostgreSQL JSON result numbers
 
 PostgreSQL JSON/JSONB query results decode integer tokens as exact signed 64-bit `int64`

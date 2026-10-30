@@ -1,0 +1,1548 @@
+{
+  "node_kinds": [
+    "AliasCreated"
+  ],
+  "families": [
+    {
+      "name": "result aliases",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "AliasInput"
+            ],
+            "properties": {
+              "k": 7
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "AliasInput"
+            ],
+            "properties": {
+              "k": 8
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "mixed case/read",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 RETURN n.k AS objectId ORDER BY objectId"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "objectId": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "mixed case/with",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS objectId RETURN objectId AS objectId"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "objectId": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "mixed case/set",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k RETURN n.k AS objectId"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "objectId": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "mixed case/set without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "mixed case/create",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS objectId CREATE (c:AliasCreated {k: objectId}) RETURN c.k AS objectId"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "objectId": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "mixed case/create without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS objectId CREATE (c:AliasCreated {k: objectId})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "spaces/read",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 RETURN n.k AS `object id` ORDER BY `object id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object id": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "spaces/with",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object id` RETURN `object id` AS `object id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object id": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "spaces/set",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k RETURN n.k AS `object id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object id": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "spaces/set without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "spaces/create",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object id` CREATE (c:AliasCreated {k: `object id`}) RETURN c.k AS `object id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object id": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "spaces/create without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object id` CREATE (c:AliasCreated {k: `object id`})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "backtick/read",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 RETURN n.k AS `object``id` ORDER BY `object``id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object`id": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "backtick/with",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object``id` RETURN `object``id` AS `object``id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object`id": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "backtick/set",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k RETURN n.k AS `object``id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object`id": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "backtick/set without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "backtick/create",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object``id` CREATE (c:AliasCreated {k: `object``id`}) RETURN c.k AS `object``id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object`id": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "backtick/create without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object``id` CREATE (c:AliasCreated {k: `object``id`})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "double quote/read",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 RETURN n.k AS `object\"id` ORDER BY `object\"id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object\"id": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "double quote/with",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object\"id` RETURN `object\"id` AS `object\"id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object\"id": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "double quote/set",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k RETURN n.k AS `object\"id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object\"id": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "double quote/set without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "double quote/create",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object\"id` CREATE (c:AliasCreated {k: `object\"id`}) RETURN c.k AS `object\"id`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "object\"id": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "double quote/create without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `object\"id` CREATE (c:AliasCreated {k: `object\"id`})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "keyword/read",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 RETURN n.k AS `select` ORDER BY `select`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "select": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "keyword/with",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `select` RETURN `select` AS `select`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "select": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "keyword/set",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k RETURN n.k AS `select`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "select": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "keyword/set without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "keyword/create",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `select` CREATE (c:AliasCreated {k: `select`}) RETURN c.k AS `select`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "select": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "keyword/create without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `select` CREATE (c:AliasCreated {k: `select`})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "unicode/read",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 RETURN n.k AS `étiquette` ORDER BY `étiquette`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "étiquette": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "unicode/with",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `étiquette` RETURN `étiquette` AS `étiquette`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "étiquette": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "unicode/set",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k RETURN n.k AS `étiquette`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "étiquette": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "unicode/set without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "unicode/create",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `étiquette` CREATE (c:AliasCreated {k: `étiquette`}) RETURN c.k AS `étiquette`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "étiquette": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "unicode/create without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `étiquette` CREATE (c:AliasCreated {k: `étiquette`})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "wildcard name/read",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 RETURN n.k AS `*` ORDER BY `*`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "*": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "wildcard name/with",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `*` RETURN `*` AS `*`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "*": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "wildcard name/set",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k RETURN n.k AS `*`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "*": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "wildcard name/set without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 SET n.seen = n.k"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7,
+                      "seen": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": []
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "wildcard name/create",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `*` CREATE (c:AliasCreated {k: `*`}) RETURN c.k AS `*`"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "*": [
+                7
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "wildcard name/create without return",
+          "vars": {
+            "query": "MATCH (n:AliasInput) WHERE n.k = 7 WITH n.k AS `*` CREATE (c:AliasCreated {k: `*`})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:AliasInput) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 7
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "AliasInput"
+                    ],
+                    "props": {
+                      "k": 8
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:AliasCreated) RETURN n.k AS k",
+              "assert": {
+                "ordered_column_values": {
+                  "k": [
+                    7
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
