@@ -13,7 +13,7 @@ import (
 // TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL verifies graph partitioning in both the outer query and shortest-path harness.
 func TestTargetGraphUsesConcreteRelationsInOuterAndHarnessSQL(t *testing.T) {
 	regularQuery, err := frontend.ParseCypher(frontend.NewContext(), `
-		MATCH p = shortestPath((s:Group)-[:MemberOf*1..]->(e:Domain))
+		MATCH p = shortestPath((s:Group)-[:MemberOf*1..15]->(e:Domain))
 		WHERE id(s) = $start_id AND id(e) = $end_id
 		RETURN p
 		LIMIT 1

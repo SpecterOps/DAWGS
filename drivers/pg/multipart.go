@@ -55,7 +55,7 @@ func (s *transaction) queryMultipart(query *cypher.RegularQuery, parameters map[
 		return graph.NewErrorResult(fmt.Errorf("multipart writes require an explicit PostgreSQL write transaction"))
 	}
 	started := time.Now()
-	translation, err := translate.Translate(s.ctx, query, s.schemaManager, parameters, graphID)
+	translation, err := translate.Translate(s.ctx, query, s.kindMapper, parameters, graphID)
 	profile.Translate += time.Since(started)
 	if err != nil {
 		return graph.NewErrorResult(err)
@@ -105,7 +105,7 @@ func (s *transaction) queryMultipart(query *cypher.RegularQuery, parameters map[
 			return graph.NewErrorResult(s.stagedError)
 		}
 		return &stagedQueryResult{
-			Result: &queryResult{ctx: s.ctx, rows: rows, kindMapper: s.schemaManager},
+			Result: &queryResult{ctx: s.ctx, rows: rows, kindMapper: s.kindMapper},
 			owner:  s,
 			tables: tables,
 		}

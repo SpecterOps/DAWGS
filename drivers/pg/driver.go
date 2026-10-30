@@ -280,6 +280,18 @@ func (s *Driver) AssertSchema(ctx context.Context, schema graph.Schema) error {
 		return err
 	}
 
+	for _, graphSchema := range schema.Graphs {
+		if graphSchema.Name == schema.DefaultGraph.Name {
+			continue // The default graph is asserted below.
+		}
+		if err := s.WriteTransaction(ctx, func(tx graph.Transaction) error {
+			_, err := s.SchemaManager.AssertGraph(tx, graphSchema)
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+
 	if schema.DefaultGraph.Name != "" {
 		// There's a default graph defined. Assert that it exists and has a matching schema
 		if err := s.SchemaManager.AssertDefaultGraph(ctx, schema.DefaultGraph); err != nil {
@@ -315,11 +327,7 @@ func (s *Driver) FetchKinds(_ context.Context) (graph.Kinds, error) {
 
 // RefreshKinds discards and reloads the driver's in-memory kind mapping.
 func (s *Driver) RefreshKinds(ctx context.Context) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
-	// Wipe this map to be rebuilt in the fetch call below
-	s.SchemaManager.kindIDsByKind = map[int16]graph.Kind{}
 	if err := s.SchemaManager.Fetch(ctx); err != nil {
 		return err
 	}
@@ -399,13 +407,12 @@ func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16
 	}
 	s.lock.RUnlock()
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	if err := s.Fetch(ctx); err != nil {
 		return nil, nil, err
 	}
 
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	kindIDs, missingKinds := s.mapKinds(kinds)
 	return kindIDs, missingKinds, nil
 }

@@ -1,0 +1,1324 @@
+{
+  "families": [
+    {
+      "name": "bounded shortest endpoint identity",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kinds": [
+              "BoundedNode"
+            ],
+            "properties": {
+              "position": 0,
+              "eligible": true
+            }
+          },
+          {
+            "id": "n1",
+            "kinds": [
+              "BoundedNode"
+            ],
+            "properties": {
+              "position": 1,
+              "eligible": false
+            }
+          },
+          {
+            "id": "n2",
+            "kinds": [
+              "BoundedNode"
+            ],
+            "properties": {
+              "position": 2,
+              "eligible": true
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "BoundedOther"
+            ],
+            "properties": {
+              "position": 17,
+              "eligible": true
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "n0",
+            "end_id": "n1",
+            "kind": "BoundedStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n1",
+            "end_id": "n2",
+            "kind": "BoundedStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n0",
+            "end_id": "decoy",
+            "kind": "BoundedOtherStep",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "shortestPath bound 64 outbound p",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..64]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "shortestPath bound 64 outbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..64]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath bound 64 inbound p",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*1..64]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1",
+                "n0"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "shortestPath bound 64 inbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*1..64]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath bound 65 outbound p",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..65]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "shortestPath bound 65 outbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..65]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath bound 65 inbound p",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*1..65]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1",
+                "n0"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "shortestPath bound 65 inbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*1..65]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath bound 128 outbound p",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "shortestPath bound 128 outbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath bound 128 inbound p",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*1..128]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1",
+                "n0"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "shortestPath bound 128 inbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*1..128]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound 64 outbound p",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*1..64]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths bound 64 outbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*1..64]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound 64 inbound p",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*1..64]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1",
+                "n0"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths bound 64 inbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*1..64]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound 65 outbound p",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*1..65]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths bound 65 outbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*1..65]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound 65 inbound p",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*1..65]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1",
+                "n0"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths bound 65 inbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*1..65]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound 128 outbound p",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths bound 128 outbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound 128 inbound p",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*1..128]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1",
+                "n0"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths bound 128 inbound length(p) AS hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*1..128]-(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "terminal property mismatch",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id AND e.eligible=false RETURN p"
+          },
+          "params": {},
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "root property mismatch",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id AND s.eligible=false RETURN p"
+          },
+          "params": {},
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "terminal label mismatch",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "params": {},
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "decoy"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "null endpoint",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "params": {
+            "end_id": null
+          },
+          "node_params": {
+            "start_id": "n0"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "unreachable endpoint",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "params": {},
+          "node_params": {
+            "start_id": "n2",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "mutation eligible True",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id AND e.eligible=$eligible SET e.selected=true RETURN e"
+          },
+          "params": {
+            "eligible": true
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_node_ids": [
+              "n2"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 0,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 1,
+                      "eligible": false
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 2,
+                      "eligible": true,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "BoundedOther"
+                    ],
+                    "props": {
+                      "position": 17,
+                      "eligible": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "BoundedOtherStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mutation eligible False",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id AND e.eligible=$eligible SET e.selected=true RETURN e"
+          },
+          "params": {
+            "eligible": false
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 0,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 1,
+                      "eligible": false
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 2,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "BoundedOther"
+                    ],
+                    "props": {
+                      "position": 17,
+                      "eligible": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "BoundedOtherStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "endpoint property constraints",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id AND s.eligible=true AND e.eligible=true RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2"
+              ]
+            ],
+            "path_lengths": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "shortestPath zero hop",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*0..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0"
+              ]
+            ],
+            "path_lengths": [
+              0
+            ]
+          }
+        },
+        {
+          "name": "singleton mutation with RETURN",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id SET e.selected=true RETURN e"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_node_ids": [
+              "n2"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 0,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 1,
+                      "eligible": false
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 2,
+                      "eligible": true,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "BoundedOther"
+                    ],
+                    "props": {
+                      "position": 17,
+                      "eligible": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "BoundedOtherStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "singleton mutation without RETURN",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode)) WHERE id(s)=$start_id AND id(e)=$end_id SET e.selected=true"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n2"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 0,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 1,
+                      "eligible": false
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 2,
+                      "eligible": true,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "BoundedOther"
+                    ],
+                    "props": {
+                      "position": 17,
+                      "eligible": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "BoundedOtherStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "shortestPath filtered root 0 to 1 outbound",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*]->(e:BoundedNode)) WHERE s.position=0 AND e.position=1 RETURN p"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1"
+              ]
+            ],
+            "path_lengths": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "shortestPath filtered root mutation",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*]->(e:BoundedNode)) WHERE s.position=0 AND e.position=1 SET e.selected=true RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_node_ids": [
+              "n1"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 0,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 1,
+                      "eligible": false,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 2,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "BoundedOther"
+                    ],
+                    "props": {
+                      "position": 17,
+                      "eligible": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "BoundedOtherStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "shortestPath filtered root 2 to 0 outbound",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*]->(e:BoundedNode)) WHERE s.position=2 AND e.position=0 RETURN p"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "shortestPath filtered root 2 to 1 inbound",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*]-(e:BoundedNode)) WHERE s.position=2 AND e.position=1 RETURN p"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1"
+              ]
+            ],
+            "path_lengths": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "shortestPath filtered root 0 to 2 inbound",
+          "vars": {
+            "query": "MATCH p=shortestPath((s:BoundedNode)<-[:BoundedStep*]-(e:BoundedNode)) WHERE s.position=0 AND e.position=2 RETURN p"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "allShortestPaths filtered root 0 to 1 outbound",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*]->(e:BoundedNode)) WHERE s.position=0 AND e.position=1 RETURN p"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n0",
+                "n1"
+              ]
+            ],
+            "path_lengths": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths filtered root mutation",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*]->(e:BoundedNode)) WHERE s.position=0 AND e.position=1 SET e.selected=true RETURN e"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_node_ids": [
+              "n1"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 0,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 1,
+                      "eligible": false,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "BoundedNode"
+                    ],
+                    "props": {
+                      "position": 2,
+                      "eligible": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "BoundedOther"
+                    ],
+                    "props": {
+                      "position": 17,
+                      "eligible": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "BoundedStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "BoundedOtherStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "allShortestPaths filtered root 2 to 0 outbound",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*]->(e:BoundedNode)) WHERE s.position=2 AND e.position=0 RETURN p"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "allShortestPaths filtered root 2 to 1 inbound",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*]-(e:BoundedNode)) WHERE s.position=2 AND e.position=1 RETURN p"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_node_ids": [
+              [
+                "n2",
+                "n1"
+              ]
+            ],
+            "path_lengths": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "allShortestPaths filtered root 0 to 2 inbound",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s:BoundedNode)<-[:BoundedStep*]-(e:BoundedNode)) WHERE s.position=0 AND e.position=2 RETURN p"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        }
+      ]
+    }
+  ]
+}

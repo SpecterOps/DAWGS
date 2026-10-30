@@ -72,6 +72,10 @@ func (s *SchemaManager) compileRegularQuery(ctx context.Context, prepared prepar
 }
 
 func (s *SchemaManager) compile(ctx context.Context, source string, parameters map[string]any, graphID int32, identity *builderCacheIdentity, parse func() (*cypher.RegularQuery, error)) (string, map[string]any, error) {
+	return s.compileWithMapper(ctx, source, parameters, graphID, identity, parse, s)
+}
+
+func (s *SchemaManager) compileWithMapper(ctx context.Context, source string, parameters map[string]any, graphID int32, identity *builderCacheIdentity, parse func() (*cypher.RegularQuery, error), mapper KindMapper) (string, map[string]any, error) {
 	var (
 		translationCache   = s.compilationCacheProvider.TranslationCache()
 		optimized          = OptimizedTranslationEnabled()
@@ -86,12 +90,15 @@ func (s *SchemaManager) compile(ctx context.Context, source string, parameters m
 	build := func() (string, translationCacheBuildResult, error) {
 		if regularQuery, err := parse(); err != nil {
 			return "", translationCacheBuildResult{}, err
-		} else if translated, parameterSources, err := translate.TranslateWithOptionsAndParameterSources(ctx, regularQuery, s, parameters, graphID, translationOptions); err != nil {
+		} else if translated, parameterSources, err := translate.TranslateWithOptionsAndParameterSources(ctx, regularQuery, mapper, parameters, graphID, translationOptions); err != nil {
 			return "", translationCacheBuildResult{}, err
 		} else if sqlQuery, err := translate.Translated(translated); err != nil {
 			return "", translationCacheBuildResult{}, err
 		} else {
 			maps.Copy(translated.Parameters, sqlQuery.Parameters)
+			if local, ok := mapper.(*transactionKindMapper); ok && local.hasUncommittedKinds {
+				translated.HasMissingKinds = true
+			}
 			return sqlQuery.Statement, translationCacheBuildResult{
 				hasMissingKinds:   translated.HasMissingKinds,
 				parameters:        translated.Parameters,
@@ -101,6 +108,9 @@ func (s *SchemaManager) compile(ctx context.Context, source string, parameters m
 		}
 	}
 
+	if local, ok := mapper.(*transactionKindMapper); ok && local.hasUncommittedKinds {
+		return translationCache.buildUncached(build)
+	}
 	if !optimized {
 		return translationCache.BuildUnoptimized(build)
 	}

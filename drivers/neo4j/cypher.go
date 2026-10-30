@@ -14,6 +14,8 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+func upsertIdentifier(name string) string { return "`" + strings.ReplaceAll(name, "`", "``") + "`" }
+
 func newUpdateKey(identityKind graph.Kind, identityProperties []string, updateKinds graph.Kinds, removedKinds ...graph.Kind) string {
 	kind := ""
 	if identityKind != nil && !identityKind.Is(graph.EmptyKind) {
@@ -107,7 +109,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 		output.WriteString("unwind $p as p merge (s")
 
 		if batch.startIdentityKind != nil && !batch.startIdentityKind.Is(graph.EmptyKind) {
-			output.WriteString(fmt.Sprintf(":%s", batch.startIdentityKind.String()))
+			output.WriteString(fmt.Sprintf(":%s", upsertIdentifier(batch.startIdentityKind.String())))
 		}
 
 		if len(batch.startIdentityProperties) > 0 {
@@ -121,9 +123,9 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.s.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
@@ -131,7 +133,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 
 		output.WriteString(") merge (e")
 		if batch.endIdentityKind != nil && !batch.endIdentityKind.Is(graph.EmptyKind) {
-			output.WriteString(fmt.Sprintf(":%s", batch.endIdentityKind.String()))
+			output.WriteString(fmt.Sprintf(":%s", upsertIdentifier(batch.endIdentityKind.String())))
 		}
 
 		if len(batch.endIdentityProperties) > 0 {
@@ -145,16 +147,16 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.e.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
 		}
 
 		output.WriteString(") merge (s)-[r:")
-		output.WriteString(batch.identityKind.String())
+		output.WriteString(upsertIdentifier(batch.identityKind.String()))
 
 		if len(batch.identityProperties) > 0 {
 			output.WriteString(" {")
@@ -167,9 +169,9 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.r.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
@@ -183,7 +185,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					continue // skip empty kinds
 				}
 				output.WriteString(", s:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -193,7 +195,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					continue // skip empty kinds
 				}
 				output.WriteString(", e:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -291,7 +293,7 @@ func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[str
 		if len(batch.nodeKindsToAdd) > 0 {
 			for _, kindToAdd := range batch.nodeKindsToAdd {
 				output.WriteString(", n:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -304,7 +306,7 @@ func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[str
 				}
 
 				output.WriteString("n:")
-				output.WriteString(kindToRemove.String())
+				output.WriteString(upsertIdentifier(kindToRemove.String()))
 			}
 		}
 
@@ -339,7 +341,7 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 		output.WriteString("unwind $p as p merge (n")
 
 		if batch.identityKind != nil && !batch.identityKind.Is(graph.EmptyKind) {
-			output.WriteString(fmt.Sprintf(":%s", batch.identityKind.String()))
+			output.WriteString(fmt.Sprintf(":%s", upsertIdentifier(batch.identityKind.String())))
 		}
 
 		if len(batch.identityProperties) > 0 {
@@ -353,9 +355,9 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
@@ -366,7 +368,7 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 		if len(batch.nodeKindsToAdd) > 0 {
 			for _, kindToAdd := range batch.nodeKindsToAdd {
 				output.WriteString(", n:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -379,7 +381,7 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 				}
 
 				output.WriteString("n:")
-				output.WriteString(kindToRemove.String())
+				output.WriteString(upsertIdentifier(kindToRemove.String()))
 			}
 		}
 

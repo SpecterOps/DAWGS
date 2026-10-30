@@ -123,7 +123,7 @@ func (s *batch) CreateNodes(nodes []*graph.Node) ([]graph.ID, error) {
 			return nil, fmt.Errorf("bulk create node %d is nil", index)
 		}
 
-		mappedKindIDs, err := s.schemaManager.AssertKinds(s.ctx, node.Kinds)
+		mappedKindIDs, err := s.innerTransaction.kindMapper.AssertKinds(s.ctx, node.Kinds)
 		if err != nil {
 			return nil, fmt.Errorf("unable to map kinds: %w", err)
 		}
@@ -214,7 +214,7 @@ func (s *batch) largeUpdate(nodes []*graph.Node) error {
 	}
 
 	nodeRows := NewLargeNodeUpdateRows(len(nodes))
-	if err := nodeRows.AppendAll(s.ctx, nodes, s.schemaManager, s.kindIDEncoder); err != nil {
+	if err := nodeRows.appendAllWithMapper(s.ctx, nodes, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
 		return err
 	}
 
@@ -260,7 +260,7 @@ func (s *LargeNodeUpdateRows) Rows() [][]any {
 	return s.rows
 }
 
-func (s *LargeNodeUpdateRows) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *LargeNodeUpdateRows) appendWithMapper(ctx context.Context, node *graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	addedKindIDs, err := schemaManager.AssertKinds(ctx, node.Kinds)
 	if err != nil {
 		return fmt.Errorf("mapping added kinds for node %d: %w", node.ID, err)
@@ -288,9 +288,9 @@ func (s *LargeNodeUpdateRows) Append(ctx context.Context, node *graph.Node, sche
 }
 
 // AppendAll encodes every node in the slice and appends its row to the accumulator.
-func (s *LargeNodeUpdateRows) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *LargeNodeUpdateRows) appendAllWithMapper(ctx context.Context, nodes []*graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	for _, node := range nodes {
-		if err := s.Append(ctx, node, schemaManager, kindIDEncoder); err != nil {
+		if err := s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder); err != nil {
 			return err
 		}
 	}
@@ -375,7 +375,7 @@ func (s *batch) flushNodeCreateBufferWithIDs() error {
 	for idx, nextNode := range s.nodeCreateBuffer {
 		nodeIDs[idx] = nextNode.ID.Uint64()
 
-		if mappedKindIDs, err := s.schemaManager.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
+		if mappedKindIDs, err := s.innerTransaction.kindMapper.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
 			return fmt.Errorf("unable to map kinds %w", err)
 		} else {
 			kindIDSlices[idx] = kindIDEncoder.Encode(mappedKindIDs)
@@ -410,7 +410,7 @@ func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 	)
 
 	for idx, nextNode := range s.nodeCreateBuffer {
-		if mappedKindIDs, err := s.schemaManager.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
+		if mappedKindIDs, err := s.innerTransaction.kindMapper.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
 			return fmt.Errorf("unable to map kinds %w", err)
 		} else {
 			kindIDSlices[idx] = kindIDEncoder.Encode(mappedKindIDs)
@@ -437,7 +437,7 @@ func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 	parameters := NewNodeUpsertParameters(len(updates.Updates))
 
-	if err := parameters.AppendAll(s.ctx, updates, s.schemaManager, s.kindIDEncoder); err != nil {
+	if err := parameters.appendAllWithMapper(s.ctx, updates, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
 		return err
 	}
 
@@ -528,7 +528,7 @@ func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
 func (s *batch) flushNodeUpdateBatchWithDriver(nodes []*graph.Node, executor driver) error {
 	parameters := NewNodeUpdateParameters(len(nodes))
 
-	if err := parameters.AppendAll(s.ctx, nodes, s.schemaManager, s.kindIDEncoder); err != nil {
+	if err := parameters.appendAllWithMapper(s.ctx, nodes, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
 		return err
 	}
 
@@ -585,7 +585,7 @@ func (s *NodeUpdateParameters) Format() []any {
 	}
 }
 
-func (s *NodeUpdateParameters) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpdateParameters) appendWithMapper(ctx context.Context, node *graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	s.NodeIDs = append(s.NodeIDs, node.ID)
 
 	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, node.Kinds); err != nil {
@@ -611,9 +611,9 @@ func (s *NodeUpdateParameters) Append(ctx context.Context, node *graph.Node, sch
 	return nil
 }
 
-func (s *NodeUpdateParameters) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpdateParameters) appendAllWithMapper(ctx context.Context, nodes []*graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	for _, node := range nodes {
-		if err := s.Append(ctx, node, schemaManager, kindIDEncoder); err != nil {
+		if err := s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder); err != nil {
 			return err
 		}
 	}
@@ -643,7 +643,7 @@ func (s *NodeUpsertParameters) Format(graphTarget model.Graph) []any {
 	}
 }
 
-func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdate, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpsertParameters) appendWithMapper(ctx context.Context, update *sql.NodeUpdate, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	s.IDFutures = append(s.IDFutures, update.IDFuture)
 
 	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, update.Node.Kinds); err != nil {
@@ -661,9 +661,9 @@ func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdat
 	return nil
 }
 
-func (s *NodeUpsertParameters) AppendAll(ctx context.Context, updates *sql.NodeUpdateBatch, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpsertParameters) appendAllWithMapper(ctx context.Context, updates *sql.NodeUpdateBatch, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	for _, nextUpdate := range updates.Updates {
-		if err := s.Append(ctx, nextUpdate, schemaManager, kindIDEncoder); err != nil {
+		if err := s.appendWithMapper(ctx, nextUpdate, schemaManager, kindIDEncoder); err != nil {
 			return err
 		}
 	}
@@ -697,7 +697,7 @@ func (s *RelationshipUpdateByParameters) Format(graphTarget model.Graph) []any {
 	}
 }
 
-func (s *RelationshipUpdateByParameters) Append(ctx context.Context, update *sql.RelationshipUpdate, schemaManager *SchemaManager) error {
+func (s *RelationshipUpdateByParameters) appendWithMapper(ctx context.Context, update *sql.RelationshipUpdate, schemaManager KindMapper) error {
 	s.StartIDs = append(s.StartIDs, update.StartID.Value)
 	s.EndIDs = append(s.EndIDs, update.EndID.Value)
 
@@ -715,9 +715,9 @@ func (s *RelationshipUpdateByParameters) Append(ctx context.Context, update *sql
 	return nil
 }
 
-func (s *RelationshipUpdateByParameters) AppendAll(ctx context.Context, updates *sql.RelationshipUpdateBatch, schemaManager *SchemaManager) error {
+func (s *RelationshipUpdateByParameters) appendAllWithMapper(ctx context.Context, updates *sql.RelationshipUpdateBatch, schemaManager KindMapper) error {
 	for _, nextUpdate := range updates.Updates {
-		if err := s.Append(ctx, nextUpdate, schemaManager); err != nil {
+		if err := s.appendWithMapper(ctx, nextUpdate, schemaManager); err != nil {
 			return err
 		}
 	}
@@ -733,7 +733,7 @@ func (s *batch) flushRelationshipUpdateByBuffer(updates *sql.RelationshipUpdateB
 
 	parameters := NewRelationshipUpdateByParameters(len(updates.Updates))
 
-	if err := parameters.AppendAll(s.ctx, updates, s.schemaManager); err != nil {
+	if err := parameters.appendAllWithMapper(s.ctx, updates, s.innerTransaction.kindMapper); err != nil {
 		return err
 	}
 
@@ -876,7 +876,7 @@ func (s *batch) flushRelationshipCreateBuffer() error {
 	batchBuilder := newRelationshipCreateBatchBuilder(len(s.relationshipCreateBuffer))
 
 	for _, nextRel := range s.relationshipCreateBuffer {
-		if err := batchBuilder.Add(s.ctx, s.schemaManager, nextRel); err != nil {
+		if err := batchBuilder.Add(s.ctx, s.innerTransaction.kindMapper, nextRel); err != nil {
 			return err
 		}
 	}
@@ -980,4 +980,44 @@ func (s *batch) DeleteRelationship(id graph.ID) error {
 
 func (s *batch) Close() {
 	s.innerTransaction.Close()
+}
+
+// Append retains the public schema-manager entry point.
+func (s *LargeNodeUpdateRows) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *LargeNodeUpdateRows) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendAllWithMapper(ctx, nodes, schemaManager, kindIDEncoder)
+}
+
+// Append retains the public schema-manager entry point.
+func (s *NodeUpdateParameters) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *NodeUpdateParameters) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendAllWithMapper(ctx, nodes, schemaManager, kindIDEncoder)
+}
+
+// Append retains the public schema-manager entry point.
+func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdate, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendWithMapper(ctx, update, schemaManager, kindIDEncoder)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *NodeUpsertParameters) AppendAll(ctx context.Context, updates *sql.NodeUpdateBatch, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendAllWithMapper(ctx, updates, schemaManager, kindIDEncoder)
+}
+
+// Append retains the public schema-manager entry point.
+func (s *RelationshipUpdateByParameters) Append(ctx context.Context, update *sql.RelationshipUpdate, schemaManager *SchemaManager) error {
+	return s.appendWithMapper(ctx, update, schemaManager)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *RelationshipUpdateByParameters) AppendAll(ctx context.Context, updates *sql.RelationshipUpdateBatch, schemaManager *SchemaManager) error {
+	return s.appendAllWithMapper(ctx, updates, schemaManager)
 }

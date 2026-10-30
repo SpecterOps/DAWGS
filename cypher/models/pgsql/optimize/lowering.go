@@ -421,15 +421,18 @@ const (
 )
 
 // ShortestPathMaximumDepthSource distinguishes an explicit Cypher upper bound
-// from the repository's existing effective cap for a syntax-open range.
+// from an absent maximum for a syntax-open range.
 type ShortestPathMaximumDepthSource string
 
 const (
 	// ShortestPathMaximumDepthExplicit identifies an upper bound written in the query.
 	ShortestPathMaximumDepthExplicit ShortestPathMaximumDepthSource = "explicit"
 
-	// ShortestPathMaximumDepthPolicyDefault identifies the effective depth-15
-	// cap already applied by PostgreSQL translation to an omitted upper bound.
+	// ShortestPathMaximumDepthUnbounded preserves an absent Cypher maximum.
+	ShortestPathMaximumDepthUnbounded ShortestPathMaximumDepthSource = "unbounded"
+
+	// ShortestPathMaximumDepthPolicyDefault is retained for historical diagnostic consumers.
+	// New open ranges report ShortestPathMaximumDepthUnbounded.
 	ShortestPathMaximumDepthPolicyDefault ShortestPathMaximumDepthSource = "policy_default"
 )
 

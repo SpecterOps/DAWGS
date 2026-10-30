@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/cypher/models/walk"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -59,6 +61,7 @@ func (s inspectingDriver) QueryRow(ctx context.Context, sql string, arguments ..
 type transaction struct {
 	// schemaManager resolves target graphs, kind identifiers, and cached Cypher translations.
 	schemaManager *SchemaManager
+	kindMapper    *transactionKindMapper
 
 	// translationCache is selected for the physical connection leased by this
 	// transaction. Nil deliberately bypasses translation retention.
@@ -87,6 +90,7 @@ type transaction struct {
 
 	// targetSchemaSet distinguishes an explicit target from the zero-value graph schema.
 	targetSchemaSet bool
+	selectedGraph   *model.Graph
 
 	// topologyRouteDecisions is transaction-owned shadow routing state. It is
 	// allocated only after an explicit stable-snapshot transaction begins.
@@ -117,6 +121,7 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 		targetSchemaSet:    false,
 	}
 
+	wrapper.kindMapper = &transactionKindMapper{tx: wrapper, ids: schemaManager.GetKindIDsByKind()}
 	if allocateTransaction {
 		if pgxTx, err := conn.BeginTx(ctx, cfg.Options); err != nil {
 			return nil, err
@@ -151,6 +156,7 @@ func (s *transaction) GraphQueryMemoryLimit() size.Size {
 
 // WithGraph selects schema as the target graph for subsequent operations.
 func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
+	s.selectedGraph = nil
 	s.targetSchema = schema
 	s.targetSchemaSet = true
 
@@ -178,7 +184,14 @@ func (s *transaction) getTargetGraph() (model.Graph, error) {
 		}
 	}
 
-	return s.schemaManager.AssertGraph(s, s.targetSchema)
+	if s.selectedGraph != nil {
+		return *s.selectedGraph, nil
+	}
+	selected, err := s.schemaManager.SelectGraph(s, s.targetSchema.Name)
+	if err == nil {
+		s.selectedGraph = &selected
+	}
+	return selected, err
 }
 
 // targetGraphID resolves the database ID of the transaction's explicit or default graph target.
@@ -194,7 +207,7 @@ func (s *transaction) targetGraphID() (int32, error) {
 func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Kind) (*graph.Node, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
-	} else if kindIDSlice, err := s.schemaManager.AssertKinds(s.ctx, kinds); err != nil {
+	} else if kindIDSlice, err := s.kindMapper.AssertKinds(s.ctx, kinds); err != nil {
 		return nil, err
 	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(properties); err != nil {
 		return nil, err
@@ -259,7 +272,7 @@ func (s *transaction) Nodes() graph.NodeQuery {
 func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) (*graph.Relationship, error) {
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
-	} else if kindIDSlice, err := s.schemaManager.AssertKinds(s.ctx, graph.Kinds{kind}); err != nil {
+	} else if kindIDSlice, err := s.kindMapper.AssertKinds(s.ctx, graph.Kinds{kind}); err != nil {
 		return nil, err
 	} else if propertiesJSONB, err := pgsql.PropertiesToJSONB(properties); err != nil {
 		return nil, err
@@ -370,6 +383,15 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		s.recordSQLGenerationProfile(profile)
 		return graph.NewErrorResult(err)
 	}
+	if s.kindMapper != nil {
+		if err := s.kindMapper.refresh(); err != nil {
+			return graph.NewErrorResult(err)
+		}
+	}
+	if err := s.beginTraversalBudget(parsedQuery); err != nil {
+		return graph.NewErrorResult(err)
+	}
+
 	graphStarted := time.Now()
 	graphTarget, err := s.getTargetGraph()
 	profile.Graph = time.Since(graphStarted)
@@ -409,14 +431,17 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 				if options, optionsErr := activePolicy.productionOptionsForShape(query, shape); optionsErr != nil {
 					return translate.Result{}, "", optionsErr
 				} else {
-					translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID, options)
+					translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.effectiveKindMapper(), parameters, graphTarget.ID, options)
 				}
 			} else {
-				translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.schemaManager, parameters, graphTarget.ID)
+				translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.effectiveKindMapper(), parameters, graphTarget.ID)
 			}
 			profile.Translate += time.Since(translateStarted)
 			if translateErr != nil {
 				return translate.Result{}, "", translateErr
+			}
+			if s.kindMapper != nil && s.kindMapper.hasUncommittedKinds {
+				translated.HasMissingKinds = true
 			}
 			formatStarted := time.Now()
 			formatted, formatErr := translate.Translated(translated)
@@ -433,7 +458,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	}
 	translateCached := func(activePolicy TraversalPolicy, identity string) (string, map[string]any, error) {
 		builder := buildTranslation(activePolicy)
-		if s.translationCache == nil {
+		if s.translationCache == nil || (s.kindMapper != nil && s.kindMapper.hasUncommittedKinds) {
 			translated, formatted, err := builder()
 			if err != nil {
 				return "", nil, err
@@ -470,7 +495,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	var sqlQuery string
 	var translatedParameters map[string]any
 	cacheStarted := time.Now()
-	if s.translationCache == nil {
+	if s.translationCache == nil || (s.kindMapper != nil && s.kindMapper.hasUncommittedKinds) {
 		translated, translatedSQL, translateErr := buildCurrentTranslation()
 		if translateErr != nil {
 			profile.Cache = time.Since(cacheStarted)
@@ -529,13 +554,14 @@ func (s *transaction) Raw(query string, parameters map[string]any) graph.Result 
 
 // raw executes PostgreSQL SQL without changing transaction routing state.
 func (s *transaction) raw(query string, parameters map[string]any) graph.Result {
+
 	if rows, err := s.query(query, parameters); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
 		return &queryResult{
 			ctx:        s.ctx,
 			rows:       rows,
-			kindMapper: s.schemaManager,
+			kindMapper: s.kindMapper,
 		}
 	}
 }
@@ -547,8 +573,38 @@ func (s *transaction) Commit() error {
 		return s.stagedError
 	}
 	if s.tx != nil {
-		return s.tx.Commit(s.ctx)
+		if err := s.tx.Commit(s.ctx); err != nil {
+			return err
+		}
+		s.kindMapper.publish()
+		return nil
 	}
 
 	return nil
+}
+
+func (s *transaction) effectiveKindMapper() KindMapper {
+	if s.kindMapper != nil {
+		return s.kindMapper
+	}
+	return s.schemaManager
+}
+
+func queryHasOpenTraversal(query *cypher.RegularQuery) bool {
+	open := false
+	_ = walk.Cypher(query, walk.NewSimpleVisitor(func(node cypher.SyntaxNode, handler walk.VisitorHandler) {
+		if bounds, ok := node.(*cypher.PatternRange); ok && bounds.EndIndex == nil {
+			open = true
+			handler.SetDone()
+		}
+	}))
+	return open
+}
+
+func (s *transaction) beginTraversalBudget(query *cypher.RegularQuery) error {
+	if !queryHasOpenTraversal(query) {
+		return nil
+	}
+	_, err := s.driver().Exec(s.ctx, "select set_config('dawgs.traversal_token', $1, true)", fmt.Sprintf("%p/%d", s, time.Now().UnixNano()))
+	return err
 }

@@ -75,7 +75,7 @@ func TestNodeUpsertKindRemovalExecution(t *testing.T) {
 			require.NoError(t, err)
 			parameters := NewNodeUpsertParameters(1)
 			parameters.IDFutures = append(parameters.IDFutures, future)
-			b := &batch{ctx: ctx, schemaManager: manager, innerTransaction: &transaction{schemaManager: manager}, kindIDEncoder: Int2ArrayEncoder{buffer: &bytes.Buffer{}}}
+			b := &batch{ctx: ctx, schemaManager: manager, innerTransaction: &transaction{schemaManager: manager, kindMapper: &transactionKindMapper{kinds: map[graph.Kind]int16{removed: 7}, ids: map[int16]graph.Kind{7: removed}}}, kindIDEncoder: Int2ArrayEncoder{buffer: &bytes.Buffer{}}}
 			mock, err := pgxmock.NewConn(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 			require.NoError(t, err)
 			failure := errors.New("forced write failure")

@@ -2,7 +2,7 @@
 
 Prepared on **2026-10-22** from [variance_findings.md](variance_findings.md), validated against checkout **`0bf83edb8155d915c55f559bae212a4526e4607f`**. This document adds engineering judgment and delivery order to that evidence. It preserves the underlying dispositions: **90 retained findings, 4 needing runtime validation, 10 contract questions, and 9 resolved original findings**. The 22 additional observations have a separate queue.
 
-**Prioritize the confirmed schema-selection and pool-acquisition repairs, the pending regex migration decision, and the selected open-ended traversal implementation.** The largest sustained work is compiler semantics: row identity, predicate lifetime, type preservation, and traversal correctness. Smaller utility and error-handling fixes can ship while those programs develop.
+**The schema-selection, pool-acquisition, open-ended traversal and Neo4j identifier-escaping release repairs are complete; validation and release limits are recorded in the completion ledger. Preserve the current regex default pending its downstream migration decision.** The largest sustained work is compiler semantics: row identity, predicate lifetime, type preservation, and traversal correctness. Smaller utility and error-handling fixes can ship while those programs develop.
 
 ## Priority and sizing rules
 
@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **41 items: 4 P1, 28 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **63 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **37 items: 1 P1, 27 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **67 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -45,39 +45,11 @@ The original 36 P1 rows formed several parallel work packages. Start the first a
 
 ## Open work ledger
 
-Completed actions, original queue details and their implementation/validation notes have moved to the [completion ledger](variance_findings_priority_complete.md). These four work items still have pending repairs or decisions. Reproduction and design completion do not close their runtime defects. Credentials are excluded from evidence.
+Completed actions, original queue details and their implementation/validation notes have moved to the [completion ledger](variance_findings_priority_complete.md). The regex migration decision remains pending. The four release repairs and their earlier runtime evidence have moved to the completion ledger. Credentials are excluded from evidence.
 
 | Order | Finding | Status | Work and validation |
 | ---: | --- | --- | --- |
-| 3 | DAWGS-063 | Reproduction complete; repair open | A fresh PostgreSQL manager selecting an existing graph by name through `ReadTransaction` drops both node and edge property indexes and uniqueness constraints (four objects total). The call succeeds and returns count 0. Selection/schema-reconciliation separation remains to implement. |
 | 14 | DAWGS-007 | Downstream audit and migration decision — pending | Preserve the current PostgreSQL substring-matching default while auditing downstream raw and parameterized regex usage, including negated filters and mutation targets. Decide the migration policy before changing matching scope. Assess literal/parameter escaping separately because its correction can also change results. |
-| 23 | DAWGS-019 | Design action complete; runtime repair open | Selected complete traversal semantics with explicit resource failure. A controlled chain confirms silent truncation in both PostgreSQL compiler modes: open queries omit depths 16/17 and SET/CREATE affect 15 rather than 17 rows. The design records the API guarantee, versioned migration, L implementation scope and resource/semantic acceptance gates. A separate optimized all-shortest scalar discrepancy remains open. See the policy and evidence below. |
-| 25 | DAWGS-065 | Reproduction complete; repair open | Live PostgreSQL probes confirm the nested acquisition. On a verified one-connection pool, CreateNode with an uncached kind waits its full context budget and returns `context deadline exceeded` without committing. With all connections held by registering transactions, one registration holds the schema write lock while waiting for a second connection, others block on the lock, and an unrelated reader holding its own connection stalls until a registration context expires. MapKinds misses wedge through the nested read path; cached-kind concurrency at the pool maximum completes. The probes are pinned as bounded driver-scoped regressions the connection-ownership repair must invert. See below. |
-
-### DAWGS-063 controlled fixture and outcome — 2026-10-22
-
-Create an empty disposable PostgreSQL graph through schema assertion with this definition (use a unique name):
-
-```go
-graph.Graph{
-    Name: "variance-schema-probe",
-    NodeIndexes: []graph.Index{{Field: "name", Type: graph.BTreeIndex}},
-    NodeConstraints: []graph.Constraint{{Field: "objectid", Type: graph.BTreeIndex}},
-    EdgeIndexes: []graph.Index{{Field: "name", Type: graph.BTreeIndex}},
-    EdgeConstraints: []graph.Constraint{{Field: "objectid", Type: graph.BTreeIndex}},
-}
-```
-
-Record the four property indexes in `pg_indexes` for its `node_<id>` and `edge_<id>` partitions. Construct a fresh driver/manager, without asserting this graph into its cache, and run:
-
-```go
-fresh.ReadTransaction(ctx, func(tx graph.Transaction) error {
-    _, err := tx.WithGraph(graph.Graph{Name: "variance-schema-probe"}).Nodes().Count()
-    return err
-})
-```
-
-Expected: count 0, all four property indexes/constraints retained. Observed: count 0, no error, all four objects removed and the removal visible from an independent PostgreSQL connection after the read transaction. The removed objects were `node_<id>_name_index`, `node_<id>_objectid_constraint`, `edge_<id>_name_index`, and `edge_<id>_objectid_constraint`. The graph and its partitions were removed after inspection. Repair remains open: graph selection must resolve existing metadata without schema reconciliation; explicit schema assertion must retain its reconciliation role.
 
 ### DAWGS-007 downstream audit and migration decision — 2026-10-23
 
@@ -86,35 +58,6 @@ At the user's request, the next action changes from **Repair** to **Decide**, re
 The audit must inventory actual downstream raw Cypher and parameterized patterns, identify callers relying on substring behavior, and compare returned rows and mutation selection under current and proposed matching semantics. Repository examples alone cannot establish downstream dependence. Cover flags, alternation, multiline values and backslashes, and assess the literal/parameter escaping defect independently; fixing escaping can also change results.
 
 Completion requires a recorded compatibility policy and migration plan: choose whether full-string matching needs an opt-in policy before a versioned default change, define the supported regex behavior, document affected caller changes and rollback, and select the release boundary for any default switch. Audit evidence and the migration decision remain open; no opt-in mechanism or default switch has been implemented.
-
-### DAWGS-019 open-ended traversal design and runtime evidence — 2026-10-24
-
-The selected [open-ended traversal policy](docs/open_ended_traversal_policy.md) promises complete ordinary, shortest and all-shortest query semantics, with identifiable failure if execution resources prevent completion. Explicit Cypher upper bounds remain semantic limits. Execution budgets must not silently narrow a query or permit partial writes to commit. The document defines streaming/error behavior, budget/fallback accounting, schema/selector/cache migration, downstream result/write impact and the shared semantic plus driver-scoped resource acceptance matrix. This completes the queue's **M design action**; the coordinated runtime implementation is **L** and remains open. Current execution still caps omitted maxima at 15; no cap removal or rejection was implemented here.
-
-An 18-node / 17-edge chain supplies **80 variants on Neo4j and 80 in each PostgreSQL compiler mode**, all in rollback transactions. Both PostgreSQL modes return no rows for open ordinary/shortest/all-shortest queries targeting depths 16 and 17, without errors. A minimum-only ordinary `*16..` also returns no rows. Explicit upper bounds reach those endpoints, and `RETURN p` checks the complete ordered nodes and relationship counts. Open SET and CREATE queries without RETURN affect **15 rows on PostgreSQL versus 17 on Neo4j**. Comparison identifies **28 truncation discrepancies per PostgreSQL mode**. The complete fixture, query matrix, observed results and limitations are in the policy document; this small chain is not resource/performance qualification or downstream service replay.
-
-The positive controls also identify **eight scalar discrepancies from an independent projection issue with optimization enabled**: singleton `allShortestPaths` with minimum one returns `length(p) = 0` for a present 15–17-hop path. Disabled translation and Neo4j return the actual depth, and full `RETURN p` witnesses remain correct. The bounded 16-hop reproducer and separate repair/containment requirement are recorded without changing the original triage counts. The investigation-only overlay logs observations, so its successful execution is not a conformance pass; no shared expected assertions were weakened.
-
-Baseline validation passes: the PostgreSQL-selected **`make test_all`** completes its race-enabled unit and integration stages and final BDD stage, with unit statement coverage unchanged at **66.4%** at reported precision. The complete Neo4j-selected **`make test_integration`** and subsequent **`make test_bdd_integration`** also pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**. Runs use each supplied connection separately, `TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes. The investigation overlay was Go-formatted; new local Markdown links and `git diff --check` pass. The final patch changes documentation only. These existing gates do not enforce the investigation's new failing semantics or qualify resource behavior; both runtime defects remain open.
-
-The next ordered work item is **DAWGS-072**, cancellation and error propagation for parallel fetch operations. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
-
-### DAWGS-065 kind-registration pool wedge — 2026-10-24
-
-The retained source mechanism is confirmed live on PostgreSQL and pinned as driver-scoped regressions in `drivers/pg/kind_registration_pool_integration_test.go` (`manual_integration`; the probes skip unless `CONNECTION_STRING` selects PostgreSQL). Every probe builds its pool through `NewPoolWithRuntimeConfig` with explicit `RuntimeConfig` limits and asserts the effective `Stat().MaxConns()` first, because pools without explicit runtime configuration keep the v1 default of 50 connections. Fixtures warm all physical connections before timing so the measured windows contain lock and connection waits, not connection setup. Kind names use a `DAWGS065` prefix; cleanup removes the probe graph's nodes/edges and those kind rows, and the graph partition remains like the existing `pg_v2_integration` fixture.
-
-| Probe / shape | Outcome |
-| --- | --- |
-| Single write transaction, effective MaxConns 1, CreateNode with an uncached kind | Waits the full 750 ms budget; returns `context deadline exceeded`; node count and kind rows unchanged. |
-| Saturated pool, MaxConns 3: two registering writers plus one unrelated reader, all holding connections at a barrier | The schema write lock is sampled continuously unavailable; both writers fail with `context deadline exceeded` at their 2 s deadlines although each already holds a connection; the reader stalls in target-graph resolution behind the same lock and completes with count 0 only after those deadlines; nothing commits and no wedge kind is defined. A fresh registration afterwards succeeds, proving the wait cycle is released by context expiry/connection release rather than pool damage. |
-| Read-side family: one connection held by an unrelated read, MapKinds for an uncached kind | The miss takes the schema write lock and refreshes through a nested read transaction; it waits its full budget and returns `context deadline exceeded`; after release the same miss completes promptly with `unable to map kinds` and defines nothing. |
-| Control: two concurrent writes at MaxConns 2 with an already-cached kind | Both complete immediately and commit; the AssertKinds fast path needs no second connection. |
-
-The saturated-pool probe samples the schema lock with `RWMutex.TryLock` polls rather than sleeps, so the unrelated reader is released only after a registration demonstrably holds the write lock; that reader already holds its own connection at release, isolating the lock wait from pool acquisition. All probes use bounded contexts and terminate deterministically; they pin current wedged behavior, and the connection-ownership repair must invert them so kind registration inside a transaction never needs a second connection while holding the schema lock, matching the finding's regression criterion. The batch registration paths in `drivers/pg/batch.go` share the same `AssertKinds` entry and were not separately replayed.
-
-Validation: the four probes pass under the race detector with repeated runs (`-count=3`, and `-count=2` after the read-side addition). The full `drivers/pg` tagged integration package passes on PostgreSQL (**69.2%** package statement coverage) and on Neo4j (the PostgreSQL-scoped probes skip). The PostgreSQL-selected `make test` passes (**66.6%** overall unit statement coverage, unchanged from the last ledger gate), and both backends pass `make test_integration` and `make test_bdd_integration`; each gate reports **10 enforced / 0 failed**, **18 report-only scenarios / 18 failed**. The three-probe version of the file ran in the unrestricted broad gates; the later read-side addition re-ran the complete affected package on both backends. Runs use each supplied connection separately with `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`. Repository lint, `gofmt`, default and integration-tagged vet, and `git diff --check` pass. No Go edits followed the final package retries.
-
-The next ordered work item is **DAWGS-099**, the ThreadSafeDuplex cross-operation deadlock repair. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
 
 ### Live acceptance completed — 2026-10-28
 
@@ -257,7 +200,7 @@ Legacy builder XOR groups embedded in AND retain parentheses without changing
 lowered Boolean result. Shared truth-table read/SET templates and live builder
 controls check exact selection and complete mutation state. Detailed evidence is
 in the [completion ledger](variance_findings_priority_complete.md#dawgs-085-xor-grouping-repair--2026-10-30).
-DAWGS-055 is completed below. **DAWGS-061 is the next implementation item.** Earlier pending repairs and
+DAWGS-055 is completed below. **DAWGS-061 is completed in the release repairs below.** Earlier pending repairs and
 separate follow-ups retain their existing status.
 
 ### DAWGS-055 result alias spelling — 2026-10-30
@@ -269,13 +212,22 @@ backends and in both PostgreSQL compiler modes. The complete PostgreSQL gate
 encounters an independent WipeGraph shared-memory failure, retained in the
 evidence. Implementation, original-source regressions and validation are in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-055-result-alias-spelling--2026-10-30).
-**DAWGS-061 is the next implementation item.** Earlier pending repairs and
+**DAWGS-061 is completed in the release repairs below.** Earlier pending repairs and
 separate follow-ups retain their existing status.
+
+### Release repairs — 2026-10-30
+
+DAWGS-063, DAWGS-065, DAWGS-019 and DAWGS-061 have focused live acceptance.
+Their implementation, preserved earlier evidence, backend gates and release limits
+are recorded in the [completion ledger](variance_findings_priority_complete.md#release-repairs--2026-10-30).
+The active numbered queue has **37 items (1 P1, 27 P2, 9 P3)** and the completion
+ledger has **67 completed actions**. Separate follow-ups remain open below.
 
 ### Open follow-ups to completed actions
 
 | Finding | Remaining work | Completed evidence |
 | --- | --- | --- |
+| DAWGS-019 | The bounded singleton workspace/filter contract is repaired, including the stale-filter wrong-endpoint result. Two independent pre-existing controls remain: bounded `allShortestPaths` with equal endpoints and minimum zero returns no row, and `shortestPath` followed by `SET ... RETURN p` loses its path representation. Qualify and repair those separately. | [Bounded workspace repair and remaining controls](variance_findings_priority_complete.md#bounded-shortest-path-workspace-repair--2026-10-30) |
 | DAWGS-060 | Decide the support policy for vendor `CYPHER` prefixes and index hints when raw-query AST rewriting is required; preserve native text or implement a token-preserving rewrite before promising fidelity. The completed semantic repair covers namespaces, label conjunctions and float types, without adding an APOC dependency. | [Raw-query rewrite repair](variance_findings_priority_complete.md#dawgs-060-raw-query-rewrite-fidelity--2026-10-30) |
 | DAWGS-103 | Full shared in-query procedure AST, formatting and execution support remains separate XL work coordinated with standalone CALL under 017. The completed containment rejects in-query calls before PostgreSQL execution; native Neo4j text remains server-controlled. | [In-query CALL containment](variance_findings_priority_complete.md#dawgs-103-in-query-call-containment--2026-10-30) |
 | DAWGS-013 | Full shared CREATE UNIQUE and LOAD CSV support requires explicit AST, formatting and execution semantics, including creation identity and CSV access/resource policy. The completed containment rejects both clauses at the parser boundary; native Neo4j text remains server-controlled. | [Import and legacy creation containment](variance_findings_priority_complete.md#dawgs-013-import-and-legacy-creation-containment--2026-10-30) |
@@ -304,25 +256,21 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 41 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 37 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
-### P1: Start first — 4 items
+### P1: Start first — 1 item
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 3 | [DAWGS-063](variance_findings.md#dawgs-063) — WithGraph drops existing indexes and constraints | D | Repair | M | Separate graph selection from schema reconciliation; preserve existing indexes and constraints during reads. The destructive read-triggered behavior is reproduced above. |
 | 14 | [DAWGS-007](variance_findings.md#dawgs-007) — Regex match is a substring search | Q | Decide | M | Downstream audit and migration decision: preserve the current default, audit raw/parameterized patterns and read/negated/mutation behavior, then choose an opt-in policy or versioned default migration. Assess literal/parameter escaping independently; both corrections can change results. |
-| 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
-| 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
 
-### P2: Next correctness and reliability wave — 28 items
+### P2: Next correctness and reliability wave — 27 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 68 | [DAWGS-061](variance_findings.md#dawgs-061) — Kind and identity-property names lack escaping | B | Repair | M | Escape valid kind and identity-property names in the separate hand-built Neo4j relationship-upsert emitter. |
-| 69 | [DAWGS-071](variance_findings.md#dawgs-071) — Dumping an unknown graph name creates that graph | D | Repair | M | Make missing-graph dump selection intentional and non-mutating where required; share select/assert separation with 063 rather than opening a second schema redesign. |
+| 69 | [DAWGS-071](variance_findings.md#dawgs-071) — Dumping an unknown graph name creates that graph | D | Repair | M | Selection now uses the non-mutating lookup introduced by 063; add dedicated dump/file-side-effect acceptance before closing this tooling item. |
 | 70 | [DAWGS-067](variance_findings.md#dawgs-067) — AssertSchema never creates the non-default graphs it is given | D | Repair | M | Assert all requested non-default graph definitions after separating graph selection from schema reconciliation. |
-| 71 | [DAWGS-089](variance_findings.md#dawgs-089) — Kind-map getter returns shared map after unlocking | D | Repair | S | Return owned kind-map snapshots and protect iteration. A concurrent runtime race has not been reproduced; shared mutable map exposure is source-supported. |
+| 71 | [DAWGS-089](variance_findings.md#dawgs-089) — Kind-map getter returns shared map after unlocking | D | Repair | S | 065 now returns owned snapshots and has an ownership regression; qualify concurrent refresh/iteration before closing this independent concurrency item. |
 | 72 | [DAWGS-088](variance_findings.md#dawgs-088) — Concurrent kind insert can return no rows | D | Reproduce | M | Use a synchronized two-session kind insertion schedule before changing conflict/snapshot handling. |
 | 73 | [DAWGS-069](variance_findings.md#dawgs-069) — SelectKindID loads the wrong SQL file | D | Repair | S | Load the intended SelectKindID SQL and bind its expected parameter; validate exact current executor behavior. |
 | 74 | [DAWGS-090](variance_findings.md#dawgs-090) — Mixed-case index field causes repeated reconciliation | D | Reproduce | M | Confirm mixed-case index-name folding and repeated DDL, then repair naming compatibly with existing installations. |
@@ -361,6 +309,7 @@ The 41 unfinished numbered work items appear once in this queue. Completed actio
 | 102 | [DAWGS-105](variance_findings.md#dawgs-105) — AsNumeric truncates and wraps | R | Decide | S | Document ordinary casts versus a checked/lossless numeric API; consider additive checked conversion rather than silently breaking existing callers. |
 | 103 | [DAWGS-108](variance_findings.md#dawgs-108) — Neo4j relationship upsert sets endpoint lastseen | D | Decide | S | Choose caller versus ingestion ownership of endpoint lastseen updates on Neo4j relationship upserts. |
 | 104 | [DAWGS-111](variance_findings.md#dawgs-111) — Kinds.Remove changes shared slice storage | A | Decide | S | Define constructor/slice ownership and copying for Kinds; an implementation change may be M and needs allocation/performance review. |
+
 
 ## Delivery packages, dependencies and parallelism
 
