@@ -646,8 +646,10 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 		}
 
 	case *cypher.FunctionInvocation:
-		if _, err := io.WriteString(output, strings.Join(typedExpression.Namespace, ".")); err != nil {
-			return err
+		if len(typedExpression.Namespace) > 0 {
+			if _, err := io.WriteString(output, strings.Join(typedExpression.Namespace, ".")+"."); err != nil {
+				return err
+			}
 		}
 
 		if _, err := io.WriteString(output, typedExpression.Name); err != nil {
@@ -707,7 +709,11 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 
 		for idx, matcher := range typedExpression.Kinds {
 			if idx > 0 {
-				if _, err := io.WriteString(output, " or "); err != nil {
+				operator := " or "
+				if typedExpression.IsExclusive {
+					operator = " and "
+				}
+				if _, err := io.WriteString(output, operator); err != nil {
 					return err
 				}
 			}

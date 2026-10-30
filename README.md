@@ -22,6 +22,13 @@ filters intersect their allowed kinds, disjoint filters match no relationships, 
 OR, XOR and NOT keep their predicates in WHERE. This also prevents mutations from
 affecting relationships selected only by an incorrect union of kinds.
 
+Neo4j raw-query rewrites for pattern-map parameters and temporal comparisons preserve
+qualified function names, conjunctive label predicates (`n:A:B`) and floating-point
+literal types. Builder filters that match any kind retain OR semantics. The shared
+`raw_rewrite_semantics_shapes` corpus checks reads and mutation targets on both
+backends; a Neo4j control executes the native `point.distance` function. Vendor
+`CYPHER` prefixes and index hints do not yet have a rewrite-fidelity guarantee.
+
 ### PostgreSQL connection-local translation cache
 
 The PostgreSQL driver uses connection-local SQL translation caches. Pool construction owns the required connection
