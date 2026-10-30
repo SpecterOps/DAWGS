@@ -22,7 +22,7 @@ The ordering assumes both supported backends and the shared analysis/tooling API
 
 ## Original triage baseline
 
-The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **43 items: 4 P1, 30 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **61 completed actions** and the nine originally resolved regression controls.
+The counts in this section describe the original triage baseline, including completed actions; they are not current backlog totals. The active queue now has **42 items: 4 P1, 29 P2 and 9 P3**. The [completion ledger](variance_findings_priority_complete.md) holds **62 completed actions** and the nine originally resolved regression controls.
 
 Each numbered finding has **one primary workstream** below, so counts do not double-count shared code. Retained means Applies or Partially applies in the validated report. Questions combine its unverified and contract dispositions. Resolved findings remain regression controls.
 
@@ -247,8 +247,18 @@ predicates and existing integral-float literal types. Shared read/mutation
 regressions and a native Neo4j namespace control have live acceptance; detailed
 implementation and validation evidence are in the
 [completion ledger](variance_findings_priority_complete.md#dawgs-060-raw-query-rewrite-fidelity--2026-10-30).
-**DAWGS-085 is the next implementation item.** Vendor-prefix/index-hint fidelity
-remains a separate compatibility follow-up below.
+DAWGS-085 is completed below. Vendor-prefix/index-hint fidelity remains a
+separate compatibility follow-up below.
+
+### DAWGS-085 XOR grouping repair — 2026-10-30
+
+Legacy builder XOR groups embedded in AND retain parentheses without changing
+`query.Xor`'s return type. PostgreSQL also groups XOR comparison operands and the
+lowered Boolean result. Shared truth-table read/SET templates and live builder
+controls check exact selection and complete mutation state. Detailed evidence is
+in the [completion ledger](variance_findings_priority_complete.md#dawgs-085-xor-grouping-repair--2026-10-30).
+**DAWGS-055 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
 
 ### Open follow-ups to completed actions
 
@@ -282,7 +292,7 @@ Completion requires preserving the DAWGS-073 semantic and race regressions, then
 
 ## Ordered next-step queue
 
-The 43 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
+The 42 unfinished numbered work items appear once in this queue. Completed actions and their original queue entries are in the [completion ledger](variance_findings_priority_complete.md). Original order numbers are retained; separate follow-ups to completed actions remain visible above. The ID links to the original validated evidence, including corrected subcases and runtime limits. Track codes refer to the workstream table. The global order is a default next-start order; independent tasks can run concurrently.
 
 ### P1: Start first — 4 items
 
@@ -293,11 +303,10 @@ The 43 unfinished numbered work items appear once in this queue. Completed actio
 | 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
 | 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
 
-### P2: Next correctness and reliability wave — 30 items
+### P2: Next correctness and reliability wave — 29 items
 
 | Order | Finding | Track | Action | Effort | Next step and reason |
 | ---: | --- | :---: | --- | :---: | --- |
-| 66 | [DAWGS-085](variance_findings.md#dawgs-085) — Xor rendering loses builder grouping | B | Repair | S | Parenthesize/group XOR consistently when embedded in AND; cover both backend render/translation paths. |
 | 67 | [DAWGS-055](variance_findings.md#dawgs-055) — Result aliases are emitted unquoted | R | Repair | S | Preserve case and decoded alias spelling when quoting result-column identifiers; unusual aliases now avoid the old syntax failure. |
 | 68 | [DAWGS-061](variance_findings.md#dawgs-061) — Kind and identity-property names lack escaping | B | Repair | M | Escape valid kind and identity-property names in the separate hand-built Neo4j relationship-upsert emitter. |
 | 69 | [DAWGS-071](variance_findings.md#dawgs-071) — Dumping an unknown graph name creates that graph | D | Repair | M | Make missing-graph dump selection intentional and non-mutating where required; share select/assert separation with 063 rather than opening a second schema redesign. |
