@@ -231,7 +231,9 @@
           "CREATE (n {value: [1,2][-1..]})",
           "MATCH (n) WHERE size([0,1][..1]) = 1 DELETE n"
         ],
-        "error_matchers": ["list slicing is not supported"]
+        "error_matchers": [
+          "list slicing is not supported"
+        ]
       }
     },
     {
@@ -246,7 +248,9 @@
           "CALL example.write($value)",
           "CALL example.write({value: 1})"
         ],
-        "error_matchers": ["standalone CALL is not supported"]
+        "error_matchers": [
+          "standalone CALL is not supported"
+        ]
       }
     },
     {
@@ -261,7 +265,41 @@
           "MATCH (a), (b) CREATE (:Created {value: length(shortestPath((a)-[:R*]->(b)))})",
           "MATCH (a), (b) WHERE shortestPath((a)-[:R*]->(b)) IS NOT NULL DELETE a"
         ],
-        "error_matchers": ["shortest-path expressions are not supported"]
+        "error_matchers": [
+          "shortest-path expressions are not supported"
+        ]
+      }
+    },
+    {
+      "name": "Unsupported CREATE UNIQUE in mutations",
+      "type": "negative_case",
+      "details": {
+        "queries": [
+          "MATCH (a:A), (b:B) CREATE UNIQUE (a)-[:T]->(b)",
+          "CREATE UNIQUE (:Created {value: 1})",
+          "MATCH (a), (b) SET a.value = 1 CREATE UNIQUE (a)-[:T]->(b) RETURN a",
+          "CREATE (:Created) WITH 1 AS x CREATE UNIQUE (:Created)"
+        ],
+        "error_matchers": [
+          "CREATE UNIQUE is not supported"
+        ]
+      }
+    },
+    {
+      "name": "Unsupported LOAD CSV in reads and mutations",
+      "type": "negative_case",
+      "details": {
+        "queries": [
+          "LOAD CSV FROM 'file:///missing.csv' AS row MATCH (n:A) RETURN count(*) AS c",
+          "LOAD CSV WITH HEADERS FROM $url AS row FIELDTERMINATOR ';' RETURN row",
+          "LOAD CSV FROM $url AS row CREATE (:Created {value: 1})",
+          "LOAD CSV FROM $url AS row MATCH (n) SET n.value = 1",
+          "LOAD CSV FROM $url AS row MATCH (n) DETACH DELETE n",
+          "CREATE (:Created) WITH 1 AS x LOAD CSV FROM $url AS row RETURN x"
+        ],
+        "error_matchers": [
+          "LOAD CSV is not supported"
+        ]
       }
     }
   ]

@@ -30,6 +30,15 @@ rejection before execution and unchanged committed state in both compiler modes;
 Neo4j native indexing and slicing have separate driver-scoped controls. These differing support
 boundaries do not use backend-specific assertions in the shared corpus.
 
+`CREATE UNIQUE` and `LOAD CSV` are rejected explicitly by the shared parser and
+PostgreSQL compiler rather than silently omitted. Negative fixtures and templated
+parser regressions cover reads, WITH boundaries and mutations with and without
+RETURN. PostgreSQL driver controls commit after consuming compilation errors and
+verify that preceding SET/CREATE statements and target node/relationship state
+remain unchanged in both compiler modes. Neo4j controls preserve native text and
+parameters and check native legacy-syntax/missing-file errors. These differing
+support boundaries stay driver-scoped.
+
 Standalone `CALL` is likewise rejected explicitly by the shared parser and
 PostgreSQL compiler, including implicit invocations and `YIELD`. Parser negative
 fixtures and a templated syntax matrix cover read and write procedure names;

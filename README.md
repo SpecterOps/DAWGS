@@ -78,6 +78,15 @@ For a persistent, explicitly selected warm set that also applies to new physical
 to `pg.NewDriver` must have been created by `pg.NewPool` or `pg.NewPoolWithRuntimeConfig` so those lifecycle hooks are in
 place.
 
+### Unsupported import and legacy creation clauses
+
+The DAWGS Cypher parser rejects `CREATE UNIQUE` and `LOAD CSV` with located
+`CREATE UNIQUE is not supported` and `LOAD CSV is not supported` errors.
+PostgreSQL text compilation returns these errors before executing any part of
+the query, including preceding writes. Check parse errors before formatting an
+AST. Neo4j text queries pass through to the native server, which determines
+syntax support and CSV access. Full shared support remains pending.
+
 ### Standalone procedure calls
 
 The DAWGS Cypher parser rejects standalone `CALL` with
@@ -304,6 +313,10 @@ Run unit tests (no database required, even when `CONNECTION_STRING` is set):
 ```bash
 make test
 ```
+
+After editing Cypher JSON cases or PostgreSQL translation fixtures, run
+`make test_update` and include the regenerated files. CI repeats this command
+and requires no diff, including fixture formatting.
 
 Run integration tests when a backend is available:
 

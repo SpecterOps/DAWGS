@@ -1,6 +1,6 @@
 # Completed variance findings and validation ledger
 
-Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-29**. This ledger preserves **57 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **58 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
 
 Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). Reproduction/design-only items with runtime repairs still open (063/019/065), and pending decision 007, remain in the active ledger.
 
@@ -65,6 +65,7 @@ Completion applies to the recorded action. Full support after containment and se
 | 59 | DAWGS-002 | Contained and live validated | The shared parser rejects slicing with a located syntax error and isolates its subtree. Templated read/mutation regressions cover omitted, negative, parameterized and chained bounds; both PostgreSQL compiler modes reject before writes and Neo4j native slicing remains supported. Full slicing remains separate work. |
 | 60 | DAWGS-017 | Contained and validated | Standalone CALL returns a located unsupported error instead of a successful nil AST. Parser/template, PostgreSQL repeated-compilation and live rejection controls cover explicit/implicit invocation and YIELD; Neo4j native procedure execution remains available. See below. |
 | 61 | DAWGS-010 | Contained and live validated | Shortest-path expressions return a located parser error, isolating their subtree instead of projecting the terminal node. Templated read/mutation rejection, both PostgreSQL compiler modes, supported MATCH syntax and native Neo4j expression controls are covered below. Full expression support remains separate L work. |
+| 62 | DAWGS-013 | Contained and live validated | CREATE UNIQUE and LOAD CSV return located parser errors before PostgreSQL text execution. Read/mutation templates, repeated compilation and live committed-state controls pass in both compiler modes. Neo4j text and parameters retain native server diagnostics. Full shared support remains separate work. |
 
 ## Original queue details for completed actions
 
@@ -129,6 +130,7 @@ These describe the original requested action; completion status and actual outco
 | 59 | [DAWGS-002](variance_findings.md#dawgs-002) — List slicing returns the upper bound | Q | Contain | S | Reject unsupported slicing explicitly now; full slicing should share list AST/type work with 001. |
 | 60 | [DAWGS-017](variance_findings.md#dawgs-017) — A standalone CALL parses to `(nil, nil)`; formatting that nil query panics | Q | Contain | S | Return an explicit standalone CALL rejection or a nonnil supported AST; never format a successful nil query. |
 | 61 | [DAWGS-010](variance_findings.md#dawgs-010) — shortestPath used as an expression returns a node | Q | Contain | S | Reject unsupported shortestPath expression position instead of returning the terminal node. Full expression support is L feature work. |
+| 62 | [DAWGS-013](variance_findings.md#dawgs-013) — `CREATE UNIQUE` and `LOAD CSV` are accepted and dropped | Q | Contain | S | Reject silently dropped CREATE UNIQUE/LOAD CSV at the text compiler boundary; formatter rejection alone does not close the raw-text path. |
 
 ## Implementation and validation notes
 
@@ -1802,3 +1804,68 @@ Markdown file links, JSON fixture parsing, ledger counts and `git diff --check`
 pass. No Go edits followed the successful aggregate runs. The active queue has
 **47 items** (4 P1, 34 P2, 9 P3), the completion ledger has **57 actions**, and
 **DAWGS-013 is the next implementation item**.
+
+### DAWGS-013 import and legacy creation containment — 2026-10-30
+
+The shared parser now reports located `CREATE UNIQUE is not supported` and
+`LOAD CSV is not supported` errors from the grammar callbacks that previously
+did nothing. PostgreSQL text compilation checks these parse errors before
+translation, so unsupported clauses cannot disappear while the rest of a query
+executes. Callers must continue checking parse errors before using an AST.
+This completes the S containment action; full shared AST, formatting and runtime
+support remains separate feature work. Native Neo4j text execution still defers
+syntax support and CSV access to the server.
+
+The frontend matrix covers **30 CREATE UNIQUE** and **48 LOAD CSV** query
+variants through unrestricted/default contexts and the parse/format helper.
+It includes directed, incoming and undirected patterns, properties/parameters,
+case/comments, headers/field terminators, nested unsupported URL expressions,
+WITH boundaries, preceding writes and
+SET/CREATE/DELETE with and without RETURN. Exact location assertions fail on
+the original parser because both original reproducers return no error; they
+pass after repair. Four supported CREATE/MERGE/UNWIND controls remain intact.
+Ten queries are recorded in the negative parser corpus. PostgreSQL compiler
+tests issue twelve shapes twice in each compiler mode and require the explicit
+error, empty SQL and no panic.
+
+Driver-scoped PostgreSQL controls repeat those twelve shapes in both compiler
+modes, then verify committed node names and relationship state independently.
+They consume the compilation error and commit the transaction: preceding SET
+and CREATE must never dispatch, rather than merely being undone by rollback.
+The complete live matrix passes twice. Native Neo4j rewrite controls preserve
+the original query and parameters through both rewrite entry points. Live
+Neo4j controls also pass twice: the server reports its native syntax error for
+legacy CREATE UNIQUE and missing-file errors for read/write LOAD CSV queries.
+No CSV contents are read and no external URL is fetched. These differing support
+boundaries remain outside the backend-equivalent shared integration corpus.
+
+README and corpus documentation describe the boundary and validation. The
+active queue now has **46 items** (4 P1, 33 P2, 9 P3), this ledger has **58
+completed actions**, and **DAWGS-103 is the next implementation item**. Earlier
+repair/design decisions and separate follow-ups retain their existing status.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in both the race-enabled unit and integration stages and the final
+BDD gate. Neo4j's complete **`make test_integration` passes all 43 tested
+packages**, followed by a passing **`make test_bdd_integration`**. Both full
+shared integration suites pass on both backends. Each BDD gate reports **17
+enforced / zero failed**, retaining **18 report-only compatibility failures**.
+The Neo4j BDD run finishes before PostgreSQL reaches that stage, so report
+writes remain sequential.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`; credentials are
+excluded from this ledger. Focused live controls pass with `-count=2` on both
+backends. Fixture regeneration passes twice and its second run produces no
+additional diff; generated SQL expectations remain unchanged. Repository lint,
+touched-file `goimports`, fixture JSON, local Markdown links, ledger counts and
+`git diff --check` pass.
+
+The final complete race-enabled unit rerun passes all **43 tested packages**
+after adding literal Neo4j pass-through and nested CSV URL-expression controls.
+Deduplicated unit statement coverage increases from the pre-change checkout's
+**33,274 / 49,578 (67.1144%)** to **33,276 / 49,580 (67.1158%)**; frontend
+coverage increases from **500 / 534 (93.6330%)** to **503 / 536 (93.8433%)**.
+Both newly added rejection callbacks are fully covered. Final affected-package
+race/coverage checks and repository lint also pass. No Go edits follow the final
+complete unit run.

@@ -86,6 +86,26 @@ func TestQueryMayNeedRewrite(t *testing.T) {
 	}
 }
 
+func TestRewriteUnsupportedImportAndCreatePreservesNativeText(t *testing.T) {
+	params := map[string]any{"props": map[string]any{"name": "start"}, "url": "file:///missing.csv"}
+	for _, source := range []string{
+		"CREATE UNIQUE (:Created {value: 1})",
+		"LOAD CSV FROM 'file:///missing.csv' AS row RETURN row",
+		"MATCH (a $props), (b) CREATE UNIQUE (a)-[:R]->(b)",
+		"LOAD CSV FROM $url AS row MATCH (n $props) RETURN n",
+		"LOAD CSV WITH HEADERS FROM $url AS row CREATE (:Created {value: row.value})",
+	} {
+		t.Run(source, func(t *testing.T) {
+			for _, rewrite := range []func(string, map[string]any) (string, map[string]any, error){rewriteQuery, rewritePatternPropertyParameters} {
+				query, parameters, err := rewrite(source, params)
+				require.NoError(t, err)
+				require.Equal(t, source, query)
+				require.Equal(t, params, parameters)
+			}
+		})
+	}
+}
+
 func TestRewriteQuery_WrapsTemporalPropertyComparison(t *testing.T) {
 	query, rewrittenParams, err := rewriteQuery(
 		"MATCH p=(:Computer)-[r:HasSession]->(:User) WHERE r.lastseen >= datetime() - duration('P3D') RETURN p LIMIT 100",
