@@ -97,13 +97,17 @@ func (s bitmap64) And(provider Provider[uint64]) {
 		s.bitmap.And(typedProvider.bitmap)
 
 	case Duplex[uint64]:
-		s.Each(func(nextValue uint64) bool {
-			if !typedProvider.Contains(nextValue) {
-				s.Remove(nextValue)
-			}
+		// Copy the provider's contents into a native bitmap and use the native
+		// intersection. Removing from the receiver while iterating it skips
+		// elements, so the fallback must never mutate s during its own Each.
+		providerCopy := roaring64.New()
 
+		typedProvider.Each(func(value uint64) bool {
+			providerCopy.Add(value)
 			return true
 		})
+
+		s.bitmap.And(providerCopy)
 	}
 }
 func (s bitmap64) Or(provider Provider[uint64]) {
@@ -135,12 +139,16 @@ func (s bitmap64) AndNot(provider Provider[uint64]) {
 		s.bitmap.AndNot(typedProvider.bitmap)
 
 	case Duplex[uint64]:
-		s.Each(func(nextValue uint64) bool {
-			if typedProvider.Contains(nextValue) {
-				s.Remove(nextValue)
-			}
+		// Copy the provider's contents into a native bitmap and use the native
+		// difference. Removing from the receiver while iterating it skips
+		// elements, so the fallback must never mutate s during its own Each.
+		providerCopy := roaring64.New()
 
+		typedProvider.Each(func(value uint64) bool {
+			providerCopy.Add(value)
 			return true
 		})
+
+		s.bitmap.AndNot(providerCopy)
 	}
 }

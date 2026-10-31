@@ -4,12 +4,12 @@ go 1.27.3
 
 // Dawgrun requirements
 require (
-	cuelang.org/go v0.17.0
-	github.com/RoaringBitmap/roaring/v2 v2.19.0
+	cuelang.org/go v0.17.1
+	github.com/RoaringBitmap/roaring/v2 v2.25.0
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/antlr4-go/antlr/v4 v4.13.1
 	github.com/axiomhq/hyperloglog v0.2.6
-	github.com/bits-and-blooms/bitset v1.24.6
+	github.com/bits-and-blooms/bitset v1.25.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cucumber/godog v0.16.0
@@ -21,9 +21,9 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/jedib0t/go-pretty/v6 v6.8.2
+	github.com/jedib0t/go-pretty/v6 v6.8.3
 	github.com/kanmu/go-sqlfmt v0.0.2-0.20200215095417-d1e63e2ee5eb
-	github.com/klauspost/compress v1.19.0
+	github.com/klauspost/compress v1.19.2
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/parquet-go/parquet-go v0.32.0
@@ -96,7 +96,7 @@ require (
 	github.com/dave/dst v0.27.3 // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
 	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
-	github.com/dlclark/regexp2/v2 v2.2.2 // indirect
+	github.com/dlclark/regexp2/v2 v2.7.1 // indirect
 	github.com/ettle/strcase v0.2.0 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
@@ -171,8 +171,8 @@ require (
 	github.com/maratori/testpackage v1.1.2 // indirect
 	github.com/matoous/godox v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
-	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/mattn/go-runewidth v0.0.24 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mattn/go-runewidth v0.0.28 // indirect
 	github.com/mgechev/revive v1.17.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moricho/tparallel v0.3.2 // indirect

@@ -1,0 +1,1979 @@
+{
+  "families": [
+    {
+      "name": "pattern predicate lifetime",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "good",
+            "kinds": [
+              "PredicateSource"
+            ],
+            "properties": {
+              "name": "good"
+            }
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "PredicateSource"
+            ],
+            "properties": {
+              "name": "wrong-kind"
+            }
+          },
+          {
+            "id": "reverse",
+            "kinds": [
+              "PredicateSource"
+            ],
+            "properties": {
+              "name": "reverse"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "PredicateSource"
+            ],
+            "properties": {
+              "name": "missing"
+            }
+          },
+          {
+            "id": "other-label",
+            "kinds": [
+              "PredicateDecoy"
+            ],
+            "properties": {
+              "name": "other-label"
+            }
+          },
+          {
+            "id": "witness",
+            "kinds": [
+              "PredicateTarget"
+            ],
+            "properties": {
+              "name": "witness"
+            }
+          },
+          {
+            "id": "end",
+            "kinds": [
+              "PredicateTarget"
+            ],
+            "properties": {
+              "name": "end"
+            }
+          },
+          {
+            "id": "end2",
+            "kinds": [
+              "PredicateTarget"
+            ],
+            "properties": {
+              "name": "end2"
+            }
+          },
+          {
+            "id": "hop",
+            "kinds": [
+              "PredicateTarget"
+            ],
+            "properties": {
+              "name": "hop"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "good",
+            "end_id": "witness",
+            "kind": "PredicateT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "wrong-kind",
+            "end_id": "witness",
+            "kind": "PredicateOther",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "witness",
+            "end_id": "reverse",
+            "kind": "PredicateT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "other-label",
+            "end_id": "witness",
+            "kind": "PredicateT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "witness",
+            "end_id": "hop",
+            "kind": "PredicateU",
+            "properties": {}
+          },
+          {
+            "start_id": "good",
+            "end_id": "end",
+            "kind": "PredicateR",
+            "properties": {}
+          },
+          {
+            "start_id": "wrong-kind",
+            "end_id": "end",
+            "kind": "PredicateR",
+            "properties": {}
+          },
+          {
+            "start_id": "reverse",
+            "end_id": "end",
+            "kind": "PredicateR",
+            "properties": {}
+          },
+          {
+            "start_id": "missing",
+            "end_id": "end",
+            "kind": "PredicateR",
+            "properties": {}
+          },
+          {
+            "start_id": "other-label",
+            "end_id": "end",
+            "kind": "PredicateR",
+            "properties": {}
+          },
+          {
+            "start_id": "good",
+            "end_id": "end2",
+            "kind": "PredicateR",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "directed type filter",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "negation",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE NOT (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "wrong-kind",
+                "end"
+              ],
+              [
+                "reverse",
+                "end"
+              ],
+              [
+                "missing",
+                "end"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "undirected",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]-() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ],
+              [
+                "reverse",
+                "end"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "incoming",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)<-[:PredicateT]-() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "reverse",
+                "end"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "multi hop",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->()-[:PredicateU]->() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "repeated predicate",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) WHERE (s)-[:PredicateT]->() RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "two predicates",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() AND NOT (s)-[:PredicateOther]->() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "compound or",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() OR s.name = 'missing' MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ],
+              [
+                "missing",
+                "end"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "edge property",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT {enabled: $enabled}]->() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "params": {
+            "enabled": true
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "edge property rejection",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT {enabled: $enabled}]->() MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "params": {
+            "enabled": false
+          },
+          "assert": {
+            "row_values": []
+          }
+        },
+        {
+          "name": "independent later match",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (t:PredicateTarget) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "witness"
+              ],
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ],
+              [
+                "good",
+                "hop"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "later optional",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() OPTIONAL MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "with boundary",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() WITH s MATCH (s)-[r:PredicateR]->(t) RETURN s.name, t.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "count multiplicity",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) RETURN count(*)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "set sFalse",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) SET s.seen = true"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "set rFalse",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) SET r.seen = true"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {
+                      "seen": true
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "create nodeFalse",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) CREATE (c:PredicateCreated {name: t.name})"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:PredicateCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:PredicateCreated) RETURN labels(c), c.name",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "PredicateCreated"
+                    ],
+                    "end"
+                  ],
+                  [
+                    [
+                      "PredicateCreated"
+                    ],
+                    "end2"
+                  ]
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "create edgeFalse",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) CREATE (s)-[:PredicateCreatedLink {name: t.name}]->(t)"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateCreatedLink",
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateCreatedLink",
+                    "props": {
+                      "name": "end2"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "set sTrue",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) SET s.seen = true RETURN s.name, t.name"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "set rTrue",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) SET r.seen = true RETURN s.name, t.name"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {
+                      "seen": true
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "create nodeTrue",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) CREATE (c:PredicateCreated {name: t.name}) RETURN s.name, t.name"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:PredicateCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:PredicateCreated) RETURN labels(c), c.name",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "PredicateCreated"
+                    ],
+                    "end"
+                  ],
+                  [
+                    [
+                      "PredicateCreated"
+                    ],
+                    "end2"
+                  ]
+                ]
+              }
+            }
+          ],
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "create edgeTrue",
+          "vars": {
+            "query": "MATCH (s:PredicateSource) WHERE (s)-[:PredicateT]->() MATCH (s)-[r:PredicateR]->(t) CREATE (s)-[:PredicateCreatedLink {name: t.name}]->(t) RETURN s.name, t.name"
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "wrong-kind"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "PredicateSource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "other-label",
+                    "kinds": [
+                      "PredicateDecoy"
+                    ],
+                    "props": {
+                      "name": "other-label"
+                    }
+                  },
+                  {
+                    "id": "witness",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "witness"
+                    }
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "id": "end2",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "end2"
+                    }
+                  },
+                  {
+                    "id": "hop",
+                    "kinds": [
+                      "PredicateTarget"
+                    ],
+                    "props": {
+                      "name": "hop"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "witness",
+                    "kind": "PredicateOther",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "reverse",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "witness",
+                    "kind": "PredicateT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "witness",
+                    "end": "hop",
+                    "kind": "PredicateU",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-kind",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "reverse",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "missing",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-label",
+                    "end": "end",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "end",
+                    "kind": "PredicateCreatedLink",
+                    "props": {
+                      "name": "end"
+                    }
+                  },
+                  {
+                    "start": "good",
+                    "end": "end2",
+                    "kind": "PredicateCreatedLink",
+                    "props": {
+                      "name": "end2"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "end"
+              ],
+              [
+                "good",
+                "end2"
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

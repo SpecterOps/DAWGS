@@ -497,7 +497,19 @@ func sortedDependencies(node cypher.SyntaxNode) []string {
 	}
 
 	_ = walk.Cypher(node, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
-		if variable, isVariable := node.(*cypher.Variable); isVariable && variable.Symbol != "" && variable.Symbol != cypher.TokenLiteralAsterisk {
+		var variable *cypher.Variable
+		switch typedNode := node.(type) {
+		case *cypher.Variable:
+			variable = typedNode
+		case *cypher.NodePattern:
+			// The syntax walker visits pattern properties but omits pattern
+			// variables. In predicates these variables consume bindings, so
+			// clause scheduling must wait for their declarations as well.
+			variable = typedNode.Variable
+		case *cypher.RelationshipPattern:
+			variable = typedNode.Variable
+		}
+		if variable != nil && variable.Symbol != "" && variable.Symbol != cypher.TokenLiteralAsterisk {
 			dependencies[variable.Symbol] = struct{}{}
 		}
 	}))

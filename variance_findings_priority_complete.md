@@ -1,0 +1,2606 @@
+# Completed variance findings and validation ledger
+
+Completed actions moved from [the active priority plan](variance_findings_priority.md) through **2026-10-30**. This ledger preserves **67 completed repairs or containment actions**, their original queue details, implementation notes and validation evidence, plus **nine originally resolved regression controls**. Original order numbers and dated evidence are retained. Shared validation notes apply to the associated DAWGS-064/070/087 and DAWGS-101/102 work items.
+
+Completion applies to the recorded action. Full support after containment and separate sequencing, batch-lifecycle or performance work remain in the active plan's [open follow-ups](variance_findings_priority.md#open-follow-ups-to-completed-actions). The pending regex migration decision 007 and separate unfinished follow-ups remain in the active ledger.
+
+## Completion ledger
+
+| Order | Finding | Status | Work and validation |
+| ---: | --- | --- | --- |
+| 1 | DAWGS-084 | Repaired and validated; initial broad-gate failure recorded | Removed the `TestMain` exit override. Untagged scenarios are enforced by default; unsupported upstream cases have explicit `@report-only` tags and still execute. Reports distinguish enforcement and compatibility results. Sequential BDD runs on both backends enforce 10 passing scenarios and expose 18 report-only failures. Race-enabled BDD unit tests and vet pass; package coverage increases from 74.0% to 80.8%, with 100% coverage of gate decisions. Both shared integration suites pass. Initial broad PostgreSQL commands failed on an unchanged timezone-sensitive unit test; later validation under 041 uses a distinct local-location name. |
+| 2 | DAWGS-039 | Repaired and live validated | Plain Cypher DELETE checks remaining incident edges against matched input and complete deletion target sets. DETACH cleanup runs on parent and partition paths and scopes endpoint IDs by graph. Shared complete-state templates, committed rollback fixtures and driver-scoped migration/isolation checks are recorded below. |
+| 3 | DAWGS-063 | Repaired and live validated | Graph selection resolves existing metadata without DDL or creation; explicit assertions reconcile cached graphs. Fresh-manager read, missing selection and index/constraint preservation controls pass. |
+| 4 | DAWGS-041 | Row-stream repair validated; image linker workaround recorded | UPDATE returns only the changed entity; a separate left-joined projection retains the complete input stream, duplicates and null targets. Assignments bind against each target's actual input frame. All 19 shared variants pass on Neo4j and in both PostgreSQL compiler modes; WITH continuation passes on both. Complete PostgreSQL unit tests and both complete backend integration runs pass with the race detector. BDD gates pass on both backends; PostgreSQL's final non-race BDD step needs external linking in this image. Mutation/SQL fixtures, v2 builder expectations, coverage, scope and exact validation conditions are recorded below. |
+| 5 | DAWGS-064 | Repaired and validated; aggregate retry recorded | Framed node/relationship identities retain kind, property names, value types and endpoint boundaries without sorting caller slices. Property hashing frames each key/type/value. Neo4j groups query shapes by structured strings, separating identity/add/remove roles and eliminating digest-only grouping. Focused race tests, vet and live kind-operation/relationship-identity regressions pass on both backends. Existing PostgreSQL relationship-create regression passes. Complete backend validation and the final graph-package retry are recorded below. |
+| 6 | DAWGS-070 | Repaired and validated | Neo4j node-update parameters copy the property map only when deletions exist and represent each deleted key with null, using existing `SET n += p.properties` behavior. Caller maps remain unchanged and rows with different deletions still share one query shape. Shared stored-state regressions pass on both backends; the corrected 1,000-node Neo4j regression and focused race tests pass. Complete integration and BDD checks pass with the recorded environment settings and graph-package retry. |
+| 7 | DAWGS-087 | Reproduced, repaired and validated | The shared stored-state regression fails before repair on PostgreSQL (removed kind retained) and passes on Neo4j. PostgreSQL now resolves upsert IDs and applies only pending kind removals through the existing bulk-update path. Flushes containing removals use an explicit transaction; a forced removal failure rolls back the associated upsert. Normal commits, coalescing and survivor isolation pass. Both backend integration suites and BDD checks pass with the recorded settings/retry. A separate pre-existing whole-batch rollback limitation was reproduced and remains open below. |
+| 8 | DAWGS-045 | Ordered intent repaired and validated; expression sequencing open | Ordered operations fix property/kind post-state without changing one-write-per-target or row preservation. All 20 shared variants pass on Neo4j and in both PostgreSQL compiler modes. A separate live probe confirms that dependent assignment expressions still require a WITH boundary; that sequencing follow-up remains open below. |
+| 9 | DAWGS-058 | Repaired and validated | Builder entries add a bounded typed AST digest and a separate identity domain. Runtime parameter names/values remain excluded; same-shape rebinding is preserved. All six compiler collision controls and eight live PostgreSQL read/mutation variants fail against the baseline and pass after repair. Four shared template controls pass on both backends. Unsupported fingerprint shapes compile without reuse. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass; coverage and preparation cost are recorded below. |
+| 10 | DAWGS-073 | Repaired and validated; performance follow-up deferred | Only complete requested-component reach sets are retained. Diamond/SCC, direction, query-order, eviction and concurrent-read regressions pass; algorithm coverage rises from 73.4% to 82.1%. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. Cold allocations improve, while all-roots sweeps slow by 2.37× / 3.48× in the local benchmarks below. Recover bulk-query throughput after semantic fixes; see the deferred performance follow-up below. |
+| 11 | DAWGS-080 | Repaired and validated | Nested maps receive full key-specific classification, including inside arrays and inherited pseudonymization/timestamp paths. Explicit preserve overrides retain subtrees; parent redaction still wins. Race-enabled scrub/dump/checkpoint tests pass, including JSONL/Parquet output and resumed `scrub_nested` action counts. Policy version advances to v3. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass; retriever coverage rises from 74.57% to 75.13%. |
+| 12 | DAWGS-101 | Repaired and validated; Neo4j fixture retry recorded | Both decoders preserve numeric tokens and normalize integer tokens to `int64` and decimal/exponent tokens to `float64`; integer overflow and float overflow are rejected before writes. Nested/array, range and preflight regressions pass. All four live import formats fail with the original decoders and preserve exact committed node/relationship properties after repair on both backends. PostgreSQL's complete gate passes; the corrected CLI test setup passes on both backends. Full Neo4j integration results and its fixture retry are recorded below. |
+| 13 | DAWGS-102 | Repaired and validated | Manifest and checkpoint checksum checks, verified preflight and ordinary node/edge load reads share a root-aware opener. Parent-relative and symlink escape fixtures reproduce the original defect and pass after repair. Valid nested files and contained relative links remain readable; invalid paths fail before database access, and each reopen checks containment. Focused race tests, full PostgreSQL gates and both backend integration/BDD checks pass with the CLI fixture retry below; retriever coverage rises from 75.1290% to 75.5192%. |
+| 15 | DAWGS-006 | Reproduced, repaired and validated | Boolean operands remain within value expressions; predicate extraction occurs at WHERE. All 19 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact node/relationship post-state. An original-source overlay reproduces the wrong stored Boolean without RETURN. Ten new SQL cases, four parser/analyzer mutation cases and focused unit regressions cover the repair; existing SQL fixtures are unchanged. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. DAWGS-007 remains pending downstream evidence; its regex default is unchanged. |
+| 16 | DAWGS-028 | Reproduced, repaired and validated | Fixed continuation steps retain and render pending predicates over materialized expansion endpoints. All 25 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact paths, duplicate rows and complete mutation post-state. The original-source overlay fails 21 variants per mode. Nine SQL golden cases, four parser/analyzer mutation cases and renderer regressions cover the repair. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
+| 17 | DAWGS-024 | Reproduced, repaired and validated | OPTIONAL MATCH correlates derived matches to numbered input rows and removes the internal identity after the join. All 33 shared variants pass on Neo4j and in both PostgreSQL compiler modes. The original-source overlay fails 25 variants per mode, including excess CREATE post-state without RETURN. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass after correcting canonical spacing in the new parser fixtures. |
+| 18 | DAWGS-026 | Reproduced, repaired and validated | Reused fixed relationships get a fresh SQL edge alias constrained to the original relationship ID. All 36 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 26 variants per mode. SQL, parser/analyzer mutation, path and stored-state controls cover the repair. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
+| 19 | DAWGS-027 | Reproduced, repaired and validated | Undirected fixed continuations pair near/far endpoint orientations before frame binding. All 30 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the unchanged translator fails 22 variants per PostgreSQL mode. SQL, parser/analyzer mutation, path, self-loop and exact stored-state controls cover the repair. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
+| 20 | DAWGS-031 | Reproduced, repaired and validated | MATCH-local relationship history covers comma-separated parts and consecutive expansions. All 45 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original translator fails 33 enabled / 35 disabled variants. Mixed-step, exact-path, duplicate-input, optional-null and complete mutation-state controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. Fan-out counts and local compilation/EXPLAIN costs are recorded below. |
+| 21 | DAWGS-033 | Reproduced, repaired and validated | Repeated local endpoints require both edge endpoints to equal the node, preserving unrelated input rows. All 32 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original translator fails 21 variants per mode. Exact loop/path identities, duplicate/empty inputs, optional matches and complete mutation-state controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
+| 22 | DAWGS-020 | Reproduced, repaired and validated | The parser normalizes `*k` to `*k..k` and accepts range whitespace/comments. All 32 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original parser fails 19 variants per mode. Exact paths, zero/short/above-15-hop bounds and complete mutation-state controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass. |
+| 23 | DAWGS-019 | Repaired and live validated; bounded-workspace follow-up retained | Open traversal preserves an absent maximum and fails explicitly on resource exhaustion. Shared long-path/read/write/cycle/branch controls cover both compiler modes. State, byte, fan-out and staged rollback controls pass; independent bounded-workspace limitations are recorded below. |
+| 24 | DAWGS-072 | Reproduced, repaired and validated | Both parallel fetch helpers bind a cancellable operation context: a failing worker delivers the originating error through the caller's context, then cancels to unblock range submission; the producer stops submitting and joins all workers. New in-memory regressions hang against the original helpers and pass after repair, alongside multi-worker failure, all-range success, caller-cancellation, empty-database and Stream-builder controls under the race detector. PostgreSQL `make test_all`, complete Neo4j integration and both BDD gates pass. See below. |
+| 25 | DAWGS-065 | Repaired and live validated | Transaction-owned kind mapping uses the leased connection, publishes committed IDs only, and bypasses caches for uncommitted registrations. Single-connection, saturation, rollback, compilation/cache and batch controls pass. |
+| 26 | DAWGS-099 | Reproduced, repaired and validated | Deterministic gated regressions reproduce the opposing cross-wrapper `Or` deadlock, single-goroutine self-operation deadlocks for all four duplex binary operations on both bitmap widths, a nested-wrapper self-operation deadlock, an ungated mixed-operation deadlock, and silent no-op merges between wrapped HyperLogLog sketches on both widths. Binary operations now snapshot another thread-safe wrapper before acquiring the receiver's lock, so wrapper locks are never nested. All new regressions, controls and focused race runs pass on both bitmap widths; PostgreSQL `make test_all` and Neo4j integration/BDD gates pass. Benchmark medians, coverage and the DAWGS-076 boundary are recorded below. |
+| 27 | DAWGS-076 | Repaired and validated | Bitmap `And`/`AndNot` fallbacks for non-native Duplex operands no longer remove from the receiver during its own iteration; each copies the operand into a native bitmap and applies the native roaring operation on both widths. The original `{0..9}` reproductions return empty results, and wrapped/custom/native/empty/full and container-boundary regressions pass under the race detector. Focused and broad gates pass on both backends. See below. |
+| 28 | DAWGS-077 | Repaired and validated | PackedMap merges now store the merged values slice with the merged key set, and EFSet.Find terminates without a match for targets below the stored minimum and for empty sets. The recorded compact/(re)put/compact trigger returns each key's own value instead of 102 or an out-of-range panic, and the below-minimum Find(5) returns instead of never completing. Guarded regressions fail against the original sources and pass after repair; focused and broad gates pass on both backends. See below. |
+| 29 | DAWGS-074 | Reproduced, repaired and validated | A pattern step fetches its endpoint with that expansion's own direction instead of reusing the previous step's fetch direction, so direction-changing chains such as `OutboundWithDepth(1,1).InboundWithDepth(1,1)` over `a→b←c` match. Five scripted-direction unit regressions and the shared live BreadthFirst integration regression fail against the original source and pass after repair on both backends. Optional-step duplicate callbacks remain the separate DAWGS-095 boundary. See below. |
+| 30 | DAWGS-095 | Reproduced, repaired and validated | An optional following expansion no longer eager-fetches its matches and also preserves the boundary segment; the preserved segment performs the expansion itself, so each optional-step match reaches the terminal delegate exactly once. The recorded `OutboundWithDepth(1,1).OutboundWithDepth(0,0)` trigger returns terminal `c` twice with five fetches before repair and once with three fetches after. Scripted unit regressions and the shared live BreadthFirst integration regression pin exact callback cardinality on both backends. See below. |
+| 31 | DAWGS-100 | Repaired and validated; aggregate flake recorded | The `FetchNodeProperties` result callback returns `results.Error()` after iteration instead of nil, matching its sibling helpers. A result-double regression reproduces the swallowed mid-iteration failure — one row applied, the second node left with nil properties, nil returned — and fails against the original source; full-iteration and unmappable-node-ID controls pass. Focused race tests, vet, lint and both backend gates pass; a pre-existing load-sensitive graphbench cancellation flake encountered in two aggregate attempts is recorded below. |
+| 32 | DAWGS-003 | Contained and validated | Pattern-less scalar-list quantifier projections no longer nil-dereference the missing current pattern in `prepareFilterExpression`; translation proceeds to the same normal projection-aggregation error their pattern-present siblings already produce. Compile regressions panic against the original source and return errors after repair in both optimizer modes for all four quantifier types; the live PostgreSQL driver regression panics through the transaction cache before repair and returns `graph.NewErrorResult` after. WHERE-context quantifiers (property arrays, `labels()`, scalar lists, WITH/OPTIONAL MATCH output predicates) keep compiling, pinned by new unit regressions and two new SQL golden cases. Neo4j natively returns `true` for the same standalone query, so the containment stays PostgreSQL-scoped. See below. |
+| 33 | DAWGS-004 | Reproduced, repaired and validated | IS/IS NOT completion pushes the assembled predicate for literal, parameter and entity operands; null predicates infer Boolean without operand-type compatibility; an empty expression operand stack returns a translation error instead of `index out of range [-1]`. Literal `RETURN null IS NULL` projections return correct booleans, and WHERE literal null predicates filter rows instead of being silently dropped. Unit, SQL golden, mutation, shared-corpus and live driver regressions fail against the original sources and pass after repair on both backends. See below. |
+| 34 | DAWGS-011 | Reproduced, contained and validated | Temporal component lookups on constructed instants (`datetime('…')`, `date(n.d)`) are rejected with an explicit `unsupported temporal type component … on cast type …` error in projections and WHERE contexts instead of silently dropping the cast operand and underflowing the expression stack. Both driver compile boundaries now contain build panics as ordinary errors carrying the panic value and stack: the shared translation cache no longer re-panics into the caller and the connection cache, which had no recovery at all, is also contained. The complexity analyzer no longer errors on property lookups with non-variable atoms, restoring the fitness-regeneration workflow. Live PostgreSQL regressions cover first and repeated requests; Neo4j natively supports these components, so the containment stays PostgreSQL-scoped. Complete temporal component support remains separate M work. See below. |
+| 35 | DAWGS-030 | Contained and validated | The aggregate traversal count lowering returns `unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported` when either MATCH WHERE carries a pattern predicate, instead of panicking on a predicate translator with no query parts; `preparePatternPredicate` gains the same producer-boundary error model. Declining the lowering is explicitly not the containment because the generic multi-match path still cannot translate the shape. Live first and repeated requests return the error through the translation cache while the plain lowering keeps executing. See below. |
+| 36 | DAWGS-086 | Reproduced, repaired and validated | Empty v2 kind predicates, assignments and removals are rejected at Build with the typed continuations' established `kind predicate requires at least one kind` contract instead of silently dropping the relationship restriction, rendering blank WHERE output or emitting invalid `set n:`/`remove n:`. Validation covers hand-built matchers and Not/And/Or nesting; populated kind rendering is byte-identical. See below. |
+| 37 | DAWGS-008 | Reproduced, repaired and validated | Repeated NOT prefixes preserve Cypher parity in both frontend visitor paths: even counts cancel to the positive predicate and odd counts negate exactly once, replacing the any-positive-count single-NOT collapse. Formatting canonicalizes, both PostgreSQL compiler modes emit parity-correct SQL, and shared variants agree with Neo4j. See below. |
+| 38 | DAWGS-009 | Reproduced, repaired and validated | Integral floating-point literals keep a fractional suffix in both emitters through a shared `cypher.FormatFloatLiteral` helper, so `3.0 / 2.0` lowers to numeric division returning 1.5, `toString(1.0)` returns "1.0", the Neo4j rewrite re-emits float spellings, and builder cache preparation no longer formats integral floats to integer text. A pre-existing PostgreSQL BDD gate failure from a newly added upstream leading-OPTIONAL-MATCH feature is recorded below and belongs to the open DAWGS-021 row. See below. |
+| 39 | DAWGS-051 | Reproduced, repaired and validated; decoding cost recorded | Connection-local JSON/JSONB codecs preserve signed 64-bit integer tokens before pgx decodes scalar, map, array or graph-composite results. Both wire formats and range-error propagation pass. All five direct result regressions and seven of eight shared mutation variants per compiler mode fail against the original decoder; all pass after repair. Complete unit and both backend integration checks pass; the original-decoder overlay confirms the four existing PostgreSQL DAWGS-021 BDD failures. See below. |
+| 40 | DAWGS-057 | Reproduced, repaired and validated; existing BDD failure recorded | JSON-typed strings already decoded by pgx retain their exact contents; only raw bytes are decoded again. Unit, wire and committed-result regressions reproduce the original reinterpretation. All 17 shared mutation variants fail against the original helper in both PostgreSQL compiler modes and pass after repair on both backends, including complete post-state. Complete unit and both backend integration gates pass; PostgreSQL BDD retains the four known DAWGS-021 failures. See below. |
+| 41 | DAWGS-016 | Repaired and validated; representation limits and fixture retry recorded | PostgreSQL dispatches property arithmetic on stored JSON types instead of assuming text concatenation or text modulo. All 44 shared variants pass on Neo4j and in both PostgreSQL compiler modes; an original-source overlay fails 39 variants per mode. Exact integer, floating remainder, string/list/null, chained-expression and complete mutation-state controls pass. Complete unit and Neo4j gates pass; PostgreSQL's aggregate plan-fixture failure passes in isolation, and its four known DAWGS-021 BDD failures remain. Representation/filter boundaries and measured helper costs are recorded below. |
+| 42 | DAWGS-018 | Reproduced, repaired and validated; gate retries recorded | String predicates preserve nullable type guards on both operands; dynamic ordered comparisons use compatible JSON value types and lexicographic lists. All 64 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 59 variants per mode. Exact typed results, complete mutation-state controls, schema checks and focused race tests pass. Complete unit and both backend checks pass with the affected-package reruns below; PostgreSQL BDD retains four known DAWGS-021 failures. Measured costs are recorded below. |
+| 43 | DAWGS-052 | Reproduced, repaired and validated; aggregate retries recorded | Typed consumers preserve property strings and values through WITH, including rebound aliases, heterogeneous coalesce, Boolean predicates and list head/tail. All 59 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 53 variants per mode. Final unit coverage is 67.3%; both complete backend matrices pass with the affected-package reruns below. PostgreSQL BDD retains the four known DAWGS-021 failures. |
+| 44 | DAWGS-053 | Reproduced, repaired and validated; unit fixture retry and dispatch cost recorded | SUM retains integer precision, returns zero for empty/all-null inputs and honors DISTINCT. All 46 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 39 variants per mode. Both complete backend integration runs pass. Unit packages pass with the formatter retry below at 67.3% overall coverage; PostgreSQL BDD retains the four known DAWGS-021 failures. AVG precision and runtime costs are qualified below. |
+| 45 | DAWGS-054 | Reproduced, repaired and validated; integration reruns and collection cost recorded | Property collections and UNWIND retain value types. All 74 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 42 variants per mode and 38 of 50 committed typed-result cases. All 43 unit packages pass at 67.3% overall coverage. Both backend integration matrices pass with the affected-package reruns below; PostgreSQL BDD retains four known DAWGS-021 failures. Collection costs and representation limits are qualified below. |
+| 46 | DAWGS-056 | Reproduced, repaired and validated; aggregate-boundary reruns recorded | ID-only collections retain their node/relationship element type through scope copies. All 67 shared variants pass on Neo4j and in both PostgreSQL compiler modes; the original-source overlay fails 21 variants per mode and 10 of 13 committed overlapping-ID controls per mode. All 43 unit packages pass at 67.4% overall coverage. Both backend integration matrices pass with the affected-package reruns below; PostgreSQL BDD retains four known DAWGS-021 failures. |
+| 47 | DAWGS-015 | Repaired and live validated | Numeric conversions truncate toward zero. All 50 current shared variants pass on Neo4j and in both PostgreSQL compiler modes, alongside concrete Go type and signed-boundary checks. Earlier endpoint failures and final acceptance are recorded below. |
+| 48 | DAWGS-014 | Repaired and live validated | Literal substring/prefix/suffix patterns escape LIKE metacharacters for all supported operand shapes. All 60 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including complete mutation-state checks. |
+| 49 | DAWGS-040 | Repaired and live validated | Read-only WITH retains ordering and pagination, alias resolution and filtering after pagination. All 44 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including complete mutation-state checks. |
+| 50 | DAWGS-021 | Repaired and live validated | Leading OPTIONAL MATCH retains the implicit input row and matched-side predicates. All 57 current shared variants pass on Neo4j and in both PostgreSQL compiler modes; both BDD gates now pass all 17 enforced scenarios. |
+| 51 | DAWGS-036 | Reproduced, repaired and live validated | Resolve MATCH pattern-predicate futures once, retaining type constraints, and evaluate pending filters before another MATCH changes their correlation frame. All 22 new shared variants pass on Neo4j and in both PostgreSQL compiler modes, including repeated predicates and exact mutation-state checks. |
+| 52 | DAWGS-035 | Reproduced, repaired and live validated | Optimizer dependencies include node and relationship variables consumed by pattern predicates, keeping unresolved bindings pinned. Deferred MATCH filters are materialized before mutations. All 19 shared variants pass on both backends and in both PostgreSQL compiler modes, including exact mutation state and writes without RETURN; validation retries are recorded below. |
+| 53 | DAWGS-046 | Reproduced, repaired and live validated | Traversal frames read the preceding materialized input instead of their enclosing WITH output. Literal WITH projections preserve duplicate and empty streams. All 33 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including complete SET/CREATE post-state and writes without RETURN. |
+| 54 | DAWGS-047 | Reproduced, repaired and live validated | Nested ORDER BY aliases expand through binding identities with preserved expression grouping; bare UNWIND inputs are qualified to avoid output-alias capture. DISTINCT carries hidden sort keys without changing visible columns or pagination. All 36 shared variants pass on Neo4j and in both PostgreSQL compiler modes, including exact SET/CREATE post-state. See below. |
+| 55 | DAWGS-042 | Reproduced, repaired and live validated | Property-list UNWIND preserves JSON value types through direct properties, WITH aliases and nested lists. Pending inputs are materialized before SET, retaining duplicates and empty-input behavior. All 46 shared variants pass on Neo4j and in both PostgreSQL compiler modes, plus concrete committed-property checks. Complete backend qualification and formatter-fixture correction are recorded below. |
+| 56 | DAWGS-043 | Repaired and live validated | DELETE reserves a unique CTE name without advancing the input stream; RETURN preserves cardinality and captured values. Earlier SET/CREATE writes run before DELETE through the existing transaction-scoped staged executor. Shared complete-state and commit/rollback regressions pass on Neo4j and in both PostgreSQL compiler modes. Validation and scope are recorded below. |
+| 57 | DAWGS-023 | Repaired and live validated | Unknown match kinds no longer fail compilation or register metadata; conjunctions, alternatives, null predicates and mutation selection retain their semantics. Missing-kind plans bypass both translation caches so later registration is visible. Shared and driver-scoped validation is recorded below. |
+| 58 | DAWGS-001 | Contained and live validated | The shared parser rejects indexing with a located syntax error and isolates its subtree. Templated read/mutation regressions, both PostgreSQL compiler modes and Neo4j native controls pass. Complete PostgreSQL unit/integration/BDD and Neo4j integration/BDD gates pass; statement coverage increases. Full indexing remains separate work. |
+| 59 | DAWGS-002 | Contained and live validated | The shared parser rejects slicing with a located syntax error and isolates its subtree. Templated read/mutation regressions cover omitted, negative, parameterized and chained bounds; both PostgreSQL compiler modes reject before writes and Neo4j native slicing remains supported. Full slicing remains separate work. |
+| 60 | DAWGS-017 | Contained and validated | Standalone CALL returns a located unsupported error instead of a successful nil AST. Parser/template, PostgreSQL repeated-compilation and live rejection controls cover explicit/implicit invocation and YIELD; Neo4j native procedure execution remains available. See below. |
+| 61 | DAWGS-010 | Contained and live validated | Shortest-path expressions return a located parser error, isolating their subtree instead of projecting the terminal node. Templated read/mutation rejection, both PostgreSQL compiler modes, supported MATCH syntax and native Neo4j expression controls are covered below. Full expression support remains separate L work. |
+| 62 | DAWGS-013 | Contained and live validated | CREATE UNIQUE and LOAD CSV return located parser errors before PostgreSQL text execution. Read/mutation templates, repeated compilation and live committed-state controls pass in both compiler modes. Neo4j text and parameters retain native server diagnostics. Full shared support remains separate work. |
+| 63 | DAWGS-103 | Contained and live validated | In-query CALL returns a located parser error before PostgreSQL text execution. Templated reads/mutations, repeated compilation and committed-state controls cover both compiler modes. Native Neo4j procedures retain arguments and YIELD results. Full shared procedure support remains separate XL work. |
+| 64 | DAWGS-059 | Repaired and live validated; gate retries recorded | Positive conjunctive relationship-kind filters intersect their allowed kinds; disjoint sets become an explicit false predicate. OR, XOR and NOT predicates keep their logical ancestry. Render, shared read/SET templates and live builder-state validation are recorded below. |
+| 65 | DAWGS-060 | Repaired and live validated; gate retry recorded | The Cypher formatter preserves qualified function separators and uses AND for parsed all-label predicates while retaining OR for builder any-kind filters. Original-source regressions reproduce both defects; 29 shared variants and a native namespaced-function control pass live. Vendor hints/prefixes remain a separate compatibility follow-up. |
+| 66 | DAWGS-085 | Repaired and live validated | XOR groups retain parentheses when embedded in AND; PostgreSQL groups both comparison operands and the lowered result. Seven builder render controls and four SQL translation controls accompany 12 shared read/SET variants over 27 Boolean/null combinations. Original-source overlays reproduce wrong selection on both backends and invalid PostgreSQL comparison SQL. See below. |
+| 67 | DAWGS-055 | Repaired and live validated; PostgreSQL gate limitation recorded | PostgreSQL identifier rendering preserves case, decodes escaped Cypher names and doubles embedded SQL quotes. CTE names use the same rendering. Forty-two backend-equivalent read/WITH/SET/CREATE templates and direct result-key controls pass on Neo4j and in both PostgreSQL compiler modes; original-source overlays reproduce the incorrect keys. See below. |
+| 68 | DAWGS-061 | Repaired and live validated | Hand-built Neo4j upserts quote all emitted kind and identity-property names. Unit render controls and repeated live relationship upserts preserve exact identities and endpoint labels with escaped names. |
+
+## Original queue details for completed actions
+
+These describe the original requested action; completion status and actual outcomes are recorded above and in the notes below.
+
+| Order | Finding | Track | Action | Effort | Original next step and reason |
+| ---: | --- | :---: | --- | :---: | --- |
+| 1 | [DAWGS-084](variance_findings.md#dawgs-084) — BDD gate ignores upstream failures | V | Enable | M | Establish a useful supported-scenario gate and preserve ordinary Go-test failures. Keep unsupported upstream reporting explicit so the gate can qualify later repairs. |
+| 2 | [DAWGS-039](variance_findings.md#dawgs-039) — Plain DELETE silently detaches connected nodes | Q | Repair | M | Repair the confirmed orphan-edge and cross-graph parent-trigger defects; preserve rollback and backend-specific plain/DETACH DELETE behavior. Controlled evidence is recorded above. |
+| 3 | [DAWGS-063](variance_findings.md#dawgs-063) — WithGraph drops existing indexes and constraints | D | Repair | M | Separate graph selection from schema reconciliation; preserve existing indexes and constraints during reads. The destructive read-triggered behavior is reproduced above. |
+| 4 | [DAWGS-041](variance_findings.md#dawgs-041) — SET loses updates and drops rows | Q | Repair | L | Preserve the original input row stream through chained updates so fan-out, repeated targets and null targets cannot lose later writes or rows. |
+| 5 | [DAWGS-064](variance_findings.md#dawgs-064) — Batch de-duplication keys collide | D | Repair | M | Repair remaining typed batch-key/digest distinctions, especially Neo4j add-kind versus remove-kind. The original PostgreSQL endpoint-pair create collision stays closed. |
+| 6 | [DAWGS-070](variance_findings.md#dawgs-070) — Neo4j batch.UpdateNodes ignores property deletions | D | Repair | M | Carry tracked property deletions into Neo4j batch updates; replace the integration expectation that currently preserves the deleted property. |
+| 7 | [DAWGS-087](variance_findings.md#dawgs-087) — UpdateNodeBy ignores DeletedKinds on PostgreSQL | D | Reproduce | M | Pin UpdateNodeBy deleted-kind post-state on PostgreSQL, then carry removal intent through the upsert path. Current evidence is source-supported, not a live stored-state replay. |
+| 8 | [DAWGS-045](variance_findings.md#dawgs-045) — SET and REMOVE of the same property or label apply removals first | Q | Repair | M | Represent SET/REMOVE in clause order; remove-then-add folding currently changes persistent properties and labels. |
+| 9 | [DAWGS-058](variance_findings.md#dawgs-058) — The translation cache returns another query's SQL | B | Repair | M | Make warm/cold compilation equivalent for distinct builder ASTs. A conservative cache bypass can land before a complete semantic fingerprint or formatter repair. |
+| 10 | [DAWGS-073](variance_findings.md#dawgs-073) — ReachabilityCache returns incomplete reach sets | A | Repair | L | Guarantee complete reach sets for every cached component under diamonds, SCCs, both directions, query permutations and eviction; qualify memory and runtime effects. |
+| 11 | [DAWGS-080](variance_findings.md#dawgs-080) — Nested sensitive keys survive preserved outer properties | I | Repair | M | Define default/unclassified nested-map handling separately from explicit preserve overrides, then apply full-scrub policy recursively where promised. |
+| 12 | [DAWGS-101](variance_findings.md#dawgs-101) — JSON import numbers round through float64 | I | Repair | M | Preserve exact integers through both JSONL and document import and normalize values for driver binding. UseNumber alone does not establish lossless persistence. |
+| 13 | [DAWGS-102](variance_findings.md#dawgs-102) — Directory manifests permit parent-relative fragment paths | I | Repair | M | Use one root-aware fragment access policy in checksum, validation and load reads. Prioritize where external manifests are accepted; current proof concerns local directory reads, not remote exfiltration. |
+| 15 | [DAWGS-006](variance_findings.md#dawgs-006) — AND outside WHERE becomes a row filter | Q | Repair | M | Keep AND operands inside their expression outside WHERE; cover projected values and exact SET post-state. |
+| 16 | [DAWGS-028](variance_findings.md#dawgs-028) — Endpoint predicates on a variable-length step are dropped | Q | Repair | L | Retain cross-endpoint predicates through variable expansion and fixed suffix continuation. Check both optimizer modes and mutation selection. |
+| 17 | [DAWGS-024](variance_findings.md#dawgs-024) — OPTIONAL MATCH squares repeated input rows | Q | Repair | L | Preserve identity of duplicate OPTIONAL MATCH input rows; joining derived matches back by equal exported values must not multiply them. |
+| 18 | [DAWGS-026](variance_findings.md#dawgs-026) — Reused relationship variables cross-join the edge table | Q | Repair | M | Correlate reused relationship identity to the newly joined edge; prevent an unrelated edge scan multiplying matches. |
+| 19 | [DAWGS-027](variance_findings.md#dawgs-027) — Undirected later hops can reuse the near endpoint | Q | Repair | M | Pair undirected continuation orientations so the far endpoint cannot equal the near endpoint on a non-loop edge. |
+| 20 | [DAWGS-031](variance_findings.md#dawgs-031) — Relationship uniqueness is incomplete | Q | Repair | L | Enforce edge uniqueness across comma parts and consecutive expansions, with correct duplicate-preserving path/cardinality semantics and performance checks. |
+| 21 | [DAWGS-033](variance_findings.md#dawgs-033) — Undirected patterns mishandle self-loops | Q | Repair | M | Repair only the surviving self-reference pattern (x)-[r]-(x). Generic undirected self-loop omission and the old library-query attribution are already corrected. |
+| 22 | [DAWGS-020](variance_findings.md#dawgs-020) — Fixed-length expansion is not equivalent to an exact range | Q | Repair | S | Normalize *k to an exact range and test lengths above 15. This bounded parsing fix can ship before changing the unbounded traversal policy. |
+| 23 | [DAWGS-019](variance_findings.md#dawgs-019) — Unbounded traversals stop at 15 hops | Q | Repair | L | Implement the selected complete-traversal policy with explicit resource failure (L scope). Preserve the recorded long-path and write-state controls; separately repair the optimized all-shortest scalar discrepancy. |
+| 24 | [DAWGS-072](variance_findings.md#dawgs-072) — Parallel fetch operations hang when a worker fails | A | Repair | M | Stop and join the producer/workers on the first worker failure while preserving the originating error. Cancellation must unblock submission without swallowing the error. |
+| 25 | [DAWGS-065](variance_findings.md#dawgs-065) — Kind mapping can deadlock the connection pool | D | Repair | M | Remove nested pool acquisition during kind registration and MapKinds misses; invert the bounded pool-wedge regressions recorded above. |
+| 26 | [DAWGS-099](variance_findings.md#dawgs-099) — ThreadSafeDuplex cross-operation deadlock | A | Repair | M | Remove the cross-wrapper lock-order cycle; cover concurrent cross-operations, self-operations and allocation/runtime costs of any snapshot strategy. |
+| 27 | [DAWGS-076](variance_findings.md#dawgs-076) — Bitmap mutation during And/AndNot iteration | A | Repair | M | Avoid removing from a bitmap during its own non-native And/AndNot iteration; cover 32/64-bit, native/wrapped and empty/full operands. |
+| 28 | [DAWGS-077](variance_findings.md#dawgs-077) — PackedMap merge loses values and EFSet.Find underflows | A | Repair | M | Treat PackedMap merged-value corruption and EFSet below-minimum search as two acceptance cases and likely separate patches. |
+| 29 | [DAWGS-074](variance_findings.md#dawgs-074) — Traversal patterns changing direction never match | A | Repair | M | Use the next traversal step direction when fetching its endpoint. Coordinate the state-machine change with optional-step duplicate callbacks in 095. |
+| 30 | [DAWGS-095](variance_findings.md#dawgs-095) — Optional following traversal step duplicates callbacks | A | Repair | M | Produce each optional-transition match once. Final consumer set deduplication is not a substitute for correct callback cardinality; external caller impact is unmeasured. |
+| 31 | [DAWGS-100](variance_findings.md#dawgs-100) — FetchNodeProperties ignores iteration error | A | Repair | S | Return iteration failure from FetchNodeProperties instead of successful partial initialization. This is independently deliverable with a controlled result failure. |
+| 32 | [DAWGS-003](variance_findings.md#dawgs-003) — Scalar-list quantifiers panic | Q | Contain | S | Return a normal unsupported/translation error instead of a scalar-list quantifier panic. Full scalar quantifier support is a separate M/L repair if promised. |
+| 33 | [DAWGS-004](variance_findings.md#dawgs-004) — Literal null predicates underflow the expression stack | Q | Repair | M | Handle literal-null predicates without unchecked expression-stack underflow and establish correct null predicate results. |
+| 34 | [DAWGS-011](variance_findings.md#dawgs-011) — New panics from valid input | Q | Contain | S | Guard compiler failure boundaries and reject unsupported temporal components explicitly. Complete temporal handling is additional M work; a recovery boundary alone does not fix producer bugs. |
+| 35 | [DAWGS-030](variance_findings.md#dawgs-030) — Aggregate traversal count lowering miscounts | Q | Contain | S | Return a normal translation error for the unsafe aggregate/pattern-predicate shape until the generic 036 path is valid; declining optimization alone still reaches that path. Old source-label/repeated-terminal miscounts stay closed. |
+| 36 | [DAWGS-086](variance_findings.md#dawgs-086) — Empty v2 KindIn drops relationship predicate | B | Repair | M | Settle empty-kind consistency and preserve an explicit restrictive predicate or clear error. Current v2 relationship output drops the condition and node output has a blank WHERE. |
+| 37 | [DAWGS-008](variance_findings.md#dawgs-008) — Double negation collapses to a single NOT | Q | Repair | S | Preserve NOT count/parity instead of collapsing double negation. |
+| 38 | [DAWGS-009](variance_findings.md#dawgs-009) — Whole-number float literals become integers | Q | Repair | S | Preserve integral floating-point literal types in both emitters, the Neo4j rewrite and cache preparation. |
+| 39 | [DAWGS-051](variance_findings.md#dawgs-051) — Large integer properties lose precision in results | R | Repair | M | Decode JSON integers exactly with explicit supported ranges across scalar/map/entity results; coordinate numeric normalization with import 101. |
+| 40 | [DAWGS-057](variance_findings.md#dawgs-057) — String values that look like JSON are decoded a second time | R | Repair | M | Distinguish driver JSON bytes/values from ordinary strings that happen to resemble JSON; retain legitimate structured decoding. |
+| 41 | [DAWGS-016](variance_findings.md#dawgs-016) — Arithmetic between two properties is concatenation or trigram similarity | Q | Repair | L | Choose numeric arithmetic from value/type information rather than applying concatenation or text modulo to two properties. |
+| 42 | [DAWGS-018](variance_findings.md#dawgs-018) — String predicates and ordered comparisons on non-string values use the value's text form | Q | Repair | L | Preserve type boundaries for non-string string predicates and numeric comparison. Current numeric ordering casts text; do not restore the obsolete lexicographic claim. |
+| 43 | [DAWGS-052](variance_findings.md#dawgs-052) — Properties projected through WITH stay raw jsonb | R | Repair | L | Carry property value/type semantics through WITH before toString and later consumers; avoid raw-JSON quoting changes. |
+| 44 | [DAWGS-053](variance_findings.md#dawgs-053) — Integer sum loses precision; empty-input sum is null | R | Repair | M | Preserve supported integer aggregate precision and the empty SUM identity; qualify AVG separately. |
+| 45 | [DAWGS-054](variance_findings.md#dawgs-054) — collect(n.prop) returns strings for numbers and booleans | R | Repair | M | Keep property values typed through collect/UNWIND rather than converting numeric and Boolean elements into strings. |
+| 46 | [DAWGS-056](variance_findings.md#dawgs-056) — Entity membership compares raw ids across entity types | R | Repair | M | Retain entity type during collected-ID membership lowering, including with optimization disabled and overlapping node/edge IDs. |
+| 47 | [DAWGS-015](variance_findings.md#dawgs-015) — `toInteger` rounds instead of truncating | Q | Repair | S | Truncate numeric inputs toward zero before integer conversion and verify typed numeric, boundary and mutation results on both backends. |
+| 48 | [DAWGS-014](variance_findings.md#dawgs-014) — String predicates escape metacharacters only for bare properties | Q | Repair | M | Escape LIKE metacharacters for all supported left-operand shapes and verify read and mutation results on both backends. |
+| 49 | [DAWGS-040](variance_findings.md#dawgs-040) — WITH ordering, skip, and limit are ignored | Q | Repair | M | Retain ordering and pagination at read-only WITH boundaries and verify alias resolution and mutation selection. |
+| 50 | [DAWGS-021](variance_findings.md#dawgs-021) — Leading OPTIONAL MATCH loses the null row | Q | Repair | L | Preserve the implicit input row and matched-side filters through reads and writes. |
+| 51 | [DAWGS-036](variance_findings.md#dawgs-036) — A pattern predicate in a MATCH followed by another MATCH gives invalid SQL and drops the predicate's type filter | Q | Repair | L | Bind pattern predicates to valid frames and retain their relationship-type filters when later MATCH clauses are present. |
+| 52 | [DAWGS-035](variance_findings.md#dawgs-035) — Optimizer pattern reordering ignores pattern-predicate dependencies | Q | Repair | M | Include pattern-predicate dependencies in safe clause reordering; test that unresolved bindings remain pinned. |
+| 53 | [DAWGS-046](variance_findings.md#dawgs-046) — WITH → MATCH → WITH builds a self-referencing CTE | Q | Repair | M | Fix read-only WITH/MATCH/WITH frame construction and out-of-scope/self CTE references. |
+| 54 | [DAWGS-047](variance_findings.md#dawgs-047) — ORDER BY alias expressions and internal-name collisions | Q | Repair | M | Rewrite nested ORDER BY alias expressions safely and separate user identifiers from internal binding names. |
+| 55 | [DAWGS-042](variance_findings.md#dawgs-042) — UNWIND generates invalid SQL for common forms | Q | Repair | M | Translate property-array UNWIND as an actual typed collection; leading literal and empty-alias pipelines are fixed controls. |
+| 56 | [DAWGS-043](variance_findings.md#dawgs-043) — DELETE with several targets, or followed by RETURN, generates invalid SQL | Q | Repair | M | Define valid continuation/projection after final DELETE and preserve needed input rows, including the SET-to-DELETE frame control recorded under completed 039. Duplicate multi-target delete CTE naming stays closed. |
+| 57 | [DAWGS-023](variance_findings.md#dawgs-023) — An unknown label raises an error | Q | Repair | M | Resolve an unregistered match kind as an empty match without registering it or broadening the query. |
+| 58 | [DAWGS-001](variance_findings.md#dawgs-001) — List indexing returns the index | Q | Contain | S | Reject unsupported list indexing explicitly now; implement full null/negative/out-of-range indexing as separately scoped M/L work. |
+| 59 | [DAWGS-002](variance_findings.md#dawgs-002) — List slicing returns the upper bound | Q | Contain | S | Reject unsupported slicing explicitly now; full slicing should share list AST/type work with 001. |
+| 60 | [DAWGS-017](variance_findings.md#dawgs-017) — A standalone CALL parses to `(nil, nil)`; formatting that nil query panics | Q | Contain | S | Return an explicit standalone CALL rejection or a nonnil supported AST; never format a successful nil query. |
+| 61 | [DAWGS-010](variance_findings.md#dawgs-010) — shortestPath used as an expression returns a node | Q | Contain | S | Reject unsupported shortestPath expression position instead of returning the terminal node. Full expression support is L feature work. |
+| 62 | [DAWGS-013](variance_findings.md#dawgs-013) — `CREATE UNIQUE` and `LOAD CSV` are accepted and dropped | Q | Contain | S | Reject silently dropped CREATE UNIQUE/LOAD CSV at the text compiler boundary; formatter rejection alone does not close the raw-text path. |
+| 63 | [DAWGS-103](variance_findings.md#dawgs-103) — In-query CALL omitted from generated SQL | Q | Contain | S | Reject accepted in-query CALL on unrestricted compiler paths; preserve existing DefaultCypherContext restrictions. Full procedure execution is separate XL feature work. |
+| 64 | [DAWGS-059](variance_findings.md#dawgs-059) — Neo4j builder rewrite changes Boolean kind predicates | B | Repair | M | Repair the remaining relationship-kind conjunction becoming R|T. The original OR-based Enterprise caller is fixed and supplies no current residual exposure claim. |
+| 65 | [DAWGS-060](variance_findings.md#dawgs-060) — tx.Query rewrite re-emits a lossy AST | B | Repair | L | Preserve namespaces, conjunctive WHERE labels and integral float types whenever pattern-map rewriting re-emits the AST. Vendor hints/prefixes need a separate support promise. |
+| 66 | [DAWGS-085](variance_findings.md#dawgs-085) — Xor rendering loses builder grouping | B | Repair | S | Parenthesize/group XOR consistently when embedded in AND; cover both backend render/translation paths. |
+| 67 | [DAWGS-055](variance_findings.md#dawgs-055) — Result aliases are emitted unquoted | R | Repair | S | Preserve case and decoded alias spelling when quoting result-column identifiers; unusual aliases now avoid the old syntax failure. |
+| 68 | [DAWGS-061](variance_findings.md#dawgs-061) — Kind and identity-property names lack escaping | B | Repair | M | Escape valid kind and identity-property names in the separate hand-built Neo4j relationship-upsert emitter. |
+
+## Implementation and validation notes
+
+### DAWGS-039 node-delete semantics and graph-scoped cleanup — 2026-10-28
+
+PostgreSQL translation retains the Cypher DETACH flag. Plain node DELETE invokes
+`cypher_assert_node_deletable` against the statement snapshot and raises SQLSTATE
+`23503` if incident relationships remain. The check excludes all relationship
+IDs explicitly deleted by the query part and relationships incident to any
+DETACH target, across all input rows. Optional null targets are omitted. Plain
+DELETE materializes the matched input and checks its IDs rather than filtering
+the stored node scan; forced hash-join controls protect unrelated connected
+nodes from premature error evaluation. DETACH and relationship-only deletion
+retain their ordinary data-modifying CTEs. Final DELETE projections remain the
+separate open DAWGS-043 repair.
+
+The statement-level cleanup trigger matches `(graph_id, endpoint_id)` on both
+endpoint probes. Schema assertion installs it on existing node partitions, and
+`CreatePartitionTable` installs it for new node partitions with a separate
+statement in the same transaction, supporting prepared-statement connections. The downgrade removes
+partition triggers before dropping their function. Go node-deletion/batch APIs
+retain cascading cleanup. Existing databases must run `AssertSchema` before
+using the updated compiler. This repair preserves direct partition routing and
+does not introduce endpoint foreign keys or a new concurrent-write integrity
+contract. Input materialization and exclusion ID arrays scale with matched rows;
+no application-throughput improvement is claimed.
+
+The 19 backend-equivalent `delete_node_shapes` variants assert complete surviving
+node and relationship records for inbound/outbound/self-loop cleanup, several
+and repeated targets, explicit relationships across rows, mixed plain/detached
+targets, isolated/missing/null bindings and WITH continuations. All pass on Neo4j
+and in both PostgreSQL optimizer modes. Twelve committed-fixture shapes, each run
+with normal completion and forced rollback, check plain-DELETE rejection,
+DETACH success, explicit relationship targets, self-loops and missing targets.
+PostgreSQL additionally counts physical edge storage so orphaned rows cannot be
+hidden by endpoint joins.
+
+Driver-scoped schema tests cover fresh and repeat-upgraded partitions, parent
+and partition deletes, inbound/outbound/self-loop edges, overlapping node and
+edge IDs in another graph, savepoint rollback and downgrade cleanup. Endpoint
+scan checks compare counters before/after the guard so partition-index creation
+scans do not contaminate the assertion; sequential scans are disabled to require
+indexed access. Existing multi-node batch cleanup and no-edge-sequential-scan
+controls remain in place. Seven new SQL translation cases and six parser/analyzer mutation cases were
+regenerated through `CYSQL_UPDATE_CASES=true` and copied from their respective
+`updated_cases` directories. The pagination mutation fixture uses explicit ASC
+to match canonical formatter output.
+
+A same-part `MATCH (n) SET n.touched = true DELETE n` control exposes an
+existing invalid input-frame reference (`s1`) in the original translator as well
+as this tree. It remains under DAWGS-043. The committed rollback control performs
+SET in an earlier successful statement of the same transaction, then checks that
+plain DELETE rejection rolls that write back; it does not count the unrelated SQL
+failure as successful connected-node rejection.
+
+The final race-enabled `make test` passes all **43 unit packages**. Counting
+repeated coverage locations once, overall coverage increases from the recorded
+DAWGS-046 complete profile's **33,099 / 49,416 (66.9803%)** to
+**33,133 / 49,446 (67.0085%)**. Translator coverage increases from
+**7,211 / 8,979 (80.3096%)** to **7,234 / 9,005 (80.3331%)**. Six focused
+parser/analyzer, formatter, SQL-fixture, translator and PostgreSQL query unit
+packages also pass after fixture regeneration. Initial fixture setup needed an
+explicit ASC for canonical formatter output; its corrected rerun passes.
+
+Neo4j's complete race-enabled `make test_integration` passes all **43 packages**.
+The initial PostgreSQL `make test_all` passes its unit gate and **40 of 43
+integration packages**. Its failures are retained: combining partition creation
+and trigger installation into one SQL string fails on prepared-statement
+connections in two graphbench and two import tests; the added same-part
+SET/DELETE rollback shape also reaches the pre-existing DAWGS-043 input-frame
+failure in both compiler modes. Partition creation now executes two statements
+in one transaction, and the rollback control uses a prior successful statement.
+Final reruns pass all **26 driver-scoped graphbench integration tests**, the full
+import CLI, PostgreSQL driver and PostgreSQL query packages, all **19 shared
+variants per backend/mode**, all **48 PostgreSQL / 24 Neo4j** committed
+completion/rollback executions, and the forced-plan and storage cleanup controls.
+These runs qualify the final source across the backend matrix; the initial
+aggregate PostgreSQL attempt remains non-green in its capture.
+
+Final BDD gates pass on both backends: **17 enforced / 0 failed** each, retaining
+**18 report-only compatibility failures** each. Backend BDD runs
+are sequential and use the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and external
+linking settings. The unit/integration runs use each supplied connection without
+additional image settings. Repository lint, integration-tagged vet, `gofmt` and
+`git diff --check` pass. `make format` cannot find goimports in this session;
+formatting uses gofmt with canonical import blocks on every touched Go file.
+Captures and the final coverage comparison are under `.coverage/delete-*`.
+Credentials are excluded. No production changes follow the final gates.
+
+The active queue now has **55 unfinished / 49 completed actions**. The next
+remaining item by original global order is **DAWGS-063**, separating graph
+selection from schema reconciliation.
+
+### DAWGS-039 controlled fixture and outcome — 2026-10-22
+
+Use a disposable PostgreSQL graph with node kind `VarianceDeleteNode` and relationship kind `VarianceDeleteEdge`. Create two nodes and one outbound edge, equivalent to:
+
+```cypher
+CREATE (:VarianceDeleteNode {role: 'target'})
+       -[:VarianceDeleteEdge]->(:VarianceDeleteNode {role: 'survivor'})
+```
+
+Reset to this fixture before each check. Execute each query in a separate write transaction, consuming its result and checking the transaction/commit error:
+
+```cypher
+MATCH (n:VarianceDeleteNode {role: 'target'}) DELETE n
+MATCH (n:VarianceDeleteNode {role: 'target'}) DETACH DELETE n
+```
+
+For each query, repeat once with normal commit and once with a sentinel error returned from the transaction delegate after result consumption. On PostgreSQL repeat the whole matrix with `pg.SetOptimizedTranslation(false)` and `true`. Inspect physical storage through `SELECT count(*) FROM node WHERE graph_id = $1` and the equivalent query over `edge`; a Cypher relationship match would hide orphan edges. On Neo4j inspect fixture-label node and relationship counts after the transaction.
+
+| Backend / path | Commit outcome | Persisted nodes / edges | Forced rollback nodes / edges |
+| --- | --- | --- | --- |
+| PostgreSQL plain DELETE, either optimizer mode | Success (incorrect) | 1 / 1; stored edge has a missing endpoint | 2 / 1 |
+| PostgreSQL DETACH DELETE, either optimizer mode | Success with orphan edge (incorrect) | 1 / 1 | 2 / 1 |
+| Neo4j plain DELETE | `Neo.ClientError.Schema.ConstraintValidationFailed` at commit | 2 / 1 | 2 / 1 |
+| Neo4j DETACH DELETE | Success | 1 / 0 | 2 / 1 |
+
+For the separate parent-trigger fixture, create graph A with nodes `a,b` and edge `a→b`. Create graph B with nodes `a,c`, deliberately reusing A's explicit `a.id`, and edge `a→c`. The shared node can be inserted without altering kinds/properties using:
+
+```sql
+INSERT INTO node (id, graph_id, kind_ids, properties)
+SELECT id, $graph_b, kind_ids, properties
+FROM node WHERE graph_id = $graph_a AND id = $shared_id;
+
+DELETE FROM node WHERE graph_id = $graph_a AND id = $shared_id;
+```
+
+After deletion A has **1 node / 0 edges**; B has **2 nodes / 0 edges**. B should retain its edge. Repeating the parent deletion inside an explicit SQL transaction and rolling it back restores **2 nodes / 1 edge in each graph**. This confirms the previously source-only parent-delete caveat under resolved DAWGS-062; it does not reopen graph-partition routing. Repair must preserve plain-DELETE rejection, implement DETACH cleanup on partition paths, and scope parent-trigger edge removal by graph as well as endpoint ID. All probe graphs and their partitions were removed after inspection.
+
+
+### DAWGS-084 implementation and checks — 2026-10-22
+
+The enforced set consists of eight DAWGS scenarios plus upstream CREATE scenarios 1–2. Upstream scenarios 3–10 need label/property side-effect assertions or scalar result formatting; 11–12 additionally cover retained null/precision findings; 13–20 need compile-time error assertions. Their 18 failures remain in Cucumber JSON and HTML. This is a supported-scenario gate, not full TCK conformance.
+
+Regression coverage exercises actual Godog passing, failing and undefined steps in DAWGS and upstream feature locations; report-only failures; HTML visibility/escaping; invalid/empty reports; runner/report disagreement; and ordinary Go-test failure in a subprocess. New untagged scenarios fail the gate when broken. No parser, translator, renderer or query semantics changed.
+
+Validation: `CGO_ENABLED=1 CC=cc go test -race -coverprofile=… ./bdd` and `go vet ./bdd` pass. Sequential runs with both supplied backend connections pass `CGO_ENABLED=0 make test_bdd_integration` with **10 enforced / 0 failed**, **18 report-only / 18 failed**. `CC=cc` selects the image's supplied C compiler for race-enabled tests; the default `gcc` executable is absent. Backend BDD runs must be sequential because they share report paths.
+
+The PostgreSQL-selected `CGO_ENABLED=1 CC=cc make test_all` completes the unit run with one failure in unchanged `cypher/models/pgsql/pytypes_test.go:452`: `TestValueToDataType` expects an explicit UTC time to be `TimestampWithTimeZone`, but `ValueToDataType` compares the location's string against the local location's string, also `UTC` in this environment. The focused test fails independently and passes with `TZ=Etc/UTC` (same UTC offset, distinct local-location name). The remaining unit packages pass. This validation issue is recorded rather than changing temporal behavior outside the current work.
+
+Neo4j-selected `TZ=Etc/UTC CGO_ENABLED=1 CC=cc make test_integration MAIN_PACKAGES='./drivers/neo4j ./integration ./opengraph'` passes, including the shared integration suite. The separate default PostgreSQL `CGO_ENABLED=1 CC=cc make test_integration` passes its shared integration suite, PostgreSQL driver/schema-query checks, graphbench integration checks, and import checks; its unchanged `TestValueToDataType` assertion fails under the original local UTC name. The gate repair has no observed failures in focused or backend checks. Full-suite green remains limited by that independent temporal-type test.
+
+### DAWGS-041 row-stream repair and checks — 2026-10-22
+
+PostgreSQL UPDATE cardinality is one row per physical target, so its RETURNING stream cannot stand in for the Cypher input. The repair makes each UPDATE return only its changed entity and follows it with a separate projection that left joins the original stream by target ID. Every matched input row, including duplicates and rows with null mutation targets, remains available to subsequent targets and RETURN. Entity bindings refresh by ID; captured scalars, paths and lists retain their representations. Assignment expressions stay unbound until the target's input frame is known, fixing the invalid earlier-frame reference in chained per-row assignments.
+
+The shared `integration/testdata/templates/update_row_stream_shapes.json` has **19 variants** covering fan-out, genuine fan-in, repeated node and relationship targets, both target orders, mixed node/relationship writes, null targets first/last, an entirely null target set, duplicate scalar input values, empty input, per-row expressions, alias freshness, property removal and kind changes. Each checks returned rows and complete node/relationship post-state, including direction/kind/isolated-node decoys. `integration/testdata/cases/update_row_stream_inline.json` additionally checks preserved rows through a later WITH/SET statement. These fixtures use identical assertions on both backends; a PostgreSQL-scoped runner executes all template variants in each compiler mode.
+
+Initial Neo4j execution passed all 12 original variants and the continuation case. Initial PostgreSQL execution in each mode exposed nine row-loss cases, an invalid earlier-frame reference, and an adjacent direct-UNWIND projection error. The duplicate-value regression now materializes UNWIND through WITH to isolate row preservation; the general UNWIND finding remains in its own queue. After the repair, all **38 PostgreSQL compiler-mode executions / 19 Neo4j variants**, the continuation case on each backend, and both full shared integration suites pass with the race detector. Broad backend results follow below.
+
+Unit tests retain alias/scalar/path/list coverage and additionally check ID-only representation preservation, combined property/kind additions and removals, and mapping-error propagation. Five parser/analyzer mutation cases and their generated fitness values cover the same query shapes, including staged continuation. Four new single-statement SQL fixture queries cover fan-out, mixed writes and nullable nodes/relationships; their generated expectations and the existing SQL fixtures were refreshed through `CYSQL_UPDATE_CASES=true`. The v2 builder's update SQL expectation was also updated. The SQL golden harness only renders single statements, so staged continuation is covered by the mutation case and live integration fixture instead. `gofmt` and focused `go vet` pass. Translator unit coverage increases from **6270/8465 (74.0697%)** to **6270/8462 (74.0960%)** with race-enabled tests passing.
+
+Scope: this repairs input-row preservation and assignment-frame resolution. Per-identifier assignment coalescing is unchanged; ordered SET/REMOVE behavior remains DAWGS-045. Repeated-target fixtures use consistent assignment values; they do not establish sequential per-row evaluation of non-idempotent expressions or writes through different variables to the same physical entity. The added projection introduces one left join per update target; correctness checks establish cardinality and post-state, not a performance improvement.
+
+Broad validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` with the supplied connection for each selected backend. PostgreSQL-selected `make test_all` passes its **complete unit and integration stages across all repository packages**, then its non-race BDD build hits an image linker failure: `runtime.gcdata: missing Go type information for global symbol .dynsym`, followed by unresolved native symbols. Re-running `make test_bdd_integration` with the additional `GOFLAGS='-ldflags=-linkmode=external'` passes. No test-behavior or linker configuration was changed in the repository.
+
+The complete Neo4j-selected `make test_integration` passes across all repository packages. Separate sequential BDD runs on both backends pass with **10 enforced / 0 failed**, **18 report-only / 18 failed** each; Neo4j used `CGO_ENABLED=0`, PostgreSQL used the external-linking flag above. The historical timezone-sensitive unit test remains unchanged; using the distinct local-location name allows the broad checks to proceed. All required test stages therefore pass with these recorded environment workarounds, while the unmodified CGO-enabled aggregate command still requires the linker flag for its final stage.
+
+### DAWGS-064 batch identity repair and checks — 2026-10-22
+
+Regressions first reproduced distinct relationship identities collapsing to `R1234`, property maps `{"a":1,"b":2}` and `{"a1b":2}` sharing a digest, Neo4j add-kind/remove-kind grouping, and identity-shape role collisions. `NodeUpdate.Key` also sorted its caller-owned identity-property slice. The repair uses framed identities with explicit entity/kind, property name/type/value and endpoint boundaries; property hashes frame each key/type/value; and Neo4j query grouping uses canonical structured strings instead of digest-only equality. Identity field and kind-set permutations retain equality. Values unsupported by JSON encoding and missing/null identity properties return errors. Keys and digests are opaque and are not a persistent serialization contract.
+
+Coverage includes graph identity/hash tests, PostgreSQL upsert coalescing/future tests, Neo4j generated-template/parameter tests, the existing PostgreSQL relationship-create regression, and shared live batch fixtures. Live fixtures check add/remove-kind separation and distinct relationship endpoint tuples plus duplicate-property merging on both backends. No parser or translator behavior changes; generated Cypher templates retain their text. Focused race tests and vet pass. Before/after unit coverage for the initial repair increases from **25.1% to 27.5%** in `graph`, **27.5% to 29.8%** in `drivers/neo4j`, and **5.2% to 16.9%** in `drivers/pg/query`; final combined validation is recorded below. Structured keys trade some allocation for explicit equality; no throughput improvement is claimed.
+
+### DAWGS-070 Neo4j batch property-deletion repair and checks — 2026-10-22
+
+Node-update rows now include null values for tracked deleted keys in their existing `properties` parameter. Neo4j's existing `SET n += p.properties` applies those deletions. The property map is copied only when deletions exist, preserving the caller's map. Nodes with different deletion sets can share the same generated query without sharing deletion intent; property names remain parameter data.
+
+The parameter regression fails before repair and passes afterward. Shared integration fixtures cover grouped and individual submissions, deleting an existing or absent property, several deletions, keys containing punctuation/backticks, simultaneous writes, untouched sibling rows, and delete-then-set resetting deletion tracking. They pass on both backends. The previous Neo4j-specific 1,000-node test now requires the deleted property to be absent and passes. Generated-template and parameter assertions cover the unchanged Cypher template. This change covers batch update-by-ID, not identity-based property-deletion behavior.
+
+### DAWGS-087 reproduction, repair and flush boundary — 2026-10-22
+
+Create a node with kinds `WriteUpsertNode`, `WriteUpsertNodeA`, `WriteUpsertNodeB`, identity property `objectid`, and an unrelated preserved property. Submit `Batch.UpdateNodeBy` using that identity, adding `WriteUpsertNodeC`, setting another property, and tracking deletion of `WriteUpsertNodeA`. In the same batch, update a separate survivor without a removal. Before repair PostgreSQL commits successfully, preserves the node ID and properties, adds C, but incorrectly retains A. Neo4j removes A with the same fixture. This converts the source-supported finding into a live stored-state reproduction.
+
+The repair pairs pending kind removals with the IDs returned by the upsert and applies them through the existing update-by-ID implementation. Its second write contains no property changes or kind additions. A flush containing removals wraps both writes in an explicit transaction; flushes without removals keep their previous path. Shared tests pass for normal commits, survivor isolation and add/remove sequences across flushes. Unit tests verify returned-ID association, property isolation and write-error propagation. A PostgreSQL-scoped trigger rejects the removal update after the upsert has changed properties/kinds: the operation returns that failure and leaves the original node unchanged, proving flush rollback. The temporary trigger/function are removed by test cleanup.
+
+**Separate runtime evidence, repair open:** A delegate-error fixture with `WithBatchSize(1)` flushes two PostgreSQL identity upserts and then returns a sentinel error. The error is returned but the flushed property/kind changes remain committed. Neo4j rolls back this small fixture. PostgreSQL constructs its batch wrapper without an explicit transaction and normally executes flushes directly through the pooled connection. Therefore whole-batch rollback was never guaranteed by the existing implementation, despite the former internal comment. README and that comment now describe the observed boundary. The 087 repair makes its two-write flush atomic; it does not implement whole-batch atomicity, recovery or caller-order guarantees. Keep that broader contract/design follow-up with the driver lifecycle/recovery work (106/109/112); the original triage counts are unchanged.
+
+### Combined batch validation — 2026-10-22
+
+Commands use each supplied backend connection separately with `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`, retaining the already-recorded image/timezone workarounds. The PostgreSQL-selected `make test_all` passes its complete race-enabled unit stage (**66.1% overall statement coverage**). Every integration package except `graph` passes in that invocation, including graphbench and the full shared suite. Neo4j-selected `make test_integration` passes across all repository packages, including the full shared suite. Its separate `make test_bdd_integration` passes with **10 enforced / 0 failed**, **18 report-only / 18 failed**.
+
+**Aggregate retry:** The final missing-property error-compatibility edit was made while PostgreSQL's aggregate build was running. That build paired the newly strengthened `errors.Is` assertions with the already-compiled older graph package: the two graph integration-tagged tests observed the previous plain `missing identity property` error and failed. The unrestricted aggregate invocation consequently exits nonzero at its integration stage. After the source was fixed in place, a PostgreSQL-selected `make test_all MAIN_PACKAGES='./graph' COVERPKG=github.com/specterops/dawgs/graph` with dedicated coverage output paths passes the graph unit and integration stages and the final BDD stage. The BDD outcome is **10 enforced / 0 failed**, **18 report-only / 18 failed**. Together these runs verify all required unit/integration/BDD stages; the unrestricted aggregate command itself was not rerun. Backend BDD report writes are sequential. No code edits follow the successful final retry.
+
+Final focused race-enabled unit coverage is **333/1213 (27.4526%)** in `graph`, **363/1200 (30.2500%)** in `drivers/neo4j`, **1802/3187 (56.5422%)** in `drivers/pg`, and **49/290 (16.8966%)** in `drivers/pg/query`. All four affected packages increase from their pre-change coverage (PostgreSQL was **55.2%** before 087). Focused vet and `git diff --check` pass. Final compatibility review preserved `errors.Is(err, graph.ErrPropertyNotFound)` for missing/null identity properties; the focused graph/query race tests and graph vet pass after that narrow error-path adjustment. All touched Go files were formatted with `gofmt`.
+
+### DAWGS-045 ordered intent repair and checks — 2026-10-22
+
+The PostgreSQL mutation model now retains each property/kind set or removal in source order instead of collecting four independent assignment/removal buckets. The renderer folds each target's property and kind expressions from left to right, with explicit parentheses at operator changes. Adjacent property sets still share one `jsonb_build_object`; adjacent removals and kind operations still share arrays. Final kind additions are sorted and deduplicated as before. Each identifier still produces one UPDATE plus its existing row-preserving projection, avoiding PostgreSQL's unsupported repeated updates of the same row in one statement.
+
+The shared `integration/testdata/templates/update_clause_order_shapes.json` has **20 variants**. They cover node and relationship properties in both orders, alternating and repeated changes, initially missing properties, label changes and overlapping label lists, combined property/kind changes, mixed node/relationship targets, fan-out, nullable relationships, empty input, and continuation through WITH. Every variant checks complete stored node and relationship records, including direction, kind, property, missing-property, endpoint and isolated-node decoys. The PostgreSQL-scoped runner executes the same assertions with each compiler mode.
+
+Before repair, **12 of 20 variants fail in each PostgreSQL compiler mode**; Neo4j passes all 20. After repair, all **40 PostgreSQL compiler-mode executions / 20 Neo4j variants** pass. Eight SQL-expression unit cases, each in both optimizer modes, pin operation order, parentheses and adjacent-operation grouping while checking one physical update. Seven parser/analyzer mutation cases and six SQL fixture queries cover alternating/mixed changes; generated fitness values and SQL expectations were refreshed using `CYSQL_UPDATE_CASES=true` and copied from the existing `updated_cases` output directories. The generated directories and temporary probes were removed. Focused race-enabled tests and coverage checks pass. Translator coverage increases from **6270/8462 (74.0960%)** to **6272/8460 (74.1371%)**. Touched Go files were formatted with `gofmt`; focused vet and `git diff --check` pass.
+
+Broad validation uses each supplied connection separately with `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`, retaining the previously recorded image/timezone workarounds. The unrestricted PostgreSQL-selected **`make test_all` passes**, including the complete race-enabled unit and integration stages and the final BDD stage; overall unit statement coverage is **66.1%**. The complete Neo4j-selected **`make test_integration`** and separate **`make test_bdd_integration`** pass. Both shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; the report-only failures remain explicit compatibility results. BDD report writes were sequential. No Go edits followed these successful broad runs.
+
+**Scope and open expression-sequencing follow-up:** This repairs ordered final mutation intent on each identifier. It does not establish arbitrary clause-by-clause evaluation of assignment expressions, caller-row sequencing of non-idempotent writes, or ordered writes through different identifiers bound to the same physical entity. A separate rollback-fixture probe starts with `n.x = 0` and runs:
+
+```cypher
+MATCH (n:OrderSource {objectid: 'source'})
+SET n.x = 1 REMOVE n.x SET n.y = coalesce(n.x, -1)
+RETURN n.y
+```
+
+PostgreSQL returns **0**, reading the original input frame; Neo4j returns **-1**, observing the earlier removal. Inserting `WITH n` between `REMOVE n.x` and the last SET returns **-1 on both backends**. README documents this boundary. Full sequential expression evaluation remains compiler work and must retain separate regressions; the constant-value ordered-intent fixtures do not close it. Query rendering remains a single statement unless an existing WITH write boundary requires staging. Alternating operations add expression nodes; adjacent operations keep their previous compact SQL shape. No performance improvement is claimed.
+
+### DAWGS-058 typed builder cache identity and checks — 2026-10-22
+
+Builder cache entries now include a SHA-256 digest of the actual typed Cypher AST in addition to the existing formatted-source digest, graph, parameter-type, policy and schema-generation keys. A separate builder identity domain prevents reuse by text compilation. The fingerprint frames types, fields, container boundaries, scalar/literal values and operation order; map keys are sorted without changing the AST. Parameter positions are retained, but their original names and runtime values are excluded because compilation rewrites names deterministically and binds current values. Only the digest survives preparation; the cache retains neither fingerprint input nor caller values.
+
+Fingerprinting uses a fixed 1 KiB streaming buffer with a 64 KiB input budget and depth limit of 128. Unsupported shapes, including external structs behind custom kind implementations, bypass lookup and retention while compiling normally. The cache-key format advances to 4. This fixes cache identity, not the independent formatter/empty-kind support findings, literal type lowering, or cold compiler semantics.
+
+Six in-memory compiler variants fail against the unchanged baseline: empty KindIn versus empty And in both population orders for reads and mutations, plus exclusive-kind builder versus its formatted text in both orders. The repaired path matches cold SQL/bindings and preserves each entry on later hits. Additional unit checks cover grouping, exclusive flags, typed and signed-zero literals, parameter exclusion, map order/framing, container distinctions, unsupported values, depth/size limits, and successful uncached compilation of an external custom-kind shape. Existing multi-parameter rebinding, disabled-cache and optimizer-toggle regressions remain passing.
+
+Eight PostgreSQL-scoped live variants also fail against the baseline and pass after repair: empty predicates and exclusive/overlapping kind predicates, read/mutation forms, and both population orders. Each repeats both requests with new mutation parameter values, checks exact returned IDs and every stored property map after each step, and rolls back its fixture. The shared `cache_kind_identity_shapes.json` fixture supplies four backend-equivalent read/mutation controls for all-kinds versus any-kind matching; all four pass on both PostgreSQL and Neo4j. The PostgreSQL builder-specific checks reuse that fixture and do not add backend-specific assertions or skips to the shared corpus. No parser, lowering or SQL-rendering behavior changes, so existing generated parser/SQL fixtures require no regeneration.
+
+Focused race-enabled PostgreSQL package coverage increases from **1802/3187 (56.5422%)** to **1876/3265 (57.4579%)**. Focused package tests, driver/integration vet and `git diff --check` pass. Go files are formatted with `gofmt`. A five-sample small node-lookup preparation benchmark has median **9.523 µs / 6752 B / 191 allocations** before repair and **16.826 µs / 8064 B / 194 allocations** after repair. This measures preparation alone, including fingerprinting on warm requests; it is a local cost measurement, not a whole-query performance claim. Same-shape requests still avoid translation on a cache hit.
+
+Broad validation uses each supplied backend connection separately and the previously recorded `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` image/timezone settings. The unrestricted PostgreSQL-selected **`make test_all` passes**, including its complete race-enabled unit stage (**66.1% overall statement coverage**), complete integration stage and final BDD stage. The complete Neo4j-selected **`make test_integration`** and separate **`make test_bdd_integration`** also pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; report-only failures remain explicit compatibility results. Backend BDD report writes were sequential. Final vet, formatting and `git diff --check` checks pass. No Go edits followed these successful broad runs.
+
+### DAWGS-073 complete requested-component reach — 2026-10-23
+
+The diamond/tail regression fails against the unchanged implementation in both outbound traversal and inbound traversal over the transposed graph: an intermediate cached branch omits the shared tail. The repair retains one local visited/reach bitmap and an iterative component stack, reuses only completed directional cache entries, and publishes only the requested component's complete result. Intermediate cursors and their partial closures are removed. Cache eviction cannot change traversal completeness, and concurrent readers never mutate published reach bitmaps. The existing minimum-one-entry-per-direction and uncached `DirectionBoth` behavior remain; README now documents these contracts and the absence of ancestor-driven prewarming.
+
+Focused race-enabled tests pass for the original reproduction, an SCC diamond, shortcut edges, isolated/unknown/empty graphs, self-loops, high member IDs, eight query orders, capacities 0/1/2/64, 24 seeded DAG/cyclic graphs, concurrent shared-cache reads, complete-entry reuse, forced eviction, returned-bitmap isolation, and OR/XOR helpers. Both the single bitmap and slice-of-component-members APIs are checked against an independent traversal of the original graph. Algorithm-package statement coverage increases from **73.4% to 82.1%**, with **100% of `componentReachDFS`** covered. No parser, translator, renderer or integration query semantics change, so mutation/template fixtures are unchanged.
+
+Local before/after benchmarks use source baseline `17daa1be6fd0`, 512 singleton components, 64 cache entries per direction, and `go test ./algo -run '^$' -bench '^BenchmarkReachabilityCache$' -benchmem -benchtime=200ms -count=5` with the existing image settings, excluding component-graph construction and member expansion. Cold-root measurements include new cache allocation; all-roots measurements sweep member IDs in ascending order on the same bounded cache. Median results:
+
+| Shape / workload | Before time | After time | Before / after bytes | Before / after allocations |
+| --- | ---: | ---: | ---: | ---: |
+| Chain / cold root | 636.256 µs | 28.054 µs | 824,941 / 7,696 | 9,502 / 41 |
+| Chain / warm root | 27.28 ns | 25.36 ns | 0 / 0 | 0 / 0 |
+| Chain / all 512 roots | 2.734 ms | 6.489 ms | 2,913,094 / 1,007,177 | 40,942 / 10,919 |
+| Converging shortcuts / cold root | 635.025 µs | 33.581 µs | 649,541 / 13,456 | 9,672 / 49 |
+| Converging shortcuts / warm root | 26.49 ns | 25.64 ns | 0 / 0 | 0 / 0 |
+| Converging shortcuts / all 512 roots | 2.714 ms | 9.434 ms | 2,366,854 / 2,260,104 | 41,694 / 13,229 |
+
+This is a correctness/memory tradeoff, not a general speedup: cold traversal allocations fall sharply and repeated-root lookup is comparable, while sweeping new roots is **2.37× / 3.48× slower** without intermediate prewarming. The baseline's intermediate entries are not generally sound, so its all-roots timings are not an equivalent-correctness performance target. The new working storage is one component bitmap plus at most one pending stack entry per discovered component; retained cache capacity bounds entry count, not total bitmap bytes. Graph construction, returned member bitmaps, concurrent query count, and bitmap-union work have their own costs. A future selective prewarming optimization must preserve complete entries and explicit memory bounds. No whole-application impact or downstream consumer replay is claimed. Cancellation/construction completeness remains the separate O22 contract question.
+
+Broad validation passes with each supplied backend connection and the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` image/timezone settings. The unrestricted PostgreSQL-selected **`make test_all` passes**, including its complete race-enabled unit stage (**66.2% overall statement coverage**, compared with the previous ledger gate's 66.1%), complete integration stage and BDD stage. The complete Neo4j-selected **`make test_integration`** and subsequent **`make test_bdd_integration`** also pass. Both shared integration suites pass on both backends. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; unsupported compatibility failures remain visible. BDD report writes were sequential. Focused race tests, algorithm vet, Go formatting and `git diff --check` pass. No Go edits followed the successful broad runs. DAWGS-080 is the next implementation item; the earlier reproduction-only rows 039/063 and expression-sequencing follow-up under 045 remain open as recorded.
+
+### DAWGS-080 recursive full scrub — 2026-10-23
+
+Before repair, new regressions reproduce unchanged nested email, SSN and password values under `extra` and `created_at`. Under `email_map` and `path`, the old pseudonymization recursion transforms strings but bypasses password/free-text redaction, timestamp shifting and nested preserve overrides. The repair classifies each `map[string]any` field independently, including maps reached through nested `[]any` arrays, pseudonymization and timestamp-array handling. Default/unclassified containers use a distinct `scrub_nested` action. Explicit `preserve_keys` entries retain entire values/subtrees; graph-reference string rules keep their existing priority over preserve overrides. Parent redaction still removes its contents even when a child key would otherwise be preserved.
+
+Focused race-enabled tests pass for four parent classifications, three array depths, repeated graph references, email/SSN pseudonyms, password/free-text redaction, timestamp shifting, nested and ancestor preserve overrides, nulls/typed nil containers, empty containers, mixed arrays, unchanged safe scalar types, and source-container isolation. A complete dump through database doubles checks exact node/relationship topology and emitted JSONL/Parquet properties in full/none modes, checks checksums, and verifies action aggregation at file, graph and global levels. Counts retain one action per top-level property plan, without counting descendants again. `scrub_nested` identifies recursively visited containers; classified arrays retain their outer action while map fields receive individual classification.
+
+The policy version is **`retriever-scrub-v3`** in manifests and checkpoint identity. A regression verifies that a v2 resume checkpoint is rejected before database access, preventing mixed-policy fragments. Extended same-policy resume coverage first reproduced loss of `scrub_nested` counts from already committed fragments; checkpoint count restoration now handles the new action, and the regression passes. README and CLI documentation describe recursion, preserve/redaction precedence, top-level counts and the new-dump requirement for old scrub checkpoints. No parser, translator, renderer or integration query semantics change, so mutation/template fixtures are unchanged.
+
+Retriever-package statement coverage increases from **2152/2886 (74.5669%)** to **2184/2907 (75.1290%)**, with **100% of `planProperty`** covered. Focused race tests, retriever/CLI vet, Go formatting and `git diff --check` pass. The unrestricted PostgreSQL-selected **`make test_all` passes**, including its complete race-enabled unit stage (**66.2% overall statement coverage**), complete integration stage and BDD stage. The complete Neo4j-selected **`make test_integration`** and subsequent **`make test_bdd_integration`** also pass. Both shared integration suites pass on each backend. Both BDD gates report **10 enforced / 0 failed**, **18 report-only / 18 failed**; unsupported compatibility failures remain visible. These runs use each supplied backend connection separately and the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` image/timezone settings. Backend BDD report writes were sequential. No Go edits followed the successful broad runs. DAWGS-101 is the next implementation item; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open as recorded.
+
+### DAWGS-101 exact numeric import — 2026-10-23
+
+Both JSON decoders now use `UseNumber`, followed by a shared recursive normalization of decoded property maps and arrays. Integer tokens bind as `int64`, preserving the entire signed 64-bit range without an intermediate `float64`. Decimal and exponent tokens bind as `float64`, with ordinary binary floating-point rounding. Integer tokens outside the signed 64-bit range and floating-point overflow return contextual errors. Numeric-looking strings, booleans, nulls and empty containers retain their values. Retriever applies normalization during both semantic preflight and load decoding; an unsupported number in either phase is rejected before schema assertion or any database access. OpenGraph validates and normalizes the entire document before writing nodes. `ParseDocument` callers now receive `int64` for integer tokens; README and CLI/package documentation describe the conversion rules and backend property-shape limits.
+
+New unit regressions reproduce rounded positive/negative integers and signed-limit corruption against the original decoders. They cover node and edge properties, nested maps/arrays, mixed scalar types, all three compression codecs, verified/unverified fragment reads, rejection context and numeric preflight before database access. The common normalizer has **100% statement coverage**. OpenGraph unit coverage increases from **35/116 (30.1724%)** to **47/124 (37.9032%)**. No Cypher parser, translator, renderer or integration query semantics change, so shared mutation/template corpora are unchanged.
+
+The live `TestImportExactNumbers` regression runs document, uncompressed JSONL, gzip and zstd imports on each supplied backend. Each format commits two nodes and a directed relationship, then verifies their full property maps, exact large integer arrays, signed limits, fractions, exponent values and string identity in a new transaction. PostgreSQL reads physical `properties::text`; Neo4j reads native Bolt property values. Raw JSON assertions avoid the independent PostgreSQL/result-assertion `float64` conversion paths. All four formats fail on **both backends** with the original decoder implementations supplied through a Go test overlay; all pass with the repair. Nested-map persistence is not claimed for Neo4j, which does not support that property shape. Broader validation is tracked in the combined checks below.
+
+### DAWGS-102 root-aware fragment reads — 2026-10-23
+
+All collection fragment reads for manifest checksums, checkpoint checksums, verified semantic preflight, ordinary node/edge loading and checkpoint fragment restoration now open files through one policy. Paths must be clean relative slash-separated file names; empty, absolute, dot/parent components, duplicate/trailing separators, backslashes and Windows drive prefixes are rejected. `os.OpenRoot` and `Root.Open` resolve the path beneath the opened collection directory, including symlinks, without a separate containment-check/open race. Relative symlinks that stay beneath the root are supported for directory loads. Absolute links and escaping file/directory links fail. The opened file must be regular. Checkpoint validation retains its existing restriction against final-file symlinks. Existing encrypted TAR symlink restrictions remain in place; this repair concerns directory fragment access.
+
+Controlled fixtures have correct JSONL, record counts, byte counts and checksums. Both node and edge parent-relative paths, nested traversal, escaping file/directory links and link chains are accepted by the original checksum implementation; the new regressions reject them across checksum, preflight and ordinary load paths. Nil-database Load checks prove rejection precedes database access. Positive controls cover nested paths, contained file/directory links and a symlinked collection root. A deterministic replacement test opens a safe link, retargets it outside the root, verifies that the existing handle still reads the safe file, and verifies that reopening rejects the escape. Additional cases cover invalid path forms, missing roots/files and directories. This establishes local filesystem containment for fragment reads, not snapshot consistency between preflight and load or a remote-exfiltration replay.
+
+Focused race-enabled retriever tests pass, including existing checksum-priority, archive, dump/checkpoint and resume checks. Combined retriever unit coverage increases from **2184/2907 (75.1290%)** to **2218/2937 (75.5192%)**. README and CLI/package documentation describe path syntax and link handling. No compiler or query semantics change, so mutation/template corpora are unchanged.
+
+### Combined DAWGS-101/102 validation — 2026-10-23
+
+The unrestricted PostgreSQL-selected **`make test_all` passes**, including the complete race-enabled unit stage (**66.3% overall statement coverage**, compared with the previous ledger gate's 66.2%), complete integration stage and BDD stage. The complete Neo4j-selected `make test_integration` executes every package: its shared integration corpus and all other packages pass, while the new CLI numeric-import test initially fails because an earlier graphbench package leaves **256 nodes / 252 relationships** in Neo4j's single graph. The regression had cleared only its own labels, so Retriever correctly rejects the non-empty target. Its setup now resets the selected test graph before each format, matching the existing Retriever round-trip test. This is a test-isolation correction; production code is unchanged.
+
+After that correction, **`make test_integration MAIN_PACKAGES='./cmd/retriever'` passes on both supplied backends**, including the complete CLI unit/integration package and existing dump/load round-trip regression. These retries complete the affected coverage alongside the other passing packages from the broad runs. The unrestricted Neo4j aggregate invocation itself remains nonzero and was not rerun. A strengthened filesystem preflight assertion also passes its final focused race run. Both backend BDD checks pass with **10 enforced / 0 failed**, **18 report-only / 18 failed**; unsupported compatibility failures remain visible. BDD report writes were sequential.
+
+All runs use the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` image/timezone settings and each supplied connection separately. Focused race tests, default and integration-tagged vet, `gofmt`, `goimports` checks and `git diff --check` pass. No Go edits followed the final focused retries. Credentials are excluded from this ledger. DAWGS-007 is the next audit and migration decision item; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open as recorded.
+
+### DAWGS-006 Boolean value expressions — 2026-10-23
+
+Initial shared regressions reproduce lost result rows and incorrect node/relationship assignment behavior in both PostgreSQL compiler modes; Neo4j passes the initial fixture set. A final Go test overlay supplies the original expression/translator sources and executes the assignment without RETURN: both modes incorrectly store `mid: true` for the `k: 2` target of `n.k > 0 AND n.k < 2`. The repaired sources pass the same complete-record assertion. This checks actual post-state within the mutation transaction, independently of returned-row failures; fixture transactions are rolled back. The translator formerly extracted conjunction operands during binary-expression completion, before their enclosing clause or function was known. Binary completion now retains the full expression. Explicit WHERE extraction splits only outer conjunctions, preserving grouped predicates, disjunctions and independently placeable constraints. Bare property operands of AND/OR receive Boolean casts. Empty Boolean builder groups retain their omission behavior, including nested empty `query.And()` placeholders.
+
+The shared `boolean_value_shapes` corpus has **19 variants**, covering direct UNWIND projection, three terms, AND/OR precedence, sibling projections, parentheses, function arguments, parameters, WITH values followed by WHERE, WHERE function arguments, missing-property/null behavior, node and relationship assignments, bare Boolean properties, assignment without RETURN, mixed writes and staged continuation. Mutation post-assertions check complete node and relationship records, including direction, kind, property and missing-property decoys. Every variant passes on Neo4j and with PostgreSQL optimization enabled and disabled. A standalone negated RETURN expression exposed the existing unsupported-unary-projection error; the parenthesized-conjunction fixture isolates this finding instead. Unary projection support remains outside this repair.
+
+Four parser/analyzer mutation cases have regenerated fitness values. Ten new single-statement SQL golden cases were generated through `CYSQL_UPDATE_CASES=true`; all existing SQL golden files regenerate without changes. Unit regressions verify value-expression isolation, predicate grouping, explicit expression-tree extraction and empty builder predicates. The latter preserves a legacy four-property builder query that initially exposed an operand-stack underflow during implementation. Public expression-tree method signatures remain available; operator prefix visits no longer extract constraints. README and the integration-corpus documentation describe the repaired behavior. Translator unit coverage increases from **6272/8460 (74.1371%)** to **6289/8470 (74.2503%)**. Focused race tests, default/integration-tagged vet, Go formatting and `git diff --check` pass. The unrestricted PostgreSQL-selected **`make test_all` passes**, including its complete race-enabled unit stage (**66.3% overall statement coverage**, unchanged at the reported precision), complete integration stage and BDD stage. The complete Neo4j-selected **`make test_integration`** and subsequent **`make test_bdd_integration`** also pass. Both shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; unsupported compatibility failures remain visible. Runs use each supplied connection separately and the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` image/timezone settings. Backend BDD report writes were sequential. No Go edits followed the successful broad runs.
+
+DAWGS-028 is the next implementation item. DAWGS-007 remains pending actual downstream audit evidence and a migration decision, preserving its current default. The earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open as recorded. Complete Boolean expression trees are now retained until predicate extraction; no performance improvement is claimed.
+
+### DAWGS-028 expansion endpoint predicates — 2026-10-23
+
+Live regressions reproduce predicate loss in both PostgreSQL compiler modes. An original-source overlay against the final corpus fails **21 of 25 variants in each mode**; the absent-value disjunction returns six rows instead of zero, and mutation queries without RETURN update targets excluded by the endpoint predicate. Neo4j passes the same shared assertions. A pending predicate over both expansion endpoints is consumed as the following fixed step's left-node constraint. Preparation formerly assigned that constraint only for the first traversal step, and the continuation renderer also omitted it. Every fixed step now rewrites and retains the constraint, and continuation SQL evaluates it in WHERE against its materialized input frame. Existing first-step visibility handling and join construction are preserved.
+
+The shared `expansion_endpoint_predicate_shapes` corpus has **25 variants**: disjunction, conjunction, negation, entity/property equality, missing properties, parameters, zero hops, fixed prefixes, multiple fixed suffix steps, physical inbound expansion, bound suffix endpoints, carried roots/scalars, duplicate input rows and exact path bags. Four mutation variants check complete node and relationship records, including kind, direction, root identity, property and missing-property decoys. All variants pass on Neo4j and with PostgreSQL optimization enabled and disabled. Initial fixture expectations omitted paths starting at an unlabeled intermediate node; those counts were corrected before final validation. A numeric scalar carried through WITH exposes a separate text/integer operator mismatch, so the carried-scalar case uses string values. An unrestricted undirected suffix exposes the separately queued near-endpoint reuse behavior; its terminal-kind restriction isolates predicate retention. Neither adjacent behavior is claimed repaired here.
+
+Six renderer shapes run in both modes and assert that each disjunction branch survives exactly once outside recursion. Nine new SQL golden cases and four parser/analyzer mutation cases were regenerated through `CYSQL_UPDATE_CASES=true`; all pre-existing SQL golden files regenerate unchanged. README and the integration/translation documentation describe the behavior. Translator statement coverage increases from **6289/8470 (74.2503%)** to **6292/8471 (74.2769%)**. Focused race-enabled Cypher and live backend regressions, integration-tagged vet, formatting and `git diff --check` pass, as does the repository lint command, which excludes generated-parser unreachable-code diagnostics.
+
+The unrestricted PostgreSQL-selected **`make test_all` passes**, including its complete race-enabled unit stage (**66.3% overall statement coverage**, unchanged at the reported precision), complete integration stage and BDD stage. The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** also pass. Both shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; unsupported compatibility failures remain visible. Runs use each supplied connection separately and the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` image/timezone settings. Backend BDD report writes were sequential. No Go edits followed the successful broad runs. Credentials are excluded from this ledger.
+
+DAWGS-024 is the next implementation item. DAWGS-007 remains pending downstream audit evidence and a migration decision, preserving its current default. Earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. No performance improvement is claimed.
+
+### DAWGS-024 OPTIONAL MATCH input row identity — 2026-10-23
+
+The live fixture reproduces the repeated-input defect: three equal origin rows produce **nine results** on PostgreSQL and **three on Neo4j**. A final original-source overlay fails **25 of 31 shared variants in each PostgreSQL compiler mode**. CREATE without RETURN separately leaves **nine audit nodes instead of three**, so the reproduction establishes incorrect mutation cardinality without relying on returned-row assertions. All fixtures are isolated in rollback transactions.
+
+Each OPTIONAL MATCH with an incoming frame now creates a materialized input CTE carrying a generated `row_number() over ()` identity. Pending UNWIND clauses are consumed in that CTE, including a leading synthetic UNWIND frame, so numbering takes place after their fan-out. Derived matches retain the identity through traversal frames and correlate back by identity equality. The merge retains origin values for unmatched rows and removes the internal identity from its exports and visibility. A later optional clause numbers its own input after the previous clause's fan-out; DISTINCT, aggregation and wildcard projections therefore see only named Cypher values. The additional materialization and numbering have execution/storage cost proportional to the incoming stream; no runtime or memory improvement is claimed.
+
+All **31 variants** in the shared `optional_row_identity_shapes` corpus pass on Neo4j and with PostgreSQL optimization enabled and disabled, covering equal/mixed duplicate inputs, fan-out, unmatched and mixed source rows, pending/leading UNWIND, empty input, WITH aliases, DISTINCT/aggregation, nullable scalars and prior optional bindings, chained optionals, multiple pattern parts, uncorrelated node matches, WHERE conditions, bound endpoints, variable-length/zero-hop and incoming paths, and wildcard projection. Mutation cases cover exact node/relationship post-state and unchanged decoys, null targets, staged WITH pagination/continuation, and CREATE cardinality with and without RETURN. Read-only WITH pagination remains the separate **DAWGS-040** finding; the pagination regression deliberately uses the supported staged-write boundary. Leading OPTIONAL MATCH without an input frame retains its existing translation path.
+
+Eight new SQL golden cases and four parser/analyzer mutation cases were regenerated through `CYSQL_UPDATE_CASES=true`. Nine existing optional-query expectations changed across `nodes.sql`, `multipart.sql` and `update.sql`; other existing SQL fixtures regenerate unchanged. Unit checks in both optimizer modes verify identity lifetime, materialization, wildcard visibility, chained clauses, pending/leading UNWIND and unchanged plain MATCH lowering. Translator statement coverage increases from **6292/8471 (74.2769%)** to **6327/8510 (74.3478%)**. Focused race-enabled translator, analyzer, frontend, SQL-fixture and v2-builder tests pass. README and corpus/translation documentation describe the behavior.
+
+The initial broad commands exposed noncanonical comma spacing in the four new parser fixture strings. The strings now use the emitter's canonical `[1, 1, 1]` spelling; focused race-enabled Cypher formatter, analyzer and frontend retries pass. Query semantics and SQL expectations are unchanged. Both unrestricted broad commands were then rerun successfully.
+
+The PostgreSQL-selected **`make test_all` passes**, including complete race-enabled unit and integration stages and the final BDD stage; overall unit statement coverage remains **66.3%** at reported precision. The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Runs use each supplied connection separately and the existing `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` image/timezone settings. BDD report writes were sequential. Repository lint, integration-tagged vet, Go formatting, `goimports` checks and `git diff --check` pass. No Go edits followed the successful broad runs.
+
+DAWGS-026 is the next implementation item. DAWGS-007 remains pending downstream audit evidence and a migration decision, preserving its current default. Earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-026 reused relationship identity — 2026-10-24
+
+The live fixture reproduces the unconstrained edge scan: two input relationships and ten stored edges produce **20 rows on PostgreSQL instead of two on Neo4j**. CREATE without RETURN independently stores **20 audit nodes instead of two**. A final original-source overlay fails **26 of 35 shared variants in each PostgreSQL compiler mode**. The corpus uses rollback transactions throughout.
+
+Each reused fixed relationship occurrence now receives a fresh SQL edge binding and an identity constraint to the original bound relationship. The Cypher alias remains attached to the original value. Endpoint joins, inline properties and kind constraints refer to the fresh scan, while frame rewriting qualifies the original identity through its input frame. The fresh alias prevents an unrelated edge scan and invalid cross-join references when only the relationship is carried through WITH. Bound paths also record the reused edge dependency, which the previous early return omitted. Pattern-predicate property constraints stay local to their occurrence; the negated property probe no longer filters the outer match incorrectly. The repair retains existing scans and projections, with an added identity equality; no performance improvement is claimed.
+
+All **35 variants** in `reused_relationship_shapes` pass on Neo4j and with PostgreSQL optimization enabled and disabled. They cover bound and unbound endpoints, inbound/outbound and undirected roots, aliases, repeated clauses, fixed continuation, self-loops, returned paths, reuse after expansion, duplicate input rows, optional/null relationships, wildcard continuation, local kind/property/parameter filters and positive/negated pattern predicates. An unbound-relationship control retains its ordinary fan-out. Mutations assert exact node/relationship records and unchanged direction/kind/root/property/missing-property decoys, plus CREATE cardinality with and without RETURN. Relationship-list reuse, undirected continuation orientation under 027 and uniqueness across pattern parts under 031 remain separate boundaries.
+
+Eleven new SQL golden cases and four parser/analyzer mutation cases were regenerated with `CYSQL_UPDATE_CASES=true`. One existing `stepwise_traversal.sql` case changes to keep the reused relationship's property condition inside its correlated predicate; other existing SQL fixtures regenerate unchanged. Focused race-enabled translator, SQL-fixture, analyzer, frontend, Cypher formatter and v2-builder tests pass. Translator statement coverage increases from **6327/8510 (74.3478%)** to **6375/8518 (74.8415%)**. README and corpus/translation documentation describe the behavior.
+
+The PostgreSQL-selected **`make test_all` passes**, including complete race-enabled unit and integration stages and the final BDD stage; overall unit statement coverage remains **66.3%** at reported precision. The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Runs use each supplied connection separately, `TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes. Repository lint, integration-tagged vet, Go formatting, `goimports` checks and `git diff --check` pass. No Go edits followed the successful broad runs.
+
+DAWGS-027 is the next implementation item. DAWGS-007 remains pending downstream audit evidence and a migration decision, preserving its current default. Earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-027 undirected continuation orientation — 2026-10-24
+
+The shared live fixture reproduces false near-endpoint rows: its two matching tail relationships produce **four rows on PostgreSQL instead of two on Neo4j**, including the near node twice. SET without RETURN incorrectly marks that near node, and CREATE without RETURN stores **four audit nodes instead of two**. Before the repair, **22 of 30 variants fail in each PostgreSQL compiler mode**; all 30 pass on Neo4j. Fixture transactions are always rolled back. The initial fixture was corrected to use opposite-direction parallel edges with distinct directed triples, respecting PostgreSQL's existing relationship-identity constraint, and to bind named pattern-predicate variables in the outer match before collecting these results.
+
+Later undirected fixed steps now use the existing paired-orientation predicate in the terminal-node join: `(near = start AND far = end) OR (far = start AND near = end)`. The expression is built before frame rewriting, so the near node retains the correct previous-frame composite or scalar-ID reference. Existing edge joins, local constraints, row multiplicity and relationship uniqueness checks remain in place. The change adds a predicate without an extra scan or materialization; no performance improvement is claimed. Directionless roots and dual-bound endpoint paths retain their existing pairwise handling. Fully undirected variable-length expansion and uniqueness across separate pattern parts remain separate support boundaries.
+
+All **30 shared variants / 60 PostgreSQL compiler-mode executions** pass after repair. `undirected_continuation_shapes` covers both tail orientations, outbound/inbound/undirected prefixes, parallel edges, self-loops, local property/kind/parameter filters, repeated/bound endpoints, cycles, returned path nodes and lengths, subsequent fixed and undirected hops, duplicate inputs, WITH aliases, OPTIONAL MATCH/nulls, pattern predicates, variable-length and zero-hop prefixes, and a directed control. Mutations assert complete node/relationship state and untouched decoys, continuation across WITH, false near matches, and CREATE cardinality with and without RETURN.
+
+Eight new SQL golden cases and four parser/analyzer mutation cases were regenerated with `CYSQL_UPDATE_CASES=true`; all existing SQL and parser/analyzer fixtures regenerate unchanged. Focused race-enabled translator, SQL-fixture, analyzer, frontend, Cypher formatter and v2-builder tests pass. Translator statement coverage increases from **6375/8518 (74.8415%)** to **6379/8521 (74.8621%)**. README and corpus/translation documentation describe the behavior.
+
+The PostgreSQL-selected **`make test_all` passes**, including complete race-enabled unit and integration stages and the final BDD stage; overall unit statement coverage remains **66.3%** at reported precision. The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Runs use each supplied connection separately, `TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes. Repository lint, integration-tagged vet, Go formatting, `goimports` checks and `git diff --check` pass. No Go edits followed the successful broad runs.
+
+DAWGS-031 is the next implementation item. DAWGS-007 remains pending downstream audit evidence and a migration decision, preserving its current default. Earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-031 MATCH relationship uniqueness — 2026-10-24
+
+The live fixture reproduces both retained families. Two comma-separated fixed patterns return **four rows instead of two**; consecutive `*1..2` segments return **42 paths instead of 29**. SET without RETURN incorrectly marks an excluded node and relationship, and comma-pattern CREATE without RETURN stores **four audit nodes instead of two**. An original-source overlay fails **33 of 45 variants with optimization enabled and 35 of 45 disabled**. Neo4j passes every shared assertion. All fixture transactions roll back.
+
+Each MATCH now supplies its earlier comma-separated traversal steps to later parts. Fixed steps compare their relationship ID with preceding fixed IDs and exclude membership in preceding expansion paths. Completed expansion states exclude preceding fixed IDs and reject array overlap with preceding expansion paths. Projection pruning retains relationship IDs and path arrays when another traversal part still needs them. These predicates preserve valid path multiplicity and duplicate input rows. MATCH clauses, WITH boundaries and pattern predicates retain independent uniqueness scopes; OPTIONAL MATCH checks uniqueness before joining matches back to input rows. Recursion still excludes its own internal relationship reuse. The new cross-segment checks filter completed states rather than changing recursive search.
+
+All **45 shared variants / 90 PostgreSQL compiler-mode executions** pass. `relationship_uniqueness_shapes` covers two/three comma parts, intervening node-only parts, unconnected parts, incoming and undirected fixed steps, opposite-direction edges, fixed/variable combinations in either order, mixed multi-step parts, consecutive two/three expansions, zero hops, self-loops, exact returned path multisets, duplicate input rows, DISTINCT, empty input, carried fixed relationships, independent MATCH/WITH/predicate scopes, and OPTIONAL MATCH null extension. Mutations assert complete node/relationship properties and unchanged decoys, continuation through WITH, and comma/expansion CREATE cardinality with and without RETURN. Variable-length inline property maps remain a separate translation limitation; expansion variants use kinds and retain property-decoy checks in fixed patterns.
+
+Twelve new SQL golden cases and four parser/analyzer mutation cases were generated with `CYSQL_UPDATE_CASES=true`; four existing SQL expectations change across `pattern_expansion.sql` and `stepwise_traversal.sql`. Other existing SQL fixtures regenerate unchanged. Focused race-enabled translator, SQL-fixture, analyzer, frontend, Cypher formatter and query-builder tests pass. Translator statement coverage increases from **6379/8521 (74.8621%)** to **6391/8536 (74.8711%)**. README and corpus/translation documentation describe the behavior.
+
+Local compilation measurements include parsing, optimization, translation and rendering, with `GOMAXPROCS=2`, 300 ms samples and five samples per shape. Values below are medians against the original-source overlay; changed queries have different semantics, so these are added compilation costs rather than an equivalent-result throughput comparison.
+
+| Shape | Original → repaired time | Original → repaired bytes | Original → repaired allocations |
+| --- | ---: | ---: | ---: |
+| Single fixed-step control | 89.866 → 95.343 µs | 58,468 → 58,563 | 1,076 → 1,079 |
+| Two comma fixed steps | 148.713 → 160.357 µs | 89,733 → 94,213 | 1,721 → 1,837 |
+| Consecutive expansions | 202.464 → 230.984 µs | 140,683 → 141,980 | 2,890 → 2,929 |
+| Comma expansions | 221.803 → 224.921 µs | 145,124 → 151,067 | 2,974 → 3,058 |
+
+The PostgreSQL-scoped fan-out test uses two-way stars with 8 and 32 leaves. Both compiler modes satisfy closed-form counts: `k(k−1)` for comma fixed steps, `3k²−2k` for consecutive expansions and `4k(k−1)` for comma expansions. On 32 leaves those are **992, 3,008 and 3,968 rows**, retaining returns to the root through distinct relationships. Five warm EXPLAIN samples per shape/mode report local median execution times of **2.801–2.818 ms**, **11.083–13.224 ms** and **15.069–17.472 ms** respectively, with median planning **0.237–0.485 ms**. These timings are diagnostic, without a host-dependent pass threshold or production performance claim. Pairwise checks grow with traversal-step count; array overlap also depends on segment lengths, and preceding path state remains carried until checked. No performance improvement is claimed.
+
+The PostgreSQL-selected **`make test_all` passes**, including complete race-enabled unit and integration stages and the final BDD stage; overall unit statement coverage remains **66.3%** at reported precision. The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Runs use each supplied connection separately, `TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes. Repository lint, integration-tagged vet, touched-file Go formatting/import checks and `git diff --check` pass. No Go edits followed the successful broad runs.
+
+DAWGS-033 is the next implementation item. DAWGS-007 remains pending downstream audit evidence and a migration decision, preserving its current default. Earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-033 undirected self-reference — 2026-10-24
+
+The shared live fixture reproduces the surviving `(x)-[r]-(x)` defect: PostgreSQL returns **six rows instead of two**, including both endpoints of two non-loop relationships. SET without RETURN incorrectly marks those incident nodes and relationships; CREATE without RETURN stores **six audit nodes instead of two**. Independent input rows also expose missing-FROM errors because the newly introduced repeated endpoint is mistaken for an existing frame binding. Before repair, **21 of 32 variants fail in each PostgreSQL compiler mode**; all 32 pass on Neo4j. All fixture transactions roll back.
+
+The self-referential root now joins one local node with `node.id = edge.start_id AND node.id = edge.end_id`. Local constraints from both occurrences remain in that join; relationship and external predicates remain applied. The single-bound builders identify a repeated local endpoint by its binding identity rather than the absence of an earlier frame. Independent input frames remain in the FROM source, preserving duplicate and empty inputs; correlated sources retain their existing omission rule. Already-bound endpoints continue through the pairwise path. This changes the endpoint predicate without adding a node/edge scan or materialization to a standalone root; no performance improvement is claimed.
+
+All **32 shared variants / 64 PostgreSQL compiler-mode executions** pass after repair. `undirected_self_reference_shapes` covers unconstrained and filtered roots, constraints on either node occurrence, parameters, conflicting properties, exact relationship and path identities, directed/generic undirected controls, bound endpoints, WITH aliases, duplicate and empty independent inputs, unrelated MATCH inputs, OPTIONAL MATCH/nulls, positive/negated pattern predicates and fixed continuations. Mutations assert complete node/relationship state and unchanged incident-edge, kind/property/missing-property decoys, WITH continuation and CREATE cardinality with and without RETURN.
+
+Ten new SQL golden cases and four parser/analyzer mutation cases were regenerated with `CYSQL_UPDATE_CASES=true`; all existing SQL and parser/analyzer fixtures regenerate unchanged. Focused race-enabled Cypher/compiler/formatter/analyzer and query-builder tests pass. Translator statement coverage increases from **6391/8536 (74.8711%)** to **6393/8538 (74.8770%)**, with **100% of the self-referential root builder** covered. README and corpus/translation documentation describe the behavior.
+
+The PostgreSQL-selected **`make test_all` passes**, including complete race-enabled unit and integration stages and the final BDD stage; overall unit statement coverage remains **66.3%** at reported precision. The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Runs use each supplied connection separately, `TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes. Repository lint, integration-tagged vet, touched-file Go formatting/import checks and `git diff --check` pass. No Go edits followed the successful broad runs.
+
+DAWGS-020 is the next implementation item. DAWGS-007 remains pending downstream audit evidence and a migration decision, preserving its current default. Earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-020 exact expansion lengths — 2026-10-24
+
+The live fixture reproduces the shorthand defect in both PostgreSQL compiler modes: `*16` returns **zero rows instead of one**, while `*16..16` reaches the 16-hop endpoint. `*2` returns endpoints at depths **2 through 15** and SET without RETURN incorrectly updates all those nodes. At 16 hops, SET stores no updates and CREATE without RETURN creates no audit records instead of two. Before repair, **19 of 32 variants fail in each PostgreSQL compiler mode**; all 32 pass on Neo4j. All fixture transactions roll back.
+
+The range visitor now copies a lone integer bound into both AST bounds when there is no `..` separator. Existing formatting emits the equivalent `*k..k`, and existing optimizer/translator paths receive the exact range. The same visitor accepts grammar-defined whitespace/comments without changing bound position. Omitted bounds remain omitted; integer overflow still produces a parsing error. This reuses existing exact-range execution, including its short fixed-step lowering and ordinary recursive traversal at larger depths; no new traversal algorithm or performance improvement is claimed. The open-ended maximum of 15 remains the separate DAWGS-019 policy decision.
+
+All **32 shared variants / 64 PostgreSQL compiler-mode executions** pass after repair. `exact_expansion_length_shapes` covers shorthand and explicit ranges at 0, 1, 2, 15, 16 and 17 hops, exact path node sequences, inbound traversal, fixed prefixes/suffixes, bound endpoints, duplicate inputs, OPTIONAL MATCH/nulls, spaced bounds and non-exact bounded controls. Mutations check complete node/relationship records and unchanged direction, kind, property, root-identity and missing-property decoys, WITH continuation and CREATE cardinality with and without RETURN. Live shortest/all-shortest controls use exact one-hop bounds; larger shortest/all-shortest checks establish generated-SQL/parameter equivalence and harness maxima only.
+
+Eleven new SQL golden cases and four parser/analyzer mutation cases were regenerated with `CYSQL_UPDATE_CASES=true`; existing SQL and parser/analyzer fixtures regenerate unchanged. Parser tests cover canonical AST/format round trips, open and partial bounds, whitespace/comments, the maximum `int64` bound and overflow rejection. Compiler tests compare complete SQL and parameters for the shorthand and explicit range across six depths and six query shapes in both optimizer modes. Focused race-enabled Cypher/compiler/formatter/analyzer and query-builder tests pass. Standalone frontend unit coverage increases from **269/518 (51.9305%)** to **287/521 (55.0864%)**. README and corpus/translation documentation describe the behavior.
+
+The PostgreSQL-selected **`make test_all` passes**, including complete race-enabled unit and integration stages and the final BDD stage; overall unit statement coverage increases from the previous ledger's **66.3%** to **66.4%** at reported precision. The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Runs use each supplied connection separately, `TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes. Repository lint, integration-tagged vet, touched-file Go formatting/import checks and `git diff --check` pass. No Go edits followed the successful broad runs.
+
+DAWGS-019 is the next work item: choose complete traversal versus explicit resource-bound/error behavior before changing open-ended execution. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-072 parallel fetch failure propagation — 2026-10-24
+
+New in-memory regressions reproduce the retained hang before repair: `parallelFetchNodes` with one worker, `maxID` 50,000 and a controlled `Fetch` error, and `parallelNodeQuery` with a controlled delegate error, both block for the full ten-second regression guard without external cancellation, matching the original mock probes that stayed blocked and returned only after cancel. After repair both return immediately, and `errors.Is` over the joined error identifies the originating sentinel; the failing `parallelNodeQuery` fixture visits exactly one range.
+
+Both helpers now bind a cancellable operation context derived from the caller's context. Workers execute their read transactions, range receives and node piping under that context. On transaction failure a worker first submits its error to the error channel using the caller's context — the merge routines only bail on caller cancellation, so delivery is guaranteed while the caller is still interested — and then cancels the operation context. Cancellation unblocks the producer's range submission, which stops submitting further ranges and joins all workers through the existing close/wait order; the deferred cancel releases the context on every path. Concurrently cancelled sibling workers may append additional context-derived errors after the originating one, which remains first in the join.
+
+Preserved controls cover caller cancellation unblocking both helpers, complete range coverage (three 20,000-ID ranges with two workers) with full `NodeSet` collection, user criteria flowing into range filters, the empty-database largest-node lookup returning an empty set without error, the public `ParallelFetchNodes` wrapper, and `ParallelNodeQueryBuilder.Stream` closing its channel and exposing the originating error from `Error()`. All controls use `graph.Database`/`Transaction`/`NodeQuery`/`Cursor` doubles and pass under the race detector, including repeated runs. Public signatures are unchanged; the wrapper doc comments now describe the stop-and-join failure behavior. No parser, translator, renderer or integration query semantics change, so shared mutation/template corpora are unchanged.
+
+The `ops` package previously had no tests; its statement coverage rises from **0% to 23.1%**, with **100% of `parallelNodeQuery`** and **97.7% of `parallelFetchNodes`** covered (the sole uncovered line is the merge routine's equivalent `errorC`-closed return racing with `nodeC` closure). Focused race tests, `go vet`, `gofmt`/`goimports` and `git diff --check` pass.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`; this image's supplied `cc` replaces the previously recorded `/opt/codices/development/bin/cc`, which no longer exists. The unrestricted PostgreSQL-selected **`make test_all` passes**, including the complete race-enabled unit stage (**66.6% overall statement coverage**, up from 66.4%), complete integration stage and BDD stage. The first Neo4j-selected `make test_integration` attempt failed on connection refusal before any test ran: no local Neo4j installation or usable container runtime exists in this image. After the environment restart the complete Neo4j-selected **`make test_integration`** (43 packages) and subsequent **`make test_bdd_integration`** pass. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Backend BDD runs were sequential. Repository lint passes. No Go edits followed the successful broad runs.
+
+The next ordered work item is **DAWGS-065**, the kind-mapping connection-pool deadlock reproduction. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-099 cross-wrapper snapshot repair — 2026-10-24
+
+The retained mechanism reproduced through five families of in-memory regressions, each guarded by a ten-second completion deadline: two gated providers wrap real Bitmap64 values and deterministically position opposing wrapped `Or` calls inside the window where each wrapper holds its own lock and is about to demand the other's; single-goroutine self-operations deadlock for `Or`, `And`, `Xor` and `AndNot` on 64-bit bitmaps and for `Or`/`AndNot` on 32-bit bitmaps (a mutex is not reentrant and the non-native fallbacks re-enter the wrapper through `Each`/`Contains`); a nested `ThreadSafeDuplex(ThreadSafeDuplex(...))` self-operation deadlocks through the outer lock; an ungated eight-goroutine mixed-operation run over two wrapped bitmaps deadlocks without any gates; and `ThreadSafeSimplex` merges of two wrapped HyperLogLog sketches silently drop the entire right-hand sketch on both widths (about 10,000 versus 20,000 after merging two disjoint 10,000-value sketches) because provider dispatch sees the wrapper, not the sketch.
+
+Binary operations now snapshot another thread-safe wrapper before acquiring the receiver's lock: `detachProvider` clones the other wrapper's inner provider under that wrapper's lock alone, then the receiver locks and applies the operation to the isolated snapshot. Wrapper locks are therefore never held while acquiring another wrapper's lock, so opposing cross-operations, self-operations and nested wrappers complete; a snapshot of a wrapped bitmap is a native bitmap, so wrapped-pair operations take native roaring paths instead of locked fallbacks. Unwrapped providers are returned unchanged and keep their existing native or fallback behavior. There is no cross-operand atomicity: a snapshot reflects the other wrapper only at the moment it is taken. Delegates passed to `Each` must not call back into the same wrapper; that reentrancy limitation is documented and unchanged. Simplex `Or` uses the same snapshot, which also routes wrapped-sketch merges to the native `Merge` implementation.
+
+Controls verify snapshot isolation and later-mutation invisibility, nil passthrough, unwrapped-provider identity, native snapshot type, exact results for all four wrapped binary operations with the right operand unchanged, unwrapped operand chains unchanged, clone isolation including `Clear`/`Remove`/`Each`/`CheckedAdd`, nested-wrapper self-operations, concurrent mixed operations under the race detector, simplex merge estimates within HyperLogLog tolerance on both widths with the right sketch unchanged, and unwrapped-sketch merges unchanged. Focused tests pass with `-race -count=3`, and every function in `cardinality/lock.go`, including `detachProvider` and all binary operations, reaches **100% statement coverage**. No parser, translator, renderer or integration query semantics change, so shared mutation/template corpora are unchanged.
+
+Benchmark medians (five samples, 200 ms benchtime; each iteration builds fresh bitmaps in both versions, so the delta isolates the snapshot): wrapped `Or` against a 10-value wrapper moves from **851 ns / 880 B / 31 allocs** to **786 ns / 1,104 B / 40 allocs**; against 1,000 values from **25.6 µs / 17,856 B / 45 allocs** to **7.33 µs / 17,688 B / 47 allocs**; against 100,000 values from **2.35 ms / 622,760 B / 147 allocs** to **465 µs / 569,108 B / 113 allocs**. Wrapped self-`Or` with 1,000 values previously never completed and now takes **9.12 µs / 21,504 B / 35 allocs**. The unwrapped-operand control is unchanged (**6.79 µs → 6.75 µs / 15,232 B / 33 allocs**). Larger wrapped operands are faster after the repair because the native snapshot path replaces the previous per-element fallback loop; the ten-value shape trades nine allocations for the snapshot clone. These are local medians, not a general performance claim.
+
+**Boundary with DAWGS-076:** the fallback mutation-during-iteration defect remains open on its original path — a raw `bitmap64`/`bitmap32` receiver iterating itself while removing elements when its argument is a wrapped or custom non-native Duplex provider. The 076 reproduction (`Bitmap64.And(ThreadSafeDuplex(empty))`) is unchanged by this repair; only wrapper-pair operations now avoid that fallback through native snapshots.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test_all` passes** (unit, integration and BDD stages; each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**). The complete Neo4j-selected **`make test_integration`** and **`make test_bdd_integration`** pass with the same gate summary. In this environment the full race-enabled unit stage reports **66.2% overall statement coverage** on the repaired tree against **66.0%** measured for unmodified HEAD in a clean worktree on the same machine; the previously recorded 66.6% at that commit did not reproduce in this environment, and the recorded repair delta is the measured increase. Repository lint, `gofmt`, default and integration-tagged vet, and `git diff --check` pass (`goimports` is unavailable in this image; touched import blocks are canonical). No Go edits followed the successful broad runs.
+
+The next ordered work item is **DAWGS-076**, bitmap mutation during And/AndNot iteration on the non-native fallback paths. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-076 bitmap mutation during fallback iteration — 2026-10-24
+
+The retained mechanism reproduced on both widths: `Bitmap64 {0..9}.And(ThreadSafeDuplex(empty))` leaves `[1 3 5 7]` and `AndNot` with a wrapped full set leaves the same values, because roaring iterators skip elements when the current value is removed during iteration. The 32-bit fallbacks exhibit the identical mechanism. This was the DAWGS-099 boundary path: a raw bitmap receiver whose argument is a wrapped or custom non-native Duplex provider.
+
+The repair makes both fallbacks follow the existing `Xor` pattern: copy the operand's values through one `Each` pass into a fresh native bitmap, then apply the native roaring `And`/`AndNot`. The receiver is never modified while being iterated, native bitmap operands keep their direct native paths, and the intended semantics (intersection and difference) are unchanged. The operand is only read; receiver mutation cannot leak into it.
+
+Regressions in `cardinality/roaring_test.go` fail against the original implementations and pass after repair. They cover the original 64/32-bit reproductions, wrapped empty/full/partial/disjoint operands, an empty receiver, operands unchanged by either operation, a custom map-backed non-native Duplex implementation, native operand controls including self-application, values crossing roaring container boundaries (2^16 multiples, the 32/64-bit split and `MaxUint64`), a 200,000-value dense receiver fully consumed by `And(wrapped empty)`/`AndNot(wrapped full)`, and a deterministic 100,000-value pseudo-random oracle comparing wrapped and custom fallback results against the equivalent native-bitmap computation. Direct `Contains`/`Remove`/`Cardinality` and early-stopping `Each` checks retain coverage of the 32-bit helpers the buggy fallback previously exercised. All focused tests pass with `-race -count=2`; dependent `graph`, `algo`, `container`, `traversal` and `ops` race runs pass. The four repaired functions reach **100% statement coverage**; the package rises from **60.5% to 72.4%** measured identically without the race detector.
+
+Local benchmark medians (five samples, 200 ms benchtime; each iteration builds a fresh receiver, with receiver construction excluded; the original implementations produce wrong results, so these are cost measurements rather than equivalent-result comparisons): wrapped same-size operand `And` moves from **458 ns / 160 B / 1 alloc** to **1,033 ns / 480 B / 14 allocs** at 10 values, from **32.6 µs** to **20.2 µs** at 1,000 values, and from **2.16 ms** to **1.58 ms** at 100,000 values; `AndNot` moves from **640 ns** to **1,033 ns**, from **58.1 µs** to **19.3 µs**, and from **2.55 ms** to **1.59 ms** respectively, with the same allocation profile as `And`. Small operands pay for the operand snapshot; larger operands are faster because the native operation replaces per-element `Contains` and structural `Remove`. No general performance claim is made.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test_all` passes** (complete race-enabled unit, integration and BDD stages; **66.8%** overall unit statement coverage on `.coverage/unit.out`). The complete Neo4j-selected **`make test_integration`** (43 packages) and subsequent **`make test_bdd_integration`** pass. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Repository lint, default and integration-tagged vet, `gofmt` and `git diff --check` pass (`goimports` remains unavailable in this image; the touched import block is canonical). No parser, translator, renderer or integration query semantics change, so shared mutation/template corpora are unchanged. No Go edits followed the successful broad runs.
+
+The next ordered work item is **DAWGS-077**, PackedMap merge value loss and EFSet.Find underflow. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-077 PackedMap merged values and EFSet.Find termination — 2026-10-24
+
+The retained mechanisms reproduced through a Go test overlay supplying the original sources. The recorded PackedMap trigger (BucketKeyStride 100, NumMaxEntries 100, NumBuckets 10; put (2,102),(3,103), Compact, put (1,101), Compact) returns **102 for Get(1)** — the rank of key 1 in the merged key set indexes the stale pre-merge values slice — and **Get(3) panics with index out of range [2] with length 2**, because the merged key set is longer than the old values. `packedBucket.merge` built a new merged values slice but assigned a reslice of the old `s.values`; the merge now stores the merged values with the merged key set, so every pending and existing association survives repeated compactions.
+
+`EFSet.Find` underflowed its unsigned high-entry bound when the entry at rank zero exceeded the target: `highEntry = midEntry - 1` with `midEntry == 0` wraps to `MaxUint64`, `Lookup` receives out-of-range ranks, and the loop re-expands forever. `CompressToEFSet([]uint64{10,20,30}).Find(5)` did not complete inside the ten-second regression guard, matching the recorded bounded probe. An empty set reaches the same underflow through `s.len - 1`; its outcomes are target-dependent wraparound arithmetic, and in the overlay run a lookup of the universe minimum returned a **false match with rank 9223372036854775807**. Find now returns `(0, false)` for an empty set and breaks when the minimum stored entry already exceeds the target; all other binary-search paths are unchanged.
+
+Regressions in `container/ef_test.go` and `container/pacmap_test.go` fail against the original sources and pass after repair. EFSet coverage checks below-minimum termination under a completion guard, empty-set lookups (which falsely matched the universe minimum against the original sources), exact ranks for first/middle/last stored values, single-value sets, misses above the maximum and between stored values, and a 100-value stride set. PackedMap coverage repeats the recorded trigger, a third compaction inserting keys below/between/above compacted keys, a second bucket compacted through `CompactParallel`, missing keys between stored values, below-compacted-minimum and never-allocated-bucket misses, and the unchanged default-parameters round trip. Guarded goroutines are intentionally left blocked on failing runs, matching the DAWGS-099 convention. Duplicate-key overwrite ordering across compactions is unchanged first-write-wins behavior and remains outside this repair.
+
+Container-package statement coverage increases from **30.3% to 42.4%** measured identically without the race detector; `merge` rises from **0% to 100%** and `Find` from **88.9% to 100%**. Focused race runs pass for `container`, `graph`, `algo`, `traversal`, `ops` and `cardinality` (`-count=2` for container). No parser, translator, renderer or integration query semantics change, so shared mutation/template corpora are unchanged.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test_all` passes** (complete race-enabled unit, integration and BDD stages; **66.9%** overall unit statement coverage on `.coverage/unit.out`, up from the previous ledger gate's 66.8%). The complete Neo4j-selected **`make test_integration`** passes across all 43 packages and the subsequent **`make test_bdd_integration`** passes. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Repository lint, default and integration-tagged vet, `gofmt` and `git diff --check` pass (`goimports` remains unavailable in this image; touched import blocks are canonical). No Go edits followed the successful broad runs.
+
+The next ordered work item is **DAWGS-074**, traversal patterns changing direction never match. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-074 pattern direction changes — 2026-10-24
+
+The pattern driver formerly computed one fetch direction from the current expansion and reused it for the following expansion's eager fetch. For `OutboundWithDepth(1, 1).InboundWithDepth(1, 1)` over `a→b←c`, the inbound step at b kept the outbound step's inbound fetch direction, so the matched `c→b` edge yielded b itself; cycle filtering dropped it and the pattern matched nothing. The mirrored inbound→outbound change and longer alternating chains fail the same way.
+
+The repair makes the following expansion's fetch use `nextExpansion.direction.Reverse()`: each expansion's criteria still select relationships entering or leaving the current node, and the fetch now selects the endpoint its own criteria imply. Current-expansion fetches, criteria preparation, depth handling, cycle filtering and the optional-preservation branch are unchanged; the change adds no scans or materialization and no performance improvement is claimed.
+
+Regressions in `traversal/pattern_driver_test.go` drive the pattern Driver with a scripted directional-cursor transaction double that, like a real database, resolves each fetched relationship's endpoint from the observed fetch direction. **Five of eight regressions fail against the original source** (outbound→inbound, inbound→outbound with a genuine cycle sibling filtered, three-step alternation, a direction change into a `1..2` depth range, and the recorded-direction control for a required second step without a match) while the same-direction control, cursor-error propagation and the pre-existing filter tests pass. The optional `InboundWithDepth(0, 1)` regression asserts only the eager fetch direction and path completion, because exact optional callback cardinality is the separate open DAWGS-095 boundary; the repaired driver produces the completed `a→b←c` path there while the original source does not.
+
+The shared `TestTraversalPatternDirectionChange` integration regression closes the "complete BreadthFirst query not rerun" gap: it commits dedicated `TraversalPatternNode`/`TraversalPatternEdge` fixtures (BreadthFirst issues its own read transactions), then runs complete two-worker BreadthFirst traversals checking exact terminal node and edge sequences for outbound→inbound, inbound→outbound, a same-direction control, a three-step alternation, and a required second step without a match. Against the original source supplied through a Go test overlay it fails the three direction-change subtests on PostgreSQL; with the repair it passes all subtests on both supplied backends under the race detector, with graph cleanup registered.
+
+Traversal-package statement coverage increases from **18.8% to 44.1%** measured identically against HEAD (`-coverpkg=./traversal`), with `pattern.Driver` at **86.2%**. Focused `-race -count=2` traversal tests pass. No parser, translator, renderer or Cypher query semantics change, so shared mutation/template corpora are unchanged.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test_all` passes**, including the complete race-enabled unit stage (**67.0%** overall statement coverage on `.coverage/unit.out`, up from the previous ledger gate's 66.9%), complete integration stage and BDD stage. The complete Neo4j-selected **`make test_integration`** passes across all repository packages and its subsequent BDD gate passes. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Repository lint, `gofmt`, default and integration-tagged vet and `git diff --check` pass (`goimports` remains unavailable in this image; touched import blocks are canonical). No Go edits followed the successful broad runs.
+
+The next ordered work item is **DAWGS-095**, optional following traversal step duplicate callbacks. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-095 optional following step duplicate callbacks — 2026-10-25
+
+The retained mechanism reproduced exactly as recorded: the scripted directional-cursor harness driving `OutboundWithDepth(1,1).OutboundWithDepth(0,0)` over `a→b→c` invokes the terminal delegate for `c` twice (**IDs [2 2], five fetches**). When a segment advanced to an optional following expansion, the driver eager-fetched that expansion's matches with the advanced tag and also preserved the boundary segment; the preserved segment's own driver invocation then repeated the identical fetch (same criteria, same boundary node, same fetch direction), queueing the same descendants twice and duplicating every terminal beneath the optional step.
+
+The repair splits the boundary behavior by optionality. A required following expansion keeps its existing eager fetch. An optional following expansion (minimum depth 0) is no longer eager-fetched; only the boundary segment is preserved with the advanced tag, and the traversal's next visit to that segment performs the optional expansion exactly once. The unmatched boundary is still delegated once when the optional step finds no matches, matched branches still continue through later expansions, and an optional first/middle step in a chain preserves each boundary node once per pattern transition. The trigger now returns terminal `c` once with **three fetches**. No new scans or materialization are introduced; one eager fetch per optional boundary is removed, so no performance improvement is claimed beyond the removed duplicate work.
+
+Scripted regressions in `traversal/pattern_driver_test.go` fail against the pre-repair source (the duplicated expansion exhausts the fixed fetch scripts) and pass after repair. They cover the recorded trigger with exact fetch directions, an optional step without matches delegating the preserved boundary once, an optional step with two matches reporting each terminal once, a required–optional–required chain over `a→b→c→d` reporting both valid path shapes exactly once (the optional step skipped at `b` and matched through `b→c`), and an optional direction-changed following step whose preserved segment fetches with that step's own direction and completes `a→b←c` exactly once. The former DAWGS-074 optional-direction regression now asserts exact callback cardinality instead of only fetch direction.
+
+The shared `TestTraversalPatternOptionalStep` integration regression runs complete two-worker BreadthFirst traversals on committed fixtures and checks exact terminal multisets, order-independent across workers: optional second step with a match, without a match (preserved boundary), with multiple matches, an optional middle step with a required tail producing both path shapes once, and an optional direction-changed second step. Against the pre-repair source supplied through a Go test overlay it fails four of five subtests on PostgreSQL while the no-match control passes; with the repair it passes all subtests on both supplied backends under the race detector. The shared `traversalPatternRun` helper now synchronizes delegate collection because BreadthFirst completes terminals across parallel workers; the earlier single-terminal direction regressions relied on a single callback and did not expose that test-side race.
+
+Traversal-package statement coverage remains **44.1%** with `pattern.Driver` at **86.2%**: the repair restructures existing statements without adding code paths. Focused `-race -count=2` runs pass for `traversal`, and dependent `graph`, `algo`, `container`, `ops` and `cardinality` race runs pass. No parser, translator, renderer or Cypher query semantics change, so shared mutation/template corpora are unchanged.
+
+The next ordered work item is **DAWGS-100**, FetchNodeProperties ignoring iteration error. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-100 FetchNodeProperties iteration error — 2026-10-25
+
+The `ops.FetchNodeProperties` query callback returned a bare `nil` after its `for results.Next()` loop, so a result that failed mid-iteration produced successful partial initialization: the finding's result-double reproduction serves one valid property row for node 1 and then an iteration error, leaving node 2's properties nil while the helper reports success. Every sibling helper in the package (`FetchAllNodeProperties`, `FetchNodesByQuery`, `FetchByQuery`, `FetchPathSet`) already returns its result/cursor error, and both drivers' `Result.Error()` implementations return nil after successful completion, so the callback now returns `results.Error()`. Rows delivered before the failure are still applied; the difference is that the caller now learns the iteration failed. No query text, criteria construction or mapping behavior changes.
+
+Regressions in `ops/properties_test.go` use a `graph.Result` double that yields configured rows and reports its configured error through `Error()` once `Next()` returns false, mirroring driver results that surface iteration failures only after iteration stops. The regression fails against the original source (`errors.Is` over the returned nil) and passes after repair while also checking that the pre-failure row was applied and the second node's properties remain unset. Controls cover a complete two-property iteration that populates both nodes and captures the single returning criteria, and an unmappable first value (non-numeric node ID) that returns the mapping error without applying properties. The shared `fakeNodeQuery` double in `ops/parallel_test.go` gains an optional `Query` hook; the parallel-fetch tests are unchanged and pass.
+
+`FetchNodeProperties` reaches **100% statement coverage**, measured identically without the race detector alongside a clean-HEAD worktree baseline; the `ops` package rises from **23.1% to 26.1%**. Focused `-race -count=2` runs pass for `ops`, and dependent `graph`, `algo`, `traversal`, `container` and `cardinality` race runs pass. No parser, translator, renderer or integration query semantics change, so shared mutation/template corpora are unchanged. `go vet`, repository lint, `gofmt` and `git diff --check` pass; `goimports` remains unavailable in this image and the touched import blocks are canonical.
+
+**Aggregate flake recorded:** the unrestricted PostgreSQL-selected `make test_all` failed twice in `cmd/graphbench` on `TestPostgreSQLForcedShortestDistanceCancellationReusesSession`, which sets a 1 ms `statement_timeout` on raw pgx SQL through the graphbench runner's own pool and requires a `57014` cancellation error. That path never traverses `ops`. The focused test passes `-count=6` on the repaired tree and `-count=20` on clean HEAD, an identical standalone integration invocation passed all 43 packages, and a clean-HEAD aggregate passed; the third aggregate attempt on the repaired tree then **passes completely**. The boundary is a load-sensitive race between the 1 ms timeout and a fast query execution, recorded here rather than changed in this repair.
+
+Final validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test_all` passes** (complete race-enabled unit stage at **67.0%** overall statement coverage on `.coverage/unit.out`, unchanged at the reported precision, complete integration stage and BDD stage). The complete Neo4j-selected **`make test_integration`** passes across all 43 packages and the subsequent **`make test_bdd_integration`** passes. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. No Go edits followed the successful broad runs. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-003**, scalar-list quantifier panics contained as unsupported/translation errors. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-003 scalar-list quantifier containment — 2026-10-25
+
+The recorded trigger `RETURN all(x IN [1] WHERE x = 1) AS value` panics at `quantifiers.go:59` in both optimizer modes: `prepareFilterExpression` evaluates `currentPattern.Parts` before the projection alternative, and a query part without a preceding MATCH or CREATE has a nil `currentPattern`. The same mechanism crashes every pattern-less quantifier projection, including `WITH ... all(...) AS ok RETURN`, standalone `WITH [1] AS xs RETURN all(...)`, and `UNWIND [1, 2] AS xs RETURN all(...)`. On the live driver path the translation cache recovers the panic and re-panics into the caller, so the defect crashes the calling process rather than returning a failure.
+
+The containment nil-checks the pattern term and replaces the raw projection dereference with a safe `QueryPart.HasCurrentProjection` predicate. Pattern-less quantifiers now continue into projection translation and fail with the same normal error their pattern-present siblings already produce — `aggregate grouping expression has unsupported type pgsql.Select` for scalar-list collections and the pre-existing type errors for UNWIND/parameter collections — instead of panicking. A quantifier with neither pattern nor projection state still gets the preparation boundary error. No working shape changes: WHERE-context quantifiers over property arrays, `labels()`, `collect()` results, path relationship predicates, and scalar-list literals compiled before and still compile, verified in both optimizer modes with SQL fragment assertions; pattern-present projection quantifiers retain their exact pre-existing error messages.
+
+Compile regressions in `quantifier_containment_test.go` panic against the original sources and pass after repair: all four quantifier types across standalone RETURN (two collection forms), WITH-projection continuation, and UNWIND collection shapes in both optimizer modes; the canonical trigger pins the exact aggregate-grouping error; controls cover six WHERE-context shapes, unchanged pattern-present projection errors, and direct preparation rejection without pattern or projection state. The live `drivers/pg` regression runs the standalone query for all four quantifiers through `ReadTransaction`: against the original sources the nil-dereference panic escapes through the translation cache's re-panic; with the repair each returns a translation error through `graph.NewErrorResult` under the race detector. A live control executes `WHERE all(x IN [1, 2] WHERE x < 3)` and returns the exact fixture count. Two new SQL golden cases in `quantifiers.sql` pin WHERE-context scalar-list `ALL`/`NONE` lowering; regeneration through `CYSQL_UPDATE_CASES=true` is byte-identical and every other golden file regenerates unchanged. A Neo4j probe executes the same standalone query and returns `true` — Neo4j natively supports scalar-list quantifiers — so the shared backend-equivalent corpus correctly omits this shape and the containment lives in the PostgreSQL-scoped suites. `cypher/Cypher Syntax Support.md` now documents the supported WHERE predicate forms and the projection boundary instead of the previous blanket "unsupported" claim.
+
+Translator statement coverage increases from **6397/8538 (74.9239%)** measured against the original sources with the pre-existing tests to **6440/8539 (75.4187%)** with the repair and new regressions; `HasCurrentProjection` is fully covered. Focused race runs pass for `cypher/...`, and the complete tagged `drivers/pg` integration package passes on PostgreSQL. Repository lint, `gofmt`, default and integration-tagged vet, and `git diff --check` pass; `goimports` remains unavailable in this image and the touched import blocks are canonical.
+
+Broad validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The PostgreSQL-selected `make test_all` passes its complete race-enabled unit stage (**67.1%** overall statement coverage on `.coverage/unit.out`, up from the previous ledger gate's 67.0%); its integration stage hit the **pre-existing load-sensitive graphbench flake** already recorded under DAWGS-100 (`TestPostgreSQLForcedShortestDistanceCancellationReusesSession`, 1 ms `statement_timeout` racing a fast execution) in three aggregate attempts — that test fails 2/6 identically on clean HEAD in this session, never traverses quantifier translation, and passes in a focused run — while every other integration package passes in one aggregate invocation; the final BDD stage reports **10 enforced / 0 failed, 18 report-only / 18 failed**. The complete Neo4j-selected `make test_integration` passes across all 43 packages and its subsequent `make test_bdd_integration` passes with the same gate summary. No Go edits followed the successful final runs. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-004**, literal null predicates underflowing the expression stack. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-004 literal null predicates — 2026-10-26
+
+IS/IS NOT binary-expression completion consumed both operands but pushed a result only when the left operand was a property lookup compared against a null literal. Every other shape — literal, parameter, entity and function operands — dropped the completed predicate from the expression stack, so the next pop underflowed `Builder.PopOperand` with `index out of range [-1]`: the canonical `RETURN null IS NULL AS value` panicked in both optimizer modes, as did every standalone null-predicate projection and the shared `RETURN 1 IS NULL`/`RETURN 'a' IS NOT NULL` family. In WHERE contexts the same dropped expression silently removed the predicate instead: `WHERE 1 IS NULL` returned every matching row and `WHERE null IS NOT NULL` emptied nothing. On the live driver path the translation cache recovered the panic and re-panicked into the caller.
+
+The repair has three parts. IS/IS NOT completion now pushes the assembled predicate whenever the dedicated property-lookup JSONB null rewrite does not apply, lowering to PostgreSQL's own null predicates (`null is null`, `n0 is null`, `i0 is not null`). `InferExpressionType` returns Boolean for IS/IS NOT — null predicates apply to operands of any type, so the operand-compatibility path that null literals can never satisfy is no longer reached. `Builder.PopOperand` checks the stack and returns `expression operand stack is empty` as an ordinary translation error, converting any other producer bug into a returned error rather than a panic that escapes through the translation cache.
+
+Semantics: `null is null` returns true, `null is not null` false, `1 is null` false, `'a' is not null` true; a bound match node is never null; an OPTIONAL MATCH null extension is; WITH/UNWIND-bound null values test correctly; property lookups keep their existing missing-key/JSON-null rewrite, including negation and OR combinations. A standalone negated projection (`RETURN NOT (...)`) still returns the pre-existing unsupported-unary-projection error, and the heterogeneous list literal `[1, null]` is still rejected; neither boundary changes here. DAWGS-011's TypeCast underflow shapes now fail through the new empty-stack error instead of panicking, but its explicit temporal rejection remains its own queue item.
+
+Coverage: unit regressions in `cypher/models/pgsql/translate/null_predicate_test.go` panic against the original sources and assert exact SQL after repair for every trigger shape in both optimizer modes, WHERE predicate retention, unchanged property-lookup rewrites, the empty-stack error and Boolean null-predicate inference. Fourteen new SQL golden cases in `translation_cases/null_predicates.sql` cover projections, WHERE retention, entity operands, conjunction with property predicates and the unchanged property rewrites; every other golden file regenerates byte-identically through `CYSQL_UPDATE_CASES=true`. Four new parser/analyzer mutation cases use canonical emitter spelling with regenerated fitness values. Ten new shared `scalar_shapes.json` variants check literal null predicate projections, WHERE filtering, bound-node identity and WITH/UNWIND-bound nulls with identical assertions on both backends; the new `pgsql_scalar_shapes_test.go` runner executes the whole scalar corpus in each PostgreSQL compiler mode. Live `drivers/pg` regressions execute the standalone projections through `ReadTransaction` and check WHERE filtering against the integration fixture.
+
+Against the original sources supplied through a Go test overlay the unit compile regressions panic, the live projection regression re-panics through the translation cache, the WHERE regression observes the dropped constraint returning rows, and the shared corpus variant panics. With the repair all pass under the race detector on both supplied backends. Translator statement coverage increases from **6441/8543 (75.3951%)** measured against the original sources with the pre-existing tests to **6463/8543 (75.6526%)**.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The PostgreSQL-selected unit (`make test`), complete integration (`make test_integration`) and BDD (`make test_bdd_integration`) stages pass; the race-enabled unit stage reports **67.1%** overall statement coverage, unchanged at reported precision from the previous ledger gate. The complete Neo4j-selected `make test_integration` passes across all 43 packages and its subsequent `make test_bdd_integration` passes. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Repository lint, default and integration-tagged vet, `gofmt` and `git diff --check` pass (`goimports` remains unavailable in this image; touched import blocks are canonical). No Go edits followed the successful broad runs. Credentials are excluded from this ledger.
+
+### DAWGS-011 temporal component rejection and panic containment — 2026-10-26
+
+Temporal constructions with an argument (`datetime('2020-01-01')`, `date(n.d)`, `localdatetime(…)`, `localtime(…)`) lower to a PostgreSQL type cast. The property-lookup translator's type-cast case popped the cast operand and fell through without pushing a replacement or returning an error, so the next operand pop underflowed the expression stack. DAWGS-004's empty-stack guard had already converted the recorded crash into a bare `expression operand stack is empty` error; the finding's triggers still lacked an explicit rejection. The type-cast case now validates the property key and returns `unsupported temporal type component <name> on cast type <type>` for every non-composite cast target, in projection and WHERE contexts, in both optimizer modes. Supported temporal lowering is unchanged: current-instant `epochseconds`/`epochmillis` components, no-argument component rejection messages, bare temporal projections, temporal comparisons and `duration` arithmetic keep their exact prior SQL. A separate live probe confirms Neo4j natively returns values for the same component queries, so the shared backend-equivalent corpus correctly omits these shapes and the containment is PostgreSQL-scoped.
+
+Both driver compile boundaries now contain compiler panics as ordinary build errors. The shared translation cache formerly recovered a panicking build and re-panicked into the caller, crashing the calling process; the v2 connection cache had no recovery at all on either its retained or bypass paths. Both now convert a recovered panic into `cypher translation panicked: <value>` carrying the panicking goroutine's stack, so containment reduces crash loudness without losing diagnosability. A contained panic counts as a build failure, retains nothing, and coalesced waiters still build uncached and succeed; the leader-panic release and close-release waiter controls are unchanged. `Builder.PopOperand`'s DAWGS-004 guard remains the producer-boundary model: containment reports producer bugs, it does not fix them.
+
+The complexity analyzer rejected comparison operands whose property lookup had a non-variable atom (`where datetime($ts).epochmillis > 0`) with `expected variable for property lookup atom`, which also aborted the `CYSQL_UPDATE_CASES=true` fitness regeneration for the whole corpus. Such lookups now measure as ordinary non-selective predicates because they cannot reference a tracked node variable.
+
+Coverage: unit regressions in `temporal_containment_test.go` fail against the original type-cast fall-through (returning the bare stack-underflow error) and assert the exact new messages in both optimizer modes across datetime/date/localdatetime/localtime constructions, literal/parameter/property arguments, projection and WHERE shapes, and the unchanged duration rejection; supported controls pin exact SQL fragments for current-instant components, comparisons and duration arithmetic. Cache regressions fail against the original sources by escaping panics on both cache implementations and their bypass paths, and pass after containment with stack retention, failure counting, no retention and continued usability. The analyzer regression covers direct and reversed comparison operands plus projections. Four new parser/analyzer mutation cases carry regenerated fitness values; all pre-existing SQL golden fixtures regenerate byte-identically through `CYSQL_UPDATE_CASES=true` because no SQL rendering changed. The live `drivers/pg` regression checks each trigger's first and repeated requests through `ReadTransaction` for the exact error message, plus a supported control executing `datetime().epochseconds` inside a WHERE predicate. Statement coverage, measured identically without the race detector against a clean HEAD worktree, increases in `cypher/models/pgsql/translate` from **5047/6971 (72.3999%)** to **5089/6974 (72.9710%)**, in `cypher/analyzer` from **116/141 (82.2695%)** to **117/141 (82.9787%)**, and in `drivers/pg` from **1318/2477 (53.2095%)** to **1326/2483 (53.4031%)**.
+
+Boundaries: complete temporal component support (year/month/day and remaining components) remains separate M work; the containment rejects rather than implements it. `WITH datetime('2020-01-01') AS d RETURN d.epochmillis` still compiles to invalid SQL through the pre-existing carried-identifier property-lookup path (an execution error, not a panic or silent success); that projection/WITH representation boundary stays with the 052-family queue rather than this containment.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test_all` passes**, including the complete race-enabled unit stage (**67.1%** overall statement coverage on `.coverage/unit.out`, unchanged at the reported precision), complete integration stage and BDD stage. The complete Neo4j-selected **`make test_integration`** passes across all 43 packages and its subsequent **`make test_bdd_integration`** passes. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**; compatibility failures remain explicit. Repository lint, default and integration-tagged vet, `gofmt` and `git diff --check` pass. No Go edits followed the successful broad runs. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-030**, containing the unsafe aggregate/pattern-predicate shape as a normal translation error. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-030 aggregate pattern predicate containment — 2026-10-26
+
+The aggregate traversal count shape check accepts MATCH WHERE clauses whose dependencies are only the source or terminal symbol, and a pattern predicate's anonymous nodes contribute no dependency, so `WHERE (s)-[:T]->()` passes the check. `aggregateBindingPredicate` then walks the WHERE with a bare predicate translator that has no query parts; `preparePatternPredicate` indexes `Parts[-1]` through `Query.CurrentPart`, reproducing the recorded `index out of range [-1]` panic for both optimizer-enabled trigger families (source and terminal WHERE). The DAWGS-011 driver containment had converted this crash into `cypher translation panicked`; the producer itself still panicked. With optimization disabled the same shape compiles into a self-referencing CTE and drops the predicate's kind filter — the separately queued DAWGS-036 path — so declining the lowering is not containment.
+
+The binding-predicate walk now detects pattern predicates before walking, including negated and disjunct nesting, and returns `unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported` as a normal translation error. `preparePatternPredicate` gains the DAWGS-004 producer-boundary guard: a translator without an active query part returns `pattern predicate translation requires an active query part` instead of panicking. No SQL rendering changes; the lowering, plain shapes and property-only WHERE predicates keep their exact prior output, and disabled optimization still takes the unchanged generic path.
+
+Unit regressions in `aggregate_pattern_predicate_containment_test.go` panic against the original sources and pass after repair: both trigger families in the enabled mode with the exact message, negated and disjunct forms, the disabled-mode boundary (generic translation completes with no planned lowerings; DAWGS-036 owns that output), plain and property-predicate shapes still lowering with `candidate_sources`, the detector matrix over negation/disjunction/plain comparisons and a nil WHERE, and the producer guard on a bare translator. The live `drivers/pg` regressions execute both triggers through `ReadTransaction` twice each — the translation cache surfaces the same error on first and repeated requests — and a control proves the plain shape still executes and returns the fixture's exact single one-hop count and source node. Against the original sources supplied through a Go test overlay the live trigger fails with the 011 containment carrying the original panic stack; the control passes. Neo4j executes pattern predicates natively, so the shared backend-equivalent corpus omits these shapes and the containment is PostgreSQL-scoped.
+
+Two parser/analyzer mutation cases pin the trigger spellings; every pre-existing case and all SQL golden files regenerate byte-identically through `CYSQL_UPDATE_CASES=true`. README and `cypher/Cypher Syntax Support.md` document the boundary. Translator statement coverage, measured identically without the race detector, increases from **6507/8546 (76.1409%)** to **6539/8560 (76.3902%)**, with `preparePatternPredicate` at 100% and `containsPatternPredicate` at 90% (the uncovered branch is its defensive walk-error return). Focused race-enabled runs pass for `cypher/models/pgsql/translate`, `cypher/analyzer`, `cypher/frontend`, `cypher/models/cypher/...`, `cypher/models/walk/...` and `drivers/pg`; default and integration-tagged vet, `gofmt` and `git diff --check` pass.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test`** passes its complete race-enabled unit stage (**67.1%** overall statement coverage on `.coverage/unit.out`, unchanged at reported precision), the complete **`make test_integration`** passes, and the BDD gate reports **10 enforced / 0 failed, 18 report-only / 18 failed**. The complete Neo4j-selected **`make test_integration`** passes across all repository packages and its BDD gate reports the same summary; unsupported compatibility failures remain explicit. Repository lint passes. No Go edits follow the successful broad runs. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-086**, the empty v2 `KindIn` dropping the relationship predicate. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. The generic pattern-predicate repair remains DAWGS-036's queue item. Credentials are excluded from this ledger.
+
+### DAWGS-086 empty v2 kind predicates — 2026-10-26
+
+The recorded shapes reproduce exactly: `v2.New().Where(v2.KindIn(v2.Relationship())).Return(...)` built successfully and rendered `match ()-[r]->() return r`, silently removing the empty-kind restriction so the query matches every relationship — the single relationship kind matcher's kinds were folded into the pattern before rendering, and an empty fold is indistinguishable from no kind restriction. `v2.KindIn(v2.Node())` and `v2.Kind(v2.Node())` rendered `match (n) where  return n`, `v2.KindIn(v2.Start())` rendered `match (s)-[r]->() where  return r`, negated and nested forms rendered blank predicates (`where not `, a blank conjunct poisoning `where  and r:A`), and empty kind mutations rendered invalid `set n:` / `remove n:` through both the compat helpers and the typed continuations, which the finding's evidence lines already pointed at alongside `KindIn`.
+
+The contract is settled to a **clear Build error**, mirroring the rejection the typed continuations (`Kind().IsOneOf`, `Kinds().HasOneOf`) already enforce: an empty kind predicate is a caller error, never a silently dropped restriction, blank WHERE output or invalid mutation Cypher. An explicit restrictive "matches nothing" predicate was not chosen because the relationship fold path has no empty-kind pattern spelling, and the typed API had already committed to rejection; callers wanting no matches should omit the predicate or name an absent kind. `Build` now validates every WHERE constraint through the shared model walk — catching hand-built `KindMatcher`s and Not/And/Or nesting at any depth — and returns `kind predicate requires at least one kind` before pattern folding. Label-assignment set items without kinds return `kind assignment requires at least one kind` and kind-matcher removals without kinds return `kind removal requires at least one kind` through the existing `Update` error tracking. The compat helpers' doc comments (`Kind`, `KindIn`, `AddKind`, `AddKinds`, `DeleteKind`, `DeleteKinds`) document the contract; no exported signature changed.
+
+Sixteen error regressions in `query/v2/empty_kinds_test.go` fail against the original sources through a Go test overlay and pass after repair: both compat helpers over node/relationship/start/end references, negation/conjunction/disjunction nesting, a hand-built matcher, empty assignments and removals through compat helpers and continuations, and a populated matcher beside an empty one. Seven positive controls pin exact renderings for populated kinds — pattern folding (`match ()-[r:A]->() return r`), WHERE predicates, negation, assignment and removal — and pass byte-identically against the original sources, proving no populated behavior changed. An internal test pins walk-error propagation from the constraint validator. Both new validators reach **100% statement coverage**; `query/v2` package coverage increases from **78.0% to 78.5%** measured identically against clean HEAD without the race detector. The pre-existing `TestEmptyKindPredicatesReturnErrors` typed-continuation control still passes. Focused race-enabled runs pass for `query/v2`, `cypher/models/cypher/...`, `cypher/models/pgsql/translate`, `cypher/models/pgsql/test` and `drivers/pg/...`; `gofmt` and focused vet pass.
+
+Boundaries: the legacy `query` package is unchanged — its empty `query.KindIn` blank-WHERE rendering and "matches nothing" PostgreSQL execution behavior remain as previously documented, and legacy callers were not audited here; the finding's evidence and queue row are v2-scoped. The Cypher formatter still renders an empty `KindMatcher` as nothing; the v2 builder now rejects such queries before rendering instead of changing the formatter. No parser, translator, renderer or integration query semantics change, so the shared mutation/template corpora are unchanged: the v2 package is experimental and isolated per its package documentation, has no production callers in this repository (drivers use the legacy builder), and therefore contributes no live-database execution path for these shapes — the regression is builder-scoped by construction.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test`** passes its complete race-enabled unit stage (**67.2%** overall statement coverage on `.coverage/unit.out`, up from the previous ledger gate's 67.1%), the complete **`make test_integration`** passes across all repository packages including the full shared integration suite and graphbench, and the BDD gate reports **10 enforced / 0 failed, 18 report-only / 18 failed**. The complete Neo4j-selected **`make test_integration`** passes across all repository packages and its BDD gate reports the same summary; unsupported compatibility failures remain explicit. Repository lint passes. No Go edits follow the successful broad runs. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-008**, double negation collapsing to a single NOT, the first P2 row; all thirty-six P1 next steps are now recorded in this ledger. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. The generic pattern-predicate repair remains DAWGS-036's queue item. Credentials are excluded from this ledger.
+
+### DAWGS-008 negation parity — 2026-10-26
+
+The recorded trigger reproduced exactly: the grammar's `oC_NotExpression` collects every `NOT` prefix on one comparison, and both frontend visitor paths gated their `NegationVisitor` on `len(ctx.AllNOT()) > 0`, so any positive count produced exactly one `Negation` node. `MATCH (n:A) WHERE NOT NOT n.x = 1` formatted `where not n.x = 1` and emitted one SQL `not` in both optimizer modes — the opposite of the intended predicate. The fix gates both visitor paths on a shared `NegatesOperand` parity check: negation is an involution over Cypher's three-valued logic (`NOT NOT null` is still null), so an even count cancels to the positive predicate and an odd count negates exactly once. Even counts now flow through the same visitor path as zero NOTs, and formatting canonicalizes `where not not n.x = 1` to `where n.x = 1`. An explicitly parenthesized `not (not n.x = 1)` is a different AST shape and retains both operators. Because the negated string-predicate coalesce rewrite and the property null rewrite attach to the surviving `Negation` node, a canceled double negation now lowers to the bare predicate's existing SQL, including missing-property null filtering.
+
+Coverage: `negation_parity_test.go` in `cypher/models/pgsql/translate` asserts complete SQL for ten shapes in both optimizer modes — double/triple negation in WHERE, the parenthesized form, a single-NOT control, a conjunction operand, negated string-prefix and null predicates, standalone projection, WITH WHERE continuation, a projected predicate and a SET assignment. The eleven golden cases in `translation_cases/negation_parity.sql` were generated through `CYSQL_UPDATE_CASES=true`; every pre-existing golden file regenerates byte-identically. Six new positive parser/analyzer cases in `positive_tests.json` pin formatted output (four through matchers, the parenthesized form exactly) with regenerated fitness values 5, 4, 0, 3, 9 and 2; all pre-existing parser, filtering, mutation and negative fixtures regenerate unchanged, and `Cypher Syntax Support.md` plus the template and translation-case README files document the parity contract. Six new backend-equivalent variants in the shared `scalar_shapes.json` corpus check double negation against the positive predicate in WHERE, WITH WHERE, projections, string-prefix predicates and null predicates, and triple negation as a single negation, with identical assertions on both backends; `TestPostgreSQLScalarShapeCompilerModes` executes the full corpus in each PostgreSQL compiler mode.
+
+Against the original frontend sources supplied through a Go test overlay, all seven double-negation unit subtests fail in both modes, eight golden cases fail (the triple-negation, single-NOT and parenthesized controls pass because odd counts and the parenthetical shape already lowered correctly), four formatter cases and four fitness cases fail, and five of the six shared variants fail live on PostgreSQL — the triple-negation variant coincidentally passes because any odd count already produced one `not`. With the repair everything passes under the race detector on both supplied backends. No translator, renderer or builder code changed; the folded AST is the canonical positive form, so downstream consumers see no new shapes.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test_all`** passes, including the complete race-enabled unit stage (**67.2%** overall statement coverage on `.coverage/unit.out`, unchanged from the previous ledger gate at reported precision), complete integration stage and BDD stage; the gate reports **10 enforced / 0 failed, 18 report-only / 18 failed**. The complete Neo4j-selected **`make test_integration`** passes across all 43 packages and its subsequent **`make test_bdd_integration`** passes with the same gate summary. Focused race runs pass for `cypher/frontend`, `cypher/models/pgsql/translate`, `cypher/models/pgsql/test`, `cypher/models/cypher/format` and `cypher/analyzer`. Frontend package coverage rises from **55.1%** to **55.2%** and translator coverage remains **76.4%**, each measured identically against clean HEAD without the race detector. Repository lint, `gofmt`, focused vet and `git diff --check` pass; `goimports` remains unavailable in this image and the touched import blocks are canonical. No Go edits follow the successful broad runs. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-009**, whole-number float literals becoming integers in both emitters, the Neo4j rewrite and cache preparation. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. The generic pattern-predicate repair remains DAWGS-036's queue item. Credentials are excluded from this ledger.
+
+### DAWGS-009 integral float literal typing — 2026-10-26
+
+The recorded trigger reproduced exactly: `RETURN 3.0 / 2.0 AS a` emitted `select 3 / 2 as a;` in both optimizer modes and formatted as `return 3 / 2 as a`; `toString(1.0)` returned `"1"`; the password-age shapes `not u.pwdlastset IN [-1.0, 0.0]` rendered `array [- 1, 0]::float8[]`; `1e3` formatted as the integer `1000` and larger magnitudes became unparseable integers. Both emitters formatted floats through `strconv.FormatFloat(v, 'f', -1, 64)`, whose shortest decimal form for an integral value has no fractional part, so the text degraded to an integer literal before any type system saw it.
+
+A shared `cypher.FormatFloatLiteral` helper now renders the shortest round-trip decimal form and appends `.0` when that form lacks a fractional suffix; non-finite values keep their strconv rendering. The Cypher emitter and the PostgreSQL `formatValue` path (inline literals, array elements, materialized parameters) both use it. PostgreSQL therefore evaluates integral float literals as numeric literals: `select 3.0 / 2.0 as a` returns 1.5 (numeric), `select (1.0)::text` returns `"1.0"`, and `array [- 1.0, 0.0]::float8[]` keeps element types. Integer literals keep integer semantics (`3 / 2` stays integer division). The grammar's `RegularDecimalReal` accepts every rendered spelling, and exponent inputs (`1e3`) canonicalize to decimal float form (`1000.0`); parser round-trip regressions verify each spelling parses back to the same float64. Property comparisons are unchanged: the JSON scalar equality path already wraps literals in `to_jsonb(x::float8)`, whose jsonb result is identical for `3` and `3.0`.
+
+The Neo4j `rewriteQuery` path re-emits through the Cypher formatter, so a rewritten query carrying `3.0 / 2.0`, `[1.0, 2.5]` or `1e3` now keeps float spellings; a regression pins the rewritten text. Cache preparation is covered at both levels: builder identity already framed typed literals (DAWGS-058), a new direct encode check distinguishes `int64(1)` from `float64(1)`, and `TestCompileRegularQuerySeparatesIntegralFloatAndIntegerLiterals` proves `return 3.0 / 2.0` and `return 3 / 2` prepare distinct sources and identities, compile to distinct SQL (`3.0 / 2.0` versus `3 / 2`), never reuse each other's warm translation-cache entries, and stay warm/cold equivalent.
+
+Coverage: helper unit tests cover integral/negative/zero/negative-zero/fractional/small/large spellings with frontend round-trip and non-finite passthrough. Formatter regressions cover parsed queries, hand-built literals and stripped-literal redaction (Cypher), and float32/float64 scalars including a value above int64 range (PostgreSQL). The translator regression asserts exact SQL for division, projection, exponent canonicalization, `toString`, list literal, membership list, property equality and the integer-division control in both optimizer modes. Eight new golden cases in `translation_cases/float_literals.sql` were generated through `CYSQL_UPDATE_CASES=true`; the only pre-existing golden changes are the three known `[-1.0, 0.0]` renderings in `nodes.sql` (two) and `multipart.sql` (one), and every other golden file regenerates byte-identically. Six new parser positive cases pin canonical spellings (including the parenthesized-free exponent and negative-exponent forms) with regenerated fitness values; all pre-existing parser, filtering, mutation and negative fixtures regenerate unchanged. Nine new backend-equivalent variants in the shared `scalar_shapes.json` float-literal family check division (1.5), multiplication, subtraction, exponent division, projection, `toString`, float lists, property equality and the integer-division control with identical assertions on both backends; `TestPostgreSQLScalarShapeCompilerModes` executes the corpus in each compiler mode. Against the original emitters supplied through a Go test overlay, the formatter tests, the translator regression, the rewrite regression, the cache separation regression, ten golden/fixture cases and the live division and `toString` variants fail; everything passes under the race detector with the repair. README sections, `Cypher Syntax Support.md` (new "Floating-Point Literal Fidelity" subsection) and the template/translation-case documentation describe the behavior.
+
+Measured identically without the race detector against a clean HEAD worktree, combined statement coverage for `cypher/models/cypher`, its formatter and the PostgreSQL formatter rises from **64.3% to 64.6%** with `FormatFloatLiteral` at 100%, and translator coverage rises from **76.4% to 76.5%**. Focused race-enabled runs pass for `cypher/...`, `drivers/pg/...` and `drivers/neo4j` (with `-count=2` for the directly affected packages); repository lint, `gofmt`, default and integration-tagged vet, and `git diff --check` pass.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` with each supplied backend connection separately and sequential BDD report writes. The unrestricted PostgreSQL-selected **`make test`** passes its complete race-enabled unit stage at **66.6%** overall statement coverage on `.coverage/unit.out`; a clean HEAD worktree measures the same **66.6%** under identical flags, so this change does not lower coverage — the previous ledger's 67.2% did not reproduce in this environment, matching the environment-variance note recorded under DAWGS-099. The complete PostgreSQL-selected **`make test_integration`** passes across all 43 packages including the full shared integration suite, and the complete Neo4j-selected **`make test_integration`** passes across all 43 packages. The Neo4j **BDD gate passes with 17 enforced / 0 failed** and 18 report-only / 18 failed. **Pre-existing PostgreSQL BDD gate failure recorded:** upstream commit 3dd20466 (merged before this session) added `bdd/features/dawgs_features/leading_optional_match.feature`, whose four null-row scenarios encode the still-open **DAWGS-021** behavior; the PostgreSQL gate reports **17 enforced / 4 failed** identically on clean HEAD and on this repaired tree, while Neo4j passes all seventeen enforced scenarios natively. The scenarios were deliberately left untagged so DAWGS-021's repair qualifies against the enforced gate; no Go or feature edits follow from this finding. No Go edits followed the successful broad runs. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-051**, large integer properties losing precision in results. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. The generic pattern-predicate repair remains DAWGS-036's queue item. Credentials are excluded from this ledger.
+
+### DAWGS-051 exact integer result decoding — 2026-10-26
+
+The original connection uses pgx's default JSON/JSONB codecs, which decode numbers into `float64` before `queryResult.Next` receives the row. Updating the later `decodeJSONValue` helper alone cannot recover lost bits or repair composite property scans. Each new DAWGS pooled connection now registers connection-local JSON/JSONB codecs before loading graph composites, and replaces both JSON array element types as well. The untyped codec destinations use `UseNumber` and the existing import `jsonutil.NormalizeNumbers` rules: integer tokens become exact `int64`; decimal/exponent tokens become `float64`; unsupported ranges return contextual errors. Owned node/edge property scans, nullable composite fallbacks, composite arrays and paths all inherit the same decoder. Explicitly typed pgx scan destinations retain their normal JSON unmarshaling behavior. The raw-byte result helper uses the same number conversion; its existing structured-string reinterpretation remains open under DAWGS-057.
+
+This intentionally changes untyped JSON integer results from `float64` to `int64`, including small integers. README documents the caller migration, supported ranges and the requirement to check `Result.Error()` after iteration. PostgreSQL JSONB may normalize an exponent spelling into an integer spelling; decoding follows the returned JSON token, because JSONB does not retain the original input spelling or a separate integer/float type tag. No SQL, parser, schema or exported function signature changes are required.
+
+`TestExactResultNumbers` commits exact properties on two nodes and a relationship, then checks actual Go types and values in five shared query families: scalar property projections, a WITH-carried scalar scanned into `int64`, a nested parameter-map projection, node/relationship/path results and entity collections. Properties cover the recorded `4611686018427387905` trigger, values above the binary64 exact-integer boundary, both signs, signed 64-bit limits, small integers, fractions, numeric-looking strings, booleans and integer arrays. The test deliberately bypasses the corpus helpers' numeric coercion and JSON comparisons. All five families fail against the original production decoder supplied through a Go test overlay, including the carried scalar becoming `4611686018427387904`; all pass after repair on both supplied backends.
+
+Eight backend-equivalent variants in `exact_result_number_shapes.json` cover CREATE/SET numeric results, carried aliases, both signed limits, node and relationship updates, with exact integer post-mutation reads. Seven variants fail per PostgreSQL compiler mode with the original production decoder; the minimum-int64 control is already representable as binary64 and does not distinguish the original decoder. All eight pass with the repair on Neo4j and in both PostgreSQL compiler modes. The minimum literal is constructed as `-9223372036854775807 - 1`, avoiding the separate frontend rejection of the positive magnitude `9223372036854775808`. Driver-scoped live tests cover both PostgreSQL wire formats for JSON, JSONB, nested maps, SQL JSON arrays and nullable composite properties. Above/below-int64-range and floating-overflow values, including nested properties, arrays and both composite decode paths, stop iteration and propagate a range error through `Result.Error()`; no queryResult error-lifecycle patch is needed. Unit tests additionally cover native pgx scan targets, empty/null containers, ordinary strings, malformed/trailing JSON and explicit typed destinations. Existing owned-composite fixtures now expect exact integer properties.
+
+Non-race package-local coverage measured with identical flags and no backend selection rises from **57.6% to 57.9%** for `drivers/pg`; shared numeric normalization stays at 100%. Both new production functions are covered at **100%**. The complete PostgreSQL-selected race-enabled `make test` passes at **67.2%** overall statement coverage. Repository lint, default and integration-tagged focused vet, formatting and `git diff --check` pass. The complete `make test_integration` passes all **43 tested packages on each backend**, including the full shared corpus and both PostgreSQL compiler-mode checks. The PostgreSQL-selected `make test_all` completes its unit and integration stages and exits nonzero only at the existing **DAWGS-021 BDD gate failure: 17 enforced / 4 failed**, all four from `leading_optional_match.feature`; a separate original-production-decoder overlay confirms the same four failures. Its baseline BDD artifacts use a separate report directory so the repaired-tree reports remain intact. Neo4j's BDD gate passes **17 enforced / 0 failed**. Both retain **18 report-only / 18 failed** compatibility scenarios. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc`, each supplied backend connection separately, and `GOFLAGS='-ldflags=-linkmode=external'` for the broad gates to retain the recorded image linker workaround. BDD report writes are sequential. No Go edits follow the successful broad runs.
+
+`BenchmarkJSONNumberDecoding` records the decoding cost against the original `json.Unmarshal` behavior, whose large-integer answer is inexact. In an isolated non-race run (`-benchtime=300ms -count=3`) on this host, median scalar time rises from **266.4 ns to 650.7 ns (2.44×)**, with **32 to 688 B** and **3 to 11 allocations**; a small property map rises from **1,723 ns to 2,676 ns (1.55×)**, with **664 to about 1,538 B** and **23 to 35 allocations**. These are local codec costs, not database-throughput measurements. Earlier probes during the broad-gate load were slower for both implementations; the isolated measurements above are the final comparison. The already-decoded result-row path retains its existing zero-allocation regression.
+
+The next ordered work item is **DAWGS-057**, ordinary strings that look like JSON being decoded a second time. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. The generic pattern-predicate repair remains DAWGS-036's queue item. Credentials are excluded from this ledger.
+
+### DAWGS-057 JSON string result identity — 2026-10-26
+
+`queryResult.Next` receives decoded Go values from pgx, including strings from JSON/JSONB fields. The original `decodeJSONValue` helper then parses any string beginning with `{`, `[` or a quote as another JSON document. Live PostgreSQL results confirm that stored `[1, 2]` becomes a list, `{"k":"v"}` becomes a map, `"q"` loses its quotes and `"\u0041"` becomes `A`. Whitespace-bearing strings also lose their exact spelling. The repair removes this string reinterpretation; raw JSON bytes still pass through the exact-number decoder, and `decodeJSONValues` still limits decoding to JSON/JSONB columns. Actual structured values, text/bytea fields and nested strings retain their types. No parser, SQL, schema or exported function signature changes are required.
+
+Unit regressions replace the old expectations that explicitly endorsed parsing JSON-like strings. They cover JSON and JSONB column types, empty/quoted/structured/scalar-looking strings, whitespace, escape text and malformed JSON-looking text; raw byte decoding still handles legitimate objects, arrays, strings, numbers, nulls and invalid/range-error inputs. Actual JSON graph collections still scan into value slices with unchanged string properties. Both decoding helpers reach **100% statement coverage**, and already-decoded string fields require zero allocations. Measured identically without the race detector or a backend selection, package-local `drivers/pg` statement coverage rises from **1911/3299 (57.9266%)** on the original code and tests to **1911/3291 (58.0675%)** with the repair and new controls.
+
+`TestJSONResultStrings` commits node and relationship properties and checks exact Go string values through both `Values` and `Scan` for direct properties, WITH-carried aliases, relationship properties and parameter projections. Entity/path property maps and a nested parameter map/list remain structured controls. The original helper fails all three property query shapes for each of the eight JSON-looking string properties; all checks pass after repair on both supplied backends. The PostgreSQL wire regression checks JSON and JSONB scalar strings, nested arrays/maps, text/bytea and genuine structured JSON controls in both text and binary formats.
+
+Seventeen backend-equivalent variants in `json_result_string_shapes.json` cover CREATE, node/relationship SET and a write followed by WITH. They assert exact returned strings, complete node/relationship post-state and unchanged decoys. Every variant fails against the original helper in both PostgreSQL compiler modes, and every variant passes after repair on Neo4j and in both PostgreSQL modes. The focused PostgreSQL and Neo4j checks pass with the race detector. README and the corpus documentation describe the string-preservation contract. No compiler fixtures require regeneration because parsing, translation and rendering are unchanged.
+
+The complete PostgreSQL-selected race-enabled unit stage passes at **67.2%** overall statement coverage, unchanged from the previous ledger gate at reported precision. Both complete backend integration runs pass all **43 tested packages**, including the full shared corpus and both PostgreSQL compiler-mode checks. PostgreSQL's **`make test_all` exits nonzero only at the pre-existing DAWGS-021 BDD failure: 17 enforced / 4 failed**, all four from `leading_optional_match.feature`. Neo4j's BDD gate passes **17 enforced / 0 failed**; both retain **18 report-only / 18 failed** compatibility scenarios. The final focused race run also verifies the allocation guard with row values reset before every iteration: the original-source overlay fails with 43 allocations, and the repair passes with zero. Repository lint, default and integration-tagged focused vet, formatting and `git diff --check` pass; `goimports` remains unavailable, so touched Go files use `gofmt` and canonical import blocks. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc`, each supplied backend connection separately, and `GOFLAGS='-ldflags=-linkmode=external'` for broad gates to retain the recorded image linker workaround. BDD report writes are sequential, and separate backend report copies are retained under `.coverage/dawgs057-*-bdd.*`. Credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-016**, arithmetic between two properties choosing concatenation or trigram similarity. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. The generic pattern-predicate repair remains DAWGS-036's queue item.
+
+### DAWGS-016 runtime property arithmetic — 2026-10-26
+
+Live PostgreSQL validation reproduces `n.x + n.y` returning string `"72"` for numeric properties 7 and 2. Subtraction, multiplication and division select nonexistent text operators; modulo selects text semantics where the installed operator exists. A source overlay of the original expression, hinting and projection code fails **39 of 44 shared variants in each PostgreSQL compiler mode**, including wrong stored values and CREATE results. The same corrected fixtures pass on Neo4j. Numeric values in the shared JSON fixtures are assigned in Cypher before the tested expression, because the fixture loader otherwise presents integral numbers to Neo4j as floats. Separate committed-property tests use explicitly typed Go inputs and require exact Go result types.
+
+The compiler now retains JSONB operands for dynamic arithmetic and calls `cypher_arithmetic(jsonb, jsonb, text)`. Ordinary PostgreSQL schema assertion installs or replaces this immutable, strict, parallel-safe helper; schema teardown removes the exact signature. Numeric `+`, `-`, `*`, `/`, `%` and `^` select numeric behavior. Signed-64-bit integer operations avoid float conversion, integer division truncates toward zero, exponentiation returns a float, and floating results retain a fractional spelling for subsequent operations. Binary floating remainder is reduced using powers of two rather than decimal modulo; a deterministic live check compares 100 finite operand pairs with Go's `math.Mod`. String/number addition, string concatenation and list append preserve their value semantics. Null/missing operands propagate null; unsupported Boolean/string/object arithmetic, division by zero and integer overflow produce errors. Known literal and direct property/literal arithmetic keep the existing native SQL path.
+
+Projected properties retain their actual JSONB representation in scope, allowing arithmetic on WITH aliases and chained arithmetic results. Arithmetic comparisons normalize their operands to JSONB without introducing a text comparison. Twelve SQL golden cases and four parser/analyzer mutation cases cover operators, nesting, predicates, WITH, node/relationship SET and CREATE without RETURN. Three existing golden queries that concatenated two unknown properties now dispatch at runtime. The 44 backend-equivalent template variants check scalar values and complete mutation state, including unchanged kind, role, missing-property, direction and relationship-property decoys. `TestPropertyArithmetic` additionally checks actual `int64`/`float64`/string/null results and errors through committed properties on both backends. PostgreSQL-only schema tests check repeated assertion, SQL/JSON nulls, supported numeric boundaries, errors and floating remainder.
+
+Focused race-enabled translator, frontend, analyzer, schema and both backend checks pass. Translator package coverage rises from **6547/8560 (76.4836%)** in an archived original checkout to **6627/8626 (76.8259%)** with the new tests; the three arithmetic helpers reach 100% statement coverage. The complete final race-enabled unit run passes all **43 tested packages** at **67.2% overall coverage**, unchanged at reported precision. The initial `make test_all` unit attempt caught an overbroad new test assertion that rejected SET's legitimate JSONB merge operator; the assertion was corrected, the translator package passed with the same broad coverage instrumentation, and the complete unit suite was rerun successfully. Neo4j's complete integration run passes all **43 tested packages**, and its BDD gate passes **17 enforced / 0 failed**, with **18 report-only / 18 failed** compatibility scenarios. Repository lint and formatting checks pass; formatting uses `gofmt` on touched files because `goimports` is unavailable. README and both fixture guides describe the behavior and schema assertion requirement. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and `GOFLAGS='-ldflags=-linkmode=external'`, preserving the previously recorded image linker workaround.
+
+PostgreSQL's complete integration command passes **42 packages** and fails only `TestPostgreSQLScalePlanInvariants` while validating `generated_scan_lookups`: **nodes=0, expected 3774; edges=2408, expected 2408**. The entire shared corpus, both compiler-mode checks, arithmetic/schema regressions and PostgreSQL driver tests pass. A focused retry attempted while the remaining shared integration tests were active fails during schema assertion with SQLSTATE **25P02**; after that aggregate run finishes, the isolated race-enabled plan-invariant test passes in **8.042 s**. The aggregate fixture-failure cause remains unconfirmed; no fixture or plan assertion was weakened. PostgreSQL's separately executed BDD gate retains the four previously recorded `leading_optional_match.feature` failures under DAWGS-021: **17 enforced / 4 failed**, **18 report-only / 18 failed**. Accordingly, the broad PostgreSQL command is not reported as a clean pass. BDD writes are sequential, with backend report copies retained under `.coverage/dawgs016/`.
+
+Two boundaries remain explicit. PostgreSQL cannot reconstruct an integral float's original type after serialization or JSONB normalization has erased its fractional spelling; runtime dispatch follows the stored number representation, with out-of-int64 numeric values treated as floats. Explicit `toFloat` operands retain an available workaround. A probe projecting a fresh arithmetic alias and filtering it in the same WITH fails with an unqualified alias column; additional WITH boundaries also expose alias/comparison limitations. This work does not close the separate WITH/type-semantics rows 046/047/052 or non-string comparison row 018. Complete numeric storage-type preservation requires separate representation work.
+
+Local SQL measurements use materialized 10,000-row JSONB inputs, `EXPLAIN (ANALYZE, TIMING OFF)`, one warm-up and five measured repetitions. Median numeric addition takes **36.069 ms** through runtime dispatch versus **10.739 ms** through an explicitly typed correct native expression (**3.36×**); string concatenation takes **23.189 ms** versus **10.231 ms** for the formerly valid text path (**2.27×**). These measure the per-row type-dispatch cost rather than application throughput, and the numeric control is not the incorrect original concatenation. The known-type compiler path remains native. Capture scripts and focused results are retained under `.coverage/dawgs016/`; credentials are excluded from this ledger.
+
+The next ordered work item is **DAWGS-018**, preserving type boundaries for string predicates and ordered comparisons. DAWGS-019's runtime repair stays open under the selected design; 007 remains pending the downstream migration decision, and reproduction-only 039/063 plus the 045 expression-sequencing follow-up remain open. Generic pattern-predicate repair remains DAWGS-036.
+
+### DAWGS-018 typed predicates — 2026-10-26
+
+Live probes confirm that PostgreSQL turns numeric `123`, Boolean `true` and list values into text for string predicates, and accepts numeric string `"123"` in `n.x < 200`. Direct property comparisons use JSONB's total ordering and therefore also give Boolean answers for incompatible value types. Neo4j returns null in these cases, including under NOT. The same fixture confirms Boolean ordering and lexicographic list comparison: `[2] < [1, 3]` is false, and a null or incompatible element encountered before a decisive list element makes the comparison null.
+
+String predicate lowering now retains both operands' runtime type conditions. Its nullable Boolean guard returns null for non-strings regardless of the textual predicate's result; missing values and NOT preserve null instead of coalescing properties to empty strings. Bare property `->>` LIKE expressions remain visible to PostgreSQL's planner: a disposable 10,002-row expression-index fixture selects an index condition for the guarded prefix query without disabling sequential scans. Dynamic right operands retain the existing helper/escaped-LIKE selection. Regex operands receive type checks, while matching scope and existing pattern spelling remain unchanged under pending DAWGS-007. Functional-left literal escaping remains DAWGS-014.
+
+Dynamic ordered comparisons call the new immutable, strict, parallel-safe `cypher_compare(jsonb, jsonb)` helper, installed or replaced by ordinary schema assertion and removed by exact signature during teardown. Numeric comparisons retain exact JSON numbers, strings compare by Unicode order, Booleans order false before true, and lists compare lexicographically by recursively comparing compatible elements. Unlike types, objects and nulls yield null. Known literal operations and native temporal casts retain their paths. WITH scalar references expose their scope types before inference, and UNWIND columns without an AST hint use their concrete SQL type, with mutable parenthetical references so existing frame and same-WITH predicate substitution can qualify them. Unary predicates become selectable to support NOT projections as well as filters.
+
+The 64 backend-equivalent template variants cover projections and filters, all four string predicate forms, both ordered operand positions, property pairs, Booleans/lists, literal/parameter operands, null results, negation, WITH aliases, SET, continuation and CREATE with/without RETURN. Exact node and relationship post-state includes untouched direction, kind, role, property and missing-property decoys. Assignment fixtures use `coalesce(predicate, false)` because persisting null assignments has a separate pre-existing storage discrepancy; this repair does not close that behavior. `TestPropertyPredicateTypes` checks committed typed properties and actual Boolean/nil Go results, including exact integers above 2^53 and both signed-64-bit limits. The original-source overlay fails **59 of 64 variants per PostgreSQL compiler mode** and **19 direct typed-property cases**; all pass after repair on both backends. Thirteen new SQL golden queries and four parser/analyzer mutation source cases were regenerated through the repository workflow; related existing SQL expectations now include type guards or runtime comparison.
+
+Focused translator, parser/analyzer, golden SQL, PostgreSQL schema and both backend checks pass, including focused race-enabled translator validation. Translator statement coverage rises from **6627/8626 (76.8259%)** in an archived original checkout to **6664/8661 (76.9426%)** after repair. The complete race-enabled unit stage passes all 43 tested packages at **67.3% overall coverage**, up from the preceding 67.2% gate. Its initial attempt caught an older v2-builder SQL snapshot; the snapshot and parameter expectation were updated, and the full unit stage plus final affected-package regressions pass. Neo4j’s complete integration attempt passes 41 packages and records two affected-package failures: regenerated SQL fixtures were read by an earlier compiled translator while files were still changing, and an exploratory literal numeric regex case is rejected by Neo4j at compile time. The invalid success assertion was removed; runtime numeric-property regex checks remain. A stable, complete rerun of both affected packages (`cypher/models/pgsql/test` and `integration`) passes, including all 64 shared variants. PostgreSQL’s complete integration attempt also passes 41 packages and fails the same two affected packages: the earlier compiled translator encounters the regenerated SQL snapshots and untyped-null `to_jsonb` calls (SQLSTATE 42804). The final null-parameter lowering supplies an explicit JSONB type; the stable, complete two-package retry passes, including every live SQL fixture, the full shared corpus and both compiler-mode checks. Consequently all 43 tested integration packages are validated on each backend, with these aggregate attempts and retries kept explicit. PostgreSQL BDD retains only the four pre-existing DAWGS-021 `leading_optional_match.feature` failures (**17 enforced / 4 failed**); Neo4j BDD passes (**17 enforced / 0 failed**). Both report **18 report-only / 18 failed** compatibility scenarios. The PostgreSQL aggregate command therefore remains non-green; neither SQL nor BDD assertions were weakened. Repository lint, default and integration-tagged vet, formatting and `git diff --check` pass. Backend BDD writes are sequential and copied to separate captures. Formatting uses `gofmt` on touched files because `goimports` is unavailable. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and `GOFLAGS='-ldflags=-linkmode=external'`, preserving the previously recorded image linker workaround. Captures are retained under `.coverage/dawgs018/`; credentials are excluded from this ledger.
+
+Local SQL measurements use materialized 10,000-row JSONB inputs, JIT disabled, `EXPLAIN (ANALYZE, TIMING OFF)`, one warm-up and five measured repetitions. Median dynamic numeric comparison takes **10.725 ms** versus **4.866 ms** for the correct native comparison on the all-numeric control (**2.20×**); guarded string-prefix filtering takes **4.827 ms** versus **4.843 ms** for the original all-string path. These are local per-row costs, not application-throughput claims. Ordered dispatch does not retain an expression index on the former text-to-number cast. Positive string-index use is retained as checked above.
+
+Stored JSON cannot distinguish a temporal string or an integral float after serialization has erased its type; this repair preserves available JSON types and explicit temporal casts. Unsupported mixed/null raw list literals still reject before comparison lowering; schema-level nested/nullable JSON list tests do not establish new literal syntax support. DAWGS-052's broader WITH consumers, generic alias/filter boundaries and full temporal representation remain separate work.
+
+The next ordered work item is **DAWGS-052**, preserving property value/type semantics through WITH for `toString` and later consumers. DAWGS-019's runtime repair stays open under the selected design; 007 remains pending downstream evidence, reproduction-only 039/063 and the 045 expression-sequencing follow-up remain open, and generic pattern-predicate repair remains DAWGS-036.
+
+### DAWGS-052 WITH property consumers — 2026-10-26
+
+Live PostgreSQL probes reproduce extra JSON quotes/escaping in `toString(x)` after `WITH n.x AS x`, stored JSON null becoming the string `"null"`, missing `lower(jsonb)`/`cardinality(jsonb)` overloads, split quoting and delimiter failures, incompatible coalesce arguments, and `jsonb = text` equality. Committed-property controls include exact integers above 2^53, embedded quotes, backslashes, newlines, Unicode, empty strings, nullable values, lists, numeric strings and explicit date construction. Neo4j supplies the backend-equivalent oracle. The initial Neo4j template filter accidentally selected only the committed-value test; explicit template runs correct that coverage gap. An exploratory empty-string split assertion exposes the separately queued O08 difference, so the shared split variant uses nonempty inputs rather than a backend-specific expectation.
+
+Property projections continue to retain their value types. Text consumers call `cypher_text(jsonb, text)`, which extracts string contents without JSON serialization and distinguishes explicit toString conversion (also numbers/Booleans) from string-only functions. `cypher_size(jsonb)` counts Unicode characters or list elements, and `cypher_list(jsonb)` validates lists while preserving element types for head/tail. SQL/JSON nulls propagate as null and unsupported values produce normal query errors. Ordinary schema assertion installs/replaces the immutable, strict, parallel-safe helpers; teardown drops their exact signatures. Existing native literal/typed-array paths remain. Scalar conversion unwraps JSON strings before the existing casts; numeric toInteger casting retains its pending DAWGS-015 policy.
+
+Dynamic coalesce arguments normalize to JSONB, preserving the first non-null value's type and heterogeneous fallbacks; downstream text, Boolean, size and head/tail consumers select the appropriate representation. Direct property arrays with a native array fallback retain their existing typed-array path, preserving established UNWIND consumers. Direct property case conversion retains bare text extraction for functional indexes. Equality and null predicates expose the carried alias type and normalize JSON null before comparison; Boolean contexts cast JSON Boolean values rather than passing raw JSONB to SQL predicates. Rebinding a materialized alias to a converted expression creates a fresh typed binding, so `WITH toString(x) AS x` does not reuse the input JSONB type. Pure identifier projections retain their bindings and existing ordering controls.
+
+The shared corpus has **59 variants**, covering repeated/rebound aliases, scalar/null/Boolean/list consumers, exact node/relationship mutation state, applicable direction/kind/property/role/identity/missing-property decoys, WITH continuation and CREATE with/without RETURN. Twenty-five SQL golden queries and five parser/analyzer mutation source cases follow the repository regeneration workflow. `TestWithPropertyConsumers` checks actual Go values/types from committed properties independently of JSON assertion conversions; driver-scoped schema tests cover repeat assertion, SQL/JSON nulls, nested list preservation and invalid-type errors. An archived original-source overlay fails **53 of 59 variants in each PostgreSQL compiler mode** and **36 of 46 committed-value/error cases**. All final shared variants and committed controls pass on Neo4j and PostgreSQL, including both PostgreSQL compiler modes. Captures are retained under `.coverage/dawgs052/`.
+
+Translator statement coverage increases from **6664/8661 (76.9426%)** in the archived original checkout to **6778/8785 (77.1542%)** with the final focused unit tests. Focused race-enabled compiler, frontend/analyzer, v2 builder and driver checks pass. The complete final race-enabled `make test` run passes all **43 tested packages** at **67.3% overall coverage**, unchanged at reported precision from the preceding gate.
+
+The initial PostgreSQL `make test_all` unit stage passes all **43 tested packages** at **67.3% overall coverage**. Its integration stage passes 40 packages and records three affected packages: the SQL-fixture package encounters regenerated snapshots, the translator's test build mixes old model constants with the newly added list helper, and the shared integration package encounters both stale list-consumer code and two real compatibility regressions. The direct case-conversion helper hid functional indexes, and dynamic coalesce lost the native empty-array path required by existing UNWIND consumers. The final implementation restores those existing native paths; no index or scalar assertions were weakened. The stable, complete final rerun of `cypher/models/pgsql/test`, `cypher/models/pgsql/translate`, `drivers/pg/query` and `integration` passes, including every live SQL fixture, the full shared corpus, both compiler modes, original scalar/coalesce cases and property-index eligibility controls. Neo4j's aggregate integration attempt passes 42 packages and fails only the SQL-fixture package because its translator compiled before alias snapshots were regenerated. The stable final four-package rerun also passes on Neo4j. Thus all 43 tested integration packages are qualified on each backend, with the aggregate attempts and affected-package reruns recorded explicitly.
+
+Sequential final BDD runs report **17 enforced / 0 failed** on Neo4j and the same four pre-existing DAWGS-021 leading-OPTIONAL-MATCH failures on PostgreSQL (**17 enforced / 4 failed**). Both retain **18 report-only / 18 failed** compatibility scenarios. Accordingly the PostgreSQL aggregate command remains non-green. BDD captures are copied separately by backend. Repository lint, affected integration-tagged vet, formatting and `git diff --check` pass.
+
+Local helper measurements use materialized 10,000-row inputs, JIT disabled, `EXPLAIN (ANALYZE, TIMING OFF)`, one warm-up and five measured samples. Median explicit text conversion takes **9.389 ms** versus **4.490 ms** for correct native extraction (**2.09×**); size takes **8.618 ms** versus **4.236 ms** (**2.03×**); validated head extraction takes **9.525 ms** versus **3.662 ms** (**2.60×**). The string/list native controls know their input types and return correct results. These are diagnostic per-row costs measured while backend validation also used the host, not application-throughput or promotion-grade claims. Existing direct-property case-conversion indexes remain eligible as verified by the unchanged plan controls. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and `GOFLAGS='-ldflags=-linkmode=external'`. Formatting uses gofmt on all touched Go files because goimports is unavailable. Credentials are excluded from this ledger.
+
+Boundaries remain explicit: stored JSON cannot recover temporal or integral-float types erased during serialization. DAWGS-015 numeric conversion policy, O08 empty-string split, collect/UNWIND semantics (054/042), and generic WITH/MATCH/alias boundaries (046/047) remain separate. An exploratory scalar-tail error assertion is invalid for Neo4j, which accepts that input; PostgreSQL's dynamic head/tail support here is for lists and nulls. No shared assertion claims scalar-tail parity. These boundaries do not weaken any pre-existing regression assertions.
+
+The next ordered work item is **DAWGS-053**, preserving integer SUM precision and the empty-input SUM identity while qualifying AVG separately. DAWGS-019's runtime repair stays open under its selected design; 007 remains pending downstream evidence, reproduction-only 039/063 and the 045 expression-sequencing follow-up remain open, and generic pattern-predicate repair remains DAWGS-036.
+
+### DAWGS-053 numeric SUM — 2026-10-27
+
+Live committed-property tests reproduce PostgreSQL SUM losing precision above 2^53, returning null for empty/all-null inputs, and ignoring DISTINCT. For inputs 9007199254740993 and 2, the original float8-to-numeric path returns 9007199254740990 rather than 9007199254740995. The original compiler overlay fails **39 of 46 shared variants per PostgreSQL compiler mode**, including wrong stored totals and CREATE results. Neo4j passes the final backend-equivalent controls. The typed committed-value/error regression fails **22 of 26 cases** against the original source and passes after repair on both backends.
+
+SUM now lowers to `cypher_sum(jsonb)`, recognized as an aggregate throughout grouping and projection analysis. Ordinary schema assertion installs/replaces its `cypher_sum_transition(jsonb, jsonb)` function and aggregate; teardown removes both exact signatures before the arithmetic helper. One numeric accumulator per group starts at integer zero, ignores SQL/JSON nulls, rejects non-numeric values and reuses checked runtime arithmetic. Integer sums retain signed-64-bit precision, floating/mixed sums use floating arithmetic, and integer overflow returns a query error. DISTINCT reaches the SQL aggregate. The result retains its JSON number type through WITH, further aggregation, comparisons, integer division and node/relationship writes. Empty grouped input still produces no groups.
+
+The **46 shared variants** cover properties, relationship properties, literals, nullable inputs, DISTINCT, groups, aggregate tuples, aliases, filtering, subsequent arithmetic and complete mutation state. SET and CREATE variants run with and without RETURN and check unchanged direction/kind/role/missing-property decoys, exact large stored totals and created-node cardinality. Numeric fixture properties are assigned in Cypher from decimal strings to avoid the fixture loader's integer-to-float conversion. `TestNumericSum` checks actual Go values/types from committed properties, both signed-64-bit limits, cancellation, float results and invalid operands. PostgreSQL-scoped schema tests cover repeated schema assertion, SQL/JSON nulls, preserved float spelling, DISTINCT, invalid JSON value types and overflow errors. Thirteen new SQL golden cases, related existing aggregation snapshots and four parser/analyzer mutation cases follow the existing regeneration workflow. Exploratory fixture uses of unsupported `keys`, untyped negative array literals and the minimum signed integer's positive token were replaced with supported equivalent checks; no shared backend-specific assertions or skips were added.
+
+Focused race-enabled translator, schema and both backend checks pass. Translator statement coverage increases from **6778/8785 (77.1542%)** in an archived original checkout to **6784/8785 (77.2225%)**. The initial PostgreSQL `make test_all` stops in the unit stage on one new CREATE parser fixture whose map needed canonical spacing (`{total: total}`). The other **42 tested packages pass**. After correcting that fixture, the complete formatter package passes under the same race/coverage settings, and parser/analyzer checks pass. The combined unit coverage remains **67.3%**, unchanged at reported precision from the preceding gate. Repository lint, integration-tagged vet, formatting and `git diff --check` pass. Both complete race-enabled backend integration runs pass all **43 tested packages**, including all live SQL fixtures, the full shared corpus and both PostgreSQL compiler-mode checks. Sequential BDD runs pass on Neo4j (**17 enforced / 0 failed**) and retain exactly the four pre-existing PostgreSQL DAWGS-021 `leading_optional_match.feature` failures (**17 enforced / 4 failed**). Both report **18 report-only / 18 failed** compatibility scenarios. Accordingly PostgreSQL aggregate validation remains non-green; the initial unit fixture failure, successful formatter retry and existing BDD failures are kept explicit. Backend reports and captures are retained separately under `.coverage/dawgs053/`. README and both fixture guides describe the aggregate and schema assertion requirement. Formatting uses gofmt on touched Go files because goimports is unavailable. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and `GOFLAGS='-ldflags=-linkmode=external'`, retaining the previously recorded image linker workaround. Credentials are excluded from this ledger.
+
+Local SQL measurements use materialized 10,000-row JSONB inputs, JIT disabled, `EXPLAIN (ANALYZE, TIMING OFF)`, one warm-up and five measured repetitions. Median integer SUM takes **32.872 ms** versus **4.852 ms** for a correct native int8-input SUM (**6.78×**); floating SUM takes **34.069 ms** versus **6.897 ms** for native float8-input SUM (**4.94×**). These are diagnostic per-row type-dispatch costs, measured while other local checks used the host, rather than application-throughput claims. The native controls know their input types; the integer control preserves precision. DISTINCT can additionally require PostgreSQL's normal distinct-value storage even though the transition state is bounded.
+
+AVG remains separately qualified: it still converts inputs to float8 and casts the result to numeric. A single integer input 9007199254740993 produces PostgreSQL numeric **9007199254740990** after that cast, while the underlying float8 and Neo4j's float result represent **9007199254740992**. Ordinary AVG and empty-input null controls pass on both backends, but this repair does not correct AVG precision or its result representation. Stored JSON also cannot recover an integral float's type after serialization has erased its fractional spelling. Duration aggregation and unsupported UNWIND/list syntax remain outside this numeric SUM repair.
+
+The next ordered work item is **DAWGS-054**, preserving property value types through collect/UNWIND. DAWGS-019's runtime repair stays open under its selected design; 007 remains pending downstream evidence, reproduction-only 039/063 and the 045 expression-sequencing follow-up remain open, and generic pattern-predicate repair remains DAWGS-036.
+
+### DAWGS-054 typed collections — 2026-10-27
+
+Committed-property tests reproduce numeric and Boolean `collect(n.x)` results becoming strings and subsequent UNWIND arithmetic failing with `operator does not exist: text + integer`. The original-source overlay fails **42 of 74 shared variants per PostgreSQL compiler mode**, including wrong list properties and failed CREATE queries. It also fails **38 of 50 committed typed-result cases**, split equally between node and relationship properties. Neo4j passes those typed controls. An initial test-only attempt to scan into `[]any` used an unsupported scan target; the final regression checks the concrete elements from `Values()` directly on both backends.
+
+Collection preparation retains property JSONB values instead of extracting text, converts JSON null to SQL NULL before aggregation and uses a typed JSONB-array empty identity. WITH aliases retain the same normalization. UNWIND bindings carry the JSONB element type into arithmetic, Boolean, text and comparison consumers; membership converts its scalar operand without serializing SQL ANY syntax. Concatenation converts native arrays element by element, preserving strings instead of interpreting them as serialized JSON. Nested collections serialize each inner list as one value, so ragged and empty inner lists do not become PostgreSQL multidimensional arrays. Known native scalar and entity collections keep their existing representations. No new schema helper or schema migration is required.
+
+The **74 shared variants** cover numbers, Booleans, exact strings, DISTINCT, missing/null and empty inputs, grouping, WITH aliases, nested collections, membership, head/tail, concatenation and UNWIND arithmetic/Boolean/text/filter consumers. SET and CREATE variants run with and without RETURN and check complete node/relationship state, untouched direction/kind/role/missing-property decoys and exact created values/counts. `TestTypedCollect` checks actual Go element types from committed node and relationship inputs, both signed-64-bit limits, mixed values, fractional floats, nested/empty lists and JSON-looking strings. Eighteen new SQL golden cases, four parser/analyzer mutation cases and related existing aggregation/multipart/pattern-binding/UNWIND snapshots follow the existing regeneration workflow. Shared assertions and skips remain backend-equivalent.
+
+Translator statement coverage increases from **6784/8785 (77.2225%)** in an archived original checkout to **6871/8870 (77.4634%)** after repair. The final complete race-enabled unit run passes all **43 tested packages**, with overall statement coverage **33201/49300 (67.3448%)**, up from the preceding DAWGS-053 qualified profile's **33118/49215 (67.2925%)**; both report 67.3% at one decimal place. The first broad unit attempt used three intermediate SQL placeholders and failed in the translator-fixture package; final regeneration and the complete rerun pass.
+
+The broad Neo4j integration run passes **42 packages** and fails the translator-fixture package on two intermediate concatenation snapshots. The broad PostgreSQL integration run also passes **42 packages**, with the shared integration package exposing a property-membership regression: scalar hinting extracted text and then cast string contents to JSON. Typed collection membership now retains the original property JSON before scalar hinting. Positive, negated, cross-type and mutation controls cover that boundary. The final race-enabled translator, SQL-fixture and entire shared integration package reruns pass all three packages on each backend, completing all **43 tested packages per backend** across the broad runs and affected-package reruns. All 74 new shared variants pass on Neo4j and in both PostgreSQL compiler modes.
+
+Sequential BDD runs pass on Neo4j (**17 enforced / 0 failed**) and retain exactly the four pre-existing PostgreSQL DAWGS-021 `leading_optional_match.feature` failures (**17 enforced / 4 failed**). Both report **18 report-only / 18 failed** compatibility scenarios. PostgreSQL aggregate validation therefore remains non-green; the initial unit/snapshot failures, PostgreSQL membership correction and successful reruns remain explicit.
+
+Repository lint, integration-tagged vet, formatting and `git diff --check` pass. README and both fixture guides describe typed collections. Formatting uses gofmt on touched Go files because goimports is unavailable. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and `GOFLAGS='-ldflags=-linkmode=external'`, retaining the previously recorded image linker workaround. Captures are under `.coverage/dawgs054/`; credentials are excluded from this ledger.
+
+Local SQL diagnostics use materialized 10,000-row JSONB inputs, JIT disabled, one warm-up and five measured repetitions with `EXPLAIN (ANALYZE, TIMING OFF)`. Median integer collection takes **9.518 ms** versus **8.676 ms** for the original text-extraction path (**1.10×**); string collection takes **9.570 ms** versus **7.417 ms** (**1.29×**). PostgreSQL aggregate value sizes increase from **80,028 to 200,024 bytes** for integers and **80,028 to 160,028 bytes** for strings. These sizes describe the SQL values, not peak process memory; both implementations retain the full collection. The original numeric path returns the wrong element types. Measurements include input construction and were taken while other checks used the host; they are diagnostic costs, not application-throughput claims.
+
+Stored JSON cannot recover an integral float's type after serialization erases its fractional spelling. Direct property-array UNWIND and arbitrary nested-list expansion remain under DAWGS-042; this repair covers UNWIND of the typed SQL collections produced by collect. The next ordered work item is **DAWGS-056**, preserving entity types in collected-ID membership. DAWGS-007, runtime repairs under 019, reproduction-only 039/063 and 045 expression sequencing retain their previously recorded boundaries.
+
+### DAWGS-056 entity membership types — 2026-10-27
+
+A PostgreSQL-scoped fixture commits two nodes and a relationship, then explicitly assigns the relationship the first node's ID without changing either sequence. The prerequisite query confirms equal numeric IDs. Against the original expression/function source overlay, cross-type membership returns one match instead of zero; negation drops the real row, SET modifies the wrong entity and CREATE adds an unwanted node. **10 of 13 overlapping-ID controls fail per compiler mode**. The same-type node/relationship controls and explicit overlap prerequisite pass against the original code. Each tested mutation runs in a separate rollback transaction and checks all stored node/relationship properties afterward.
+
+ID-only collection bindings now retain their Cypher element type independently of the SQL `int8[]` representation, including across scope copies. Membership checks those types before lowering to scalar identity comparisons. Nodes, relationships and numeric IDs remain distinct. Same-type ID-only membership keeps its existing SQL form. Full-entity collections carried through WITH compare extracted IDs, so they also support relationship membership and alias continuations. Nullable targets, null collections, empty lists, Boolean projections and negation preserve the membership truth table. Direct same-type aggregate projections keep their existing typed-composite comparison to preserve aggregate scope; a final-review regression for `head(collect(n)) IN collect(n)` pins that boundary. Cross-type aggregate expressions retain their false/null result without moving aggregates into an identity-extraction subquery. Expansion relationship variables are lists and are excluded from scalar-entity ID lowering.
+
+The shared corpus has **67 backend-equivalent variants**, including DISTINCT, duplicate inputs, entity expressions and aliases, numeric ID decoys and nullable/empty collections. The original expression/function source overlay fails **21 variants per PostgreSQL compiler mode**. SET and CREATE variants run with and without RETURN and check complete node/relationship fixture records, untouched kind/property/missing-property decoys and exact created values/counts. **16 SQL golden cases**, four parser/analyzer mutation cases and focused compiler/scope-copy tests follow the existing fixture workflow. Exploratory assertion spellings and scan targets were corrected to the harness contracts; an unsupported mixed-null list literal was excluded rather than broadening list parsing under this finding.
+
+The complete race-enabled unit run passes all **43 tested packages** at **67.4%** overall coverage, up from the preceding gate's 67.3%. The final race-enabled translator, SQL-fixture, analyzer and formatter reruns pass after adding the direct aggregate controls. Translator coverage increases from **6871/8870 (77.4634%)** in an archived original checkout to **6946/8925 (77.8263%)**. Replacing the changed helper's coverage blocks with the final compiler run gives combined unit coverage **33248/49355 (67.3650%)**, up from the preceding gate's **33201/49300 (67.3448%)**.
+
+The complete Neo4j integration matrix passes all **43 tested packages**. The initial PostgreSQL-selected `make test_all` passes its unit stage and **41 integration packages**; its SQL-fixture and shared integration packages use an intermediate compiler while the two final aggregate-expression controls are being added, and fail on those two shapes. Final race-enabled integration-tagged reruns of the translator, SQL-fixture and entire shared integration package pass all three packages on the finished source, completing all **43 integration packages** across the broad run and affected-package reruns. All **67 shared variants** pass on Neo4j and in both PostgreSQL compiler modes; all **13 committed overlapping-ID controls per mode** pass. The initial PostgreSQL aggregate-boundary failures remain explicit rather than being treated as a clean aggregate run.
+
+Sequential final BDD runs pass on Neo4j (**17 enforced / 0 failed**) and retain exactly the four pre-existing PostgreSQL DAWGS-021 `leading_optional_match.feature` failures (**17 enforced / 4 failed**). Both report **18 report-only / 18 failed** compatibility scenarios. PostgreSQL aggregate validation therefore remains non-green. Repository lint, integration-tagged vet, formatting and `git diff --check` pass. No schema assertion or schema migration is required. Formatting uses gofmt on touched Go files because goimports is unavailable. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc` and `GOFLAGS='-ldflags=-linkmode=external'`, retaining the previously recorded image linker workaround. Captures and separate backend BDD reports are under `.coverage/dawgs056/`; credentials are excluded from this ledger. No Go edits follow the successful final checks.
+
+Local SQL diagnostics use materialized 10,000-element arrays, JIT disabled, one warm-up and five measured repetitions with `EXPLAIN (ANALYZE, TIMING OFF)`. A missing-ID probe over full node composites takes **3.749 ms** with the repaired identity extraction versus **3.718 ms** for a correct streamed-ID subquery control. Native ID-array membership takes **1.419 ms**; the cross-type guard takes **1.905 ms** including identical input construction. Measurements are noisy local diagnostics while other checks use the host, not throughput or performance-equivalence claims. Full-composite identity extraction constructs an additional ID array (**80,024 bytes** for this fixture), which can be materialized for each correlated evaluation. ID-only collections keep their existing representation and same-type membership SQL; their cross-type guard avoids scanning elements because collect has already removed nulls. Broader collection resource policies remain separate work.
+
+The next ordered work item is **DAWGS-015**, explicit `toInteger` truncation. DAWGS-007, runtime repairs under 019, reproduction-only 039/063 and 045 expression sequencing retain their previously recorded boundaries.
+
+## Resolved original findings: keep as regression controls
+
+These nine original findings have no new repair slot. Their current corrected behavior must remain intact while adjacent work changes shared code. The caveat associated with 062 is already included in the urgent deletion investigation above.
+
+| Finding | Track | Protect while changing |
+| --- | :---: | --- |
+| [DAWGS-025](variance_findings.md#dawgs-025) | Q | Dual-bound exact endpoint correlation and row counts during pattern/binding work. |
+| [DAWGS-029](variance_findings.md#dawgs-029) | Q | Previously bound expansion terminal identity, including zero-hop and carried bindings. |
+| [DAWGS-032](variance_findings.md#dawgs-032) | Q | Ordinary expansion continuation after a first-edge self-loop. |
+| [DAWGS-034](variance_findings.md#dawgs-034) | Q | Zero-only expansion without one-edge neighbors. |
+| [DAWGS-038](variance_findings.md#dawgs-038) | Q | Nonfinal DELETE visibility before aggregation and retained input projection. |
+| [DAWGS-044](variance_findings.md#dawgs-044) | Q | Staged multipart SET/REMOVE/CREATE execution and write visibility. |
+| [DAWGS-048](variance_findings.md#dawgs-048) | Q | Distinct aliases referencing the original WITH input frame. |
+| [DAWGS-050](variance_findings.md#dawgs-050) | R | Implicit result expression names and correct SQL quoting. |
+| [DAWGS-062](variance_findings.md#dawgs-062) | D | Graph-specific node/edge partition routing for reads and mutations; retain separate trigger-scope validation. |
+
+## Newly completed implementation history
+
+The following notes preserve the earlier endpoint failures and implementation-time
+counts. The 2026-10-28 acceptance below supersedes their pending statuses and
+records the current corpus sizes.
+
+### DAWGS-015 integer truncation — 2026-10-27
+
+Picked up the next item recorded by the DAWGS-056 completion notes. PostgreSQL's direct integer cast rounds numeric inputs, whereas this repair explicitly applies `trunc` before casting. Native floating parameters stay in their native representation so conversion through `numeric` cannot erase significant digits near signed-64-bit limits. Dynamic JSONB numbers use their exact `numeric` representation instead of floating point, preserving all bits of integer properties. Integer, integer-string and null controls retain their existing casts. No schema or exported signature change is required. Invalid-string parsing, Boolean conversion and out-of-range conversion compatibility are outside this numeric-rounding repair.
+
+The new compiler regressions fail against the original translator on all eight numeric shapes in each optimizer mode and pass after repair; exact-integer and string/null controls retain their existing paths. Twelve SQL cases cover literals, WITH aliases, node/relationship properties, mutation filters, SET and CREATE without RETURN. Three existing SQL files were regenerated through `CYSQL_UPDATE_CASES`. Four parser/analyzer mutation cases were added and their fitness values regenerated through the existing workflow.
+
+The shared `to_integer_shapes.json` corpus contains **42 backend-equivalent variants**, including positive/negative fractions and zero, literal and parameter inputs, direct and carried properties, arithmetic, UNWIND, nulls, exact integers and signed-64-bit string limits. SET, filter and CREATE cases run with and without RETURN and check complete fixture node/relationship records, untouched decoys and created cardinality/values. An offline validation overlay compiles all **84 PostgreSQL mode/variant combinations** and checks assertion decoding; this establishes fixture/compiler validity only. `TestToInteger` separately checks actual Go result types for 16 native-parameter/committed-property inputs and native floating parameters at the signed-64-bit boundaries.
+
+Validation on the finished source: `make test` passes all **43 tested unit packages**, and the complete SQL-fixture package passes separately under the race detector. Focused translator/analyzer/frontend race tests, fixture drift/kind guards, repository lint, integration-tagged vet, gofmt and `git diff --check` pass. Formatting uses gofmt on touched Go files. Runs retain the recorded image settings `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`.
+
+The same full unit gate also passes all **43 packages** in an isolated pristine checkout of `eca58d1`. Overall unit coverage remains **66.9%**: **33,039 / 49,355** statements before and **33,043 / 49,360** after, a small increase without an overall coverage drop. The earlier overlay-based coverage attempt was invalid because the instrumented imported translator did not use the original source; it is excluded from this comparison. Captures and the valid coverage comparison are under `.coverage/dawgs015/`.
+
+**Live validation remains blocked.** Both supplied loopback endpoints refuse TCP connections, including the initial original-source probes, so no before/after runtime result or stored-state claim is established. Both selected-backend integration and BDD gate attempts finish unsuccessfully on connection setup, with no live semantic acceptance established. Their logs are recorded under `.coverage/dawgs015/`. Resume `TestToInteger`, the shared template corpus on Neo4j and both PostgreSQL compiler modes, then the complete backend gates once the services are reachable. Keep this item in the active queue and retain the current **63 unfinished / 41 completed** counts until live acceptance passes. DAWGS-014 is the following implementation item. Credentials are excluded from this evidence.
+
+### DAWGS-014 string predicate literal escaping — 2026-10-27
+
+Both supplied loopback endpoints still refuse TCP connections, so DAWGS-015 remains open for live acceptance. Picked up its following implementation item, DAWGS-014. Literal escaping previously depended on the left operand being a direct property. Function results, WITH aliases and literal left operands now escape `%`, `_` and backslashes before STARTS WITH, ENDS WITH or CONTAINS adds its semantic wildcards. The lower-property ILIKE prefilter and exact LIKE comparison share that escaped pattern. This changes compiler preparation only: no schema, exported signature or new runtime helper is required. Parameter/property right operands retain runtime escaping, and regex matching scope and escaping remain under their existing contract and DAWGS-007 decision.
+
+The original translator fails **48 of 54 literal-escaping compiler controls**, split equally across both optimizer modes; the six bare-property controls pass. All 54 pass after repair, including lower/upper/nested functions, coalesce, toString, scalar/property-derived aliases, literal left operands and a pattern containing all three LIKE metacharacters with a trailing backslash. Additional parameter and regex controls pass in both modes. Fourteen new SQL golden cases cover filters, projections, aliases, parameters, regex controls, SET and CREATE without RETURN. Existing coalesce examples in `nodes.sql`, `pattern_binding.sql` and `shortest_paths.sql` were regenerated, including SQL embedded in shortest-path harness parameters. Four parser/analyzer mutation cases and their fitness values follow the existing regeneration workflow.
+
+The shared `string_predicate_escaping_shapes.json` corpus has **60 backend-equivalent variants**. It covers all three predicates with underscores, percent signs and backslashes, function and alias operands, direct-property and parameter controls, negation, empty strings and missing properties. SET and CREATE run with and without RETURN and check complete node/relationship fixture records, unchanged direction/kind/role/missing-property decoys and exact created values/counts. An offline validation overlay compiles every primary and post-state query and decodes assertions for all **120 PostgreSQL mode/variant combinations**; this establishes fixture/compiler validity only. `TestPostgreSQLStringPredicateEscapingCompilerModes` will execute the same shared variants in each compiler mode when PostgreSQL is available.
+
+The full race-enabled unit gate passes all **43 tested packages**, as does the pristine `803dfcb` baseline in an isolated archived checkout. Overall unit coverage increases from **33,042 / 49,360 (66.9408%)** to **33,045 / 49,360 (66.9469%)**, both reported as 66.9%. Translator coverage increases from **7,168 / 8,930 (80.2688%)** to **7,169 / 8,930 (80.2800%)**. Coverage comparisons merge repeated profile locations before counting statements. A final translator unit rerun, including the additional parameter/regex controls, passes with no further coverage change. Focused race-enabled SQL-fixture, analyzer, frontend and formatter tests, repository lint and integration-tagged vet pass. Formatting uses `make format`; the unrelated pre-existing formatting change it produced was excluded. Validation retains `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`. Captures and coverage comparisons are under `.coverage/dawgs014/`. README and both fixture guides document literal escaping and the live-validation boundary.
+
+The Neo4j-selected `make test_all` passes its unit stage; its integration sweep finishes with **39 passed / 4 failed packages**. The PostgreSQL-selected `make test_all -o test` reuses the completed unit gate and finishes its integration sweep with **35 passed / 8 failed packages**. Every failed top-level integration test has connection-refused evidence; neither sweep establishes live semantic acceptance. Separate sequential BDD attempts on each backend fail during connection setup before scenario execution. Targeted DAWGS-015 typed/boundary and DAWGS-014/015 corpus attempts also fail at setup. These are failed aggregate gates, not successful live validation. `git diff --check` and formatting checks for the touched Go files pass.
+
+**Live validation remains blocked.** The supplied Neo4j and PostgreSQL services still refuse connections. No runtime result or stored-state acceptance is established for this repair, and DAWGS-015 cannot be closed either. Retain the **63 unfinished / 41 completed** counts. Resume the 42 DAWGS-015 variants and typed/boundary controls, these 60 DAWGS-014 variants on both backends and both PostgreSQL compiler modes, then complete backend gates. DAWGS-040 is the following implementation item. Credentials are excluded from this evidence.
+
+### DAWGS-040 WITH ordering and pagination — 2026-10-27
+
+Picked up the next implementation item recorded after DAWGS-014. Read-only multipart boundaries now use the existing boundary renderer to retain ORDER BY, SKIP and LIMIT. Ordering resolves entity/scalar aliases back to their input expressions, including nested expressions, before the boundary is materialized. Each WITH and the final RETURN retain independent modifiers. Read-only boundaries with modifiers also separate their input predicates from WITH WHERE, evaluating the latter after pagination; constant projections retain their incoming row stream. Existing staged mutation boundaries use the same renderer and remain covered. No schema or exported signature changes are required. Parameterized pagination retains its existing explicit rejection; unrelated WITH/MATCH frame issues under DAWGS-046 and general ORDER BY identifier collisions under DAWGS-047 remain separate.
+
+The original compiler fails the new read-only modifier controls in both optimizer modes, the filter-after-pagination checks, consecutive-page checks and literal-projection cardinality checks; existing final-write modifier controls pass. The repaired compiler passes those regressions and the existing staged-write tests. Seventeen new SQL golden cases cover reads, aliases, DISTINCT, grouping, hidden input predicates, consecutive pages, literal projection, SET and CREATE without RETURN. Regeneration through CYSQL_UPDATE_CASES leaves all pre-existing SQL fixtures byte-identical. Four parser/analyzer mutation cases carry fitness values regenerated through the existing workflow.
+
+The shared `with_modifier_shapes.json` corpus contains **44 backend-equivalent variants: 28 reads and 16 mutations**. It covers ascending/descending and multi-key order, SKIP/LIMIT individually, zero limits, aliases, nested/hidden sort keys, DISTINCT, aggregation, duplicate/empty inputs, consecutive boundaries, independent RETURN modifiers, literal projections and WITH WHERE after pagination. Node/relationship SET and CREATE run with and without RETURN, checking complete fixture state, unchanged direction/kind/property/root/missing-property decoys and exact created values/counts. An offline validation overlay compiles every primary and post-state query and decodes assertions for all **88 PostgreSQL mode/variant combinations**. This establishes fixture/compiler validity only. `TestPostgreSQLWithModifierCompilerModes` executes the same variants in each mode when PostgreSQL is available.
+
+The full race-enabled unit gate passes all **43 tested packages**, as does the pristine `bcb05f4` baseline in an isolated archived checkout. Overall unit statement coverage increases from **33,045 / 49,360 (66.9469%)** to **33,047 / 49,361 (66.9496%)**, both reported as 66.9%. Translator coverage increases from **7,169 / 8,930 (80.2800%)** to **7,170 / 8,931 (80.2822%)**. Coverage comparisons merge repeated profile locations before counting statements. Repository lint, integration-tagged vet with the repository's generated-parser exception, Go formatting, SQL/fitness regeneration checks and `git diff --check` pass. Formatting uses goimports on the touched Go files. Validation retains `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`. Captures and coverage comparisons are under `.coverage/dawgs040/`.
+
+The Neo4j-selected `make test_all` passes its unit stage, then finishes the integration sweep with **39 passed / 4 failed packages**. The PostgreSQL-selected `make test_all -o test` reuses that completed unit gate and finishes its integration sweep with **35 passed / 8 failed packages**. Every failed top-level integration test has connection-refused evidence: **35 Neo4j and 175 PostgreSQL tests**. Separate sequential BDD attempts on both backends fail during connection setup before scenario execution. These are failed aggregate gates, with no live semantic acceptance established. Final TCP probes still receive connection refusal on both supplied loopback ports.
+
+**Live validation remains pending.** Both supplied loopback database endpoints refuse connections. No runtime row-selection or stored-state acceptance is established, and DAWGS-014/015 remain open for the same live-validation requirement. Retain **63 unfinished / 41 completed** actions. Resume these 44 variants on Neo4j and both PostgreSQL modes, the earlier pending DAWGS-014/015 checks, then complete backend gates once the services are reachable. **DAWGS-021 is the following implementation item.** Credentials are excluded from evidence.
+
+### DAWGS-021 leading OPTIONAL MATCH — 2026-10-27
+
+Picked up the next implementation item recorded after DAWGS-040. A leading OPTIONAL MATCH now materializes one implicit input row with no graph source, then uses the existing row-identity outer join. A failed complete pattern or WHERE filter therefore retains one null-extended row, while successful matches preserve their multiplicity. Remaining pattern-predicate futures are consumed into the join condition instead of filtering the null row afterward. Computed path bindings retain visibility for wildcard projection without becoming nonexistent exported columns. No schema or exported signature change is required. General pattern-predicate framing across later MATCH clauses remains under DAWGS-036.
+
+The original compiler fails all **30 new leading-optional compiler controls**, split equally between optimizer modes. The repaired compiler passes the seed, binding-visibility and predicate-placement checks, plus the existing duplicate-input and pending-UNWIND controls. **17 new SQL golden cases**, two regenerated existing cases and four parser/analyzer mutation cases follow the existing fixture workflow. Staged SET-to-CREATE continuations have compiler and shared-corpus coverage; the single-statement golden harness deliberately excludes that staged shape. Intermediate placeholder/fitness and canonical-format failures were corrected before the final checks.
+
+The shared `leading_optional_shapes.json` corpus contains **53 backend-equivalent variants: 37 reads and 16 mutations**. It covers empty graphs, known labels, rejected literal/parameter/pattern predicates, fixed/variable/zero-hop paths, wildcard and explicit path bindings, comma-separated patterns, aggregation, WITH/UNWIND, chained optionals and independent mandatory matches. SET and CREATE run with and without RETURN, checking complete fixture node/relationship records, unchanged direction/kind/property/source/missing-property decoys and exact creation values/counts. An offline validation overlay compiles every primary and post-state query and decodes assertions for all **106 PostgreSQL mode/variant combinations**. This establishes fixture/compiler validity only. `TestPostgreSQLLeadingOptionalCompilerModes` executes the same shared variants in each mode when PostgreSQL is available.
+
+The final race-enabled unit gate passes all **43 tested packages**, as does the pristine `8736fef` baseline in an isolated archived checkout. Overall unit statement coverage increases from **33,045 / 49,361 (66.9456%)** to **33,054 / 49,370 (66.9516%)**. Coverage comparisons merge repeated profile locations before counting statements. Repository lint, integration-tagged vet with the generated-parser exception, shared-corpus drift/kind guards, SQL/fitness regeneration checks, formatting and `git diff --check` pass. Formatting uses `make format` followed by goimports on the final touched Go files; the unrelated pre-existing formatting difference is excluded. Validation retains `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`. Captures and the coverage comparison are under `.coverage/dawgs021/`. The initial full unit attempt embedded the intermediate noncanonical mutation fixtures and failed only the formatter package; the final full unit gate passes on the corrected fixtures.
+
+The final Neo4j-selected `make test_all` passes its unit stage, then finishes the integration sweep with **39 passed / 4 failed packages**. The PostgreSQL-selected `make test_all -o test` reuses the qualified unit gate and finishes its integration sweep with **35 passed / 8 failed packages**. Every failed top-level integration test includes connection-refused evidence: **35 Neo4j and 176 PostgreSQL tests**. Separate sequential BDD attempts on both backends fail during connection setup before scenario execution. These are unsuccessful aggregate gates, with no live semantic acceptance established. Final TCP probes still receive connection refusal on both supplied loopback ports.
+
+**Live validation remains pending.** Both supplied loopback database ports refuse connections. No runtime row-selection or stored-state acceptance is established; DAWGS-014/015/040 remain open for the same requirement. Retain **63 unfinished / 41 completed** actions. Resume these 53 variants on Neo4j and both PostgreSQL modes, the existing leading-optional BDD scenarios, the earlier pending checks and complete backend gates once the services are reachable. **DAWGS-036 is the following implementation item.** Credentials are excluded from evidence.
+
+### DAWGS-036 pattern-predicate lifetime and live acceptance — 2026-10-28
+
+The next implementation item was DAWGS-036. Eight new compiler controls reproduce
+the lost relationship-kind constraint in both optimizer modes before repair.
+Pattern-predicate futures are now resolved once per MATCH instead of being
+rebuilt after a later MATCH with already-consumed constraints. A pending filter
+is projected over its original input before entering another MATCH; this also
+prevents later predicates and OPTIONAL MATCH joins from referencing an input
+frame that is no longer in scope. OPTIONAL MATCH retains its own matched-side
+filter handling. No schema or exported interface changes are required.
+
+Nine SQL golden cases, four parser/analyzer mutation cases and the shared
+`pattern_predicate_lifetime_shapes.json` corpus cover directed/incoming/undirected
+and multi-hop predicates, negation, repeated and compound predicates,
+parameterized relationship properties, independent matches, WITH, OPTIONAL MATCH,
+fan-out and SET/CREATE with and without RETURN. All 22 shared variants pass on
+Neo4j and in both PostgreSQL compiler modes. Mutation checks compare complete
+fixture node/relationship records, unchanged decoys, created labels/values and
+exact creation cardinality. Fixture writes are rolled back. The generic repair
+does not remove DAWGS-030's explicit specialized aggregate-count rejection;
+that optimization/fallback follow-up remains open.
+
+The now-reachable endpoints also qualify the earlier DAWGS-015/014/040/021 repairs:
+all **50/60/44/57 current shared variants**, respectively, pass on Neo4j and in
+both PostgreSQL compiler modes. With the new corpus, this is **699 passing
+backend/mode variant executions**, plus the independent `TestToInteger` concrete
+Go type and signed-boundary checks on both backends. Historical implementation
+notes above retain their original, smaller corpus sizes and connection failures.
+
+The full race-enabled unit gate passes **43 tested packages**. Each backend's
+`make test_all -o test` reuses that completed unit gate and passes **43 integration
+packages**, then its BDD package. Both BDD gates report **17 enforced scenarios,
+zero enforced failures**, and **18 report-only compatibility failures**. Repository
+lint passes. Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc`, external linking,
+`GOMAXPROCS=4` and `GOFLAGS='-p=2 -ldflags=-linkmode=external'`. Initial simultaneous
+unbounded builds exhausted the process limit and were stopped; the bounded
+reruns are the qualifying results. Initial CREATE post-state assertions used
+unsupported functions and were corrected to supported label/value assertions
+before qualification. Captures are under `.coverage/dawgs036/`; credentials are
+excluded from evidence.
+
+The unchanged `931a9d4` checkout also passes all 43 unit packages. Its archived
+copy initially lacked Git metadata required by graphbench tests; the qualifying
+rerun restores metadata from the same commit without changing source. Merging
+repeated profile locations gives overall statement coverage of **33,069 / 49,379
+(66.9698%)** before and **33,089 / 49,407 (66.9723%)** after the repair. Translator
+coverage is **7,184 / 8,947 (80.2951%)** before and **7,206 / 8,975 (80.2897%)**
+after; overall coverage increases, while the translator percentage declines
+slightly as its covered statement count grows. SQL and mutation-fitness
+regeneration leaves every committed fixture byte-identical. Go formatting,
+repository lint, final focused race-enabled compiler controls and
+`git diff --check` pass.
+
+The active queue now has **58 unfinished / 46 completed actions**. DAWGS-035 is
+the following implementation item. P1 repairs and the regex migration decision
+retain their existing priorities.
+
+### DAWGS-035 pattern-predicate dependencies and mutation boundary — 2026-10-28
+
+Original order **52**, Q / Repair / M. Optimizer dependency collection now reads
+node and relationship variables directly from pattern syntax, whose variable
+fields are omitted by the general syntax walker. Property
+expressions still contribute their normal references; deduplication, sorting,
+anonymous endpoints and wildcard handling retain their existing behavior.
+Consequently a selective MATCH cannot move ahead of an earlier binding consumed
+by its WHERE pattern predicate. Unresolved node, relationship and property
+references pin the clause, while independent-anchor reordering remains covered
+by the existing controls. The change stays within optimizer analysis and does
+not alter the shared walker.
+
+The mutation acceptance checks also exposed a remaining filter-lifetime boundary
+in both compiler modes: a terminal MATCH followed immediately by SET left its
+correlated predicate until RETURN, after the mutation had advanced the frame.
+Translation now flushes the pending MATCH filter on entry to an updating clause,
+before collecting mutation operands or allocating write frames. This extends
+DAWGS-036's preceding-MATCH materialization to mutation inputs. SET, REMOVE and
+CREATE must consume the filtered rows, including writes without RETURN.
+
+`pattern_predicate_dependency_shapes.json` supplies backend-equivalent cases for
+directed, incoming, undirected, negated, conjunctive and disjunctive predicates,
+parameterized and missing targets, multiple earlier endpoints, WITH boundaries,
+counts, exact SET targets on either endpoint, REMOVE and CREATE. Each mutation
+checks the complete node and relationship state; CREATE checks the original
+nodes plus the exact created label/value rows. Unit tests inspect dependency
+sets, clause scheduling and unresolved-binding pinning, and verify that predicate
+selection precedes the write CTE in both compiler modes. Four parser/analyzer
+mutation cases and four generated SQL goldens retain the source/fixture workflow.
+Existing SQL fixtures and existing mutation fitness values remain byte-identical
+after regeneration.
+
+Before repair, the dependency and scheduling unit regressions fail. The unchanged
+`7bcb429` checkout with only the first 17 shared variants and their test wrapper
+added fails **14 enabled / 6 disabled** PostgreSQL variants. Disabled read variants
+pass; the six mutation variants fail in both modes. The enabled failures include
+out-of-scope binding errors and incorrect read/mutation behavior. The earlier
+repair-only probe, before adding mutation-boundary materialization, passes the
+read variants but still fails the immediate SET variants in both modes. These
+separate captures distinguish the optimizer dependency defect from the terminal
+MATCH-to-mutation filter lifetime defect. All new shared fixtures run in rollback
+transactions.
+
+The final race-enabled unit gate passes **43 tested packages**, as does the
+unchanged `7bcb429` baseline in an isolated local clone. After merging repeated
+coverage locations, overall statement coverage increases from **33,089 / 49,407
+(66.9723%)** to **33,095 / 49,414 (66.9749%)**. Optimizer coverage increases from
+**2,527 / 2,781 (90.8666%)** to **2,532 / 2,786 (90.8830%)**. Translator coverage is
+**7,206 / 8,975 (80.2897%)** before and **7,207 / 8,977 (80.2829%)** after: its
+covered statement count increases while its percentage falls slightly; overall
+coverage does not decrease. The final comparison includes the regenerated
+parser/analyzer and SQL fixtures. Focused race tests, repository lint,
+integration-tagged vet and narrow `goimports` formatting pass.
+
+Validation uses `TZ=Etc/UTC CGO_ENABLED=1 CC=cc`, external linking,
+`GOMAXPROCS=4` and `GOFLAGS='-p=2 -ldflags=-linkmode=external'`. A repeated
+analyzer-regeneration build hit the shared environment's process limit; its
+sequential `GOMAXPROCS=2`, `-p=1` retry passes and reproduces identical fixtures.
+The qualifying unit runs pass without retries. Captures and coverage comparisons
+are under `.coverage/dawgs035/`; credentials are excluded from evidence.
+
+All **19 final shared variants** pass on Neo4j and in both PostgreSQL compiler
+modes: **57 backend/mode variant executions**, including both writes without
+RETURN. The focused verbose captures record 19 Neo4j and 38 PostgreSQL variant
+passes. Neo4j's complete `make test_all -o test` passes all **43 integration
+packages**, then BDD, reusing the separately completed unit gate. The initial
+PostgreSQL `make test_all -o test` also passes all 43 integration packages and
+BDD with the same production code and the first 17 new variants.
+
+The PostgreSQL repetition with the expanded fixtures reaches Go's **600-second
+package timeout** in graphbench while
+`TestPostgreSQLSuffixRouteComponentClosureRecordsPreparedStateAndWorkspace`
+has been running for 15 seconds. A retry was mistakenly started before that
+run's integration package finished. Both use the `integration_test` graph;
+concurrent resets caused deadlocks and left graphbench fixture rows visible to
+core post-state assertions. That overlapping retry and integration capture are
+invalid and do not qualify the repair. After the repeated run exits, the four
+suffix-route component tests pass sequentially in **22.064 seconds**, including
+the interrupted closure check. The entire fresh integration package then passes
+in **129.229 seconds**, including the final 19-variant corpus, followed by a
+passing PostgreSQL BDD rerun. The other 41 integration packages pass in the
+repeated full run. No test expectations, skips or production code were changed
+for these retries. Both backend BDD gates report **17 enforced scenarios, zero
+enforced failures**, and **18 report-only compatibility failures**.
+
+The active queue now has **57 unfinished / 47 completed actions**. DAWGS-046 is
+the following implementation item. The five pending P1 items and the separate
+aggregate-pattern-predicate optimization follow-up retain their existing status.
+
+### DAWGS-046 multipart read boundaries — 2026-10-28
+
+Original order **53**, Q / Repair / M. New traversal frames link to the preceding
+materialized input through the existing previous-frame resolver. The enclosing
+query part's frame reserves its future WITH output, so using it as the traversal
+input generated a self-reference and left earlier bindings outside the FROM
+scope. Normalizing the traversal frame's predecessor before constraint and
+projection bookkeeping fixes fixed hops, both-bound endpoints and expansions
+consistently. The scope stack retains the reserved output frame for unwinding.
+
+The acceptance matrix also reproduced a row-cardinality defect at literal WITH
+boundaries: two incoming rows became one, and an empty stream became one.
+Every WITH now records its input frame when projection expressions supply no
+references. A leading WITH still uses the implicit single input row. Literal
+projections after MATCH preserve both duplicates and zero rows.
+
+The expanded matrix exposed a separate loss of row correlation in ordinary
+expansions: seeding retained root IDs after applying an input-dependent predicate,
+then the completed paths joined back to every input row. PostgreSQL returned
+eight rows where Neo4j returned four. The projection now reapplies the external
+primer predicate to the particular input row. Zero-hop paths, duplicate inputs
+and CREATE without RETURN check this correlation and its stored-state effects.
+
+`multipart_read_boundary_shapes.json` supplies **33 backend-equivalent variants**
+covering the original unlabelled trigger, aliases, carried scalars and relationships,
+incoming/undirected hops, both bound endpoints, consecutive boundaries, DISTINCT,
+aggregation, pagination, WHERE, empty/duplicate inputs, unrelated and optional
+matches, bounded/zero-hop expansions, bound paths and literal projections. SET
+and CREATE variants compare complete original node/relationship records plus
+exact created labels and names, including writes without RETURN. Twenty-eight compiler
+checks inspect input sources in both modes, including independent, pending-UNWIND
+and shortest-path inputs. Six parser/analyzer mutation cases
+and sixteen generated SQL goldens follow the existing regeneration workflow;
+Three existing SQL cases across two fixture files also retain the input-dependent
+seed predicate in their expansion projections; existing mutation fitness values remain byte-identical.
+
+An original-source overlay fails **26 of the first 29 shared variants in each
+PostgreSQL compiler mode** and **18 of the first 20 compiler checks**. Undirected, unrelated-node and
+optional matches supply passing controls. The initial compiler probe required a
+fixture kind correction; its missing-kind failures are excluded from the defect
+evidence. Intermediate no-RETURN assertions were corrected to drain/check errors
+and verify stored state, following the shared corpus contract. All **33 final
+variants** pass on Neo4j and in each PostgreSQL compiler mode: **99 backend/mode
+variant executions**. Focused translator, SQL-fixture, analyzer, formatter and
+corpus-audit tests and repository lint pass. Captures are under
+`.coverage/dawgs046/`; credentials are excluded from evidence.
+
+The initial PostgreSQL `make test_all` passes all **43 unit packages** and
+**42 of 43 integration packages**. Its shared integration package exposes the
+new carried-scalar correlation defect in the normal corpus and both explicit
+compiler modes; those three failures are retained in the capture. The final
+correlation repair is validated by the follow-up gates below.
+
+The final race-enabled `make test` passes all **43 tested packages**, as does
+an archived pristine `f84e9484` baseline. The initial coverage comparison exposed
+lost expansion coverage after removing the incorrect predecessor; extra compiler
+regressions cover independent inputs, pending UNWIND predicates and shortest-path
+input sources. Counting duplicate coverage locations once, the final complete
+unit profile increases overall coverage from **33,096 / 49,414 (66.9770%)** to
+**33,099 / 49,416 (66.9803%)**. Translator coverage increases from
+**7,207 / 8,977 (80.2829%)** to **7,211 / 8,979 (80.3096%)**. These final figures
+compare complete unit profiles directly; the earlier partial/merged comparison
+is retained separately and does not qualify the final source.
+
+Neo4j's initial complete race-enabled integration suite passes all **43 tested
+packages**. With the final correlation repair and expanded fixtures, complete
+reruns of the SQL-fixture, translator, PostgreSQL query, v2 builder and shared
+integration packages pass on both backends. PostgreSQL's **26 driver-scoped
+graphbench integration tests** also pass again on the final source. Thus both
+43-package backend matrices are qualified by the aggregate attempts and final
+affected-package reruns; the initial PostgreSQL aggregate failure remains
+explicit. The final verbose corpus captures record **33 Neo4j** and **66
+PostgreSQL** variant passes. The carried-scalar case retains its four-row expectation; both backends use
+identical shared assertions.
+
+Sequential final BDD gates pass on both backends: **17 enforced scenarios, zero
+enforced failures**, with **18 report-only compatibility failures** retained on
+each. Reports are copied to separate backend captures. Repository lint, final
+integration-tagged vet, Go formatting and `git diff --check` pass. Validation
+retains `TZ=Etc/UTC CGO_ENABLED=1 CC=cc`, external linking and bounded Go build
+concurrency. No schema migration or public interface change is required.
+
+The active queue now has **56 unfinished / 48 completed actions**.
+**DAWGS-047 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
+
+### DAWGS-047 ORDER BY alias expressions and binding identity — 2026-10-29
+
+Order **54**, Q / Repair / M. PostgreSQL now resolves aliases nested inside ORDER
+BY expressions through their internal binding identities, substituting grouped
+projection expressions instead of unavailable output names. Parentheses preserve
+precedence when an alias computes arithmetic and is consumed by another
+expression or a cast. Bare materialized inputs retain their qualified frame
+reference, and bare leading-UNWIND inputs gain a qualified column reference so a
+user output alias such as `i0` cannot silently change the sort key.
+
+DISTINCT with ORDER BY carries the computed keys through an inner DISTINCT
+projection, then sorts and paginates outside it. Valid Cypher DISTINCT sort keys
+depend on projected values, so these keys preserve the distinct rows. Generated
+hidden names avoid user projection aliases; hidden keys never appear in result
+columns. This adds sort-key width to the DISTINCT projection and a SQL projection
+boundary; application-scale performance has not been qualified. No schema or
+public API change is required.
+
+`order_alias_shapes.json` supplies **36 backend-equivalent variants** covering
+arithmetic, casts, supported functions, grouped substitution/unary precedence,
+internal-name and quoted aliases, multiple aliases and sort keys, aggregate and
+DISTINCT projections, pagination, materialized inputs and duplicate/empty/null
+streams. Paginated SET and CREATE cases check complete original node records,
+exact created values/cardinality and relationship state, with and without RETURN.
+All **108 backend/mode variant executions** pass. An original-source Go overlay
+fails **31 of 36 variants in each PostgreSQL compiler mode**, reproducing both
+missing-column errors and silently incorrect ordered results. The five passing
+controls are retained unchanged.
+
+Sixteen ordinary compiler checks and six DISTINCT projection/pagination checks
+run across both optimizer modes. Six parser/analyzer mutation cases retain the
+repository's formatter spelling and regenerated fitness values; nine SQL goldens
+follow the existing fixture regeneration workflow. Focused compiler, SQL-fixture,
+analyzer, formatter and shared corpus-audit tests pass, as does repository lint.
+Validation uses each supplied connection separately with
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc` and
+`GOFLAGS='-ldflags=-linkmode=external'`. Credentials are excluded from evidence.
+
+Scope: this repair preserves the existing supported expression set. Exploratory
+`abs` and CASE cases hit existing compiler/frontend rejections and are excluded
+from conformance assertions. A numeric property alias under unary minus,
+`MATCH (n:OrderSource) RETURN n.k AS x ORDER BY -x`, now resolves the alias but
+still fails on PostgreSQL's unsupported `- jsonb` operation. That independent
+unary numeric typing follow-up remains in the active plan; native numeric alias
+negation passes the shared regression. These exploratory failures are separate
+from the original-source overlay's 31 alias/order regressions per mode.
+
+The final-source race-enabled `make test` passes all **43 tested unit packages**.
+Counting duplicate coverage locations once, the final complete unit profile covers
+**33,171 / 49,489 statements (67.0270%)**, retaining **67.0%** at the reported
+precision. Translator coverage is **7,272 / 9,048 (80.3714%)**. The first unit
+capture during implementation also passes; final qualification uses the subsequent
+complete unit run, supplemented by the final affected-package reruns for the
+one-line parenthesized-input qualification follow-up.
+
+The Neo4j-selected integration attempt compiles an intermediate translator while
+the last grouping edits are still underway. Its SQL-fixture package exposes six
+extra-parentheses mismatches in existing boolean/negation/shortest cases. The
+final-source integration-tagged, race-enabled rerun of that complete package
+passes. The initial mismatches remain in the validation capture. The complete shared
+integration package passes on Neo4j, and the final focused capture passes all
+36 variants, including the parenthesized-input follow-up.
+
+The PostgreSQL-selected `make test_all` passes all 43 unit packages and **42 of
+43 integration packages**. Its integration executable predates the final one-line
+qualification fix: the new parenthesized-input variant fails in the default
+shared runner and both explicit compiler modes. No other integration cases fail.
+The complete final-source, integration-tagged, race-enabled shared integration
+package rerun passes, including all three paths. The full PostgreSQL graphbench
+integration package also passes. Together with Neo4j's final SQL-fixture package
+rerun, these affected-package reruns qualify both complete backend matrices while
+retaining the initial aggregate failures in the captures.
+
+Final verbose captures record **36 Neo4j** and **72 PostgreSQL compiler-mode**
+variant passes, plus **36 PostgreSQL default-runner** passes. The shared assertions
+are identical across backends. The final affected-package unit reruns pass;
+combining their profile with the complete unit profile changes neither the
+reported statement totals nor coverage. The merge replaces the changed column
+span of one existing coverage block to avoid double-counting it.
+
+Sequential BDD gates pass on both backends: **17 enforced scenarios, zero
+enforced failures**, with **18 report-only compatibility failures** retained on
+each. Final repository lint, Go formatting and `git diff --check` pass.
+Validation logs, the original-source overlay outcome and coverage summary are
+under `.coverage/dawgs047/`; credentials are excluded from evidence.
+
+The active queue now has **54 unfinished / 50 completed actions**.
+**DAWGS-042 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
+
+
+### DAWGS-042 property-list UNWIND — 2026-10-29
+
+Order **55**, Q / Repair / M.
+
+The retained `MATCH (n) UNWIND n.arr AS x RETURN x` shape passed extracted text
+to PostgreSQL `unnest`. `translateUnwind` now preserves direct property JSON and
+carried JSONB values, expands one list level with `jsonb_array_elements`, and
+materializes a `jsonb[]` for the existing UNWIND source renderer. The binding's
+JSONB element type reaches arithmetic, Boolean, text, projection and write
+consumers. Empty, missing and null inputs yield zero rows; dynamic non-list
+scalars yield a single row. Nested lists remain values until another UNWIND
+consumes them. Native SQL arrays retain their existing renderer and types.
+There is no schema change or exported interface change.
+
+The new direct `UNWIND … SET` unit control also exposed a pending-input defect:
+updates could reference the UNWIND binding without ever emitting its source.
+Before rendering updates, pending UNWIND inputs are now projected into a CTE,
+retaining duplicates and zero-row inputs. CREATE keeps its existing input-row
+materialization. This does not establish sequential evaluation of expressions
+that read earlier writes; the DAWGS-045 follow-up remains open.
+
+`property_unwind_shapes.json` supplies **46 shared variants**: node/relationship
+arrays, parentheses, repeated WITH aliases, one-level and nested expansion,
+scalar values, exact duplicate cardinality, OPTIONAL MATCH nulls, missing/empty
+lists, typed consumers, filtering, DISTINCT, aggregation, pagination and later
+MATCH. SET and CREATE run with and without RETURN and assert complete original
+node/relationship records, unchanged direction/kind/role/missing-property decoys
+and exact created values/counts. Direct SET checks row preservation and empty
+mutation behavior. All shared assertions are backend-equivalent.
+`TestPostgreSQLPropertyUnwindCompilerModes` executes the same corpus in both
+compiler modes. `TestPropertyUnwind` adds **54 committed-property cases** across
+node and relationship inputs, direct expansion, WITH aliases and collected-list
+expansion. These check concrete Go element types, exact integers above 2^53 and
+both signed 64-bit limits, floats, Booleans, JSON-looking strings and scalar,
+empty and missing inputs.
+
+The original-source live overlay fails **all 46 variants in each PostgreSQL
+compiler mode**. Seven new translation regressions also fail against the original
+source in each mode and pass after repair. Parser/analyzer mutation cases and the
+regenerated `property_unwind.sql` golden file cover the shared query shapes;
+focused translator, SQL-fixture, analyzer and frontend unit suites pass.
+Race-enabled live captures pass all **46 Neo4j variants**, **92 PostgreSQL
+compiler-mode variants** and **46 PostgreSQL default-runner variants**, plus
+the 54 committed-property cases on each backend.
+
+The dynamic path allocates an SQL JSONB array per input value before unnesting.
+The original direct-property path errors instead of producing usable results,
+so it supplies no valid performance baseline. Large-list runtime, allocations
+and peak memory are unmeasured; no new execution resource policy is claimed.
+Native-array expressions retain their established coercion rules, including
+coalesce expressions already converted to native arrays before UNWIND.
+Stored JSON cannot restore integral-float or temporal type information lost at
+serialization. Validation captures are under `.coverage/dawgs042/`; credentials
+are excluded from evidence.
+
+The first PostgreSQL `make test_all` stops after the unit stage because the
+new parser mutation queries use noncanonical keyword case, spacing and implicit
+sort directions. The complete Neo4j integration run passes 42 of 43 packages
+and fails the same formatter package. Canonicalizing only the new mutation
+source queries fixes this fixture error. Final race-enabled formatter, analyzer
+and frontend unit reruns pass, as does the complete Neo4j integration-tagged
+formatter package rerun. The other 42 Neo4j packages, including the full shared
+integration suite, passed in the aggregate run. The Neo4j BDD gate passes with
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**. Lint, Go formatting and `git diff --check` pass.
+
+The fresh PostgreSQL `make test_all` passed all **43 unit packages** before
+being interrupted during integration validation. Its unit statement coverage is
+**33,200 / 49,522 (67.0409%)**, up from **33,171 / 49,489 (67.0270%)**.
+Resuming the required integration and BDD stages separately completes the gate:
+PostgreSQL `make test_integration` passes all **43 tested packages**, and
+`make test_bdd_integration` passes **17 enforced scenarios / zero enforced
+failures**, retaining **18 report-only compatibility failures**. No repair
+changes were needed during this final qualification.
+
+Fresh Neo4j checks also pass all **46 shared variants**, the **54 committed-property
+cases**, and its BDD gate with **17 enforced scenarios / zero enforced failures**
+and **18 report-only compatibility failures**. The earlier complete Neo4j
+integration run and successful formatter-package rerun remain the full-backend
+qualification. Final lint, touched-file formatting verification and
+`git diff --check` pass. Captures are under `.coverage/dawgs042/`, including
+`pg-integration-resumed.log`, `pg-bdd-resumed.log`, `neo-templates-resumed.log`,
+`neo-resumed.log`, `neo-bdd-resumed.log` and `lint-resumed.log`.
+
+Runs use the supplied backend connection separately, `TZ=Etc/UTC CGO_ENABLED=1
+CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, with
+sequential BDD report writes. Credentials are excluded from evidence.
+
+The active queue now has **53 unfinished / 51 completed actions**.
+**DAWGS-043 is the next implementation item.** Earlier pending repairs and
+separate follow-ups retain their existing status.
+
+### DAWGS-043 DELETE continuation and write boundaries — 2026-10-29
+
+DELETE now reserves a unique mutation CTE name without leaving that frame on the
+scope stack. RETURN and WITH therefore consume the incoming row relation, rather
+than attempting to SELECT from a DELETE CTE without RETURNING. Deletion inputs
+resolve after CREATE/SET materialization, preserving the complete matched stream,
+including repeated targets, null optional targets and empty inputs. The earlier
+per-target unique naming repair remains intact; the WITH-only frame workaround
+is no longer necessary.
+
+Live SET-to-DELETE checks exposed a second mechanism after fixing the original
+invalid frame reference: sibling PostgreSQL UPDATE and DELETE CTEs can leave the
+updated row present. Translation now places a statement boundary before DELETE
+when preceding top-level CTEs contain INSERT or UPDATE. The existing staged
+executor materializes the complete incoming stream and runs DELETE in the same
+transaction. This handles direct targets and aliases, preserves earlier writes
+on surviving entities, and reuses existing temporary-table cleanup and failed-stage
+rollback handling. Ordinary DELETE-only statements retain a single statement.
+Staging preserves existing multipart boundaries, recursive WITH flags, parameters
+and final projection modifiers. The PostgreSQL `tx.Query` dispatcher also
+recognizes same-part DELETE combined with SET, REMOVE or CREATE and routes it
+through the existing staged executor; DELETE-only queries retain their normal
+compilation path. Detection has focused unit controls for ordinary, multipart
+and same-part queries. No default traversal or regex behavior changes.
+
+The new **42 backend-equivalent `delete_continuation_shapes` variants** check
+counts, constant and captured-scalar results, repeated/null/empty input rows,
+multiple and mixed deletion targets, DISTINCT, grouping, ordering and pagination.
+Every variant asserts complete surviving node and relationship records. SET and
+CREATE before DELETE, an updated alias of a deletion target, and existing WITH
+write boundaries exercise the staged path. All **126 backend/mode executions**
+pass on Neo4j and in both PostgreSQL compiler modes under the race detector.
+Three additional committed-fixture shapes, each run with commit and forced
+rollback, cover SET followed by rejected plain DELETE, successful DETACH DELETE
+and isolated-node deletion. They pass on both backends and in both PostgreSQL
+modes, checking persisted counts, original properties on rollback and physical
+PostgreSQL edge storage. The original twelve shapes remain passing controls.
+
+An overlay containing the original translator files from checkout
+`570ea11bd4a315e8ccf47ede565d6befb0c5bfa9` fails **32 of the initial
+33 variants in each PostgreSQL compiler mode**, chiefly with PostgreSQL's
+missing-RETURNING error. The intermediate frame-only repair additionally
+reproduces all six SET/DELETE post-state failures in each mode: the updated
+node/relationship remains stored. Both mechanisms pass after the completed
+repair. New translator unit regressions verify the input relation and staged
+statement boundary in both modes. Six parser/analyzer mutation cases and four
+SQL translation cases were regenerated through `CYSQL_UPDATE_CASES=true`; only
+the requested cases and their generated expectations were retained.
+
+The supported continuation checks use counts, constants and scalar values
+captured before deletion. They do not establish a new cross-backend contract for
+reading properties or decoding entities after those entities have been deleted.
+Dependent assignment-expression and caller-row ordering remain under DAWGS-045;
+this repair does not implement arbitrary same-part mutation sequencing. As with
+multipart mutations, staged plans bypass the ordinary single-statement cache.
+Staged queries use temporary storage proportional to the carried input stream; no
+application-scale throughput or memory qualification is claimed. README and the
+corpus documentation describe the behavior and statement boundary.
+
+The final race-enabled `make test` passes all **43 tested unit packages**.
+Counting repeated coverage locations once, statement coverage is
+**33,234 / 49,560 (67.0581%)**, up from the preceding action's
+**33,200 / 49,522 (67.0409%)**. Translator coverage is
+**7,323 / 9,106 (80.4195%)**. This final run refreshes the earlier broad run's
+profile after the staging and driver dispatch corrections were finalized. The complete Neo4j `make test_integration` passes all **43 tested
+packages**, including its full shared suite. Its BDD gate passes **17 enforced
+scenarios / zero enforced failures**, retaining **18 report-only compatibility
+failures**. The final focused race tests, lint, touched-file Go formatting,
+local Markdown file links and `git diff --check` pass.
+
+The initial PostgreSQL `make test_all` passes its full unit stage and 42 of 43
+integration packages, then fails ten new shared variants through ordinary
+`tx.Query`: its dispatcher originally recognized only multipart staged writes.
+The explicit-translation optimizer-mode regressions already passed, exposing
+this separate entry-point gap. Extending dispatch fixes all ten failures;
+the complete 42-variant corpus now passes through `tx.Query` too, along with
+both explicit compiler modes and the committed rollback controls. The affected
+driver/integration packages and full unit stage are rerun after this correction;
+the unaffected aggregate integration results remain valid. No shared assertions
+or backend skips were weakened.
+
+The resumed PostgreSQL `make test_integration` for `./drivers/pg ./integration`
+passes both complete affected packages, including the full shared suite;
+together with the initial aggregate's other passing packages, this completes
+all **43 tested integration packages**. The final full `make test` also passes
+all **43 tested unit packages** after the driver correction, with the coverage
+reported above. Final lint passes. Runs use each supplied connection separately,
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes.
+Captures are under `.coverage/dawgs043/`; credentials are excluded from evidence.
+The active queue now has **52 unfinished / 52 completed actions**.
+**DAWGS-023 is the next implementation item.**
+
+The final PostgreSQL `make test_bdd_integration` passes **17 enforced scenarios /
+zero enforced failures**, retaining **18 report-only compatibility failures**.
+This completes the resumed default `make test_all` stages after the dispatch
+repair. Both backends' full shared suites and BDD gates are qualified; no further
+code changes followed these successful final checks.
+
+### DAWGS-023 unknown match kinds — 2026-10-29
+
+PostgreSQL's production and in-memory kind mappers now report authoritative
+misses through `pgsql.MissingKindsError`, retaining resolved IDs in the error
+while preserving `MapKinds`' strict failure return. Match translation accepts
+only this typed miss; database, cancellation and deadline errors still propagate.
+No error-string matching or kind registration is used for lookup misses.
+
+Node patterns require all labels, so a missing label produces a false constraint.
+Relationship alternatives retain the known IDs and match nothing when none are
+known. Kind predicates use an empty overlap test for impossible conjunctions,
+preserving SQL NULL on optional null entities and correct negation. Count-store
+and aggregate-traversal lowerings share the same resolution rules. Unknown
+`type(r)` string comparisons retain the original string comparison when no ID
+exists. CREATE still asserts its new kinds; strict mutation kind mapping is
+unchanged.
+
+`Result.HasMissingKinds` marks plans that depend on absent kinds, including
+nested aggregate predicate translation. Both compiler and connection-local
+translation caches bypass those results so later registration cannot reuse a
+stale empty-match plan. Registered-kind plans retain their existing cache rules.
+This adds an error type and result diagnostic without changing mapper method
+signatures. Unknown-kind lookups still use the existing cache-refresh connection
+path; DAWGS-065's separate pool-acquisition repair remains open. No throughput
+qualification is claimed for repeated missing-kind lookups.
+
+The shared `unknown_kind_shapes` corpus has **38 backend-equivalent variants**
+covering empty node/edge matches, known-plus-unknown label conjunctions and
+relationship alternatives, bounded ordinary/shortest/all-shortest traversals,
+WHERE and projected predicates, negation, type-name comparisons, OPTIONAL MATCH
+and null entities. SET, DELETE and CREATE-from-empty-input variants check complete
+surviving node and relationship records; a negated SET control checks selected
+writes. PostgreSQL executes every variant in both compiler modes. An overlay of
+checkout `c2b206b630e498f6eea1a72a26ca9643aacfcbb6` fails all
+**38 variants in each PostgreSQL mode**
+with lookup/translation errors. No shared assertions or backend skips were weakened.
+
+Unit controls preserve originating lookup errors, verify strict versus match
+resolution and CREATE registration, and qualify both translation caches before
+and after registering a kind. A live PostgreSQL driver regression checks the
+kind table directly: two query/compile rounds produce no metadata rows, then
+registration plus insertion makes the exact previous query return count one
+through both entry points. Fixtures use a unique kind name and clean up the
+created node and kind. Three parser/analyzer mutation cases and nine SQL golden
+cases were regenerated with `CYSQL_UPDATE_CASES=true`; only the requested source
+cases and generated expectations were retained. README and corpus documentation
+describe the behavior and cache boundary.
+All **114 backend/mode executions** of the final 38-variant matrix pass under
+the race detector (Neo4j plus both PostgreSQL compiler modes), as does the
+PostgreSQL shared `tx.Query` entry path. The live metadata/recompilation check
+passes. All **43 tested unit packages** are qualified: the initial PostgreSQL
+`make test_all` unit stage passed 42 packages and failed only three new formatter
+fixtures whose uppercase keywords differed from canonical lowercase output.
+Correcting the source queries makes the complete formatter package and analyzer
+checks pass; no production code or expected semantics changed. The merged full
+unit and formatter-rerun profile counts each source location once and reports
+**33,253 / 49,566 (67.0883%)**, up from **33,234 / 49,560 (67.0581%)**.
+Translator coverage is **7,338 / 9,109 (80.5577%)**. Lint, touched-file Go
+formatting, local documentation links and `git diff --check` pass.
+
+The complete Neo4j `make test_integration` passes all **43 tested packages**,
+including the full shared suite and all new variants. Its BDD gate passes
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**.
+
+The resumed PostgreSQL `make test_integration` also passes all **43 tested
+packages**, including the full shared suite, both compiler modes and the live
+metadata/recompilation regression. Its final `make test_bdd_integration` passes
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**. Together with the unit and formatter checks above,
+these complete the default `make test_all` stages after the fixture correction.
+Both backend BDD report writes ran sequentially. Runs use each supplied
+connection separately with `TZ=Etc/UTC CGO_ENABLED=1
+CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`.
+Captures and the deduplicated coverage profile are under `.coverage/dawgs023/`;
+credentials are excluded from evidence. No further behavior changes followed
+these successful checks. The active queue now has **51 unfinished / 53 completed
+actions**. **DAWGS-001 is the next implementation item.**
+
+### DAWGS-001 list indexing containment — 2026-10-29
+
+The AST has no list-subscript node. Previously, visiting an index's atom replaced
+its operand, so `WITH [1,2] AS xs RETURN xs[0] AS x` became a projection of zero
+in both SQL and formatted Cypher. The non-arithmetic expression visitor now
+returns a located `SyntaxError` with `list indexing is not supported`. A base
+visitor isolates the rejected subtree so its atoms cannot overwrite the operand
+or disrupt a later property lookup. The grammar's direct range token distinguishes
+slicing, which remains DAWGS-002's separate containment item. Full indexing,
+including null, negative and out-of-range behavior, remains M/L work in the
+active follow-ups. This completes containment rather than feature support.
+
+`cypher/frontend/list_index_test.go` crosses 16 index expressions with five query
+templates (80 variants), checking unrestricted/default parsing and the formatter
+entry point. Variants cover literal, parameter, null, negative, out-of-range,
+computed, nested and chained indexes; trailing property lookups; a string
+containing `..`; and a slice nested inside an index. Templates cover projection,
+WHERE, SET, CREATE and DELETE. Controls retain ordinary list literals, aliases,
+UNWIND, IN, list-valued assignments and property lookups, and check the exact
+error location. Four fixture-backed negative cases cover projection and mutations.
+No SQL golden output is emitted for rejected syntax, and no shared backend
+assertions or skips were changed.
+
+`drivers/pg/list_index_test.go` checks six read/mutation queries in both compiler
+modes, twice per query to exercise repeated compilation. The original production
+source supplied through a Go overlay fails the canonical parser regression and
+all twelve compiler/query-mode combinations: the old code accepts them without
+an error. The contained implementation passes under the race detector.
+Driver-scoped live PostgreSQL regressions check five indexed read/write shapes
+in both compiler modes, twice per query. Every request returns the explicit
+error and no rows; independent read transactions after each shape verify that
+both fixture nodes retain their exact names and no extra node was created.
+
+Neo4j keeps its existing original-text fallback after a parse failure. Rewrite
+unit controls preserve the original indexed query and parameters even when a
+pattern-map or temporal rewrite would otherwise be considered. Live Neo4j
+controls verify positive, negative, out-of-range, null and parameter indexes and
+CREATE/SET stored values. The driver-scoped support checks do not introduce
+backend-specific assertions into the shared core corpus. README and integration
+corpus documentation describe the boundary.
+
+The complete race-enabled unit suite passes all **43 tested packages**. A clean
+detached checkout of `3d062e7` supplies the unit baseline: deduplicated statement
+coverage rises from **33,252 / 49,566 (67.0863%)** to
+**33,264 / 49,571 (67.1038%)**. Frontend coverage rises from
+**488 / 522 (93.4866%)** to **493 / 527 (93.5484%)**; all five added statements
+are covered. The initial coverage-overlay attempt is excluded because its
+profile included edited-source locations; the clean checkout comparison is the
+recorded baseline. The original-source overlay remains valid for the focused
+non-coverage failure reproductions above.
+
+The complete Neo4j-selected `make test_integration` passes all **43 tested
+packages**, including the full shared query/mutation/template suites. Its
+`make test_bdd_integration` also passes: **17 enforced scenarios / zero enforced
+failures**, retaining **18 report-only compatibility failures**. PostgreSQL's
+complete `make test_all` passes its race-enabled unit and integration stages
+(**43 tested packages each**) and final BDD stage. Its BDD gate also reports
+**17 enforced scenarios / zero enforced failures**, retaining **18 report-only
+compatibility failures**. Both full shared integration suites pass on each
+backend, and the PostgreSQL driver controls cover both compiler modes.
+
+Focused unit and both live backend checks pass, as do repository lint,
+touched-file `goimports` formatting and `git diff --check`. Validation uses each
+supplied connection separately with `TZ=Etc/UTC CGO_ENABLED=1
+CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`;
+BDD report writes are sequential. Evidence and the deduplicated coverage counts
+are under `.coverage/dawgs001/`; credentials are excluded. No Go edits followed
+the successful broad checks. The final Markdown links, queue counts and
+`git diff --check` pass.
+
+The next implementation item is **DAWGS-002**, explicit list-slicing containment.
+The active queue has **50 unfinished / 54 completed actions**, with full indexing
+support retained as a separate follow-up.
+
+### DAWGS-002 list slicing containment — 2026-10-29
+
+The next action is complete as containment. `EnterOC_ListOperatorExpression`
+rejects slicing with `list slicing is not supported`, retaining the indexing
+error for single subscripts. Both rejected forms isolate their expression
+subtrees because the AST represents neither operation. Parser errors retain
+line/column locations. Full slicing is separate M/L work in the active plan,
+sharing the AST/type design with indexing.
+
+The templated frontend matrix covers 18 sliced operands in projection, WHERE,
+SET, DELETE and CREATE contexts, through unrestricted and default parser
+contexts and the Cypher formatter. It includes both omitted bounds, negative,
+null, parameterized, arithmetic and out-of-range bounds, chained operations,
+property operands and nested slices. Five source negative fixtures and compiler
+regressions in both PostgreSQL optimizer modes cover raw-text rejection and
+repeated requests without emitted SQL. The new frontend and compiler tests
+fail against the original source, which accepts slicing and can replace the
+operand with its final bound; focused race tests pass after containment.
+
+Driver-scoped PostgreSQL tests repeat five read/write shapes in both compiler
+modes and verify exact unchanged committed fixture state after every rejection.
+Neo4j rewrite controls retain the original query and parameters. Its live
+controls cover explicit, omitted, negative, out-of-range, null and parameterized
+bounds plus CREATE/SET list values. These differing backend support boundaries
+stay outside the shared core corpus. README and corpus documentation describe
+the errors and native Neo4j fallback.
+
+The complete race-enabled unit suite passes all **43 tested packages**.
+Deduplicated statement coverage rises from the DAWGS-001 checkout's recorded
+**33,264 / 49,571 (67.1038%)** to **33,265 / 49,572 (67.1044%)**.
+Frontend coverage rises from **493 / 527 (93.5484%)** to
+**494 / 528 (93.5606%)**; all added frontend statements are covered.
+Repository lint, touched-file `goimports`, Markdown file links, queue counts and
+`git diff --check` pass. Evidence is under `.coverage/dawgs002/`; credentials
+are excluded.
+
+The initial complete Neo4j integration run passes every package except the new
+slicing control: the live server rejects `xs[..]` because at least one bound is
+required. The positive expectation was corrected to assert that native syntax
+error; valid one-sided omitted bounds retain their result assertions. This is a
+test correction only; the parser containment is unchanged. The affected complete
+integration package is rerun below.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in each race-enabled unit/integration stage and the final BDD gate.
+The new driver-scoped rejection/committed-state controls pass in both compiler
+modes. Neo4j's initial complete integration run passes the other **42 tested
+packages**; after correcting the new native syntax expectation, the complete
+shared integration package passes under the same race/coverage flags. Both
+full shared integration suites pass on each backend. Neo4j's final
+**`make test_bdd_integration` passes**. Each BDD gate reports **17 enforced /
+zero failed**, retaining **18 report-only compatibility failures**.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`; BDD report writes are sequential.
+The final Markdown links, ledger counts and `git diff --check` pass. No
+production code changed after the successful unit checks; the only later Go
+edit corrected the Neo4j integration expectation and passed its complete
+package rerun.
+
+The active queue has **49 unfinished / 55 completed actions**.
+**DAWGS-017** (standalone CALL rejection) is the next implementation item;
+full list slicing remains an explicit follow-up.
+
+### DAWGS-017 standalone CALL containment — 2026-10-29
+
+`QueryVisitor` now rejects `oC_StandaloneCall` with the located error
+`standalone CALL is not supported` and ignores the unsupported subtree. Explicit
+and implicit procedure invocation, wildcard/named/aliased `YIELD`, literal and
+parameterized arguments, comments, case and terminators no longer return a
+successful nil `RegularQuery`. Callers that check parser errors never pass that
+nil query to the formatter. This completes the S containment action; procedure
+AST/execution support remains separate feature work, coordinated with 103.
+In-query `CALL` is unchanged and retains its own queue entry.
+
+The frontend matrix applies three source templates to seven invocation shapes
+with both unrestricted and default contexts, checks nil AST plus explicit error,
+and exercises the parse/format helper. A separate location assertion pins line
+and column. Six negative corpus fixtures cover read and write procedure names,
+including parameterized and map arguments. PostgreSQL compile tests cover five
+shapes twice in each compiler mode, checking the explicit error and empty SQL.
+Neo4j rewrite regressions preserve raw queries and parameters. An original-source
+Go overlay fails the frontend's `CALL db.labels()` assertion because parsing
+returns no error, and fails the compiler assertion because it returns the old
+`unable to negotiate cypher model type` error instead of the explicit rejection.
+The new source passes these focused regressions under the race detector.
+
+Driver-scoped live PostgreSQL controls issue each of five rejected shapes twice
+in each compiler mode and independently verify the committed fixture's exact
+node names remain unchanged. Neo4j controls execute explicit and implicit
+`dbms.components` calls, check the returned component name, and execute
+parameterized `db.awaitIndexes($timeout)` with no result rows. No procedure
+installation is needed. The initial Neo4j probe incorrectly expected standalone
+`YIELD ... WHERE` to execute; this server explicitly rejects that syntax. The
+positive control was replaced with the supported parameterized procedure call;
+the shared parser still explicitly rejects both shapes. These support boundaries
+remain driver-scoped and add no backend-specific assertions to the shared core
+corpus. README and corpus documentation describe the unsupported boundary and
+native Neo4j execution.
+
+The complete race-enabled unit suite passes all **43 tested packages**.
+Deduplicated statement coverage increases from the DAWGS-002 checkout's recorded
+**33,265 / 49,572 (67.1044%)** to **33,269 / 49,575 (67.1084%)**.
+Frontend coverage increases from **494 / 528 (93.5606%)** to
+**497 / 531 (93.5970%)**; all three added statements are covered.
+Repository lint, touched-file `goimports`, local Markdown file links, ledger
+counts and `git diff --check` pass. The active queue has **48 items** (4 P1,
+35 P2, 9 P3), the completion ledger has **56 actions**, and the next ordered
+implementation item is **DAWGS-010**.
+
+Neo4j's complete **`make test_integration` passes all 43 tested packages**,
+including both shared integration suites and the new native procedure controls.
+Its **`make test_bdd_integration` passes**, with **17 enforced / zero failed**
+and **18 report-only compatibility failures** retained. This BDD run finishes
+before PostgreSQL reaches its BDD stage, keeping report writes sequential.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in each race-enabled unit/integration stage and the final BDD gate.
+Both full shared integration suites pass. The new driver controls pass in both
+compiler modes, with repeated explicit rejections and unchanged committed graph
+state. Its BDD gate also reports **17 enforced / zero failed**, retaining
+**18 report-only compatibility failures**.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`; credentials are excluded from this ledger.
+BDD report writes are sequential. Final local Markdown links, ledger counts and
+`git diff --check` pass. No Go edits followed the successful aggregate runs.
+
+### DAWGS-010 shortest-path expression containment — 2026-10-29
+
+`AtomVisitor` now rejects shortest-path expressions with the located error
+`shortest-path expressions are not supported`. It ignores the unsupported
+subtree after reporting the error, so endpoint variables cannot replace the
+expression. Both `shortestPath` and `allShortestPaths` are covered. Supported
+MATCH patterns still use their dedicated pattern visitor. This completes the S
+containment action; full expression AST, formatting and execution support remain
+separate L feature work in the active plan.
+
+The frontend matrix applies eight read/mutation templates to both functions and
+three directed/incoming/undirected range shapes, checking explicit rejection
+with unrestricted and default contexts plus the parse/format helper. A separate
+assertion pins the line and column, and six controls preserve named, anonymous
+and optional shortest-path MATCH patterns. Six negative corpus fixtures cover
+RETURN, WITH, SET, CREATE and DELETE. PostgreSQL compile tests issue six shapes
+twice in each compiler mode, requiring the explicit error and empty SQL. Native
+Neo4j rewrite controls preserve the original text and parameters. An
+original-source Go overlay fails the location regression because the old parser
+returns no error; the new parser passes.
+
+Driver-scoped live PostgreSQL tests repeat six rejected queries in both compiler
+modes, including writes before an unsupported RETURN and SET/CREATE/DELETE
+expression consumers. Independent transactions verify the committed fixture's
+exact node names remain unchanged. Neo4j controls create a one-edge fixture in
+a rollback transaction and verify native shortest-path lengths through RETURN,
+WITH and SET. These support boundaries stay driver-scoped; the shared core
+corpus has no backend-specific assertions. README and corpus documentation
+record the boundary and the supported MATCH alternative.
+
+The complete race-enabled unit suite passes all **43 tested packages**.
+Deduplicated statement coverage increases from the DAWGS-017 checkout's recorded
+**33,269 / 49,575 (67.1084%)** to **33,272 / 49,578 (67.1104%)**.
+Frontend coverage increases from **497 / 531 (93.5970%)** to
+**500 / 534 (93.6330%)**; all three added statements are covered.
+Repository lint and touched-file `goimports` pass.
+
+Neo4j's complete **`make test_integration` passes all 43 tested packages**,
+including both shared integration suites and the native shortest-path expression
+controls. Its **`make test_bdd_integration` passes**, with **17 enforced / zero
+failed** and **18 report-only compatibility failures** retained. This BDD run
+finishes before PostgreSQL reaches its BDD stage, keeping report writes
+sequential.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in each race-enabled unit/integration stage and the final BDD gate.
+Both full shared integration suites pass. The new driver controls pass in both
+compiler modes, with repeated explicit rejections and unchanged committed graph
+state. Its BDD gate reports **17 enforced / zero failed**, retaining **18
+report-only compatibility failures**.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`; credentials are
+excluded from this ledger. BDD report writes are sequential. Final local
+Markdown file links, JSON fixture parsing, ledger counts and `git diff --check`
+pass. No Go edits followed the successful aggregate runs. The active queue has
+**47 items** (4 P1, 34 P2, 9 P3), the completion ledger has **57 actions**, and
+**DAWGS-013 is the next implementation item**.
+
+### DAWGS-013 import and legacy creation containment — 2026-10-30
+
+The shared parser now reports located `CREATE UNIQUE is not supported` and
+`LOAD CSV is not supported` errors from the grammar callbacks that previously
+did nothing. PostgreSQL text compilation checks these parse errors before
+translation, so unsupported clauses cannot disappear while the rest of a query
+executes. Callers must continue checking parse errors before using an AST.
+This completes the S containment action; full shared AST, formatting and runtime
+support remains separate feature work. Native Neo4j text execution still defers
+syntax support and CSV access to the server.
+
+The frontend matrix covers **30 CREATE UNIQUE** and **48 LOAD CSV** query
+variants through unrestricted/default contexts and the parse/format helper.
+It includes directed, incoming and undirected patterns, properties/parameters,
+case/comments, headers/field terminators, nested unsupported URL expressions,
+WITH boundaries, preceding writes and
+SET/CREATE/DELETE with and without RETURN. Exact location assertions fail on
+the original parser because both original reproducers return no error; they
+pass after repair. Four supported CREATE/MERGE/UNWIND controls remain intact.
+Ten queries are recorded in the negative parser corpus. PostgreSQL compiler
+tests issue twelve shapes twice in each compiler mode and require the explicit
+error, empty SQL and no panic.
+
+Driver-scoped PostgreSQL controls repeat those twelve shapes in both compiler
+modes, then verify committed node names and relationship state independently.
+They consume the compilation error and commit the transaction: preceding SET
+and CREATE must never dispatch, rather than merely being undone by rollback.
+The complete live matrix passes twice. Native Neo4j rewrite controls preserve
+the original query and parameters through both rewrite entry points. Live
+Neo4j controls also pass twice: the server reports its native syntax error for
+legacy CREATE UNIQUE and missing-file errors for read/write LOAD CSV queries.
+No CSV contents are read and no external URL is fetched. These differing support
+boundaries remain outside the backend-equivalent shared integration corpus.
+
+README and corpus documentation describe the boundary and validation. The
+active queue now has **46 items** (4 P1, 33 P2, 9 P3), this ledger has **58
+completed actions**, and **DAWGS-103 is the next implementation item**. Earlier
+repair/design decisions and separate follow-ups retain their existing status.
+
+PostgreSQL's complete **`make test_all` passes**, including all **43 tested
+packages** in both the race-enabled unit and integration stages and the final
+BDD gate. Neo4j's complete **`make test_integration` passes all 43 tested
+packages**, followed by a passing **`make test_bdd_integration`**. Both full
+shared integration suites pass on both backends. Each BDD gate reports **17
+enforced / zero failed**, retaining **18 report-only compatibility failures**.
+The Neo4j BDD run finishes before PostgreSQL reaches that stage, so report
+writes remain sequential.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`; credentials are
+excluded from this ledger. Focused live controls pass with `-count=2` on both
+backends. Fixture regeneration passes twice and its second run produces no
+additional diff; generated SQL expectations remain unchanged. Repository lint,
+touched-file `goimports`, fixture JSON, local Markdown links, ledger counts and
+`git diff --check` pass.
+
+The final complete race-enabled unit rerun passes all **43 tested packages**
+after adding literal Neo4j pass-through and nested CSV URL-expression controls.
+Deduplicated unit statement coverage increases from the pre-change checkout's
+**33,274 / 49,578 (67.1144%)** to **33,276 / 49,580 (67.1158%)**; frontend
+coverage increases from **500 / 534 (93.6330%)** to **503 / 536 (93.8433%)**.
+Both newly added rejection callbacks are fully covered. Final affected-package
+race/coverage checks and repository lint also pass. No Go edits follow the final
+complete unit run.
+
+### DAWGS-103 in-query CALL containment — 2026-10-30
+
+`ReadingClauseVisitor` now reports a located `in-query CALL is not supported`
+error and isolates the invocation subtree. Procedure arguments and YIELD
+filters cannot contaminate the surrounding AST. PostgreSQL compilation checks
+parse errors before translation, so a call cannot silently disappear while
+other clauses execute. DefaultCypherContext's existing procedure restrictions
+remain active. This completes the S containment action; full shared procedure
+AST, formatting and execution support remains separate XL work under 103/017.
+Callers must check parse errors before using or formatting a partial AST.
+
+The frontend matrix covers 54 templates through unrestricted/default contexts
+and parse/format, including arguments, parameters, maps, nested expressions,
+YIELD aliases/filters, case, WITH boundaries and SET/CREATE/DELETE. The exact
+location regression fails against an original-source Go overlay (the original
+parser returns no error) and passes after repair. Eight additional read/mutation
+queries are in the negative parser corpus. PostgreSQL tests compile 27 shapes
+twice per compiler mode, requiring explicit errors, empty SQL and no panic.
+
+Live PostgreSQL controls repeat all 27 shapes twice in each compiler mode.
+They consume the query error and commit the transaction, then independently
+verify exact node names and relationship state. Preceding SET and CREATE must
+never dispatch. Neo4j rewrite controls preserve text and parameters through
+both rewrite entry points, including pattern-map candidates. Live native
+Neo4j calls retain parameter values and YIELD aliases/filters. These backend
+support boundaries use scoped tests outside the backend-equivalent corpus.
+
+README documents the containment. The integrated active queue now has 44 items (4 P1,
+31 P2, 9 P3), this ledger has 60 completed actions, and DAWGS-060 is the next
+implementation item. Earlier pending repairs and separate follow-ups retain
+their status. Credentials are excluded from evidence.
+
+Focused parser/compiler/rewrite controls and live controls pass under the race
+detector. The final PostgreSQL focused rerun includes the leading-CALL/RETURN
+shape (27 queries per mode); earlier full-gate builds had the preceding 24-query
+matrix. Repository lint, touched-file `goimports`, negative-corpus JSON,
+local Markdown links, queue counts and `git diff --check` pass.
+
+The PostgreSQL-selected `make test_all` does **not** pass: its unit stage times
+out after ten minutes in the unchanged `cmd/graphbench` package, running
+`TestSPI2QualificationRejectsCanonicalEvidenceAndScheduleTampering`. All other
+42 unit packages pass. Neo4j-selected `make test_integration` also times out in
+GraphBench, running
+`TestSPI2QualificationConfirmationRequiresAndPassesFrozenDiscovery`; remaining
+package results are recorded below. These failures are
+not DAWGS-103 conformance passes. The independent PostgreSQL integration rerun
+excludes only `cmd/graphbench` through `MAIN_PACKAGES`, leaving both shared
+integration suites and driver packages selected.
+
+Both backend-selected `make test_bdd_integration` gates pass sequentially:
+17 enforced / zero failed, with 18 report-only compatibility failures retained.
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`.
+
+Frontend unit statement coverage increases from the preceding ledger gate's
+503/536 (93.8433%) to 506/539 (93.8776%); all three added runtime statements
+are covered. The timed-out unit run's overall coverage is incomplete and cannot
+establish a comparable complete-repository total. Full-gate qualification
+remains limited by the GraphBench timeouts and database-state failures below.
+
+The broad Neo4j integration run also fails in `TestCypherTemplates` with
+fixture IDs absent from its assertion map and in the 2,001-row WRITE-05
+relationship-update boundary with a native `ConstraintsChanged` transaction
+error. These are recorded as failures, not a passing shared-suite qualification;
+concurrent database changes are suggested by the server error but not fully
+attributed. The new native in-query CALL controls pass. A representative
+shared-template/direct-write retry is recorded below.
+
+Neo4j's broad integration run finishes with 41 passing packages and two failing
+packages (GraphBench and integration). The representative relationship-uniqueness
+template and WRITE-05 size-2001 retry passes under the race detector (55.9 s).
+
+The PostgreSQL integration rerun excluding GraphBench finishes with 41 passing
+packages and a failing integration package. Failures are WRITE-01 size-8001
+relationship setup and carried-property SUM (`40P01` deadlocks), overlapping-ID
+membership setup (`23503` referencing `p5_adjacency_v1`), and WipeGraph (`0A000`,
+TRUNCATE blocked by a referencing foreign key). The adjacency schema is outside
+this change; no unrelated database objects were removed to make checks pass.
+The PostgreSQL shared Cypher/template suites pass in this run. Targeted retries
+for these failures and the full Neo4j template suite are recorded below.
+
+Final targeted retries: PostgreSQL's relationship-delete boundary and SUM tests
+pass, while overlapping-ID membership and WipeGraph still fail on the adjacency
+foreign-key conditions above. Neo4j's full `TestCypherTemplates` retry still
+fails with two fixture IDs missing from its assertion map (74.6 s), despite the
+passing representative retry. No expectations were weakened and no database
+schema cleanup was used to hide these failures. Broad qualification therefore
+remains incomplete; DAWGS-103's focused parser/compiler/live and both BDD gates
+pass. The final patch contains only this containment, its regressions and docs.
+
+### DAWGS-059 relationship-kind conjunction repair — 2026-10-30
+
+The Neo4j legacy builder now intersects relationship-kind alternatives from
+separate positive conjunctive predicates. `Kind(r,R) AND Kind(r,T)` retains the
+first pattern restriction and adds `WHERE false`, rather than emitting `R|T`.
+Overlapping lists narrow to their common kinds, repeated lists remain stable,
+and nested conjunctions retain every restriction. An empty intersection must
+not clear the pattern kinds, because an empty pattern kind list is unrestricted.
+OR and NOT ancestry guards remain intact; XOR now receives the same guard as
+OR so its branch predicates cannot be hoisted into a global restriction.
+DAWGS-085's separate XOR grouping inside AND is now [completed below](#dawgs-085-xor-grouping-repair--2026-10-30).
+
+The table-driven render matrix has **33 read, SET, DELETE and all-shortest-path
+variants**. It checks disjoint, overlapping (both orders), repeated and nested
+kind predicates, plus OR, XOR and NOT controls. An original-source Go overlay
+fails **27 variants**, while the repaired rewriter passes all 33. The overlay
+changes only the original rewriter; no working-tree source or history is reset.
+
+The backend-equivalent `relationship_kind_conjunction_shapes.json` corpus has
+**21 read and SET variants**, including writes with and without RETURN. Exact
+returned relationship records and complete node/relationship post-state protect
+direction, start/end identity, kind and missing-property decoys. The live builder
+test constructs the corresponding legacy ASTs, prepares and renders them, then
+reuses every shared fixture and assertion. PostgreSQL runs both the rendered
+builder matrix and the text corpus in both compiler modes. Writes without
+RETURN check successful draining and exact stored state; the PostgreSQL result
+adapter's completion row is not treated as a shared row-count promise.
+
+README and corpus documentation describe the corrected filter behavior and
+validation. The integrated active queue has **44 items** (4 P1, 31 P2, 9 P3), and this
+ledger has **60 completed actions**. DAWGS-103 containment is also complete;
+**DAWGS-060 is the next implementation item**. The
+synthetic fixtures do not establish external Enterprise consumer outcomes.
+
+The current checkout's complete race-enabled unit suite passes all **43 tested
+packages** as the unit stage of PostgreSQL-selected `make test_all`.
+Deduplicated statement coverage is **33,291 / 49,589 (67.1338%)**, above the
+pre-change checkout's recorded **33,276 / 49,580 (67.1158%)**. The new regression
+matrix covers the added intersection, explicit-false and XOR ancestry paths.
+
+The original-source baseline's complete unit attempt passes its other **42
+packages** but reaches Go's ten-minute package timeout in `cmd/graphbench`,
+while `TestSPI2FrozenTrainingEvidenceIsRecomputedFromNamedArtifacts` has been
+running for three seconds. That test passes in isolation against the original
+rewriter with a longer timeout. The current complete unit run passes the entire
+benchmark package. The incomplete baseline coverage overlay is excluded from
+the coverage comparison; the pre-change ledger provides the comparison above.
+
+The initial Neo4j-selected `make test_integration` reaches the complete shared
+integration package but reports foreign fixture node IDs/extra rows, concurrent
+`ConstraintsChanged` schema errors and a database lock deadlock. Multiple other
+agent-context integration processes are active against the shared live service.
+The new shared corpus is affected by the same foreign-row failures; its earlier
+focused run passes. The first full integration-package retry is interrupted when
+two competing context retries are observed. No assertions are weakened and no
+other context's processes are stopped. Final isolated outcomes are recorded
+below.
+
+The complete quiet Neo4j integration-package retry passes, including both full
+shared case/template suites and the expanded new fixture with independent
+wrong-value and missing-property relationship decoys. The initial aggregate run
+passes its other **42 tested packages**. Neo4j's subsequent
+`make test_bdd_integration` passes: **17 enforced / zero failed**, with **18
+report-only compatibility failures** still visible. The final fixture schema
+audit also passes under the race detector. No Go edits follow the complete
+unit run.
+
+PostgreSQL-selected `make test_all` passes its complete unit stage, then its
+integration stage passes **41 tested packages**, including the complete shared
+integration package and both compiler-mode matrices. The two failing packages
+are `cmd/graphbench` and `cmd/retriever`: the P5 adjacency calibration encounters
+a schema deadlock while other contexts run against the database, and subsequent
+checks see missing partitions in its leftover `p5_adjacency_v1` shadow table.
+The aggregate command therefore does not reach its BDD stage. The exact **27
+failed top-level tests** across those two packages are retried sequentially,
+starting with the existing P5 calibration fixture reset/cleanup; no product or
+fixture assertions are changed to accommodate these failures.
+
+All **27 PostgreSQL retry tests pass** in both affected packages. The calibration
+reset/cleanup succeeds, followed by the benchmark semantic/plan checks and import
+round trips. PostgreSQL's separately invoked `make test_bdd_integration` then
+passes: **17 enforced / zero failed**, retaining **18 report-only compatibility
+failures**. BDD report writes are sequential. This qualifies the complete tested
+package set across the aggregate runs and the documented retries; neither
+initial backend aggregate is reported as a clean first-run gate pass.
+
+Validation uses each supplied connection separately with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`. Evidence is under `.coverage/dawgs059/`;
+credentials are excluded. Touched-file `goimports`, fixture JSON/schema checks,
+local Markdown link files, ledger counts and `git diff --check` pass. The code
+change is scoped to the legacy Neo4j builder rewriter; full procedure support,
+raw-text rewrite fidelity and other pending variance repairs keep their existing
+status.
+
+### DAWGS-060 raw-query rewrite fidelity — 2026-10-30
+
+The Neo4j driver re-emits parsed Cypher when expanding pattern-map parameters or
+wrapping temporal property comparisons. The Cypher formatter previously joined
+only the namespace components, omitting the separator before the function name,
+and always rendered multi-kind predicates as OR. It now writes the namespace's
+trailing separator and respects `KindMatcher.IsExclusive`: parsed `n:A:B` means
+`n:A AND n:B`, while builder any-kind matchers retain OR. Integral-float spelling
+already uses `FormatFloatLiteral`; the new forced-rewrite corpus protects that
+existing repair without changing numeric behavior.
+
+A read-only Go overlay using the original formatter fails the new direct
+formatter conjunction/namespace controls and all nine raw-driver rewrite
+subcases. These include negation, mixed Boolean predicates, SET/CREATE/DELETE,
+single/multiple namespace components and a temporal-only rewrite trigger. The
+repaired formatter and complete Neo4j driver unit packages pass under the race
+detector. Parameter ownership and the builder's OR behavior remain covered.
+
+The shared `raw_rewrite_semantics_shapes` corpus has **29 variants**, covering
+four predicate shapes, mutations with and without RETURN, float projections,
+exact changed rows, unchanged fixture records and empty relationship state.
+Every variant passes on Neo4j and in both PostgreSQL compiler modes (**87
+backend/mode variant executions**). The Neo4j-scoped namespace control executes
+native `point.distance` with and without a forced pattern-map rewrite and checks
+concrete Go float values (5.0 and 1.5); it requires no APOC installation. Unit
+format tests preserve arbitrary qualified names, including `apoc.coll.sum`, but
+do not claim live APOC/plugin availability.
+
+Vendor `CYPHER` prefixes and index hints still have no fidelity guarantee when
+AST rewriting is required; their support policy and any token-preserving rewrite
+are explicitly retained in the active follow-ups. This completes the ordered
+semantic repair action without claiming that separate compatibility promise.
+
+The initial PostgreSQL-selected `make test_all` finishes its unit stage with one
+failed top-level test: the cache-identity regression expected the old formatter's
+OR output for an exclusive kind AST. Its assertion now expects AND and excludes
+OR while retaining separate text/builder cache-entry checks in both warming
+orders. The focused race regression passes. The complete unit retry passes all
+**43 tested packages**. Deduplicated statement coverage is **33,304 / 49,596 (67.1506%)**, above the checkout's recorded
+**33,291 / 49,589 (67.1338%)**. Neo4j's complete `make test_integration` also
+passes all **43 tested packages**, including both full shared case/template suites. Neo4j's subsequent
+`make test_bdd_integration` passes with **17 enforced / zero failed** and **18
+report-only compatibility failures** retained.
+
+The PostgreSQL-selected `make test_all` retry passes its complete unit stage,
+then **42 integration packages**. Its remaining package, `cmd/graphbench`, reports
+one failed top-level test: `TestPostgreSQLBidirectionalOperationalPoolMatrix`
+hits PostgreSQL `out of shared memory` (SQLSTATE 53200) in its eight-connection
+concurrency smoke. The exact top-level test passes in isolation under the race
+detector (**4.309 s**) after the aggregate finishes, with no product, fixture or
+assertion changes. The complete shared integration package passes (**190.326 s**),
+including both compiler-mode matrices. This qualifies the tested package set
+across the aggregate and isolated retry; the aggregate is not reported as a
+clean first-run gate pass and its failure prevents automatic BDD execution.
+
+PostgreSQL's separately invoked `make test_bdd_integration` passes: **17 enforced /
+zero failed**, retaining **18 report-only compatibility failures**. Both backend
+BDD gates are green, with unsupported compatibility outcomes still visible.
+
+Validation uses each supplied connection separately, with `TZ=Etc/UTC
+CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`; BDD report writes are sequential.
+Evidence is under `.coverage/dawgs060/`. Touched-file `goimports`, corpus record
+audits, local Markdown links, ledger counts and `git diff --check` pass.
+
+At completion of DAWGS-060, the active queue had **43 items (4 P1, 30 P2, 9 P3)**,
+and the completion ledger had **61 completed actions**. Its next implementation
+item, **DAWGS-085**, is now [completed below](#dawgs-085-xor-grouping-repair--2026-10-30). Earlier pending repairs and
+separate follow-ups retain their existing status. Credentials are excluded from
+evidence.
+
+### DAWGS-085 XOR grouping repair — 2026-10-30
+
+The Cypher emitter groups an `ExclusiveDisjunction` that is a direct operand of
+`Conjunction`, preserving the AST's intent through nested AND groups and negation.
+The exported `query.Xor` return type remains unchanged; standalone XOR retains
+its existing rendering. Seven rendered-builder controls cover left/right and
+nested AND, negation, three XOR operands, standalone XOR and AND inside XOR.
+
+Live qualification also exposed an independent lowering defect in the same
+predicate path: PostgreSQL emitted comparison XOR as `a = true != b = true`,
+which is invalid SQL. `CompleteExclusiveDisjunction` now groups both operands
+before applying the existing inequality lowering and groups the resulting
+Boolean expression. This also preserves three-operand XOR and AND operand
+boundaries without changing ordinary inequality translation. Four additional
+translation controls cover comparison operands, three XOR operands, an AND
+operand and a null operand.
+
+`xor_grouping_shapes.json` supplies **12 shared variants** over **27 fixture
+nodes**, exhausting the true/false/missing-property combinations for three
+properties. Left/right AND, negation and three-way XOR each run as a read, SET
+with RETURN and SET without RETURN. Assertions compare exact selected records
+and every fixture node after mutation. `TestBuilderXorGrouping` executes the
+same expectations using rendered legacy builder ASTs. Both text and builder
+variants pass on Neo4j and in each PostgreSQL compiler mode (**72 backend/mode
+variant executions**). No backend-specific expected assertions or skips were
+added to the shared corpus.
+
+Read-only overlays isolate the original defects. Restoring only the original
+Cypher formatter fails five of seven render controls and **all 12 builder
+variants on Neo4j and all 12 in each PostgreSQL mode**, even with repaired SQL
+lowering. Restoring only the original PostgreSQL expression/translator sources
+fails **all 12 text variants in each compiler mode** with syntax errors near
+`!=`, while retaining the repaired Cypher formatter. These controls demonstrate
+both wrong row/mutation selection and the independent SQL rendering failure.
+
+The complete race-enabled unit stage passes all **43 tested packages**.
+Deduplicated statement coverage is **33,314 / 49,610 (67.1518%)**, above the
+checkout's recorded **33,304 / 49,596 (67.1506%)**. Neo4j's separate BDD gate
+passes with **17 enforced / zero failed** and **18 report-only compatibility
+failures** retained.
+Neo4j's complete `make test_integration` also passes all **43 tested packages**,
+including both full shared case/template suites.
+
+PostgreSQL-selected `make test_all` passes its full unit stage and **42 of 43
+integration packages**, including the full shared integration package
+(**191.653 s**) and both compiler-mode matrices. Its `cmd/graphbench` package
+reports one failed top-level test:
+`TestPostgreSQLBidirectionalOperationalPoolMatrix/pool-8` encounters PostgreSQL
+`out of shared memory` (SQLSTATE 53200) in its eight-connection concurrency
+smoke, matching the previous DAWGS-060 aggregate failure. After the aggregate
+finishes, the exact top-level test passes in isolation under the race detector
+(**4.825 s**), without product, fixture or assertion changes. This qualifies the
+package set across the aggregate and isolated retry; the aggregate remains
+recorded as failed rather than a clean first-run pass.
+
+PostgreSQL's separately invoked `make test_bdd_integration` passes with
+**17 enforced / zero failed** and **18 report-only compatibility failures**
+retained. Validation uses each supplied connection separately, with
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`; BDD report writes are sequential.
+Evidence is under `.coverage/dawgs085/`. Touched-file `goimports`, shared record
+audits, local Markdown file targets, ledger counts and `git diff --check` pass.
+
+The active queue has **42 items (4 P1, 29 P2, 9 P3)**, and this ledger has
+**62 completed actions**. **DAWGS-055** is the next implementation item.
+Earlier pending repairs and separate follow-ups retain their existing status.
+Credentials are excluded from evidence.
+
+### DAWGS-055 result alias spelling — 2026-10-30
+
+Order **67**, P2 / R / Repair / S. PostgreSQL previously returned `objectid`
+for `AS objectId` and literal backticks for escaped aliases such as
+``AS `object id` ``. `formatIdentifier` now quotes names containing uppercase
+characters, decodes a single escaped Cypher identifier (including doubled
+backticks), and doubles embedded SQL double quotes. Escaped `*` remains an
+identifier; the unescaped wildcard still renders as `*`. Implicit expression
+names such as `` `a` + `b` `` retain their full spelling rather than being
+decoded as one identifier. CTE/table alias names use the same formatter as
+references and declared CTE columns, preserving mixed-case binding consistency.
+
+Ten formatter controls and 40 translation read/mutation controls cover quoting
+and execution paths in both optimizer modes. Two existing SQL goldens were
+regenerated through `CYSQL_UPDATE_CASES=true` and the repository's
+`updated_cases` copy workflow; nearby optimizer shape expectations now include
+mixed-case identifier quotes. README documents the caller-visible correction:
+clients that relied on lowercase folding must look up the requested alias.
+No exported signatures or schema changed. The separate identifier round-trip
+observation O09 and Neo4j hand-built upsert escaping under 061 retain their
+existing scopes.
+
+`result_alias_shapes.json` adds **42 shared variants**: seven alias spellings
+across reads, WITH, SET and CREATE, including mutations without RETURN.
+Assertions verify exact column names/values, complete source node records and
+creation cardinality, preserving identical backend expectations. All variants
+pass on Neo4j and in each PostgreSQL compiler mode (**126 backend/mode variant
+executions**). `TestResultAliasSpelling` independently checks `Result.Keys()`
+for standalone and WITH/ORDER BY output, case-distinct columns and implicit
+backtick expressions (**16 queries per backend/mode, 48 executions**). Literal
+integer values use numeric comparison because PostgreSQL returns `int32` here
+and Neo4j returns `int64`; column spelling assertions remain exact.
+
+A read-only Go overlay restores only the original formatter, leaving the
+working tree intact. **28 of 42 shared variants fail in each PostgreSQL mode**
+and **15 of 16 direct key controls fail in each mode**; mutations without RETURN
+and the implicit-expression control remain positive controls. New formatter and
+translator unit regressions also fail against the original source. With the
+repair, focused race-enabled formatter/translator/golden tests and both live
+backend checks pass. Evidence is under `.coverage/dawgs055/`.
+
+The complete race-enabled unit stage passes all **43 tested packages**.
+Deduplicated statement coverage is **33,324 / 49,617 (67.1625%)**, above the
+checkout's recorded **33,314 / 49,610 (67.1518%)**. Touched-file `goimports`,
+repository lint, integration-tagged vet for affected packages, local Markdown
+file targets, ledger counts and `git diff --check` pass.
+
+Neo4j's complete `make test_integration` passes all **43 tested packages**,
+including both complete shared case/template suites (**254.559 s** for the
+shared integration package). Its separate `make test_bdd_integration` also
+passes. Both separately run BDD gates report **17 enforced / zero failed**
+and retain **18 report-only compatibility failures** each; their report writes
+are sequential.
+
+PostgreSQL-selected `make test_all` passes its complete unit stage and **42 of
+43 integration packages**. The shared integration package executes its full
+case/template suites and both compiler-mode matrices, but fails one top-level
+test, `TestWipeGraph` (**228.646 s** for the package). All three truncate variants
+encounter `out of shared memory` (SQLSTATE 53200). An isolated retry retains
+the same resource failure; its first variant additionally observes six fixture
+nodes instead of three because the failed truncation left secondary-graph data.
+Restoring the original formatter through the read-only overlay retains the
+truncate resource failure (and the subsequent fixture-count residue). No product,
+fixture or assertion changes were made for this unrelated failure. The aggregate
+remains **failed**, and the full PostgreSQL gate is not qualified as passing.
+Because make stopped before the BDD stage, that gate was invoked separately
+and passes as recorded above. The final focused PostgreSQL alias rerun passes
+after the aggregate failure (**3.071 s**).
+
+Validation uses each supplied connection separately with
+`TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc
+GOFLAGS='-ldflags=-linkmode=external'`. The active queue has **41 items
+(4 P1, 28 P2, 9 P3)** and this ledger has **63 completed actions**.
+**DAWGS-061** is the next implementation item. Earlier pending repairs and
+separate follow-ups retain their existing status. Credentials are excluded
+from evidence.
+
+## Release repairs — 2026-10-30
+
+DAWGS-063 separates existing-graph lookup from explicit schema assertion. A fresh
+manager retains all four property indexes/constraints after a name-only read;
+missing selection returns `ErrNoRows`. Explicit assertion still reconciles a
+previously cached graph. Selection caches only within the caller transaction.
+The adjacent missing-graph dump path now benefits from lookup-only selection;
+its dedicated tooling acceptance remains under 071.
+
+DAWGS-065 supplies transaction-owned kind maps to writes, builders, text
+translation, result decoding and batch emitters. Misses use the existing connection,
+and shared metadata locks cover only memory access. Rollback cannot publish kind
+IDs or retain SQL compiled against those IDs. Commit publishes the metadata;
+raw result decoding can use an owned reverse-map snapshot without another query.
+Public batch-parameter method signatures remain compatible through wrappers.
+The shared kind-map getter returns owned snapshots; separate concurrent
+refresh/iteration qualification remains under 089.
+
+DAWGS-019 removes the implicit depth cap from ordinary recursion and prevents
+open ranges from qualifying finite-bound optimizations. Versioned forward
+shortest harnesses separate bound presence from the depth value. Admission
+charges each candidate before frontier materialization, including shallow fan-out,
+and shares monotone state/estimated-byte counters across multipart stages.
+Limits raise SQLSTATE `54000`; consuming the error cannot commit earlier writes.
+All-shortest search completes each resolved layer before retiring a root whose
+requested endpoint pairs are complete. Hydrated path dependencies now contribute
+their edges to scalar length calculations, repairing the independently recorded
+optimized all-shortest length defect. Generic undirected shortest support is
+unchanged and remains an explicit error.
+
+The shared `open_traversal_shapes` corpus has **124 variants**: complete paths and
+lengths at depths 15–17, open/minimum-only/explicit bounds, branching witnesses and
+endpoint pairs at different depths, endpoints bound by earlier MATCH clauses,
+duplicate bound input rows, relationship-unique cycles and zero hops.
+SET/CREATE with and without RETURN verify full original graph records, decoys and
+created cardinality. PostgreSQL runs both compiler modes. Driver controls qualify
+state/byte exhaustion, early-LIMIT fan-out, rollback of prior multipart stages,
+fresh per-query budgets, and open ordinary/shortest/all-shortest chains through
+**128 hops**. These bounded fixtures do not establish production peak memory or
+application-scale performance. Open workspace searches can cost substantially more
+than specialized bounded searches; budget sizing and service replay remain
+consumer release qualification.
+
+A new explicit `*1..128` shortest control exposes the independent
+`pg_temp.bsp_terminal_filter does not exist` failure. A read-only overlay using
+original `expansion.go` and `lowering_plan.go` reproduces the same error. It stays
+open in the active follow-ups. The chain qualification uses bounded shortest
+controls through 64 and open shortest execution through 128; ordinary traversal
+also checks the explicit 128 bound. No shared expected assertion was weakened.
+
+DAWGS-061 applies backtick quoting with doubled embedded backticks to kind and
+identity-property identifiers in hand-built relationship and adjacent node
+upserts. Parameter maps retain original keys and values. Render controls include
+query-looking names; live Neo4j controls repeat upserts with spaces, keywords,
+Unicode, embedded backticks and double quotes, checking exact endpoint identities,
+labels, relationship cardinality and final properties. The test is explicitly
+scoped to the Neo4j emitter; shared query expectations remain backend-equivalent.
+
+Upgrade with ordinary schema assertion before issuing queries from the new
+compiler. Queries and mutations may now reach beyond depth 15; use an explicit
+Cypher bound to retain an intended cutoff. The [runtime policy](docs/open_ended_traversal_policy.md)
+and README document budgets, errors, migration and support limits.
+
+### Release repair validation
+
+The initial PostgreSQL-selected `make test_all` unit stage passes 42 tested
+packages and fails only `query/v2`, whose structural test still expected the old
+finite-bound executors. That test now checks the versioned open harnesses,
+serialized endpoint filters and admission guard. Final race-enabled reruns of
+`drivers/pg`, `query/v2`, the optimizer/translator packages and the complete SQL
+fixture package pass. The remaining
+unit packages already pass. The final affected-unit rerun includes all five
+optimizer, translator, SQL-fixture, builder and driver packages. Final deduplicated coverage merges the full unit
+profile with those reruns, using current driver statement coordinates:
+**33,550 / 49,782 (67.3938%)**, above the prior recorded **33,324 / 49,617
+(67.1625%)**. Current statement coordinates replace earlier coordinates for changed driver
+and expansion files; unchanged coverage combines all successful package runs.
+Profiles are `.coverage/unit.out`,
+`.coverage/release-final-affected.out` and `.coverage/release-final-unit.out`.
+
+The initial Neo4j-selected complete integration run passes 42 of 43 tested
+packages, including the complete shared integration package (**248.350 s**).
+Its SQL fixture package was compiled before the final admission signature and
+compared against the subsequently regenerated expectations. Final tagged reruns
+of that complete package and `query/v2` pass on Neo4j. The Neo4j BDD gate passes;
+its enforced/report-only counts and final PostgreSQL gate are recorded below.
+
+An intermediate raw-result snapshot change caused schema assertion to reacquire
+its own metadata lock. The broad PostgreSQL run exposed the stall; a stack trace
+identified the lock acquisition. Snapshot initialization now occurs in transaction
+construction, before schema locks are taken. A unit regression constructs the
+wrapper, holds the metadata write lock and checks raw kind decoding without
+another query. Final schema, kind/pool, traversal/resource, compiled rollback-cache
+and live benchmark integration regressions pass (**10.202 s** for the selected
+driver controls and **2.556 s** for the benchmark controls). The interrupted
+aggregate is not treated as a pass; the PostgreSQL aggregate remains non-green and its corrections and remaining
+resource failures are retained below.
+
+Further PostgreSQL validation found catalog-only kind reads clearing the
+transaction's topology route cache. A metadata-only transaction adapter now uses
+non-invalidating SQL; all three existing topology route/cache regressions pass.
+Standalone refresh and kind-filtered deletion resolution also fetch outside the
+metadata lock. A one-connection regression covers both paths, and the complete
+final PostgreSQL driver package passes (**33.119 s**).
+
+The complete SQL validation exposed a missing correlated-endpoint overload after
+open queries moved to the forward executor. Versioned pair-filter overloads and
+one-pair array calls now preserve endpoints selected by an earlier MATCH without
+referring to CTEs from dynamic SQL. Each distinct pair is searched once; the outer
+frame preserves duplicate rows. A separate zero-depth SQL branch preserves empty
+paths and bypasses positive-depth search for equal bound endpoints. Shared tests
+cover those paths and normal projections group the zero/non-self condition.
+Final PostgreSQL SQL validation passes (**6.024 s**); the full shared read and
+template suites were exercised, with their final new bound-zero failures repaired
+and all **124 variants** rerun successfully in the default compiler and both
+explicit compiler modes (**42.446 s**). The complete shared read corpus passes;
+initial label-fixture failures were observed while an overlapping probe was
+clearing the same fixture and do not recur in the sequential run. Final Neo4j traversal and
+escaped-upsert controls pass (**3.804 s**). No shared expectation was weakened.
+
+The PostgreSQL aggregate identifies two remaining capacity failures:
+`TestPostgreSQLBidirectionalOperationalPoolMatrix/pool-8` fails with SQLSTATE
+`53200` (`out of shared memory`) in its concurrency smoke, and all three
+`TestWipeGraph` truncate variants fail with the same resource error. The complete
+GraphBench package ran (**386.586 s**) and fails only that smoke matrix. A read-only
+overlay restoring the original PostgreSQL driver sources and schema reproduces
+the pool-8 failure (**4.155 s**). The remaining package run retains WipeGraph's
+failure; its shared integration package completed in **267.947 s**. Failed
+truncation can leave fixture residue, as recorded in the earlier ledger. No
+assertions, fixture sizes, connection limits or server configuration were weakened
+to hide these failures. **The complete PostgreSQL release gate is not qualified
+as passing.**
+
+Both final BDD gates pass with **17 enforced / 0 failed**, retaining **18
+report-only / 18 failed** compatibility scenarios each. `make format`, repository
+lint, regenerated SQL fixture checks, local Markdown targets, queue/completion
+counts and `git diff --check` pass. Current counts are **37 active / 67 completed**.
+No commits were authored.
+
+Both backend BDD gates run separately and sequentially. Validation uses the supplied
+connection for each backend separately with `TZ=Etc/UTC CGO_ENABLED=1`, the image's
+reviewed C compiler and external Go linking. Credentials are excluded from evidence.
+
+### Bounded shortest-path workspace repair — 2026-10-30
+
+This follow-up supersedes the bounded-workspace limitation in the earlier release
+validation. Singleton endpoint recognition now precedes filter-materialization
+selection. These array-mode calls generate satisfaction predicates using the
+current root/terminal arrays, retain endpoint constraints and cannot reference
+generic filter tables. A compiler invariant checks relation dependencies before
+serializing the four search fragments. The reusable SP harness also checks the
+supplied root and terminal arrays before direct or midpoint success and before
+early termination. Invalid candidates cannot stop the search before a later valid
+hit. Text-filter calls retain their existing reset/load contract.
+
+The permanent driver regressions in
+`drivers/pg/bounded_shortest_path_integration_test.go` cover cold bounds 64, 65
+and 128, scalar and complete path projections, a 128-edge chain, and parameter
+changes across leases of a one-connection pool. The reuse fixture first executes
+a valid property-filtered shortest query to depth 17, then requests endpoint pairs
+0→128, 0→17, 64→128 and 0→128, checking every node and relationship ID. Separate
+malformed-fragment controls exercise forward, backward and midpoint endpoint
+guards and require a later valid result. The long-chain qualification again
+includes explicit bounds above 64 for both shortest families.
+
+A temporary source overlay restoring the pre-repair compiler and SQL reproduces
+the failures against the same permanent tests: bound 65 on a one-edge chain and
+bound 128 fail with SQLSTATE `42P01`; the warmed 128-edge request returns only
+17 edges; malformed forward/backward/midpoint calls return terminal 17, root 17,
+and terminal 77 respectively. The repaired driver controls pass with the race
+detector. The shared `bounded_shortest_endpoint_shapes.json` corpus has **45
+variants**, all passing on Neo4j and in both PostgreSQL compiler modes, including
+path witnesses, lengths, both directions, endpoint predicates, null/unreachable
+endpoints, shortest zero hops, and mutation targets with complete stored-state
+assertions. The final focused matrix records **135 PostgreSQL leaf passes**
+(default, enabled and disabled) and **45 Neo4j leaf passes**. Compiler and
+SQL-fixture unit packages pass.
+
+The complete PostgreSQL integration run also exposed two order-sensitive
+self-endpoint errors in the existing shared `shortest path single hop` and
+`shortest path wrong direction returns empty` cases. PostgreSQL can evaluate the
+error guard on unrelated edge rows before joining the property-filtered root
+seed. The guard now uses a CASE to prove membership in the filtered seed relation
+before evaluating the self-endpoint error branch. The original cases pass, and
+the final matrix includes property-filtered roots, terminals with outgoing edges,
+inbound and wrong-direction searches, and complete mutation post-state. SQL
+goldens are regenerated from their existing source cases. The later affected-unit
+rerun passes all five translator, SQL-fixture, driver, SQL-helper and builder
+packages under the race detector.
+
+Install the compiler and SQL functions together through normal schema assertion.
+The graph-data and temporary-table layouts are unchanged. Application deployment
+rebuilds its process-local compilation caches. This repair preserves the existing
+bidirectional search strategy and explicit semantic bounds.
+
+Two additional shared probes failed identically with the pre-repair compiler and
+remain separate work; they were not assigned successful expectations. On a
+two-edge `BoundedStep` chain with `BoundedNode` endpoints and `eligible=true` on
+the root and terminal:
+
+* `MATCH p=shortestPath((s:BoundedNode)-[:BoundedStep*1..128]->(e:BoundedNode))
+  WHERE id(s)=$start_id AND id(e)=$end_id AND e.eligible=true
+  SET e.selected=true RETURN p` produces a row without a recognized path witness
+  on PostgreSQL. Neo4j returns the complete path. The accepted mutation cases
+  return the selected node and check complete node/relationship post-state;
+  independent read cases retain complete path assertions.
+* `MATCH p=allShortestPaths((s:BoundedNode)-[:BoundedStep*0..128]->(e:BoundedNode))
+  WHERE id(s)=$start_id AND id(e)=$end_id RETURN p`, with both IDs equal to the
+  root, returns zero rows on PostgreSQL and one zero-edge path on Neo4j.
+
+The initial broad build exceeded the host's linker thread capacity. Broad gates
+are rerun with `GOMAXPROCS=2` and Go build parallelism `-p=1`; test assertions,
+fixtures, database configuration and coverage instrumentation are unchanged.
+The complete unit run passes **42 packages** and exposes one stale structural
+check in `drivers/pg/query`: its GraphBench S1 function slice extended to the end
+of the schema file and included unrelated open-search helpers. The check now
+ends at the function's closing dollar quote and retains every original assertion.
+The complete affected package passes under the race detector. All **43 unit
+packages** therefore have passing results against the current production source.
+Final deduplicated coverage is **33,575 / 49,804 (67.4143%)**, above the prior
+recorded **67.3938%**. Coverage merges the complete unit run and affected reruns,
+aligning unchanged expansion blocks after the 26-line helper insertion. Profiles
+are `.coverage/unit.out`, `.coverage/shortest-query-unit.out`,
+`.coverage/shortest-final-affected.out` and `.coverage/shortest-release-unit.out`.
+Repository lint, formatting, local Markdown targets and `git diff --check` pass.
+Final integration outcomes follow. Credentials are excluded from evidence, and
+no commits are authored.
+
+The complete Neo4j-selected `make test_integration` passes all **43 tested
+packages**, including the shared integration package (**415.010 s**). Its BDD
+gate passes with **17 enforced / 0 failed**, retaining **18 report-only / 18
+failed** compatibility scenarios. After the final PostgreSQL-only guard repair,
+the expanded 45-case shared matrix also passes on Neo4j.
+
+The PostgreSQL GraphBench integration package completes in **564.529 s** with
+only two failures: `TestP5AdjacencyTaggedPGXStatementVisibleToPGStatStatements`
+and `TestP5AdjacencyCalibrationAttributesTaggedStatementWAL`. The cleared database
+has no `pg_stat_statements` extension, and its attempt to install that capture
+dependency fails with SQLSTATE `42501` (permission denied). The existing README
+documents administrator installation in the selected test database when the test
+role lacks that privilege. Database privileges, server configuration and test
+assertions are unchanged. The former pool-8 shared-memory failure does not recur
+in this complete package run. The complete PostgreSQL gate remains non-green
+because of this environment prerequisite.
+
+The final PostgreSQL affected integration rerun passes the complete driver
+package (**11.507 s**), SQL-fixture package (**8.319 s**), query builder package
+(**1.037 s**) and complete shared integration package (**137.775 s**). This
+includes the existing shortest-path cases, all 45 new variants in both compiler
+modes, complete path witnesses, mutation post-state and WipeGraph. The final BDD
+gate passes with **17 enforced / 0 failed**, retaining **18 report-only / 18
+failed** compatibility scenarios. Focused GraphBench traversal/shortest-path unit
+controls also pass after the last compiler change. The earlier aggregate failure
+is preserved; the benchmark extension prerequisite has not been waived or
+reclassified as a passing test.
+
+### Preserved pre-repair evidence
+
+These original dated notes are preserved verbatim. Their repair-open status
+statements describe the earlier probes and are superseded by the repairs above.
+
+### DAWGS-063 controlled fixture and outcome — 2026-10-22
+
+Create an empty disposable PostgreSQL graph through schema assertion with this definition (use a unique name):
+
+```go
+graph.Graph{
+    Name: "variance-schema-probe",
+    NodeIndexes: []graph.Index{{Field: "name", Type: graph.BTreeIndex}},
+    NodeConstraints: []graph.Constraint{{Field: "objectid", Type: graph.BTreeIndex}},
+    EdgeIndexes: []graph.Index{{Field: "name", Type: graph.BTreeIndex}},
+    EdgeConstraints: []graph.Constraint{{Field: "objectid", Type: graph.BTreeIndex}},
+}
+```
+
+Record the four property indexes in `pg_indexes` for its `node_<id>` and `edge_<id>` partitions. Construct a fresh driver/manager, without asserting this graph into its cache, and run:
+
+```go
+fresh.ReadTransaction(ctx, func(tx graph.Transaction) error {
+    _, err := tx.WithGraph(graph.Graph{Name: "variance-schema-probe"}).Nodes().Count()
+    return err
+})
+```
+
+Expected: count 0, all four property indexes/constraints retained. Observed: count 0, no error, all four objects removed and the removal visible from an independent PostgreSQL connection after the read transaction. The removed objects were `node_<id>_name_index`, `node_<id>_objectid_constraint`, `edge_<id>_name_index`, and `edge_<id>_objectid_constraint`. The graph and its partitions were removed after inspection. Repair remains open: graph selection must resolve existing metadata without schema reconciliation; explicit schema assertion must retain its reconciliation role.
+
+### DAWGS-019 open-ended traversal design and runtime evidence — 2026-10-24
+
+The selected [open-ended traversal policy](docs/open_ended_traversal_policy.md) promises complete ordinary, shortest and all-shortest query semantics, with identifiable failure if execution resources prevent completion. Explicit Cypher upper bounds remain semantic limits. Execution budgets must not silently narrow a query or permit partial writes to commit. The document defines streaming/error behavior, budget/fallback accounting, schema/selector/cache migration, downstream result/write impact and the shared semantic plus driver-scoped resource acceptance matrix. This completes the queue's **M design action**; the coordinated runtime implementation is **L** and remains open. Current execution still caps omitted maxima at 15; no cap removal or rejection was implemented here.
+
+An 18-node / 17-edge chain supplies **80 variants on Neo4j and 80 in each PostgreSQL compiler mode**, all in rollback transactions. Both PostgreSQL modes return no rows for open ordinary/shortest/all-shortest queries targeting depths 16 and 17, without errors. A minimum-only ordinary `*16..` also returns no rows. Explicit upper bounds reach those endpoints, and `RETURN p` checks the complete ordered nodes and relationship counts. Open SET and CREATE queries without RETURN affect **15 rows on PostgreSQL versus 17 on Neo4j**. Comparison identifies **28 truncation discrepancies per PostgreSQL mode**. The complete fixture, query matrix, observed results and limitations are in the policy document; this small chain is not resource/performance qualification or downstream service replay.
+
+The positive controls also identify **eight scalar discrepancies from an independent projection issue with optimization enabled**: singleton `allShortestPaths` with minimum one returns `length(p) = 0` for a present 15–17-hop path. Disabled translation and Neo4j return the actual depth, and full `RETURN p` witnesses remain correct. The bounded 16-hop reproducer and separate repair/containment requirement are recorded without changing the original triage counts. The investigation-only overlay logs observations, so its successful execution is not a conformance pass; no shared expected assertions were weakened.
+
+Baseline validation passes: the PostgreSQL-selected **`make test_all`** completes its race-enabled unit and integration stages and final BDD stage, with unit statement coverage unchanged at **66.4%** at reported precision. The complete Neo4j-selected **`make test_integration`** and subsequent **`make test_bdd_integration`** also pass. Both full shared integration suites pass on each backend. Each BDD gate reports **10 enforced / 0 failed**, **18 report-only / 18 failed**. Runs use each supplied connection separately, `TZ=Etc/UTC CGO_ENABLED=1 CC=/opt/codices/development/bin/cc GOFLAGS='-ldflags=-linkmode=external'`, and sequential BDD report writes. The investigation overlay was Go-formatted; new local Markdown links and `git diff --check` pass. The final patch changes documentation only. These existing gates do not enforce the investigation's new failing semantics or qualify resource behavior; both runtime defects remain open.
+
+The next ordered work item is **DAWGS-072**, cancellation and error propagation for parallel fetch operations. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.
+
+### DAWGS-065 kind-registration pool wedge — 2026-10-24
+
+The retained source mechanism is confirmed live on PostgreSQL and pinned as driver-scoped regressions in `drivers/pg/kind_registration_pool_integration_test.go` (`manual_integration`; the probes skip unless `CONNECTION_STRING` selects PostgreSQL). Every probe builds its pool through `NewPoolWithRuntimeConfig` with explicit `RuntimeConfig` limits and asserts the effective `Stat().MaxConns()` first, because pools without explicit runtime configuration keep the v1 default of 50 connections. Fixtures warm all physical connections before timing so the measured windows contain lock and connection waits, not connection setup. Kind names use a `DAWGS065` prefix; cleanup removes the probe graph's nodes/edges and those kind rows, and the graph partition remains like the existing `pg_v2_integration` fixture.
+
+| Probe / shape | Outcome |
+| --- | --- |
+| Single write transaction, effective MaxConns 1, CreateNode with an uncached kind | Waits the full 750 ms budget; returns `context deadline exceeded`; node count and kind rows unchanged. |
+| Saturated pool, MaxConns 3: two registering writers plus one unrelated reader, all holding connections at a barrier | The schema write lock is sampled continuously unavailable; both writers fail with `context deadline exceeded` at their 2 s deadlines although each already holds a connection; the reader stalls in target-graph resolution behind the same lock and completes with count 0 only after those deadlines; nothing commits and no wedge kind is defined. A fresh registration afterwards succeeds, proving the wait cycle is released by context expiry/connection release rather than pool damage. |
+| Read-side family: one connection held by an unrelated read, MapKinds for an uncached kind | The miss takes the schema write lock and refreshes through a nested read transaction; it waits its full budget and returns `context deadline exceeded`; after release the same miss completes promptly with `unable to map kinds` and defines nothing. |
+| Control: two concurrent writes at MaxConns 2 with an already-cached kind | Both complete immediately and commit; the AssertKinds fast path needs no second connection. |
+
+The saturated-pool probe samples the schema lock with `RWMutex.TryLock` polls rather than sleeps, so the unrelated reader is released only after a registration demonstrably holds the write lock; that reader already holds its own connection at release, isolating the lock wait from pool acquisition. All probes use bounded contexts and terminate deterministically; they pin current wedged behavior, and the connection-ownership repair must invert them so kind registration inside a transaction never needs a second connection while holding the schema lock, matching the finding's regression criterion. The batch registration paths in `drivers/pg/batch.go` share the same `AssertKinds` entry and were not separately replayed.
+
+Validation: the four probes pass under the race detector with repeated runs (`-count=3`, and `-count=2` after the read-side addition). The full `drivers/pg` tagged integration package passes on PostgreSQL (**69.2%** package statement coverage) and on Neo4j (the PostgreSQL-scoped probes skip). The PostgreSQL-selected `make test` passes (**66.6%** overall unit statement coverage, unchanged from the last ledger gate), and both backends pass `make test_integration` and `make test_bdd_integration`; each gate reports **10 enforced / 0 failed**, **18 report-only scenarios / 18 failed**. The three-probe version of the file ran in the unrestricted broad gates; the later read-side addition re-ran the complete affected package on both backends. Runs use each supplied connection separately with `TZ=Etc/UTC CGO_ENABLED=1 CC=cc GOFLAGS='-ldflags=-linkmode=external'`. Repository lint, `gofmt`, default and integration-tagged vet, and `git diff --check` pass. No Go edits followed the final package retries.
+
+The next ordered work item is **DAWGS-099**, the ThreadSafeDuplex cross-operation deadlock repair. DAWGS-019's runtime repair stays open under the selected design. DAWGS-007 remains pending downstream audit evidence and a migration decision; earlier reproduction-only rows 039/063 and the expression-sequencing follow-up under 045 remain open. Credentials are excluded from this ledger.

@@ -1,0 +1,3158 @@
+{
+  "families": [
+    {
+      "name": "relationship kind conjunction",
+      "template": "MATCH (s)-[r]->(e) WHERE s.name = 'root' AND e.name = 'target' AND r.role = 'candidate' AND ({{predicate}}) {{action}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "ConjunctionNode"
+            ],
+            "properties": {
+              "name": "root"
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "ConjunctionNode"
+            ],
+            "properties": {
+              "name": "target"
+            }
+          },
+          {
+            "id": "other",
+            "kinds": [
+              "ConjunctionNode"
+            ],
+            "properties": {
+              "name": "other"
+            }
+          },
+          {
+            "id": "wrong-role",
+            "kinds": [
+              "ConjunctionNode"
+            ],
+            "properties": {
+              "name": "target"
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "ConjunctionNode"
+            ],
+            "properties": {
+              "name": "target"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "target",
+            "kind": "ConjR",
+            "properties": {
+              "role": "candidate"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "target",
+            "kind": "ConjT",
+            "properties": {
+              "role": "candidate"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "target",
+            "kind": "ConjU",
+            "properties": {
+              "role": "candidate"
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "root",
+            "kind": "ConjT",
+            "properties": {
+              "role": "candidate"
+            }
+          },
+          {
+            "start_id": "other",
+            "end_id": "target",
+            "kind": "ConjT",
+            "properties": {
+              "role": "candidate"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "other",
+            "kind": "ConjT",
+            "properties": {
+              "role": "candidate"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "target",
+            "kind": "ConjV",
+            "properties": {}
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-role",
+            "kind": "ConjT",
+            "properties": {
+              "role": "other"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "missing-role",
+            "kind": "ConjT",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "disjoint/read",
+          "vars": {
+            "predicate": "r:ConjR AND r:ConjT",
+            "action": "RETURN r"
+          },
+          "assert": {
+            "relationship_records": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "disjoint/set",
+          "vars": {
+            "predicate": "r:ConjR AND r:ConjT",
+            "action": "SET r.marked = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "disjoint/set without return",
+          "vars": {
+            "predicate": "r:ConjR AND r:ConjT",
+            "action": "SET r.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "overlap/read",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND (r:ConjT OR r:ConjU)",
+            "action": "RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate"
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "overlap/set",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND (r:ConjT OR r:ConjU)",
+            "action": "SET r.marked = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "overlap/set without return",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND (r:ConjT OR r:ConjU)",
+            "action": "SET r.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "identical/read",
+          "vars": {
+            "predicate": "r:ConjT AND r:ConjT",
+            "action": "RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate"
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "identical/set",
+          "vars": {
+            "predicate": "r:ConjT AND r:ConjT",
+            "action": "SET r.marked = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "identical/set without return",
+          "vars": {
+            "predicate": "r:ConjT AND r:ConjT",
+            "action": "SET r.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "nested/read",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND ((r:ConjT OR r:ConjU) AND r:ConjT)",
+            "action": "RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate"
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "nested/set",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND ((r:ConjT OR r:ConjU) AND r:ConjT)",
+            "action": "SET r.marked = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "nested/set without return",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND ((r:ConjT OR r:ConjU) AND r:ConjT)",
+            "action": "SET r.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "three disjoint/read",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND (r:ConjT OR r:ConjU) AND r:ConjU",
+            "action": "RETURN r"
+          },
+          "assert": {
+            "relationship_records": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "three disjoint/set",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND (r:ConjT OR r:ConjU) AND r:ConjU",
+            "action": "SET r.marked = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "three disjoint/set without return",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND (r:ConjT OR r:ConjU) AND r:ConjU",
+            "action": "SET r.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "or/read",
+          "vars": {
+            "predicate": "r:ConjR OR r:ConjT",
+            "action": "RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjR",
+                "props": {
+                  "role": "candidate"
+                }
+              },
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate"
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "or/set",
+          "vars": {
+            "predicate": "r:ConjR OR r:ConjT",
+            "action": "SET r.marked = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjR",
+                "props": {
+                  "role": "candidate",
+                  "marked": true
+                }
+              },
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "or/set without return",
+          "vars": {
+            "predicate": "r:ConjR OR r:ConjT",
+            "action": "SET r.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "not/read",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND NOT r:ConjR",
+            "action": "RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate"
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "not/set",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND NOT r:ConjR",
+            "action": "SET r.marked = true RETURN r"
+          },
+          "assert": {
+            "relationship_records": [
+              {
+                "start": "root",
+                "end": "target",
+                "kind": "ConjT",
+                "props": {
+                  "role": "candidate",
+                  "marked": true
+                }
+              }
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "not/set without return",
+          "vars": {
+            "predicate": "(r:ConjR OR r:ConjT) AND NOT r:ConjR",
+            "action": "SET r.marked = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "root"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "ConjunctionNode"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjR",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate",
+                      "marked": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjU",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "root",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "other",
+                    "end": "target",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "other",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "candidate"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "target",
+                    "kind": "ConjV",
+                    "props": {}
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "ConjT",
+                    "props": {
+                      "role": "other"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "ConjT",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

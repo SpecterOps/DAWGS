@@ -78,6 +78,9 @@ func KindsOf(reference any) *cypher.FunctionInvocation {
 	return cypher.NewSimpleFunctionInvocation(cypher.NodeLabelsFunction, expression)
 }
 
+// Kind returns a kind predicate matching the reference against any of the given kinds.
+// At least one kind is required: Build rejects kind predicates without kinds instead of
+// dropping the restriction or rendering blank WHERE output.
 func Kind(reference any, kinds ...graph.Kind) *cypher.KindMatcher {
 	return &cypher.KindMatcher{
 		Reference: expressionOrError(reference),
@@ -85,22 +88,32 @@ func Kind(reference any, kinds ...graph.Kind) *cypher.KindMatcher {
 	}
 }
 
+// KindIn returns an inclusive kind predicate; it is subject to the same non-empty kind
+// contract as Kind.
 func KindIn(reference any, kinds ...graph.Kind) *cypher.KindMatcher {
 	return Kind(reference, kinds...)
 }
 
+// AddKind returns a label-assignment set item for one kind. At least one kind is
+// required: Build rejects kind assignments without kinds instead of rendering invalid
+// Cypher such as `set n:`.
 func AddKind(reference any, kind graph.Kind) *cypher.SetItem {
 	return AddKinds(reference, graph.Kinds{kind})
 }
 
+// AddKinds returns a label-assignment set item; Build rejects it when kinds is empty.
 func AddKinds(reference any, kinds graph.Kinds) *cypher.SetItem {
 	return cypher.NewSetItem(expressionOrError(reference), cypher.OperatorLabelAssignment, kinds)
 }
 
+// DeleteKind returns a kind-removal item for one kind. At least one kind is required:
+// Build rejects kind removals without kinds instead of rendering invalid Cypher such
+// as `remove n:`.
 func DeleteKind(reference any, kind graph.Kind) *cypher.RemoveItem {
 	return DeleteKinds(reference, graph.Kinds{kind})
 }
 
+// DeleteKinds returns a kind-removal item; Build rejects it when kinds is empty.
 func DeleteKinds(reference any, kinds graph.Kinds) *cypher.RemoveItem {
 	return cypher.RemoveKindsByMatcher(cypher.NewKindMatcher(expressionOrError(reference), kinds, false))
 }

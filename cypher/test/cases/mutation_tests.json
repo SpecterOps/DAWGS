@@ -44,7 +44,7 @@
       "name": "JD's Create User Example",
       "type": "string_match",
       "details": {
-        "query": "merge (x:Base {objectid: '\u003cobjId\u003e'}) set x:User, x.name = 'BOB@TEST.LAB' set x += {arr: ['abc', 'def', 'ghi']} return x",
+        "query": "merge (x:Base {objectid: '<objId>'}) set x:User, x.name = 'BOB@TEST.LAB' set x += {arr: ['abc', 'def', 'ghi']} return x",
         "fitness": 6
       }
     },
@@ -52,7 +52,7 @@
       "name": "JD's Create Edges Example",
       "type": "string_match",
       "details": {
-        "query": "match (x) match (y) merge (x)-[:Edge]-\u003e(y)",
+        "query": "match (x) match (y) merge (x)-[:Edge]->(y)",
         "fitness": 1
       }
     },
@@ -100,7 +100,7 @@
       "name": "Create relationship",
       "type": "string_match",
       "details": {
-        "query": "create p = (:Label {p: '1234'})-[:Link {r: 1234}]-\u003e(b {p: '4321'}) return p",
+        "query": "create p = (:Label {p: '1234'})-[:Link {r: 1234}]->(b {p: '4321'}) return p",
         "fitness": 12
       }
     },
@@ -108,7 +108,7 @@
       "name": "Create relationship with decimal properties parameter",
       "type": "string_match",
       "details": {
-        "query": "create p = (:Label {p: '1234'})-[:Link $1]-\u003e(b {p: '4321'}) return p",
+        "query": "create p = (:Label {p: '1234'})-[:Link $1]->(b {p: '4321'}) return p",
         "fitness": 9
       }
     },
@@ -116,7 +116,7 @@
       "name": "Create relationship with named properties parameter",
       "type": "string_match",
       "details": {
-        "query": "create p = (:Label {p: '1234'})-[:Link $named]-\u003e(b {p: '4321'}) return p",
+        "query": "create p = (:Label {p: '1234'})-[:Link $named]->(b {p: '4321'}) return p",
         "fitness": 9
       }
     },
@@ -124,7 +124,7 @@
       "name": "Create relationship with matching",
       "type": "string_match",
       "details": {
-        "query": "match (a), (b) where a.name = 'a' and b.linked = id(a) create p = (a)-[:Linked]-\u003e(b) return p",
+        "query": "match (a), (b) where a.name = 'a' and b.linked = id(a) create p = (a)-[:Linked]->(b) return p",
         "fitness": 12
       }
     },
@@ -247,6 +247,1586 @@
       "details": {
         "query": "match (a:Thing1), (b:Thing2) detach delete a, b return b",
         "fitness": 4
+      }
+    },
+    {
+      "name": "LOGIC-04 filtered relationship delete preserves mutation binding",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:RegressionKind05)-[r:RegressionKind06]->(e:RegressionKind07) where e.objectid = $object_id and r.shoulddelete = $should_delete delete r",
+        "fitness": 16
+      }
+    },
+    {
+      "name": "LOGIC-04 filtered detach node delete preserves mutation binding",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:RegressionKind08) where n.objectid = $object_id detach delete n",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "REC-01 inbound reconciliation delete with thirty relationship kinds",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind01|RegressionKind02|RegressionKind03|RegressionKind04|RegressionKind05|RegressionKind06|RegressionKind07|RegressionKind08|RegressionKind09|RegressionKind10|RegressionKind11|RegressionKind12|RegressionKind13|RegressionKind14|RegressionKind15|RegressionKind16|RegressionKind17|RegressionKind18|RegressionKind19|RegressionKind20|RegressionKind21|RegressionKind22|RegressionKind23|RegressionKind24|RegressionKind25|RegressionKind26|RegressionKind27|RegressionKind28|RegressionKind29|RegressionKind30]->(e:RegressionKind31) where e.objectid = $object_id delete r",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "REC-02 outbound reconciliation delete with thirty relationship kinds",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:RegressionKind31)-[r:RegressionKind01|RegressionKind02|RegressionKind03|RegressionKind04|RegressionKind05|RegressionKind06|RegressionKind07|RegressionKind08|RegressionKind09|RegressionKind10|RegressionKind11|RegressionKind12|RegressionKind13|RegressionKind14|RegressionKind15|RegressionKind16|RegressionKind17|RegressionKind18|RegressionKind19|RegressionKind20|RegressionKind21|RegressionKind22|RegressionKind23|RegressionKind24|RegressionKind25|RegressionKind26|RegressionKind27|RegressionKind28|RegressionKind29|RegressionKind30]->() where s.objectid = $object_id delete r",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "REC-03 inbound primary group relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind32]->(e:RegressionKind31) where e.objectid = $object_id and r.isprimarygroup = $flag delete r",
+        "fitness": 14
+      }
+    },
+    {
+      "name": "REC-03 outbound primary group relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:RegressionKind31)-[r:RegressionKind32]->() where s.objectid = $object_id and r.isprimarygroup = $flag delete r",
+        "fitness": 14
+      }
+    },
+    {
+      "name": "REC-04 endpoint object ID list relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind32]->(e:RegressionKind31) where e.objectid in $object_ids delete r",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "REC-06 delegated enrollment relationship delete by endpoint IDs",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind37]->(e:RegressionKind35) where id(e) in $template_ids delete r",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "REC-07 HostsCAService relationship delete",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:RegressionKind39]->(e:RegressionKind38) where e.objectid = $object_id delete r",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "REC-08 AD entity detach delete by object ID list",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:RegressionKind31) where n.objectid in $object_ids detach delete n",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "DAWGS-041 fan-out node updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[r:EdgeKind1]->(y:NodeKind2) set x.src = true, y.dst = true return x, y",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-041 mixed node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[r:EdgeKind1]->(y:NodeKind2) set x.src = true, r.visited = true, y.marker = r.marker return x, y, r",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-041 nullable node target before a required target",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1) optional match (x)-[r:EdgeKind1]->(y:NodeKind2) set y.dst = true, x.src = true return x, y",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-041 nullable relationship target before a required target",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1) optional match (x)-[r:EdgeKind1]->(y:NodeKind2) set r.visited = true, x.src = true return x, r",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-041 fan-out updates followed by a WITH mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[r:EdgeKind1]->(y:NodeKind2) set x.src = true, y.dst = true with x, y set y.seen = x.src return y",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 node set remove set",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.x = 1 remove n.x set n.x = 2 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 node remove set remove",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) remove n.x set n.x = 1 remove n.x return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 relationship set remove set",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() set r.x = 1 remove r.x set r.x = 2 return r",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-045 kind set remove set",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n:NodeKind2 remove n:NodeKind2 set n:NodeKind2 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 kind remove set remove",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) remove n:NodeKind2 set n:NodeKind2 remove n:NodeKind2 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 mixed fields and kinds",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.x = 1, n.y = 2, n:NodeKind2 remove n.x, n:NodeKind2 set n.y = 3 return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-045 ordered changes across WITH",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.x = 1 remove n.x with n set n.x = 2 remove n.x return n",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "Boolean node assignment retains conjunction",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.mid = n.k > 0 and n.k < 2 return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Boolean relationship assignment retains conjunction",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() set r.mid = r.k > 0 and r.k < 2 return r",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Boolean function argument in assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.mid = coalesce(n.k > 0 and n.k < 2, false) return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Boolean projection after assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.mid = n.k > 0 and n.k < 2 with n, n.k > 0 and n.k < 2 as mid return n, mid",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-028 node mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:EdgeKind1*1..2]->(g)-[:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set d.selected = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-028 relationship mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:EdgeKind1*1..2]->(g)-[t:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set t.selected = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-028 zero hop mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:EdgeKind1*0..2]->(g)-[:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set d.selected = true return d",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-028 inbound mutation through fixed suffix",
+      "type": "string_match",
+      "details": {
+        "query": "match (g)<-[:EdgeKind1*1..2]-(s)-[:EdgeKind2]->(d) where s.v = 99 or g.v = 99 set d.selected = true return d",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Optional duplicate origins feed node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 1] as x match (a:NodeKind1) optional match (a)-[r:EdgeKind1]->(b:NodeKind2) set b.visited = true, r.visited = true return x, b",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Optional repeated origins feed create without return",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 1] as x match (a:NodeKind1) optional match (a)-[:EdgeKind1]->(b:NodeKind2) create (audit:NodeKind1 {item: x})",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "Optional null targets preserve origin updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) unwind [1, 1, 1] as x optional match (a)-[r:EdgeKind1]->(b:NodeKind2) where b.name = 'absent' set a.visited = true return x, a",
+        "fitness": 11
+      }
+    },
+    {
+      "name": "Chained optional rows cross a with mutation boundary",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 1] as x match (a:NodeKind1) optional match (a)-[:EdgeKind1]->(b:NodeKind2) optional match (b)-[:EdgeKind2]->(c:NodeKind1) with a, b, c, x set c.visited = true return x, c",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-026 reused relationship node and edge updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) match (a)-[r]->(c) set c.visited = true, r.visited = true return c",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-026 reused relationship create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) match (a)-[r]->(c) create (audit:NodeKind1 {target: c.name})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-026 relationship alias through WITH",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) with a, r as carried match (a)-[carried]->(c) set c.visited = true return c",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "DAWGS-026 optional reused relationship mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[r:EdgeKind1]->(b) optional match (a)-[r]->(c) set c.visited = true return c",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DAWGS-027 node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b)-[r:EdgeKind2]-(c) set c.visited = true, r.visited = true return c",
+        "fitness": -6
+      }
+    },
+    {
+      "name": "DAWGS-027 create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b)-[:EdgeKind2]-(c) create (:NodeKind1 {target: c.name})",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DAWGS-027 expansion continuation update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1*0..2]->(b)-[:EdgeKind2]-(c) set c.visited = true return c",
+        "fitness": -8
+      }
+    },
+    {
+      "name": "DAWGS-027 bound endpoint mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b)-[r:EdgeKind2]-(b) set b.visited = true return b",
+        "fitness": -6
+      }
+    },
+    {
+      "name": "DAWGS-031 comma node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1]->(b), (a)-[r:EdgeKind1]->(c) set c.visited = true, r.visited = true return c",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-031 consecutive expansion create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1*1..2]->(b)-[:EdgeKind1*1..2]->(c) create (:NodeKind1 {target: c.name})",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-031 optional comma mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (a) optional match (a)-[:EdgeKind1]->(b), (a)-[:EdgeKind1]->(c) where b = c set a.visited = true return a",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-031 comma expansion mutation through WITH",
+      "type": "string_match",
+      "details": {
+        "query": "match (a)-[:EdgeKind1*0..2]->(b), (a)-[:EdgeKind1*0..2]->(c) set c.visited = true with c set c.confirmed = true return c",
+        "fitness": -5
+      }
+    },
+    {
+      "name": "DAWGS-033 self loop node and relationship updates",
+      "type": "string_match",
+      "details": {
+        "query": "match (x)-[r:EdgeKind1]-(x) set x.visited = true, r.visited = true return x",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "DAWGS-033 self loop create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (x:NodeKind1)-[:EdgeKind1]-(x) create (:NodeKind2 {target: x.name})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-033 self loop independent input mutation",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1] as row with row match (x)-[r:EdgeKind1]-(x) set x.visited = true return row, x",
+        "fitness": -5
+      }
+    },
+    {
+      "name": "DAWGS-033 optional local self loop mutation",
+      "type": "string_match",
+      "details": {
+        "query": "match (seed:NodeKind1) optional match (x)-[r:EdgeKind1]-(x) set x.visited = true return seed, x",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DAWGS-020 short exact node update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*2]->(b:NodeKind2) set b.selected = true",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*2\\.\\.2\\]\\->\\(b:NodeKind2\\) set b\\.selected = true$",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-020 long exact node and edge update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*16]->(b)-[r:EdgeKind2]->(c:NodeKind2) set b.selected = true, r.selected = true",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*16\\.\\.16\\]\\->\\(b\\)\\-\\[r:EdgeKind2\\]\\->\\(c:NodeKind2\\) set b\\.selected = true, r\\.selected = true$",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-020 long exact create without return",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*16]->(b) create (:NodeKind2 {target: b.name})",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*16\\.\\.16\\]\\->\\(b\\) create \\(:NodeKind2 \\{target: b\\.name\\}\\)$",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "DAWGS-020 zero exact update",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1)-[:EdgeKind1*0]->(b) set b.selected = true return b",
+        "matcher": "^match \\(a:NodeKind1\\)\\-\\[:EdgeKind1\\*0\\.\\.0\\]\\->\\(b\\) set b\\.selected = true return b$",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-004 literal null predicate projection",
+      "type": "string_match",
+      "details": {
+        "query": "return null is null as value",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-004 literal null predicate negated",
+      "type": "string_match",
+      "details": {
+        "query": "with null as n return n is not null as value",
+        "fitness": -4
+      }
+    },
+    {
+      "name": "DAWGS-004 literal false null predicate where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where 1 is null set n.checked = true",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-004 property null predicate where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.name is null return n",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "DAWGS-011 datetime literal component projection",
+      "type": "string_match",
+      "details": {
+        "query": "return datetime('2020-01-01').epochmillis as value",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-011 date property component projection",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) return date(n.d).year as value",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-011 datetime parameter component where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where datetime($ts).epochmillis > 0 return n",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-011 supported current instant component where",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where (datetime().epochseconds - (365 * 86400)) > 0 return n",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-030 aggregate traversal count source pattern predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:User) where (s)-[:MemberOf]->() match (s)-[:MemberOf*1..3]->(t) with s, count(t) as c return s, c order by c desc limit 100",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-030 aggregate traversal count terminal pattern predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:User) match (s)-[:MemberOf*1..3]->(t) where (t)-[:MemberOf]->() with s, count(t) as c return s, c order by c desc limit 100",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Property arithmetic SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.total = n.x + n.y return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Property arithmetic relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() set r.total = r.x % r.y return r",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Property arithmetic WHERE and CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.x + n.y > 2 create (m:NodeKind2 {total: n.x * n.y})",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "Property arithmetic WITH continuation",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.x + n.y as total set n.total = total return n",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "Typed string predicate SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.x starts with '1' set n.seen = true return n",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Typed comparison relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() where r.x < 200 set r.seen = true return r",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Typed predicate projection assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) set n.seen = coalesce(n.x contains n.y, false) return n",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Typed comparison CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.x < n.y create (m:NodeKind2 {source: n.x})",
+        "fitness": 8
+      }
+    },
+    {
+      "name": "WITH property conversion SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.name as x where toString(x) = 'Alice' set n.value = toString(x) return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "WITH relationship string consumer SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:EdgeKind1]->() with r, r.name as x where toString(x) = 'Alice' set r.value = toUpper(x)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "WITH property conversion CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n.name as x where toString(x) = 'Alice' create (c:NodeKind2 {value: toString(x)})",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "WITH converted property alias rebound SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.name as x with n, toString(x) as x where x = 'Alice' set n.value = x",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "WITH property list head filter and tail SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.items as x where head(x) = 'one' set n.items = tail(x)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "SUM node assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:nodekind1) with sum(n.big) as total match (t:nodekind2) set t.total = total return t",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "SUM DISTINCT relationship assignment",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:nodekind1) with sum(distinct n.big) as total match ()-[r:edgekind1]->() set r.total = total",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "SUM CREATE without RETURN",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:nodekind1) with sum(n.big) as total create (c:nodekind2 {total: total})",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "SUM carried aggregate arithmetic",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) with sum(n.big) as total return total / 2",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "typed node collection SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.x) as xs match (t:B) set t.xs = xs return t",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "typed relationship collection SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.flag) as xs match ()-[r:R]->() set r.xs = xs",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "typed collected UNWIND CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.x) as xs unwind xs as x create (c:B {value: x + 1})",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "typed collected Boolean SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n.flag) as xs unwind xs as x match (t:B) set t.flag = x and true return t",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-056 cross entity relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n) as xs match ()-[r:R]->() where r in xs set r.hit = true return r",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-056 cross entity node SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with collect(r) as xs match (n:A) where n in xs set n.hit = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-056 negated entity CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with collect(n) as xs match ()-[r:R]->() where not r in xs create (c:B {hit: true})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-056 same entity SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with collect(r) as xs match ()-[s:R]->() where s in xs set s.hit = true return s",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-015 node SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) set n.value = toInteger(n.x) return n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-015 relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with r, r.x as x set r.value = toInteger(x)",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "DAWGS-015 filtered SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where toInteger(n.x) = 1 set n.hit = true return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DAWGS-015 CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n.x as x create (c:B {value: toInteger(x)})",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-014 node SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where toLower(n.name) starts with 'a_' set n.hit = true return n",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "DAWGS-014 relationship SET",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() where toUpper(r.name) ends with 'A%' set r.hit = true",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-014 negated SET",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) where not coalesce(n.name, '') contains 'a_' set n.hit = true",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-014 CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n, toLower(n.name) as value where value contains 'a_' create (c:B {name: n.name})",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "DAWGS-040 node page",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n order by n.x desc skip 1 limit 2 set n.hit = true return n",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-040 relationship page",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:R]->() with r order by r.x desc limit 1 set r.hit = true",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DAWGS-040 paginated alias filter",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n, n.x as value order by value desc limit 1 where value < 3 set n.hit = true",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "DAWGS-040 CREATE page",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:A) with n order by n.x desc skip 1 limit 2 create (c:B {value: n.x})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Leading optional SET retains the null input row",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) set n.seen = true return n",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Leading optional relationship SET filters matches",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (a:NodeKind1)-[r:EdgeKind1]->(b:NodeKind2) where r.name = 'missing' set b.seen = true, r.seen = true return b",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Leading optional CREATE consumes null input",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) create (c:NodeKind2 {source: coalesce(n.name, 'missing')})",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Leading optional null update feeds multipart CREATE",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) set n.seen = true with n create (c:NodeKind2 {source: coalesce(n.name, 'missing')}) return c",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 1",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1.9, -1.5, 0.9, -0.9] as x return toInteger(x) as value order by value asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 2",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1.9, -1.5] as x create (n:NodeKind1 {value: toInteger(x)}) return n.value",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 3",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1.9, -1.5] as x with x as value create (n:NodeKind1 {value: toInteger(value)})",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) create (c:NodeKind2 {flag: n.flag, score: n.score, text: n.text}) return c",
+        "fitness": 13
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n order by n.score desc limit 2 create (c:NodeKind2 {score: (n.score)})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 6",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n.score as score create (c:NodeKind2 {score: score}) return c.score",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "CI property and UNWIND type regression 7",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) create (n)-[c:EdgeKind2 {score: r.score}]->(m) return c.score",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 1",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) with n as item return item, item.name",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 2",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1] as x optional match (n:NodeKind1) with x, n as item return x, item.name",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 3",
+      "type": "string_match",
+      "details": {
+        "query": "with 1 as x optional match (n:NodeKind1) with x, n as item return x, item.name",
+        "fitness": -5
+      }
+    },
+    {
+      "name": "CI optional input boundary regression 4",
+      "type": "string_match",
+      "details": {
+        "query": "with 1 as x unwind [2, 2] as y optional match (n:NodeKind1) with x, y, n as item return x, y, item.name",
+        "fitness": -5
+      }
+    },
+    {
+      "name": "Pattern predicate lifetime 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) return s, t",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Pattern predicate lifetime 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where not (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) return s, t",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Pattern predicate lifetime 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[r:EdgeKind2]->(t) set r.seen = true",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Pattern predicate lifetime 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) create (c:NodeKind2 {name: t.name})",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Pattern predicate dependency 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where (b)-[:EdgeKind1]->(c) return b, c",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Pattern predicate dependency 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where not (b)-[:EdgeKind1]->(c) return b, c",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Pattern predicate dependency 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where (b)-[:EdgeKind1]->(c) set b.seen = true return b, c",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Pattern predicate dependency 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (b:NodeKind1) match (c {name: 'c1'}) where (b)-[:EdgeKind1]->(c) create (:NodeKind2 {name: b.name}) return b, c",
+        "fitness": 13
+      }
+    },
+    {
+      "name": "Multipart read boundary 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1]->(c) with c return c",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "Multipart read boundary 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1*1..2]->(c) with c return c",
+        "fitness": -4
+      }
+    },
+    {
+      "name": "Multipart read boundary 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1]->(c) with c set c.seen = true",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "Multipart read boundary 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:NodeKind1) with a match (a)-[:EdgeKind1]->(c) with c create (:NodeKind2 {name: c.name})",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Multipart read boundary 5",
+      "type": "string_match",
+      "details": {
+        "query": "unwind ['a', 'a', 'dead'] as name with name match (a:NodeKind1)-[:EdgeKind1*1..2]->(b) where a.name = name with name, b create (:NodeKind2 {name: name})",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "Multipart read boundary 6",
+      "type": "string_match",
+      "details": {
+        "query": "unwind ['a', 'dead'] as name with name match (a:NodeKind1)-[:EdgeKind1*0..2]->(b) where a.name = name with name, b return name, b",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "DAWGS-039 plain isolated deletion",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode {name: 'isolated'}) delete n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "DAWGS-039 detach incident relationships",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode {name: 'target'}) detach delete n",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "DAWGS-039 explicit relationship targets",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode)-[r]-() delete n, r",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "DAWGS-039 optional null relationship target",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode) optional match (n)-[r]->() delete r, n",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DAWGS-039 mixed plain and detach targets",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode)-[]->(m:DeleteNode) delete n detach delete m",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "DAWGS-039 paginated deletion input",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DeleteNode) with n order by n.name asc skip 1 limit 1 delete n",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Order alias identity 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) return n.k as x order by x + 0 asc",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Order alias identity 2",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 2, 3] as x return 10 - x as i0 order by x asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Order alias identity 3",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 2, 3] as x return 10 - x as i0 order by toString(i0) asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Order alias identity 4",
+      "type": "string_match",
+      "details": {
+        "query": "unwind [1, 1, 2] as x return distinct 10 - x as i2 order by i2 + 0 asc",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Order alias identity 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.k as i0 order by i0 + 0 desc limit 1 set n.seen = true return n.k as s0 order by s0 + 0 asc",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Order alias identity 6",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) with n, n.k as i0 order by i0 + 0 desc limit 1 create (:NodeKind2 {k: n.k})",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return x order by x asc",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind (n.arr) as x return x order by x asc",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' with n.arr as xs unwind xs as x return x order by x asc",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Property UNWIND 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' with n.arr as xs with xs as ys unwind ys as x return x order by x asc",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "Property UNWIND 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return x + 1 as value order by value asc",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 6",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x where x > 1 return x order by x asc",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Property UNWIND 7",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return distinct x order by x asc",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Property UNWIND 8",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.text as x return x order by x asc",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 9",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.flags as x return x and true as value order by value asc",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Property UNWIND 10",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.floats as x return x / 2 as value order by value asc",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 11",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.single as x return x",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 12",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.tag as x return x",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 13",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.keep as x return x",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 14",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' with collect(n.arr) as lists unwind lists as xs unwind xs as x return x order by x asc",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Property UNWIND 15",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind [1, 1] as duplicate unwind n.arr as x return x order by x asc",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 16",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x order by x asc skip 1 limit 1 return x",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Property UNWIND 17",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x match (m:NodeKind2) where m.role = 'target' return x order by x asc",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 18",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x return collect(distinct x)",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 19",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x return x",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 20",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x return x",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 21",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) unwind n.arr as x return x order by x asc",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Property UNWIND 22",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x return x order by x asc",
+        "fitness": 12
+      }
+    },
+    {
+      "name": "Property UNWIND 23",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' with r.arr as xs unwind xs as x return x + 1 as value order by value asc",
+        "fitness": 9
+      }
+    },
+    {
+      "name": "Property UNWIND 24",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x where x = 1 match (t:NodeKind2) where t.role = 'target' set t.value = x + 10",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 25",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x with r, x where x = 3 set r.value = x + 10",
+        "fitness": 12
+      }
+    },
+    {
+      "name": "Property UNWIND 26",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x create (c:NodeKind2 {value: x})",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 27",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x create (c:NodeKind2 {value: x})",
+        "fitness": 17
+      }
+    },
+    {
+      "name": "Property UNWIND 28",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x create (c:NodeKind2 {value: x})",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 29",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x create (c:NodeKind2 {value: x})",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 30",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x with x where x = 1 match (t:NodeKind2) where t.role = 'target' set t.value = x + 10 return t.value",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 31",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x with r, x where x = 3 set r.value = x + 10 return r.value",
+        "fitness": 12
+      }
+    },
+    {
+      "name": "Property UNWIND 32",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x create (c:NodeKind2 {value: x}) return c.value as value order by value asc",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 33",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x create (c:NodeKind2 {value: x}) return c.value as value order by value asc",
+        "fitness": 17
+      }
+    },
+    {
+      "name": "Property UNWIND 34",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x create (c:NodeKind2 {value: x}) return c",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 35",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x create (c:NodeKind2 {value: x}) return c",
+        "fitness": 10
+      }
+    },
+    {
+      "name": "Property UNWIND 36",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x set n.value = x > 0",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Property UNWIND 37",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x set r.value = x > 0",
+        "fitness": 13
+      }
+    },
+    {
+      "name": "Property UNWIND 38",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x set n.value = 9",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 39",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x set n.value = 9",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 40",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as x set n.value = x > 0 return x order by x asc",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Property UNWIND 41",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1)-[r:EdgeKind1]->(m:NodeKind2) where n.tag = 'a' and r.role = 'target' unwind r.arr as x set r.value = x > 0 return x order by x asc",
+        "fitness": 13
+      }
+    },
+    {
+      "name": "Property UNWIND 42",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'b' unwind n.arr as x set n.value = 9 return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 43",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'missing' unwind n.arr as x set n.value = 9 return n",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 44",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1) where n.tag = 'a' unwind n.arr as xs unwind xs as x return x order by x asc",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Property UNWIND 45",
+      "type": "string_match",
+      "details": {
+        "query": "optional match (n:NodeKind1) where n.tag = 'absent' unwind n.arr as x return x",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Property UNWIND 46",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind2) where n.tag = 'target' unwind n.keep as x return x",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "DELETE continuation 1",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) delete n return count(*) as c",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DELETE continuation 2",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) detach delete n return 1 as x",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DELETE continuation 3",
+      "type": "string_match",
+      "details": {
+        "query": "match (n)-[r]->(m) delete r, n return count(*) as c",
+        "fitness": -1
+      }
+    },
+    {
+      "name": "DELETE continuation 4",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) with n, n.name as name detach delete n return name",
+        "fitness": -3
+      }
+    },
+    {
+      "name": "DELETE continuation 5",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) set n.x = 1 delete n return count(*) as c",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "DELETE continuation 6",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:NodeKind1) delete n return count(*) as c",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Unknown kind mutation: MATCH (n:DAWGS023NeverRegistered) SET n.touched = true RETURN count(*) AS c",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:DAWGS023NeverRegistered) set n.touched = true return count(*) as c",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Unknown kind mutation: MATCH (n:NodeKind1:DAWGS023NeverRegistered) DETACH DELETE n RETURN count(*) AS c",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:NodeKind1:DAWGS023NeverRegistered) detach delete n return count(*) as c",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Unknown kind mutation: MATCH ()-[r:DAWGS023NeverRegistered]->() DELETE r RETURN count(*) AS c",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:DAWGS023NeverRegistered]->() delete r return count(*) as c",
+        "fitness": 1
       }
     }
   ]

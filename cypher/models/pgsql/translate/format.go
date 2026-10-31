@@ -3,6 +3,7 @@ package translate
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"maps"
 	"strings"
 
@@ -12,11 +13,15 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 )
 
+// Translated renders a translation result as PostgreSQL for its target graph.
 func Translated(translation Result) (format.Formatted, error) {
-	return format.Statement(translation.Statement, format.NewOutputBuilder())
+	if len(translation.Stages) > 0 {
+		return format.Formatted{}, fmt.Errorf("multipart mutations require TranslatedStatements and sequential transaction execution")
+	}
+	return format.Statement(translation.Statement, format.NewOutputBuilder().WithTargetGraph(translation.GraphID))
 }
 
-// postgres comments can be terminated by \r, \n, or both per the source:
+// newlineToCommentReplacer prefixes every PostgreSQL line-comment continuation after \r, \n, or both, per the scanner source:
 // https://github.com/postgres/postgres/blob/824d5f6241ea7a0a85c9d2b3d27beb78e42a36ab/src/backend/parser/scan.l#L186-L211
 var newlineToCommentReplacer = strings.NewReplacer(
 	"\r\n", "\n-- ",
@@ -24,6 +29,7 @@ var newlineToCommentReplacer = strings.NewReplacer(
 	"\n", "\n-- ",
 )
 
+// FromCypher renders a Cypher query as a SQL comment followed by its PostgreSQL translation.
 func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, stripLiterals bool, graphID int32) (format.Formatted, error) {
 	var (
 		output  = &bytes.Buffer{}
@@ -54,7 +60,7 @@ func FromCypher(ctx context.Context, regularQuery *cypher.RegularQuery, kindMapp
 
 	if translation, err := Translate(ctx, regularQuery, kindMapper, nil, graphID); err != nil {
 		return format.Formatted{}, err
-	} else if sqlQuery, err := format.Statement(translation.Statement, format.NewOutputBuilder()); err != nil {
+	} else if sqlQuery, err := Translated(translation); err != nil {
 		return format.Formatted{}, err
 	} else {
 		output.WriteString(sqlQuery.Statement)

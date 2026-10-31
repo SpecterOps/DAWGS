@@ -1,0 +1,399 @@
+{
+  "families": [
+    {
+      "name": "Reused relationship identity",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "source", "kinds": ["ReuseSource"], "properties": {"name": "source"}},
+          {"id": "other", "kinds": ["ReuseSource"], "properties": {"name": "other"}},
+          {"id": "isolated", "kinds": ["ReuseSource"], "properties": {"name": "isolated"}},
+          {"id": "one", "kinds": ["ReuseTarget"], "properties": {"name": "one"}},
+          {"id": "two", "kinds": ["ReuseTarget"], "properties": {"name": "two"}},
+          {"id": "wrong-kind", "kinds": ["ReuseDecoy"], "properties": {"name": "wrong-kind"}},
+          {"id": "missing", "kinds": ["ReuseTarget"], "properties": {"name": "missing"}},
+          {"id": "leaf", "kinds": ["ReuseLeaf"], "properties": {"name": "leaf"}}
+        ],
+        "edges": [
+          {"start_id": "source", "end_id": "one", "kind": "ReuseLink", "properties": {"marker": "yes"}},
+          {"start_id": "source", "end_id": "two", "kind": "ReuseLink", "properties": {"marker": "yes"}},
+          {"start_id": "source", "end_id": "wrong-kind", "kind": "ReuseLink", "properties": {"marker": "yes"}},
+          {"start_id": "source", "end_id": "missing", "kind": "ReuseLink", "properties": {}},
+          {"start_id": "other", "end_id": "one", "kind": "ReuseLink", "properties": {"marker": "yes"}},
+          {"start_id": "one", "end_id": "source", "kind": "ReuseLink", "properties": {"marker": "reverse"}},
+          {"start_id": "source", "end_id": "one", "kind": "OtherReuseLink", "properties": {"marker": "yes"}},
+          {"start_id": "one", "end_id": "leaf", "kind": "ReuseTail", "properties": {"marker": "tail"}},
+          {"start_id": "two", "end_id": "leaf", "kind": "ReuseTail", "properties": {"marker": "tail"}},
+          {"start_id": "one", "end_id": "one", "kind": "ReuseLoop", "properties": {"marker": "loop"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "reused edge count",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "new terminal identities",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) RETURN b.name, c.name, r.marker ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one", "yes"], ["two", "two", "yes"]], "row_count": 2}
+        },
+        {
+          "name": "both endpoints bound",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(b) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "right endpoint bound",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (c)-[r]->(b) RETURN b.name, c.name ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "source"], ["two", "source"]]}
+        },
+        {
+          "name": "only edge carried",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) WITH r MATCH (x)-[r]->(y) RETURN x.name, y.name ORDER BY y.name"
+          },
+          "assert": {"ordered_row_values": [["source", "one"], ["source", "two"]]}
+        },
+        {
+          "name": "inbound reuse",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (c)<-[r]-(a) RETURN b.name, c.name, r.marker ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one", "yes"], ["two", "two", "yes"]], "row_count": 2}
+        },
+        {
+          "name": "wrong direction is empty",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)<-[r]-(c) RETURN c"},
+          "assert": "empty"
+        },
+        {
+          "name": "undirected single bound endpoint",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]-(c) RETURN b.name, c.name, r.marker ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one", "yes"], ["two", "two", "yes"]], "row_count": 2}
+        },
+        {
+          "name": "undirected both endpoints bound",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]-(b) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "relationship alias",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) WITH a, b, r AS carried MATCH (a)-[carried]->(c) RETURN b.name, c.name, carried.marker ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one", "yes"], ["two", "two", "yes"]], "row_count": 2}
+        },
+        {
+          "name": "relationship aliases share identity",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) WITH a, r, r AS carried MATCH (a)-[carried]->(c) MATCH (a)-[r]->(d) RETURN c.name, d.name ORDER BY c.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one"], ["two", "two"]]}
+        },
+        {
+          "name": "repeated match clauses",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) MATCH (a)-[r]->(d) RETURN b.name, c.name, d.name ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one", "one"], ["two", "two", "two"]]}
+        },
+        {
+          "name": "reused relationship property constraint",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r {marker:'yes'}]->(c) RETURN count(*) AS c"
+          },
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "conflicting property is empty",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r {marker:'no'}]->(c) RETURN c"},
+          "assert": "empty"
+        },
+        {
+          "name": "conflicting relationship kind is empty",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r:OtherReuseLink]->(c) RETURN c"},
+          "assert": "empty"
+        },
+        {
+          "name": "terminal property filter",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) WHERE c.name = $name RETURN c.name"
+          },
+          "assert": {"ordered_row_values": [["one"]]},
+          "params": {"name": "one"}
+        },
+        {
+          "name": "duplicate input rows",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x WITH x MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) RETURN c.name ORDER BY c.name"
+          },
+          "assert": {"ordered_row_values": [["one"], ["one"], ["one"], ["two"], ["two"], ["two"]], "row_count": 6}
+        },
+        {
+          "name": "optional reused relationship",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) OPTIONAL MATCH (a)-[r]->(c) RETURN b.name, c.name, r.marker ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one", "yes"], ["two", "two", "yes"]], "row_count": 2}
+        },
+        {
+          "name": "optional mismatch preserves origins",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) OPTIONAL MATCH (a)-[r]->(c) WHERE c.name = 'absent' RETURN b.name, coalesce(c.name,'missing') ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "missing"], ["two", "missing"]]}
+        },
+        {
+          "name": "null relationship cannot match",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'isolated'}) OPTIONAL MATCH (a)-[r:ReuseLink]->(b) MATCH (a)-[r]->(c) RETURN c"},
+          "assert": "empty"
+        },
+        {
+          "name": "fixed continuation reuses bound relationship",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (x:ReuseLeaf {name:'leaf'})<-[:ReuseTail]-(m)<-[r]-(c) RETURN b.name, m.name, c.name ORDER BY b.name"
+          },
+          "assert": {"ordered_row_values": [["one", "one", "source"], ["two", "two", "source"]]}
+        },
+        {
+          "name": "directed self loop reuse",
+          "vars": {"query": "MATCH (a)-[r:ReuseLoop]->(a) MATCH (a)-[r]->(c) RETURN a.name, c.name"},
+          "assert": {"ordered_row_values": [["one", "one"]], "row_count": 1}
+        },
+        {
+          "name": "node and relationship update",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) SET c.visited = true, r.visited = true RETURN c.name ORDER BY c.name"
+          },
+          "assert": {"ordered_row_values": [["one"], ["two"]], "row_count": 2},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["ReuseSource"], "props": {"name": "source"}},
+                  {"id": "other", "kinds": ["ReuseSource"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["ReuseSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["ReuseTarget"], "props": {"name": "one", "visited": true}},
+                  {"id": "two", "kinds": ["ReuseTarget"], "props": {"name": "two", "visited": true}},
+                  {"id": "wrong-kind", "kinds": ["ReuseDecoy"], "props": {"name": "wrong-kind"}},
+                  {"id": "missing", "kinds": ["ReuseTarget"], "props": {"name": "missing"}},
+                  {"id": "leaf", "kinds": ["ReuseLeaf"], "props": {"name": "leaf"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes", "visited": true}},
+                  {"start": "source", "end": "two", "kind": "ReuseLink", "props": {"marker": "yes", "visited": true}},
+                  {"start": "source", "end": "wrong-kind", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "missing", "kind": "ReuseLink", "props": {}},
+                  {"start": "other", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "source", "kind": "ReuseLink", "props": {"marker": "reverse"}},
+                  {"start": "source", "end": "one", "kind": "OtherReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "two", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "one", "end": "one", "kind": "ReuseLoop", "props": {"marker": "loop"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "filtered update without return",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) WHERE c.name = 'one' SET c.visited = true, r.visited = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["ReuseSource"], "props": {"name": "source"}},
+                  {"id": "other", "kinds": ["ReuseSource"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["ReuseSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["ReuseTarget"], "props": {"name": "one", "visited": true}},
+                  {"id": "two", "kinds": ["ReuseTarget"], "props": {"name": "two"}},
+                  {"id": "wrong-kind", "kinds": ["ReuseDecoy"], "props": {"name": "wrong-kind"}},
+                  {"id": "missing", "kinds": ["ReuseTarget"], "props": {"name": "missing"}},
+                  {"id": "leaf", "kinds": ["ReuseLeaf"], "props": {"name": "leaf"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes", "visited": true}},
+                  {"start": "source", "end": "two", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "wrong-kind", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "missing", "kind": "ReuseLink", "props": {}},
+                  {"start": "other", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "source", "kind": "ReuseLink", "props": {"marker": "reverse"}},
+                  {"start": "source", "end": "one", "kind": "OtherReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "two", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "one", "end": "one", "kind": "ReuseLoop", "props": {"marker": "loop"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create cardinality with return",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) CREATE (audit:ReuseAudit {target:c.name}) RETURN audit.target ORDER BY audit.target"
+          },
+          "assert": {"ordered_row_values": [["one"], ["two"]], "row_count": 2},
+          "post_assertions": [
+            {"cypher": "MATCH (n:ReuseAudit) RETURN n.target ORDER BY n.target", "assert": {"ordered_row_values": [["one"], ["two"]], "row_count": 2}},
+            {
+              "cypher": "MATCH (n) WHERE NOT n:ReuseAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["ReuseSource"], "props": {"name": "source"}},
+                  {"id": "other", "kinds": ["ReuseSource"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["ReuseSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["ReuseTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["ReuseTarget"], "props": {"name": "two"}},
+                  {"id": "wrong-kind", "kinds": ["ReuseDecoy"], "props": {"name": "wrong-kind"}},
+                  {"id": "missing", "kinds": ["ReuseTarget"], "props": {"name": "missing"}},
+                  {"id": "leaf", "kinds": ["ReuseLeaf"], "props": {"name": "leaf"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "two", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "wrong-kind", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "missing", "kind": "ReuseLink", "props": {}},
+                  {"start": "other", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "source", "kind": "ReuseLink", "props": {"marker": "reverse"}},
+                  {"start": "source", "end": "one", "kind": "OtherReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "two", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "one", "end": "one", "kind": "ReuseLoop", "props": {"marker": "loop"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create cardinality without return",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) CREATE (audit:ReuseAudit {target:c.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {"cypher": "MATCH (n:ReuseAudit) RETURN n.target ORDER BY n.target", "assert": {"ordered_row_values": [["one"], ["two"]], "row_count": 2}},
+            {
+              "cypher": "MATCH (n) WHERE NOT n:ReuseAudit RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "source", "kinds": ["ReuseSource"], "props": {"name": "source"}},
+                  {"id": "other", "kinds": ["ReuseSource"], "props": {"name": "other"}},
+                  {"id": "isolated", "kinds": ["ReuseSource"], "props": {"name": "isolated"}},
+                  {"id": "one", "kinds": ["ReuseTarget"], "props": {"name": "one"}},
+                  {"id": "two", "kinds": ["ReuseTarget"], "props": {"name": "two"}},
+                  {"id": "wrong-kind", "kinds": ["ReuseDecoy"], "props": {"name": "wrong-kind"}},
+                  {"id": "missing", "kinds": ["ReuseTarget"], "props": {"name": "missing"}},
+                  {"id": "leaf", "kinds": ["ReuseLeaf"], "props": {"name": "leaf"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "source", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "two", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "wrong-kind", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "missing", "kind": "ReuseLink", "props": {}},
+                  {"start": "other", "end": "one", "kind": "ReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "source", "kind": "ReuseLink", "props": {"marker": "reverse"}},
+                  {"start": "source", "end": "one", "kind": "OtherReuseLink", "props": {"marker": "yes"}},
+                  {"start": "one", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "two", "end": "leaf", "kind": "ReuseTail", "props": {"marker": "tail"}},
+                  {"start": "one", "end": "one", "kind": "ReuseLoop", "props": {"marker": "loop"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "path contains reused relationship",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH p = (a)-[r]->(c) RETURN p"},
+          "assert": {"path_node_ids": [["source", "one"], ["source", "two"]], "path_lengths": [1, 1], "row_count": 2}
+        },
+        {
+          "name": "inbound path contains reused relationship",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH p = (c)<-[r]-(a) RETURN p"},
+          "assert": {"path_node_ids": [["one", "source"], ["two", "source"]], "path_lengths": [1, 1], "row_count": 2}
+        },
+        {
+          "name": "undirected edge alone has both orientations",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) WITH r MATCH (x)-[r]-(y) RETURN x.name, y.name ORDER BY x.name, y.name"
+          },
+          "assert": {"ordered_row_values": [["one", "source"], ["source", "one"], ["source", "two"], ["two", "source"]], "row_count": 4}
+        },
+        {
+          "name": "reuse after expansion",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (b)-[:ReuseTail*1..2]->(leaf:ReuseLeaf) MATCH (a)-[r]->(c) RETURN c.name, leaf.name ORDER BY c.name"
+          },
+          "assert": {"ordered_row_values": [["one", "leaf"], ["two", "leaf"]]}
+        },
+        {
+          "name": "bound relationship in pattern predicate",
+          "vars": {"query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) WHERE (a)-[r]->(b) RETURN count(*) AS c"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "unbound relationship still fans out",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[fresh:ReuseLink {marker:'yes'}]->(c:ReuseTarget) RETURN count(*) AS c"
+          },
+          "assert": {"exact_int": 4}
+        },
+        {
+          "name": "with wildcard retains named bindings",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) MATCH (a)-[r]->(c) WITH * RETURN a.name, b.name, c.name, r.marker ORDER BY b.name"
+          },
+          "assert": {
+            "ordered_row_values": [["source", "one", "one", "yes"], ["source", "two", "two", "yes"]],
+            "keys": ["a.name", "b.name", "c.name", "r.marker"]
+          }
+        },
+        {
+          "name": "negated pattern property remains local",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) WHERE NOT (a)-[r {marker:'no'}]->(b) RETURN count(*) AS c"
+          },
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "positive pattern property remains local",
+          "vars": {
+            "query": "MATCH (a:ReuseSource {name:'source'})-[r:ReuseLink {marker:'yes'}]->(b:ReuseTarget) WHERE (a)-[r {marker:'yes'}]->(b) RETURN count(*) AS c"
+          },
+          "assert": {"exact_int": 2}
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,694 @@
+{
+  "node_kinds": [
+    "OrderCreated"
+  ],
+  "families": [
+    {
+      "name": "order aliases",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "1",
+            "kinds": [
+              "OrderSource"
+            ],
+            "properties": {
+              "k": 1
+            }
+          },
+          {
+            "id": "2",
+            "kinds": [
+              "OrderSource"
+            ],
+            "properties": {
+              "k": 2
+            }
+          },
+          {
+            "id": "3",
+            "kinds": [
+              "OrderSource"
+            ],
+            "properties": {
+              "k": 3
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "property alias arithmetic",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS x ORDER BY x + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "name": "nested arithmetic descending",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS x ORDER BY (x + 1) * 2 DESC"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "function alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS x ORDER BY toString(x) DESC"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "coalesce alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS x ORDER BY coalesce(x, 0) DESC"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "alias page",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS x ORDER BY x + 0 DESC SKIP 1 LIMIT 1"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "unwind input collision",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY x"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              9,
+              8,
+              7
+            ]
+          }
+        },
+        {
+          "name": "unwind alias collision",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY i0 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              7,
+              8,
+              9
+            ]
+          }
+        },
+        {
+          "name": "unwind function collision",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY toString(i0)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              7,
+              8,
+              9
+            ]
+          }
+        },
+        {
+          "name": "qualified input collision",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x WITH x RETURN 10-x AS i0 ORDER BY x"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              9,
+              8,
+              7
+            ]
+          }
+        },
+        {
+          "name": "node internal name",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS n0 ORDER BY n0 + 0 DESC"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "scope internal name",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS s0 ORDER BY s0 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "name": "same-name expression",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN 10-x AS x ORDER BY x + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              7,
+              8,
+              9
+            ]
+          }
+        },
+        {
+          "name": "distinct nested alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN DISTINCT n.k AS x ORDER BY x + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "name": "aggregate alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN sum(n.k) AS x ORDER BY x + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              6
+            ]
+          }
+        },
+        {
+          "name": "with alias collision",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x WITH 10-x AS i0 ORDER BY x LIMIT 2 RETURN i0 ORDER BY i0 DESC"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              9,
+              8
+            ]
+          }
+        },
+        {
+          "name": "with nested alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) WITH n.k AS i0 ORDER BY i0 + 0 DESC LIMIT 2 RETURN i0 ORDER BY i0 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "name": "empty stream",
+          "vars": {
+            "query": "MATCH (n:OrderSource) WHERE n.k < 0 RETURN n.k AS x ORDER BY x + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          }
+        },
+        {
+          "name": "literal alias",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN 7 AS i0 ORDER BY i0 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              7,
+              7,
+              7
+            ]
+          }
+        },
+        {
+          "name": "duplicate inputs",
+          "vars": {
+            "query": "UNWIND [1,1,2] AS x RETURN 10-x AS i0 ORDER BY x"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              9,
+              9,
+              8
+            ]
+          }
+        },
+        {
+          "name": "quoted alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.k AS `order value` ORDER BY `order value` + 0 DESC"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "SET return",
+          "vars": {
+            "query": "MATCH (n:OrderSource) WITH n, n.k AS i0 ORDER BY i0 + 0 DESC SKIP 1 LIMIT 1 SET n.seen = true RETURN n.k AS i0 ORDER BY i0 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              2
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OrderSource) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 1
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 2,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 3
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OrderCreated) RETURN n.k ORDER BY n.k",
+              "assert": {
+                "ordered_scalar_values": []
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "ordered_scalar_values": [
+                  0
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET no return",
+          "vars": {
+            "query": "MATCH (n:OrderSource) WITH n, n.k AS i0 ORDER BY i0 + 0 DESC SKIP 1 LIMIT 1 SET n.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OrderSource) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 1
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 2,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 3
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OrderCreated) RETURN n.k ORDER BY n.k",
+              "assert": {
+                "ordered_scalar_values": []
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "ordered_scalar_values": [
+                  0
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE return",
+          "vars": {
+            "query": "MATCH (n:OrderSource) WITH n, n.k AS i0 ORDER BY i0 + 0 DESC SKIP 1 LIMIT 1 CREATE (:OrderCreated {k: n.k}) RETURN n.k AS i0 ORDER BY i0 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              2
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OrderSource) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 1
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 2
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 3
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OrderCreated) RETURN n.k ORDER BY n.k",
+              "assert": {
+                "ordered_scalar_values": [
+                  2
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "ordered_scalar_values": [
+                  0
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE no return",
+          "vars": {
+            "query": "MATCH (n:OrderSource) WITH n, n.k AS i0 ORDER BY i0 + 0 DESC SKIP 1 LIMIT 1 CREATE (:OrderCreated {k: n.k})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OrderSource) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "1",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 1
+                    }
+                  },
+                  {
+                    "id": "2",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 2
+                    }
+                  },
+                  {
+                    "id": "3",
+                    "kinds": [
+                      "OrderSource"
+                    ],
+                    "props": {
+                      "k": 3
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OrderCreated) RETURN n.k ORDER BY n.k",
+              "assert": {
+                "ordered_scalar_values": [
+                  2
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN count(r)",
+              "assert": {
+                "ordered_scalar_values": [
+                  0
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "distinct duplicates",
+          "vars": {
+            "query": "UNWIND [1,1,2] AS x RETURN DISTINCT 10-x AS i0 ORDER BY i0 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              8,
+              9
+            ]
+          }
+        },
+        {
+          "name": "distinct hidden name collision",
+          "vars": {
+            "query": "UNWIND [1,1,2] AS x RETURN DISTINCT 10-x AS i2 ORDER BY i2 + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              8,
+              9
+            ]
+          }
+        },
+        {
+          "name": "distinct direct property",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN DISTINCT n.k ORDER BY n.k + 0 DESC"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "distinct input reference",
+          "vars": {
+            "query": "UNWIND [1,1,2] AS x RETURN DISTINCT x AS value ORDER BY x + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "name": "distinct materialized alias",
+          "vars": {
+            "query": "UNWIND [1,1,2] AS x WITH x RETURN DISTINCT x AS value ORDER BY value + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "name": "distinct page",
+          "vars": {
+            "query": "UNWIND [1,1,2,3] AS x RETURN DISTINCT 10-x AS i0 ORDER BY i0 + 0 SKIP 1 LIMIT 1"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              8
+            ]
+          }
+        },
+        {
+          "name": "distinct aggregate alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN DISTINCT sum(n.k) AS x ORDER BY x + 0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              6
+            ]
+          }
+        },
+        {
+          "name": "null alias",
+          "vars": {
+            "query": "MATCH (n:OrderSource) RETURN n.missing AS x ORDER BY coalesce(x, 0)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              null,
+              null,
+              null
+            ]
+          }
+        },
+        {
+          "name": "string alias",
+          "vars": {
+            "query": "UNWIND ['c','a','b'] AS x RETURN toUpper(x) AS i0 ORDER BY toLower(i0)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "A",
+              "B",
+              "C"
+            ]
+          }
+        },
+        {
+          "name": "multiple alias collision",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN x AS i1, 10-x AS i0 ORDER BY x"
+          },
+          "assert": {
+            "ordered_row_values": [
+              [
+                1,
+                9
+              ],
+              [
+                2,
+                8
+              ],
+              [
+                3,
+                7
+              ]
+            ]
+          }
+        },
+        {
+          "name": "negated alias",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY -i0"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              9,
+              8,
+              7
+            ]
+          }
+        },
+        {
+          "name": "parenthesized input collision",
+          "vars": {
+            "query": "UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY ((x))"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              9,
+              8,
+              7
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

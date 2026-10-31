@@ -63,7 +63,7 @@ func FetchNodeProperties(tx graph.Transaction, nodes graph.NodeSet, propertyName
 			nodes[nodeID].Properties = graph.AsProperties(nodeProperties)
 		}
 
-		return nil
+		return results.Error()
 	}, query.Returning(
 		returningCriteria...,
 	))
@@ -495,6 +495,11 @@ func parallelFetchNodes(ctx context.Context, db graph.Database, maxID graph.ID, 
 		errs     []error
 	)
 
+	// Bind a cancellable operation context so that the first worker failure stops range submission and joins the
+	// remaining workers without waiting for the caller's context to expire
+	opCtx, opCancel := context.WithCancel(ctx)
+	defer opCancel()
+
 	// Fetch workers
 	for workerID := 0; workerID < numWorkers; workerID++ {
 		workerWG.Add(1)
@@ -502,7 +507,7 @@ func parallelFetchNodes(ctx context.Context, db graph.Database, maxID graph.ID, 
 		go func() {
 			defer workerWG.Done()
 
-			if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+			if err := db.ReadTransaction(opCtx, func(tx graph.Transaction) error {
 				// Create a slice of criteria to join the node ID range constraints to any passed user criteria
 				var criteriaSlice []graph.Criteria
 
@@ -511,7 +516,7 @@ func parallelFetchNodes(ctx context.Context, db graph.Database, maxID graph.ID, 
 				}
 
 				// Select the next node ID range floor while honoring context cancellation and channel closure
-				nextRangeFloor, channelOpen := channels.Receive(ctx, rangeC)
+				nextRangeFloor, channelOpen := channels.Receive(opCtx, rangeC)
 
 				for channelOpen {
 					if err := tx.Nodes().Filter(query.And(
@@ -520,18 +525,22 @@ func parallelFetchNodes(ctx context.Context, db graph.Database, maxID graph.ID, 
 							query.LessThan(query.NodeID(), nextRangeFloor+stride),
 						)...,
 					)).Fetch(func(cursor graph.Cursor[*graph.Node]) error {
-						channels.PipeAll(ctx, cursor.Chan(), nodeC)
+						channels.PipeAll(opCtx, cursor.Chan(), nodeC)
 						return cursor.Error()
 					}); err != nil {
 						return err
 					}
 
-					nextRangeFloor, channelOpen = channels.Receive(ctx, rangeC)
+					nextRangeFloor, channelOpen = channels.Receive(opCtx, rangeC)
 				}
 
 				return nil
 			}); err != nil {
+				// Deliver the originating error through the caller's context before cancelling so that the merge
+				// routine records it; cancelling the operation context afterwards unblocks range submission without
+				// swallowing the error
 				channels.Submit(ctx, errorC, err)
+				opCancel()
 			}
 		}()
 	}
@@ -569,7 +578,11 @@ func parallelFetchNodes(ctx context.Context, db graph.Database, maxID graph.ID, 
 
 	// Iterate through node ID ranges up to the maximum ID by the stride constant
 	for nextRangeFloor := graph.ID(0); nextRangeFloor <= maxID; nextRangeFloor += stride {
-		channels.Submit(ctx, rangeC, nextRangeFloor)
+		if !channels.Submit(opCtx, rangeC, nextRangeFloor) {
+			// The operation context expired from a worker failure or caller cancellation; stop submitting ranges
+			// and join the workers below
+			break
+		}
 	}
 
 	// Stop the fetch workers
@@ -588,7 +601,8 @@ func parallelFetchNodes(ctx context.Context, db graph.Database, maxID graph.ID, 
 
 // ParallelFetchNodes will first look up the largest node database identifier. The function will then spin up to
 // numWorkers parallel read transactions. Each transaction will apply the user passed criteria to this function to a
-// range of node database identifiers to avoid parallel worker collisions.
+// range of node database identifiers to avoid parallel worker collisions. The first worker failure stops further
+// range submission, joins all workers and returns the originating error alongside any join errors.
 func ParallelFetchNodes(ctx context.Context, db graph.Database, criteria graph.Criteria, numWorkers int) (graph.NodeSet, error) {
 	if largestNodeID, err := FetchLargestNodeID(ctx, db); err != nil {
 		if graph.IsErrNotFound(err) {

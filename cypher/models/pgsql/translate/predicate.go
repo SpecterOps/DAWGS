@@ -11,6 +11,13 @@ import (
 )
 
 func (s *Translator) preparePatternPredicate(predicate *cypher.PatternPredicate) error {
+	if !s.query.HasParts() {
+		// Producer-boundary guard: pattern predicates need an active query part
+		// to stash the current match pattern. Report the bug instead of panicking
+		// on the missing part.
+		return fmt.Errorf("pattern predicate translation requires an active query part")
+	}
+
 	currentQueryPart := s.query.CurrentPart()
 
 	// Stash the match pattern
@@ -169,7 +176,12 @@ func (s *Translator) usePatternPredicateExistencePlacement(patternPart *PatternP
 // buildPatternPredicates is used by translateMatch to resolve deferred pattern predicate
 // futures collected for the current MATCH/OPTIONAL MATCH query part's WHERE expressions
 func (s *Translator) buildPatternPredicates() error {
-	for _, predicateFuture := range s.query.CurrentPart().patternPredicates {
+	// Resolve each MATCH's futures once. Rebuilding one after a later MATCH
+	// would rebind its correlation and reuse already-consumed constraints.
+	predicates := s.query.CurrentPart().patternPredicates
+	s.query.CurrentPart().patternPredicates = nil
+	s.query.CurrentPart().pendingPatternPredicateFilter = len(predicates) > 0
+	for _, predicateFuture := range predicates {
 		var (
 			lastFrame *Frame
 

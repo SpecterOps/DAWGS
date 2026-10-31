@@ -52,6 +52,7 @@ func (s *Translator) translateAggregateTraversalCount(query *cypher.RegularQuery
 func (s *Translator) newAggregatePredicateTranslator() *Translator {
 	translator := NewTranslator(s.ctx, s.kindMapper.kindMapper, s.parameters, s.graphID)
 	translator.scope.generator = s.scope.generator
+	translator.kindMapper.missingKinds = s.kindMapper.missingKinds
 
 	return translator
 }
@@ -462,6 +463,15 @@ func (s *Translator) aggregateBindingPredicate(translator *Translator, match *cy
 		return nil, nil
 	}
 
+	// Pattern predicates require an active query part to stash and rebuild their
+	// pattern; this translator walks the predicate without one. Reject the shape
+	// with the existing explicit translation error. DAWGS-036 repairs generic
+	// predicate lifetime; qualifying a fallback from this lowering remains a
+	// separate follow-up to DAWGS-030.
+	if containsPatternPredicate(match.Where) {
+		return nil, fmt.Errorf("unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported")
+	}
+
 	binding := translator.scope.Define(alias, pgsql.NodeComposite)
 	translator.scope.Alias(pgsql.Identifier(symbol), binding)
 
@@ -486,25 +496,7 @@ func (s *Translator) aggregateBindingPredicate(translator *Translator, match *cy
 }
 
 func (s *Translator) aggregateNodeKindConstraint(alias pgsql.Identifier, kinds graph.Kinds) (pgsql.Expression, error) {
-	if len(kinds) == 0 {
-		return nil, nil
-	}
-
-	kindIDs, err := s.kindMapper.MapKinds(kinds)
-	if err != nil {
-		return nil, err
-	}
-
-	kindIDsLiteral, err := pgsql.AsLiteral(kindIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	return pgsql.NewBinaryExpression(
-		pgsql.CompoundIdentifier{alias, pgsql.ColumnKindIDs},
-		pgsql.OperatorPGArrayLHSContainsRHS,
-		kindIDsLiteral,
-	), nil
+	return s.nodeKindConstraint(alias, kinds)
 }
 
 func (s *Translator) aggregateEdgeKindConstraint(alias pgsql.Identifier, kinds graph.Kinds) (pgsql.Expression, error) {
@@ -512,7 +504,7 @@ func (s *Translator) aggregateEdgeKindConstraint(alias pgsql.Identifier, kinds g
 		return nil, nil
 	}
 
-	kindIDs, err := s.kindMapper.MapKinds(kinds)
+	kindIDs, _, err := s.kindMapper.MapMatchKinds(kinds)
 	if err != nil {
 		return nil, err
 	}
@@ -542,4 +534,30 @@ func aggregateNodeComposite(alias pgsql.Identifier) pgsql.CompositeValue {
 		},
 		DataType: pgsql.NodeComposite,
 	}
+}
+
+// containsPatternPredicate reports whether the WHERE expression tree carries a
+// pattern predicate, including negated or compound forms. Such predicates need
+// an active query part and cannot be expressed against the aggregate traversal
+// count CTEs.
+func containsPatternPredicate(where *cypher.Where) bool {
+	if where == nil {
+		return false
+	}
+
+	var found bool
+	visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, handler walk.VisitorHandler) {
+		if _, isPatternPredicate := node.(*cypher.PatternPredicate); isPatternPredicate {
+			found = true
+			handler.SetDone()
+		}
+	})
+
+	if err := walk.Cypher(where, visitor); err != nil {
+		// The visitor never sets an error; an unexpected walk failure is treated
+		// as unsupported so the caller rejects rather than partially lowers.
+		return true
+	}
+
+	return found
 }

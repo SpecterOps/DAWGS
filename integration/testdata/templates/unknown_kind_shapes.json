@@ -1,0 +1,2150 @@
+{
+  "families": [
+    {
+      "name": "Unknown match kinds",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "a"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "NodeKind1"
+            ],
+            "properties": {
+              "name": "b"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "EdgeKind1",
+            "properties": {
+              "name": "ab"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "unknown node count",
+          "vars": {
+            "query": "MATCH (n:DAWGS023NeverRegistered) RETURN count(n) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown node conjunction",
+          "vars": {
+            "query": "MATCH (n:NodeKind1:DAWGS023NeverRegistered) RETURN count(n) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown edge count",
+          "vars": {
+            "query": "MATCH ()-[r:DAWGS023NeverRegistered]->() RETURN count(r) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mixed edge alternatives",
+          "vars": {
+            "query": "MATCH ()-[r:DAWGS023NeverRegistered|EdgeKind1]->() RETURN count(r) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown expansion",
+          "vars": {
+            "query": "MATCH (n:NodeKind1)-[r:DAWGS023NeverRegistered*1..2]->(t) RETURN count(t) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mixed expansion",
+          "vars": {
+            "query": "MATCH (n:NodeKind1)-[r:DAWGS023NeverRegistered|EdgeKind1*1..2]->(t) RETURN count(t) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown endpoint",
+          "vars": {
+            "query": "MATCH (n:NodeKind1)-[:EdgeKind1]->(t:DAWGS023NeverRegistered) RETURN count(t) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown source",
+          "vars": {
+            "query": "MATCH (n:DAWGS023NeverRegistered)-[:EdgeKind1]->(t:NodeKind1) RETURN count(t) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "where unknown",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) WHERE n:DAWGS023NeverRegistered RETURN count(n) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "where conjunction",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) WHERE n:NodeKind1:DAWGS023NeverRegistered RETURN count(n) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "where negation",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) WHERE NOT n:DAWGS023NeverRegistered RETURN count(n) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "where disjunction",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) WHERE n:DAWGS023NeverRegistered OR n:NodeKind1 RETURN count(n) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown type literal",
+          "vars": {
+            "query": "MATCH ()-[r:EdgeKind1]->() WHERE type(r) = 'DAWGS023NeverRegistered' RETURN count(r) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated type literal",
+          "vars": {
+            "query": "MATCH ()-[r:EdgeKind1]->() WHERE type(r) <> 'DAWGS023NeverRegistered' RETURN count(r) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "optional node",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) OPTIONAL MATCH (n)-[:EdgeKind1]->(t:DAWGS023NeverRegistered) RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "optional edge",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) OPTIONAL MATCH (n)-[:DAWGS023NeverRegistered]->(t) RETURN count(t) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "leading optional",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:DAWGS023NeverRegistered) RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "optional unknown count",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:DAWGS023NeverRegistered) RETURN count(n) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "optional null predicate",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:DAWGS023NeverRegistered) WHERE NOT n:DAWGS023NeverRegistered RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "unknown rows",
+          "vars": {
+            "query": "MATCH (n:DAWGS023NeverRegistered) RETURN n"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "projected unknown predicate",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) RETURN n:DAWGS023NeverRegistered AS x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                false
+              ],
+              [
+                false
+              ]
+            ],
+            "row_count": 2
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "projected conjunction",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) RETURN n:NodeKind1:DAWGS023NeverRegistered AS x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                false
+              ],
+              [
+                false
+              ]
+            ],
+            "row_count": 2
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "null projected predicate",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:DAWGS023NeverRegistered) RETURN n:DAWGS023NeverRegistered AS x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "null projected conjunction",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:DAWGS023NeverRegistered) RETURN n:NodeKind1:DAWGS023NeverRegistered AS x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set",
+          "vars": {
+            "query": "MATCH (n:DAWGS023NeverRegistered) SET n.touched = true RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "delete",
+          "vars": {
+            "query": "MATCH (n:DAWGS023NeverRegistered) DETACH DELETE n RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge set",
+          "vars": {
+            "query": "MATCH ()-[r:DAWGS023NeverRegistered]->() SET r.touched = true RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "edge delete",
+          "vars": {
+            "query": "MATCH ()-[r:DAWGS023NeverRegistered]->() DELETE r RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create from unknown",
+          "vars": {
+            "query": "MATCH (n:DAWGS023NeverRegistered) CREATE (:NodeKind1 {name:\"unexpected\"}) RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated set",
+          "vars": {
+            "query": "MATCH (n:NodeKind1) WHERE NOT n:DAWGS023NeverRegistered SET n.touched = true RETURN count(*) AS c"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "touched": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "touched": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "shortestPath unknown source",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:DAWGS023NeverRegistered {name:'a'})-[:EdgeKind1*1..2]->(b:NodeKind1 {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "shortestPath unknown edge",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:NodeKind1 {name:'a'})-[:DAWGS023NeverRegistered*1..2]->(b:NodeKind1 {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "shortestPath unknown terminal",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:NodeKind1 {name:'a'})-[:EdgeKind1*1..2]->(b:DAWGS023NeverRegistered {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "shortestPath mixed alternatives",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:NodeKind1 {name:'a'})-[:DAWGS023NeverRegistered|EdgeKind1*1..2]->(b:NodeKind1 {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "allShortestPaths unknown source",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:DAWGS023NeverRegistered {name:'a'})-[:EdgeKind1*1..2]->(b:NodeKind1 {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "allShortestPaths unknown edge",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:NodeKind1 {name:'a'})-[:DAWGS023NeverRegistered*1..2]->(b:NodeKind1 {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "allShortestPaths unknown terminal",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:NodeKind1 {name:'a'})-[:EdgeKind1*1..2]->(b:DAWGS023NeverRegistered {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [],
+            "row_count": 0
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "allShortestPaths mixed alternatives",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:NodeKind1 {name:'a'})-[:DAWGS023NeverRegistered|EdgeKind1*1..2]->(b:NodeKind1 {name:'b'})) RETURN 1 AS x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:NodeKind1) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "NodeKind1"
+                    ],
+                    "props": {
+                      "name": "b"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:EdgeKind1]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "EdgeKind1",
+                    "props": {
+                      "name": "ab"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

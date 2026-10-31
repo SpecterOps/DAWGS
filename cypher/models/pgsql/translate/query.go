@@ -64,6 +64,12 @@ func (s *Translator) buildSinglePartQuery(singlePartQuery *cypher.SinglePartQuer
 }
 
 func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery) error {
+	for index, part := range s.query.Parts[:len(s.query.Parts)-1] {
+		if queryPartHasWrites(part) {
+			return s.buildStagedMultiPartQuery(index)
+		}
+	}
+
 	var multipartCTEChain []pgsql.CommonTableExpression
 
 	for _, part := range s.query.Parts[:len(s.query.Parts)-1] {
@@ -88,9 +94,12 @@ func (s *Translator) buildMultiPartQuery(singlePartQuery *cypher.SinglePartQuery
 		if inlineSelect, err := s.buildInlineProjection(part); err != nil {
 			return err
 		} else {
-			nextCTE.Query.Body = inlineSelect
+			if query, err := multipartBoundaryQuery(part, nextCTE.Query, inlineSelect); err != nil {
+				return err
+			} else {
+				nextCTE.Query = query
+			}
 		}
-
 		multipartCTEChain = append(multipartCTEChain, nextCTE)
 	}
 

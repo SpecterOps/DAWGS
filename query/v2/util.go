@@ -247,6 +247,7 @@ func variableReference(value any) (*cypher.Variable, error) {
 	}
 }
 
+// propertyLookupOrError constructs a property lookup or an error expression when its key or variable reference is invalid.
 func propertyLookupOrError(reference any, propertyName string) cypher.Expression {
 	if err := cypher.ValidatePropertyKeyName(propertyName); err != nil {
 		return invalidExpression(err)
@@ -429,6 +430,18 @@ func validateAssignmentOperator(operator cypher.AssignmentOperator) error {
 	}
 }
 
+// validateKindAssignment rejects label-assignment set items without kinds,
+// which would otherwise render invalid Cypher such as `set n:`.
+func validateKindAssignment(setItem *cypher.SetItem) error {
+	if setItem.Operator == cypher.OperatorLabelAssignment {
+		if kinds, typeOK := setItem.Right.(graph.Kinds); typeOK && len(kinds) == 0 {
+			return fmt.Errorf("kind assignment requires at least one kind")
+		}
+	}
+
+	return nil
+}
+
 func setItemFromValue(setItem *cypher.SetItem) (*cypher.SetItem, error) {
 	if setItem == nil {
 		return nil, fmt.Errorf("set item is nil")
@@ -439,6 +452,10 @@ func setItemFromValue(setItem *cypher.SetItem) (*cypher.SetItem, error) {
 	}
 
 	if err := validateAssignmentOperator(setItem.Operator); err != nil {
+		return nil, err
+	}
+
+	if err := validateKindAssignment(setItem); err != nil {
 		return nil, err
 	}
 
@@ -484,6 +501,10 @@ func removeItemFromValue(removeItem *cypher.RemoveItem) (*cypher.RemoveItem, err
 		return nil, fmt.Errorf("remove item has multiple targets")
 
 	case hasKindMatcher:
+		if len(removeItem.KindMatcher.Kinds) == 0 {
+			return nil, fmt.Errorf("kind removal requires at least one kind")
+		}
+
 		if err := collectModelErrors(removeItem.KindMatcher); err != nil {
 			return nil, err
 		}
@@ -1027,6 +1048,32 @@ func collectModelErrors(node cypher.SyntaxNode) error {
 	}
 
 	return errors.Join(modelErrors...)
+}
+
+// validateConstraintKindPredicates rejects kind predicates without kinds before they reach
+// pattern folding or WHERE rendering. A relationship kind matcher without kinds would
+// otherwise lose its restriction entirely, and any other placement would render blank
+// WHERE output. This matches the contract the typed kind continuations already enforce.
+func validateConstraintKindPredicates(constraints []cypher.SyntaxNode) error {
+	var emptyKindPredicates int
+
+	for _, nextConstraint := range constraints {
+		visitor := walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+			if kindMatcher, typeOK := node.(*cypher.KindMatcher); typeOK && len(kindMatcher.Kinds) == 0 {
+				emptyKindPredicates++
+			}
+		})
+
+		if err := walk.Cypher(nextConstraint, visitor); err != nil {
+			return err
+		}
+	}
+
+	if emptyKindPredicates > 0 {
+		return fmt.Errorf("kind predicate requires at least one kind")
+	}
+
+	return nil
 }
 
 func collectModelErrorsFromKnownValues(values ...any) error {

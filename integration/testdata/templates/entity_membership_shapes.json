@@ -1,0 +1,2313 @@
+{
+  "families": [
+    {
+      "name": "entity membership types",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "MemberNode"
+            ],
+            "properties": {
+              "tag": "a",
+              "role": "pick",
+              "keep": true
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "MemberNode"
+            ],
+            "properties": {
+              "tag": "b",
+              "role": "pick",
+              "keep": true
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "MemberNode"
+            ],
+            "properties": {
+              "tag": "c",
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "id": "kind-decoy",
+            "kinds": [
+              "OtherMemberNode"
+            ],
+            "properties": {
+              "tag": "kind-decoy",
+              "role": "pick",
+              "keep": true
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "MemberNode"
+            ],
+            "properties": {
+              "tag": "missing",
+              "keep": true
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "MemberEdge",
+            "properties": {
+              "role": "pick",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "b",
+            "end_id": "a",
+            "kind": "MemberEdge",
+            "properties": {
+              "role": "pick",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "a",
+            "end_id": "c",
+            "kind": "MemberEdge",
+            "properties": {
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "c",
+            "end_id": "a",
+            "kind": "MemberEdge",
+            "properties": {
+              "keep": true
+            }
+          },
+          {
+            "start_id": "a",
+            "end_id": "kind-decoy",
+            "kind": "OtherMemberEdge",
+            "properties": {
+              "role": "pick",
+              "keep": true
+            }
+          },
+          {
+            "start_id": "missing",
+            "end_id": "b",
+            "kind": "MemberEdge",
+            "properties": {
+              "role": "keep",
+              "keep": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "nodes",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE m IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "nodes full",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE m IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "nodes rebound",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs WITH xs AS ys MATCH (m:MemberNode) WHERE m IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "nodes negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE NOT m IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "nodes full negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE NOT m IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "nodes rebound negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs WITH xs AS ys MATCH (m:MemberNode) WHERE NOT m IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "edges",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "edges full",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "edges rebound",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs WITH xs AS ys MATCH ()-[s:MemberEdge]->() WHERE s IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "edges negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH ()-[s:MemberEdge]->() WHERE NOT s IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 3
+          }
+        },
+        {
+          "name": "edges full negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH ()-[s:MemberEdge]->() WHERE NOT s IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 3
+          }
+        },
+        {
+          "name": "edges rebound negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs WITH xs AS ys MATCH ()-[s:MemberEdge]->() WHERE NOT s IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 3
+          }
+        },
+        {
+          "name": "edge in nodes",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "edge in nodes full",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "edge in nodes rebound",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs WITH xs AS ys MATCH ()-[s:MemberEdge]->() WHERE s IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "edge in nodes negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE NOT s IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 5
+          }
+        },
+        {
+          "name": "edge in nodes full negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE NOT s IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 5
+          }
+        },
+        {
+          "name": "edge in nodes rebound negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs WITH xs AS ys MATCH ()-[s:MemberEdge]->() WHERE NOT s IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 5
+          }
+        },
+        {
+          "name": "node in edges",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode) WHERE m IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "node in edges full",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode) WHERE m IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "node in edges rebound",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs WITH xs AS ys MATCH (m:MemberNode) WHERE m IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "node in edges negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode) WHERE NOT m IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "node in edges full negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode) WHERE NOT m IN xs AND size(xs) = 2 RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "node in edges rebound negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs WITH xs AS ys MATCH (m:MemberNode) WHERE NOT m IN ys RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "edge projection",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge {role:'pick'}]->() RETURN s IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              false,
+              false
+            ]
+          }
+        },
+        {
+          "name": "edge projection negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge {role:'pick'}]->() RETURN NOT s IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              true,
+              true
+            ]
+          }
+        },
+        {
+          "name": "edge projection full",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge {role:'pick'}]->() RETURN s IN xs AS hit, size(xs) AS total"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hit": [
+                false,
+                false
+              ],
+              "total": [
+                2,
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "node projection",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode {role:'pick'}) RETURN m IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              false,
+              false
+            ]
+          }
+        },
+        {
+          "name": "node projection negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode {role:'pick'}) RETURN NOT m IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              true,
+              true
+            ]
+          }
+        },
+        {
+          "name": "node projection full",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode {role:'pick'}) RETURN m IN xs AS hit, size(xs) AS total"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hit": [
+                false,
+                false
+              ],
+              "total": [
+                2,
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "scalar in nodes",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode {role:'pick'}) WHERE id(m) IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "node in numbers",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(id(n)) AS xs MATCH (m:MemberNode) WHERE m IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "scalar in edges",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH ()-[s:MemberEdge]->() WHERE id(s) IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "edge in numbers",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(id(r)) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "null node",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs OPTIONAL MATCH (m:MemberNode {role:'absent'}) RETURN m IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "null node negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs OPTIONAL MATCH (m:MemberNode {role:'absent'}) RETURN NOT m IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "null edge",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs OPTIONAL MATCH ()-[s:MemberEdge {role:'absent'}]->() RETURN s IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "null edge negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs OPTIONAL MATCH ()-[s:MemberEdge {role:'absent'}]->() RETURN NOT s IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "empty nodes",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'absent'}) WITH collect(n) AS xs OPTIONAL MATCH ()-[s:MemberEdge {role:'absent'}]->() RETURN s IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              false
+            ]
+          }
+        },
+        {
+          "name": "empty nodes negated",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'absent'}) WITH collect(n) AS xs OPTIONAL MATCH ()-[s:MemberEdge {role:'absent'}]->() RETURN NOT s IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "empty edges",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'absent'}]->() WITH collect(r) AS xs OPTIONAL MATCH (m:MemberNode {role:'absent'}) RETURN m IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              false
+            ]
+          }
+        },
+        {
+          "name": "empty edges negated",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'absent'}]->() WITH collect(r) AS xs OPTIONAL MATCH (m:MemberNode {role:'absent'}) RETURN NOT m IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "duplicate collected nodes",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) UNWIND [1,1] AS x WITH collect(n) AS xs MATCH (m:MemberNode) WHERE m IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "distinct collected edges",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(DISTINCT r) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "carried entity source",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH n AS source WITH collect(source) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs RETURN count(*)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "cross edge SET no return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs SET s.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cross node SET no return",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode) WHERE m IN xs SET m.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "same node SET no return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE m IN xs SET m.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated cross edge SET no return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE NOT s IN xs SET s.hit = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "hit": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cross CREATE no return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs CREATE (c:MemberCreated {hit: true})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MemberCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN n.hit",
+              "assert": {
+                "scalar_values": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "same CREATE no return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE m IN xs CREATE (c:MemberCreated {hit: true})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MemberCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN n.hit",
+              "assert": {
+                "scalar_values": [
+                  true,
+                  true
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cross edge SET return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs SET s.hit = true RETURN s"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cross node SET return",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs MATCH (m:MemberNode) WHERE m IN xs SET m.hit = true RETURN m"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "same node SET return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE m IN xs SET m.hit = true RETURN m"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated cross edge SET return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE NOT s IN xs SET s.hit = true RETURN s"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true,
+                      "hit": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "hit": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cross CREATE return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH ()-[s:MemberEdge]->() WHERE s IN xs CREATE (c:MemberCreated {hit: true}) RETURN c"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MemberCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN n.hit",
+              "assert": {
+                "scalar_values": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "same CREATE return",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode) WHERE m IN xs CREATE (c:MemberCreated {hit: true}) RETURN c"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MemberCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherMemberNode"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "MemberNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "b",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "c",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "a",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "kind-decoy",
+                    "kind": "OtherMemberEdge",
+                    "props": {
+                      "role": "pick",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "start": "missing",
+                    "end": "b",
+                    "kind": "MemberEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n:MemberCreated) RETURN n.hit",
+              "assert": {
+                "scalar_values": [
+                  true,
+                  true
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "null node list",
+          "vars": {
+            "query": "MATCH (n:MemberNode {tag:'a'}) WITH n, nodes(null) AS xs RETURN n IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "null edge list",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH r, relationships(null) AS xs RETURN r IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null,
+              null
+            ]
+          }
+        },
+        {
+          "name": "carried null scalar",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs MATCH (m:MemberNode {tag:'a'}) WITH xs, m.absent AS x RETURN x IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "null scalar in nodes",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs RETURN null IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "empty node list",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'absent'}) WITH collect(n) AS xs RETURN null IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              false
+            ]
+          }
+        },
+        {
+          "name": "same null node",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs OPTIONAL MATCH (m:MemberNode {role:'absent'}) RETURN m IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "same null edge",
+          "vars": {
+            "query": "MATCH ()-[r:MemberEdge {role:'pick'}]->() WITH collect(r) AS xs OPTIONAL MATCH ()-[s:MemberEdge {role:'absent'}]->() RETURN s IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              null
+            ]
+          }
+        },
+        {
+          "name": "entity expression membership",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) WITH collect(n) AS xs RETURN head(xs) IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "direct aggregate entity expression",
+          "vars": {
+            "query": "MATCH (n:MemberNode {role:'pick'}) RETURN head(collect(n)) IN collect(n)"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "cross aggregate entity expression",
+          "vars": {
+            "query": "MATCH (n:MemberNode)-[r:MemberEdge {role:'pick'}]->() RETURN head(collect(n)) IN collect(r)"
+          },
+          "assert": {
+            "scalar_values": [
+              false
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

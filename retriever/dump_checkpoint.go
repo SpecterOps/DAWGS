@@ -364,7 +364,7 @@ func verifyDumpCheckpointFile(outputDir string, fileEntry FileManifest) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("dump checkpoint fragment %q is not a regular file", fileEntry.Path)
 	}
-	return verifyChecksum(absolutePath, fileEntry.SHA256, fileEntry.CompressedBytes)
+	return verifyFragmentChecksum(outputDir, fileEntry)
 }
 
 func verifyDumpCheckpointParquetFile(outputDir, relativePath string) error {
@@ -412,6 +412,8 @@ func checkpointActionCounts(files []FileManifest, phase Phase) scrubActionCounts
 				result.redact += count
 			case actionShiftTimestamp:
 				result.shift += count
+			case actionScrubNested:
+				result.nested += count
 			}
 		}
 	}

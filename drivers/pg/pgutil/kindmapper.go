@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/graph"
 )
 
@@ -70,7 +71,7 @@ func (s *InMemoryKindMapper) mapKinds(kinds graph.Kinds) ([]int16, graph.Kinds) 
 
 func (s *InMemoryKindMapper) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
 	if ids, missing := s.mapKinds(kinds); len(missing) > 0 {
-		return nil, fmt.Errorf("missing kinds: %v", missing)
+		return nil, &pgsql.MissingKindsError{Kinds: missing, KindIDs: ids}
 	} else {
 		return ids, nil
 	}

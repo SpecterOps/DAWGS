@@ -1,0 +1,1163 @@
+{
+  "families": [
+    {
+      "name": "pattern predicate dependencies",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "good",
+            "kinds": [
+              "DependencySource"
+            ],
+            "properties": {
+              "name": "good"
+            }
+          },
+          {
+            "id": "wrong",
+            "kinds": [
+              "DependencySource"
+            ],
+            "properties": {
+              "name": "wrong"
+            }
+          },
+          {
+            "id": "reverse",
+            "kinds": [
+              "DependencySource"
+            ],
+            "properties": {
+              "name": "reverse"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "DependencySource"
+            ],
+            "properties": {
+              "name": "missing"
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "DependencyTarget"
+            ],
+            "properties": {
+              "name": "target"
+            }
+          },
+          {
+            "id": "other",
+            "kinds": [
+              "DependencyTarget"
+            ],
+            "properties": {
+              "name": "other"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "good",
+            "end_id": "target",
+            "kind": "DependencyR",
+            "properties": {}
+          },
+          {
+            "start_id": "wrong",
+            "end_id": "target",
+            "kind": "DependencyOther",
+            "properties": {}
+          },
+          {
+            "start_id": "target",
+            "end_id": "reverse",
+            "kind": "DependencyR",
+            "properties": {}
+          },
+          {
+            "start_id": "good",
+            "end_id": "other",
+            "kind": "DependencyR",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "directed",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "negated",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE NOT (b)-[:DependencyR]->(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "wrong",
+                "target"
+              ],
+              [
+                "reverse",
+                "target"
+              ],
+              [
+                "missing",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "incoming",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)<-[:DependencyR]-(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "reverse",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "undirected",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]-(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ],
+              [
+                "reverse",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "compound or",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) OR b.name = 'missing' RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ],
+              [
+                "missing",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "conjunction",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) AND NOT (b)-[:DependencyOther]->(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "parameter target",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: $target}) WHERE (b)-[:DependencyR]->(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ]
+            ]
+          },
+          "params": {
+            "target": "target"
+          }
+        },
+        {
+          "name": "empty target",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'absent'}) WHERE (b)-[:DependencyR]->(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": []
+          }
+        },
+        {
+          "name": "with boundary",
+          "vars": {
+            "query": "MATCH (b:DependencySource) WITH b MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "both endpoints earlier",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (d:DependencyTarget) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(d) AND (b)-[:DependencyR]->(c) RETURN b.name, c.name, d.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target",
+                "target"
+              ],
+              [
+                "good",
+                "target",
+                "other"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "count",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) RETURN count(*)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "set directed",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) SET b.selected = true RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "good",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set negated",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE NOT (b)-[:DependencyR]->(c) SET b.selected = true RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "wrong",
+                "target"
+              ],
+              [
+                "reverse",
+                "target"
+              ],
+              [
+                "missing",
+                "target"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set endpoint",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) SET c.selected = true RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set endpoint negated",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE NOT (b)-[:DependencyR]->(c) SET c.selected = true RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "wrong",
+                "target"
+              ],
+              [
+                "reverse",
+                "target"
+              ],
+              [
+                "missing",
+                "target"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "remove",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) REMOVE b.name RETURN c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "target"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) CREATE (:DependencyCreated {name: b.name}) RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "good",
+                "target"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:DependencyCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:DependencyCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "DependencyCreated"
+                    ],
+                    "good"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set directed without return",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) SET b.selected = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "good",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create without return",
+          "vars": {
+            "query": "MATCH (b:DependencySource) MATCH (c {name: 'target'}) WHERE (b)-[:DependencyR]->(c) CREATE (:DependencyCreated {name: b.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:DependencyCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "good",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "good"
+                    }
+                  },
+                  {
+                    "id": "wrong",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "wrong"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "reverse"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "DependencySource"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "DependencyTarget"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "good",
+                    "end": "target",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong",
+                    "end": "target",
+                    "kind": "DependencyOther",
+                    "props": {}
+                  },
+                  {
+                    "start": "target",
+                    "end": "reverse",
+                    "kind": "DependencyR",
+                    "props": {}
+                  },
+                  {
+                    "start": "good",
+                    "end": "other",
+                    "kind": "DependencyR",
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:DependencyCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "DependencyCreated"
+                    ],
+                    "good"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

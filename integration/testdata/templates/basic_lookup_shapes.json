@@ -1,0 +1,72 @@
+{
+  "families": [
+    {
+      "name": "LOOKUP-01 through LOOKUP-08 node predicates and projections",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "group", "kinds": ["Group", "Entity"], "properties": {"name": "group", "objectid": "S-1-5-21-512", "domainsid": "S-1-5-21"}},
+          {"id": "user", "kinds": ["User", "Entity"], "properties": {"name": "user", "objectid": "S-1-5-21-513", "domainsid": "S-1-5-21"}},
+          {"id": "multi", "kinds": ["Group", "User", "Entity"], "properties": {"name": "multi", "objectid": "S-1-5-21-514", "domainsid": "S-1-5-21"}},
+          {"id": "local-group", "kinds": ["Group", "LocalGroup", "Entity"], "properties": {"name": "local-group", "objectid": "S-1-5-21-512", "domainsid": "S-1-5-21"}},
+          {"id": "entity-only", "kinds": ["Entity"], "properties": {"name": "entity-only", "objectid": "S-1-5-21-512", "domainsid": "S-1-5-21"}},
+          {"id": "tenant", "kinds": ["Tenant"], "properties": {"name": "tenant", "objectid": "tenant-1"}},
+          {"id": "computer-hit-a", "kinds": ["Computer"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-100", "enabled": true}},
+          {"id": "computer-hit-b", "kinds": ["Computer", "Entity"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-100", "enabled": true}},
+          {"id": "computer-disabled", "kinds": ["Computer"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-101", "enabled": false}},
+          {"id": "objectid-untyped", "kinds": ["Other"], "properties": {"name": "dc.example.test", "objectid": "S-1-5-21-100", "enabled": true}},
+          {"id": "ura-true", "kinds": ["Computer"], "properties": {"name": "ura-true", "hasura": true}},
+          {"id": "ura-false", "kinds": ["Computer"], "properties": {"name": "ura-false", "hasura": false}},
+          {"id": "ura-null", "kinds": ["Computer"], "properties": {"name": "ura-null", "hasura": null}},
+          {"id": "ura-missing", "kinds": ["Computer"], "properties": {"name": "ura-missing"}},
+          {"id": "adminsdholder", "kinds": ["Container"], "properties": {"name": "admin", "distinguishedname": "CN=ADMINSDHOLDER,CN=SYSTEM,DC=EXAMPLE,DC=TEST", "domainsid": "S-1-5-21"}},
+          {"id": "admin-wrong-case", "kinds": ["Container"], "properties": {"name": "admin-case", "distinguishedname": "cn=adminsdholder,CN=SYSTEM,DC=EXAMPLE,DC=TEST", "domainsid": "S-1-5-21"}},
+          {"id": "admin-wrong-domain", "kinds": ["Container"], "properties": {"name": "admin-domain", "distinguishedname": "CN=ADMINSDHOLDER,CN=SYSTEM,DC=OTHER", "domainsid": "S-1-5-99"}},
+          {"id": "suffix-a", "kinds": ["Group"], "properties": {"name": "suffix-a", "objectid": "OBJECT-S-1"}},
+          {"id": "suffix-b", "kinds": ["Group"], "properties": {"name": "suffix-b", "objectid": "OBJECT-S-2"}},
+          {"id": "suffix-case", "kinds": ["Group"], "properties": {"name": "suffix-case", "objectid": "OBJECT-s-1"}},
+          {"id": "suffix-wrong-kind", "kinds": ["User"], "properties": {"name": "suffix-user", "objectid": "OBJECT-S-1"}},
+          {"id": "ci-prefix-exact", "kinds": ["Lookup"], "properties": {"name": "Remote Desktop Users Alpha"}},
+          {"id": "ci-prefix-mixed", "kinds": ["Lookup"], "properties": {"name": "rEmOtE dEsKtOp UsErS Beta"}},
+          {"id": "ci-prefix-literal", "kinds": ["Lookup"], "properties": {"name": "Remote%_Desktop Literal"}},
+          {"id": "ci-prefix-wild-decoy", "kinds": ["Lookup"], "properties": {"name": "RemoteXXDesktop Decoy"}},
+          {"id": "ci-contains-exact", "kinds": ["Entity"], "properties": {"name": "approver-exact", "objectid": "Approver_GUID"}},
+          {"id": "ci-contains-substring", "kinds": ["Entity"], "properties": {"name": "approver-substring", "objectid": "prefix-APPROVER_guid-suffix"}},
+          {"id": "ci-contains-decoy", "kinds": ["Entity"], "properties": {"name": "approver-decoy", "objectid": "different-guid"}},
+          {"id": "name-missing", "kinds": ["Lookup"], "properties": {"objectid": "missing"}},
+          {"id": "name-null", "kinds": ["Lookup"], "properties": {"name": null, "objectid": "null"}},
+          {"id": "name-empty", "kinds": ["Lookup"], "properties": {"name": "", "objectid": "empty"}},
+          {"id": "name-populated", "kinds": ["Lookup"], "properties": {"name": "populated", "objectid": "populated"}},
+          {"id": "role-user", "kinds": ["AZRole"], "properties": {"name": "role-user", "tenantid": "tenant-1", "approvalrequired": true, "userapprovers": ["u1"]}},
+          {"id": "role-group", "kinds": ["AZRole"], "properties": {"name": "role-group", "tenantid": "tenant-1", "approvalrequired": true, "groupapprovers": ["g1"]}},
+          {"id": "role-both", "kinds": ["AZRole"], "properties": {"name": "role-both", "tenantid": "tenant-1", "approvalrequired": true, "userapprovers": ["u1"], "groupapprovers": ["g1"]}},
+          {"id": "role-neither", "kinds": ["AZRole"], "properties": {"name": "role-neither", "tenantid": "tenant-1", "approvalrequired": true}},
+          {"id": "role-null", "kinds": ["AZRole"], "properties": {"name": "role-null", "tenantid": "tenant-1", "approvalrequired": true, "userapprovers": null, "groupapprovers": null}},
+          {"id": "role-wrong-tenant", "kinds": ["AZRole"], "properties": {"name": "role-wrong-tenant", "tenantid": "tenant-2", "approvalrequired": true, "userapprovers": ["u1"]}},
+          {"id": "role-not-required", "kinds": ["AZRole"], "properties": {"name": "role-not-required", "tenantid": "tenant-1", "approvalrequired": false, "userapprovers": ["u1"]}}
+        ]
+      },
+      "variants": [
+        {"name": "LOOKUP-01 one kind ID projection", "vars": {"query": "MATCH (n:Group) RETURN id(n)"}, "assert": {"keys": ["id(n)"], "row_count": 6}},
+        {"name": "LOOKUP-01 many kinds include multi-kind node once", "vars": {"query": "MATCH (n) WHERE n:Group OR n:User RETURN n"}, "assert": {"node_id_set": ["group", "user", "multi", "local-group", "suffix-a", "suffix-b", "suffix-case", "suffix-wrong-kind"]}},
+        {"name": "LOOKUP-01 exact kind full hydration", "vars": {"query": "MATCH (n:Tenant) RETURN n"}, "assert": {"node_records": [{"id": "tenant", "kinds": ["Tenant"], "props": {"name": "tenant", "objectid": "tenant-1"}}]}},
+        {"name": "LOOKUP-02 indexed kind and object ID First with multiple hits", "vars": {"query": "MATCH (n:Computer) WHERE n.objectid = $objectid RETURN n LIMIT 1"}, "params": {"objectid": "S-1-5-21-100"}, "assert": {"row_count": 1}},
+        {"name": "LOOKUP-02 indexed kind no hit", "vars": {"query": "MATCH (n:Computer) WHERE n.objectid = $objectid RETURN n LIMIT 1"}, "params": {"objectid": "missing"}, "assert": "empty"},
+        {"name": "LOOKUP-02 no-kind object ID includes untyped node", "vars": {"query": "MATCH (n) WHERE n.objectid = $objectid RETURN n"}, "params": {"objectid": "S-1-5-21-100"}, "assert": {"node_id_set": ["computer-hit-a", "computer-hit-b", "objectid-untyped"]}},
+        {"name": "LOOKUP-02 two equalities string and boolean", "vars": {"query": "MATCH (n) WHERE n.name = $name AND n.enabled = $enabled RETURN id(n)"}, "params": {"name": "dc.example.test", "enabled": true}, "assert": {"keys": ["id(n)"], "row_count": 3}},
+        {"name": "LOOKUP-03 true boolean and two-column projection", "vars": {"query": "MATCH (n:Computer) WHERE n.hasura = $value RETURN id(n), n.hasura"}, "params": {"value": true}, "assert": {"keys": ["id(n)", "n.hasura"], "row_count": 1}},
+        {"name": "LOOKUP-03 false excludes null and missing", "vars": {"query": "MATCH (n:Computer) WHERE n.hasura = $value RETURN id(n), n.hasura"}, "params": {"value": false}, "assert": {"keys": ["id(n)", "n.hasura"], "row_count": 1}},
+        {"name": "LOOKUP-04 case-sensitive AdminSDHolder prefix and domain", "vars": {"query": "MATCH (n:Container) WHERE n.distinguishedname STARTS WITH $prefix AND n.domainsid = $domain RETURN n"}, "params": {"prefix": "CN=ADMINSDHOLDER,CN=SYSTEM,", "domain": "S-1-5-21"}, "assert": {"node_id_set": ["adminsdholder"]}},
+        {"name": "LOOKUP-04 OR of two suffixes is case-sensitive", "vars": {"query": "MATCH (n:Group) WHERE n.objectid ENDS WITH $a OR n.objectid ENDS WITH $b RETURN n"}, "params": {"a": "-S-1", "b": "-S-2"}, "assert": {"node_id_set": ["suffix-a", "suffix-b"]}},
+        {"name": "LOOKUP-05 case-insensitive prefix exact and mixed case", "vars": {"query": "MATCH (n:Lookup) WHERE toLower(n.name) STARTS WITH $prefix RETURN n"}, "params": {"prefix": "remote desktop users"}, "assert": {"node_id_set": ["ci-prefix-exact", "ci-prefix-mixed"]}},
+        {"name": "LOOKUP-05 percent and underscore remain literal", "vars": {"query": "MATCH (n:Lookup) WHERE toLower(n.name) STARTS WITH $prefix RETURN n"}, "params": {"prefix": "remote%_"}, "assert": {"node_id_set": ["ci-prefix-literal"]}},
+        {"name": "LOOKUP-05 contains retains substring candidate", "vars": {"query": "MATCH (n:Entity) WHERE toLower(n.objectid) CONTAINS $fragment RETURN n"}, "params": {"fragment": "approver_guid"}, "assert": {"node_id_set": ["ci-contains-exact", "ci-contains-substring"]}},
+        {"name": "LOOKUP-06 included kind group plus Entity suffix and domain", "vars": {"query": "MATCH (n) WHERE (n:Group OR n:User) AND n:Entity AND n.objectid ENDS WITH $suffix AND n.domainsid = $domain RETURN n"}, "params": {"suffix": "-512", "domain": "S-1-5-21"}, "assert": {"node_id_set": ["group", "local-group"]}},
+        {"name": "LOOKUP-06 Entity excluding Group and LocalGroup", "vars": {"query": "MATCH (n:Entity) WHERE NOT (n:Group OR n:LocalGroup) AND n.objectid ENDS WITH $suffix RETURN n"}, "params": {"suffix": "-512"}, "assert": {"node_id_set": ["entity-only"]}},
+        {"name": "LOOKUP-07 missing and explicit null names", "vars": {"query": "MATCH (n:Lookup) WHERE n.name IS NULL RETURN n"}, "assert": {"node_id_set": ["name-missing", "name-null"]}},
+        {"name": "LOOKUP-07 empty and populated names are present", "vars": {"query": "MATCH (n:Lookup) WHERE n.name IS NOT NULL RETURN n"}, "assert": {"node_id_set": ["ci-prefix-exact", "ci-prefix-mixed", "ci-prefix-literal", "ci-prefix-wild-decoy", "name-empty", "name-populated"]}},
+        {"name": "LOOKUP-08 either or both approver properties present", "vars": {"query": "MATCH (n:AZRole) WHERE n.tenantid = $tenant AND n.approvalrequired = true AND (n.userapprovers IS NOT NULL OR n.groupapprovers IS NOT NULL) RETURN n"}, "params": {"tenant": "tenant-1"}, "assert": {"node_id_set": ["role-user", "role-group", "role-both"]}}
+      ]
+    }
+  ]
+}

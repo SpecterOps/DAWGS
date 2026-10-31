@@ -7,6 +7,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
+	"github.com/specterops/dawgs/graph"
 )
 
 func newPGKindIDMatcher(scope *Scope, treeTranslator *ExpressionTreeTranslator, binding *BoundIdentifier, kindIDs []int16, isExclusive bool) error {
@@ -49,9 +50,28 @@ func (s *Translator) translateKindMatcher(kindMatcher *cypher.KindMatcher) error
 		return fmt.Errorf("expected variable for kind matcher reference but found type: %T", operand)
 	} else if binding, resolved := s.scope.Lookup(identifier); !resolved {
 		return fmt.Errorf("unable to find identifier %s", identifier)
-	} else if kindIDs, err := s.kindMapper.MapKinds(kindMatcher.Kinds); err != nil {
+	} else if kindIDs, missing, err := s.kindMapper.MapMatchKinds(kindMatcher.Kinds); err != nil {
 		return fmt.Errorf("failed to translate kinds: %w", err)
 	} else {
+		if missing && kindMatcher.IsExclusive && (binding.DataType == pgsql.NodeComposite || binding.DataType == pgsql.ExpansionRootNode || binding.DataType == pgsql.ExpansionTerminalNode) {
+			return newPGKindIDMatcher(s.scope, s.treeTranslator, binding, []int16{}, false)
+		}
 		return newPGKindIDMatcher(s.scope, s.treeTranslator, binding, kindIDs, kindMatcher.IsExclusive)
 	}
+}
+
+// nodeKindConstraint requires every requested label. Dropping an unknown label
+// would broaden a conjunction, and an empty @> operand would match every node.
+func (s *Translator) nodeKindConstraint(alias pgsql.Identifier, kinds graph.Kinds) (pgsql.Expression, error) {
+	if len(kinds) == 0 {
+		return nil, nil
+	}
+	ids, missing, err := s.kindMapper.MapMatchKinds(kinds)
+	if err != nil {
+		return nil, err
+	}
+	if missing {
+		return pgsql.NewLiteral(false, pgsql.Boolean), nil
+	}
+	return pgsql.NewBinaryExpression(pgsql.CompoundIdentifier{alias, pgsql.ColumnKindIDs}, pgsql.OperatorPGArrayLHSContainsRHS, pgsql.NewLiteral(ids, pgsql.Int2Array)), nil
 }

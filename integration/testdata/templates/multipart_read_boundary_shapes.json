@@ -1,0 +1,1770 @@
+{
+  "node_kinds": [
+    "MultipartCreated"
+  ],
+  "families": [
+    {
+      "name": "multipart read boundaries",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "MultipartSource"
+            ],
+            "properties": {
+              "name": "a"
+            }
+          },
+          {
+            "id": "b1",
+            "kinds": [
+              "MultipartMiddle"
+            ],
+            "properties": {
+              "name": "b1"
+            }
+          },
+          {
+            "id": "b2",
+            "kinds": [
+              "MultipartMiddle"
+            ],
+            "properties": {
+              "name": "b2"
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "MultipartEnd"
+            ],
+            "properties": {
+              "name": "c"
+            }
+          },
+          {
+            "id": "dead",
+            "kinds": [
+              "MultipartSource"
+            ],
+            "properties": {
+              "name": "dead"
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "MultipartMiddle"
+            ],
+            "properties": {
+              "name": "decoy"
+            }
+          },
+          {
+            "id": "other",
+            "kinds": [
+              "MultipartEnd"
+            ],
+            "properties": {
+              "name": "other"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b1",
+            "kind": "MultipartR",
+            "properties": {
+              "name": "a_b1"
+            }
+          },
+          {
+            "start_id": "a",
+            "end_id": "b2",
+            "kind": "MultipartR",
+            "properties": {
+              "name": "a_b2"
+            }
+          },
+          {
+            "start_id": "b1",
+            "end_id": "c",
+            "kind": "MultipartR",
+            "properties": {
+              "name": "b1_c"
+            }
+          },
+          {
+            "start_id": "b2",
+            "end_id": "c",
+            "kind": "MultipartR",
+            "properties": {
+              "name": "b2_c"
+            }
+          },
+          {
+            "start_id": "dead",
+            "end_id": "decoy",
+            "kind": "MultipartOther",
+            "properties": {
+              "name": "dead_decoy"
+            }
+          },
+          {
+            "start_id": "c",
+            "end_id": "dead",
+            "kind": "MultipartR",
+            "properties": {
+              "name": "c_dead"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "original unlabelled",
+          "vars": {
+            "query": "MATCH (a) WITH a MATCH (a)-[:MultipartR]->(b) WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 5,
+            "row_values": [
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ],
+              [
+                "c"
+              ],
+              [
+                "c"
+              ],
+              [
+                "dead"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "bound root",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "entity aliases",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a AS root MATCH (root)-[:MultipartR]->(b) WITH b AS item RETURN item.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "carried scalar and relationship",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a, a.name AS source MATCH (a)-[r:MultipartR]->(b) WITH source, r, b RETURN source, r.name, b.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "a",
+                "a_b1",
+                "b1"
+              ],
+              [
+                "a",
+                "a_b2",
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "incoming",
+          "vars": {
+            "query": "MATCH (b:MultipartMiddle) WITH b MATCH (b)<-[:MultipartR]-(a) WITH a, b RETURN a.name, b.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "a",
+                "b1"
+              ],
+              [
+                "a",
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "undirected",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[:MultipartR]-(b) WITH a, b RETURN a.name, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "row_values": [
+              [
+                "a",
+                "b1"
+              ],
+              [
+                "a",
+                "b2"
+              ],
+              [
+                "dead",
+                "c"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "both endpoints bound",
+          "vars": {
+            "query": "MATCH (a:MultipartSource), (b:MultipartMiddle) WITH a, b MATCH (a)-[:MultipartR]->(b) WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "both endpoints undirected",
+          "vars": {
+            "query": "MATCH (a:MultipartSource), (b:MultipartMiddle) WITH a, b MATCH (a)-[:MultipartR]-(b) WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "three boundaries",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b MATCH (b)-[:MultipartR]->(c) WITH b, c RETURN b.name, c.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "b1",
+                "c"
+              ],
+              [
+                "b2",
+                "c"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "distinct",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b MATCH (b)-[:MultipartR]->(c) WITH DISTINCT c RETURN c.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "c"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "aggregation",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH a, count(b) AS total RETURN a.name, total"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "a",
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "pagination",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b ORDER BY b.name DESC SKIP 1 LIMIT 1 RETURN b.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "b1"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "with predicate",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b WHERE b.name = 'b2' RETURN b.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "input predicate",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WHERE b.name = 'b1' WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                "b1"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty input",
+          "vars": {
+            "query": "MATCH (a:MultipartSource {name: 'dead'}) WITH a MATCH (a)-[:MultipartR]->(b) WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "duplicate input",
+          "vars": {
+            "query": "UNWIND [1, 1] AS x MATCH (a:MultipartSource {name: 'a'}) WITH a, x MATCH (a)-[:MultipartR]->(b) WITH b, x RETURN b.name, x"
+          },
+          "assert": {
+            "row_count": 4,
+            "row_values": [
+              [
+                "b1",
+                1
+              ],
+              [
+                "b2",
+                1
+              ],
+              [
+                "b1",
+                1
+              ],
+              [
+                "b2",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "unrelated match",
+          "vars": {
+            "query": "MATCH (a:MultipartSource {name: 'a'}) WITH a MATCH (b:MultipartMiddle) WITH a, b RETURN a.name, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "row_values": [
+              [
+                "a",
+                "b1"
+              ],
+              [
+                "a",
+                "b2"
+              ],
+              [
+                "a",
+                "decoy"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "optional match",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a OPTIONAL MATCH (a)-[:MultipartR]->(b) WITH a, b RETURN a.name, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "row_values": [
+              [
+                "a",
+                "b1"
+              ],
+              [
+                "a",
+                "b2"
+              ],
+              [
+                "dead",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "expansion",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[:MultipartR*1..2]->(b) WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 4,
+            "row_values": [
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ],
+              [
+                "c"
+              ],
+              [
+                "c"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "zero hop expansion",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[:MultipartR*0..1]->(b) WITH b RETURN b.name"
+          },
+          "assert": {
+            "row_count": 4,
+            "row_values": [
+              [
+                "a"
+              ],
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ],
+              [
+                "dead"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "bound path",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH p=(a)-[:MultipartR]->(b) WITH p, b RETURN length(p), b.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                1,
+                "b1"
+              ],
+              [
+                1,
+                "b2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "literal projection preserves rows",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH 1 AS value RETURN value"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                1
+              ],
+              [
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "literal projection preserves empty input",
+          "vars": {
+            "query": "MATCH (a:MultipartSource {name: 'dead'}) WITH a MATCH (a)-[:MultipartR]->(b) WITH 1 AS value RETURN value"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "independent expansion input",
+          "vars": {
+            "query": "UNWIND [1, 2] AS x WITH x MATCH (a:MultipartSource)-[:MultipartR*1..2]->(b) WITH x, b RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 8,
+            "row_values": [
+              [
+                1,
+                "b1"
+              ],
+              [
+                1,
+                "b2"
+              ],
+              [
+                1,
+                "c"
+              ],
+              [
+                1,
+                "c"
+              ],
+              [
+                2,
+                "b1"
+              ],
+              [
+                2,
+                "b2"
+              ],
+              [
+                2,
+                "c"
+              ],
+              [
+                2,
+                "c"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "carried scalar expansion predicate",
+          "vars": {
+            "query": "UNWIND ['a', 'dead'] AS name WITH name MATCH (a:MultipartSource)-[:MultipartR*1..2]->(b) WHERE a.name = name WITH name, b RETURN name, b.name"
+          },
+          "assert": {
+            "row_count": 4,
+            "row_values": [
+              [
+                "a",
+                "b1"
+              ],
+              [
+                "a",
+                "b2"
+              ],
+              [
+                "a",
+                "c"
+              ],
+              [
+                "a",
+                "c"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "zero hop carried scalar predicate",
+          "vars": {
+            "query": "UNWIND ['a', 'dead'] AS name WITH name MATCH (a:MultipartSource)-[:MultipartR*0..2]->(b) WHERE a.name = name WITH name, b RETURN name, b.name"
+          },
+          "assert": {
+            "row_count": 6,
+            "row_values": [
+              [
+                "a",
+                "a"
+              ],
+              [
+                "a",
+                "b1"
+              ],
+              [
+                "a",
+                "b2"
+              ],
+              [
+                "a",
+                "c"
+              ],
+              [
+                "a",
+                "c"
+              ],
+              [
+                "dead",
+                "dead"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "node set",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b SET b.seen = true RETURN b.name, b.seen"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "b1",
+                true
+              ],
+              [
+                "b2",
+                true
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MultipartCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b1",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b1",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "b2",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b2",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "c"
+                    }
+                  },
+                  {
+                    "id": "dead",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "dead"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b1",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b1"
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "b2",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b2"
+                    }
+                  },
+                  {
+                    "start": "b1",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b1_c"
+                    }
+                  },
+                  {
+                    "start": "b2",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b2_c"
+                    }
+                  },
+                  {
+                    "start": "dead",
+                    "end": "decoy",
+                    "kind": "MultipartOther",
+                    "props": {
+                      "name": "dead_decoy"
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "dead",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "c_dead"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MultipartCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship set",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH r SET r.seen = true RETURN r.name, r.seen"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "a_b1",
+                true
+              ],
+              [
+                "a_b2",
+                true
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MultipartCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b1",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b1"
+                    }
+                  },
+                  {
+                    "id": "b2",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b2"
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "c"
+                    }
+                  },
+                  {
+                    "id": "dead",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "dead"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b1",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b1",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "b2",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b2",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "b1",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b1_c"
+                    }
+                  },
+                  {
+                    "start": "b2",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b2_c"
+                    }
+                  },
+                  {
+                    "start": "dead",
+                    "end": "decoy",
+                    "kind": "MultipartOther",
+                    "props": {
+                      "name": "dead_decoy"
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "dead",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "c_dead"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MultipartCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "filtered set without return",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b WHERE b.name = 'b2' SET b.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MultipartCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b1",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b1"
+                    }
+                  },
+                  {
+                    "id": "b2",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b2",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "c"
+                    }
+                  },
+                  {
+                    "id": "dead",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "dead"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b1",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b1"
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "b2",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b2"
+                    }
+                  },
+                  {
+                    "start": "b1",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b1_c"
+                    }
+                  },
+                  {
+                    "start": "b2",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b2_c"
+                    }
+                  },
+                  {
+                    "start": "dead",
+                    "end": "decoy",
+                    "kind": "MultipartOther",
+                    "props": {
+                      "name": "dead_decoy"
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "dead",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "c_dead"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MultipartCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "create",
+          "vars": {
+            "query": "MATCH (a:MultipartSource) WITH a MATCH (a)-[r:MultipartR]->(b) WITH b CREATE (n:MultipartCreated {name: b.name}) RETURN n.name"
+          },
+          "assert": {
+            "row_count": 2,
+            "row_values": [
+              [
+                "b1"
+              ],
+              [
+                "b2"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MultipartCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b1",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b1"
+                    }
+                  },
+                  {
+                    "id": "b2",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b2"
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "c"
+                    }
+                  },
+                  {
+                    "id": "dead",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "dead"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b1",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b1"
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "b2",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b2"
+                    }
+                  },
+                  {
+                    "start": "b1",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b1_c"
+                    }
+                  },
+                  {
+                    "start": "b2",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b2_c"
+                    }
+                  },
+                  {
+                    "start": "dead",
+                    "end": "decoy",
+                    "kind": "MultipartOther",
+                    "props": {
+                      "name": "dead_decoy"
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "dead",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "c_dead"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MultipartCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_count": 2,
+                "row_values": [
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "b1"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "b2"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "duplicate create without return",
+          "vars": {
+            "query": "UNWIND [1, 1] AS x MATCH (a:MultipartSource {name: 'a'}) WITH a MATCH (a)-[:MultipartR]->(b) WITH b CREATE (:MultipartCreated {name: b.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MultipartCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b1",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b1"
+                    }
+                  },
+                  {
+                    "id": "b2",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b2"
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "c"
+                    }
+                  },
+                  {
+                    "id": "dead",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "dead"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b1",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b1"
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "b2",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b2"
+                    }
+                  },
+                  {
+                    "start": "b1",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b1_c"
+                    }
+                  },
+                  {
+                    "start": "b2",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b2_c"
+                    }
+                  },
+                  {
+                    "start": "dead",
+                    "end": "decoy",
+                    "kind": "MultipartOther",
+                    "props": {
+                      "name": "dead_decoy"
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "dead",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "c_dead"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MultipartCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_count": 4,
+                "row_values": [
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "b1"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "b2"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "b1"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "b2"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty create without return",
+          "vars": {
+            "query": "MATCH (a:MultipartSource {name: 'dead'}) WITH a MATCH (a)-[:MultipartR]->(b) WITH b CREATE (:MultipartCreated {name: b.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MultipartCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b1",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b1"
+                    }
+                  },
+                  {
+                    "id": "b2",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b2"
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "c"
+                    }
+                  },
+                  {
+                    "id": "dead",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "dead"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b1",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b1"
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "b2",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b2"
+                    }
+                  },
+                  {
+                    "start": "b1",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b1_c"
+                    }
+                  },
+                  {
+                    "start": "b2",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b2_c"
+                    }
+                  },
+                  {
+                    "start": "dead",
+                    "end": "decoy",
+                    "kind": "MultipartOther",
+                    "props": {
+                      "name": "dead_decoy"
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "dead",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "c_dead"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MultipartCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_count": 0,
+                "row_values": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "correlated expansion duplicate create",
+          "vars": {
+            "query": "UNWIND ['a', 'a', 'dead'] AS name WITH name MATCH (a:MultipartSource)-[:MultipartR*1..2]->(b) WHERE a.name = name WITH name, b CREATE (:MultipartCreated {name: name + '_' + b.name})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE NOT n:MultipartCreated RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "a"
+                    }
+                  },
+                  {
+                    "id": "b1",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b1"
+                    }
+                  },
+                  {
+                    "id": "b2",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "b2"
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "c"
+                    }
+                  },
+                  {
+                    "id": "dead",
+                    "kinds": [
+                      "MultipartSource"
+                    ],
+                    "props": {
+                      "name": "dead"
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "MultipartMiddle"
+                    ],
+                    "props": {
+                      "name": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other",
+                    "kinds": [
+                      "MultipartEnd"
+                    ],
+                    "props": {
+                      "name": "other"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "a",
+                    "end": "b1",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b1"
+                    }
+                  },
+                  {
+                    "start": "a",
+                    "end": "b2",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "a_b2"
+                    }
+                  },
+                  {
+                    "start": "b1",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b1_c"
+                    }
+                  },
+                  {
+                    "start": "b2",
+                    "end": "c",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "b2_c"
+                    }
+                  },
+                  {
+                    "start": "dead",
+                    "end": "decoy",
+                    "kind": "MultipartOther",
+                    "props": {
+                      "name": "dead_decoy"
+                    }
+                  },
+                  {
+                    "start": "c",
+                    "end": "dead",
+                    "kind": "MultipartR",
+                    "props": {
+                      "name": "c_dead"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:MultipartCreated) RETURN labels(n), n.name",
+              "assert": {
+                "row_count": 8,
+                "row_values": [
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_b1"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_b2"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_c"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_c"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_b1"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_b2"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_c"
+                  ],
+                  [
+                    [
+                      "MultipartCreated"
+                    ],
+                    "a_c"
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

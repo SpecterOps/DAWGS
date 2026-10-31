@@ -86,6 +86,26 @@ func TestQueryMayNeedRewrite(t *testing.T) {
 	}
 }
 
+func TestRewriteUnsupportedImportAndCreatePreservesNativeText(t *testing.T) {
+	params := map[string]any{"props": map[string]any{"name": "start"}, "url": "file:///missing.csv"}
+	for _, source := range []string{
+		"CREATE UNIQUE (:Created {value: 1})",
+		"LOAD CSV FROM 'file:///missing.csv' AS row RETURN row",
+		"MATCH (a $props), (b) CREATE UNIQUE (a)-[:R]->(b)",
+		"LOAD CSV FROM $url AS row MATCH (n $props) RETURN n",
+		"LOAD CSV WITH HEADERS FROM $url AS row CREATE (:Created {value: row.value})",
+	} {
+		t.Run(source, func(t *testing.T) {
+			for _, rewrite := range []func(string, map[string]any) (string, map[string]any, error){rewriteQuery, rewritePatternPropertyParameters} {
+				query, parameters, err := rewrite(source, params)
+				require.NoError(t, err)
+				require.Equal(t, source, query)
+				require.Equal(t, params, parameters)
+			}
+		})
+	}
+}
+
 func TestRewriteQuery_WrapsTemporalPropertyComparison(t *testing.T) {
 	query, rewrittenParams, err := rewriteQuery(
 		"MATCH p=(:Computer)-[r:HasSession]->(:User) WHERE r.lastseen >= datetime() - duration('P3D') RETURN p LIMIT 100",
@@ -132,4 +152,120 @@ func TestRewriteQuery_RewritesPatternPropertiesAndTemporalComparisons(t *testing
 	require.Contains(t, query, "where datetime(n.lastseen) >= datetime()")
 	require.Equal(t, params["props"], rewrittenParams["props"])
 	require.Len(t, rewrittenParams, 2)
+}
+
+// Rewritten queries previously degraded integral float literals to integers,
+// so `3.0 / 2.0` reached Neo4j as integer division `3 / 2`. The rewrite must
+// preserve floating-point literal spellings in the re-emitted query text.
+func TestRewriteQuery_PreservesIntegralFloatLiterals(t *testing.T) {
+	query, rewrittenParams, err := rewriteQuery(
+		"match (n) where date() <= n.created_at return 3.0 / 2.0 as a, [1.0, 2.5] as c, 1e3 as b",
+		nil,
+	)
+	require.NoError(t, err)
+	require.Nil(t, rewrittenParams)
+	require.Contains(t, query, "return 3.0 / 2.0 as a")
+	require.Contains(t, query, "[1.0, 2.5] as c")
+	require.Contains(t, query, "1000.0 as b")
+}
+
+// Unsupported subscripts must keep the original text for Neo4j rather than
+// allowing a different rewrite to emit the parser's former lossy AST.
+func TestRewritePreservesListIndexing(t *testing.T) {
+	for _, source := range []string{
+		"MATCH (n $props) RETURN n.values[0] AS value",
+		"MATCH (n) WHERE datetime(n.created) < $threshold RETURN n.values[-1] AS value",
+		"WITH $values AS xs RETURN xs[$idx] AS value",
+	} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"props": map[string]any{"name": "test"}, "values": []int64{1, 2}, "idx": int64(0), "threshold": "2026-01-01"}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}
+
+func TestRewritePreservesListSlicing(t *testing.T) {
+	for _, source := range []string{
+		"MATCH (n $props) RETURN n.values[0..2] AS value",
+		"MATCH (n) WHERE datetime(n.created) < $threshold RETURN n.values[-1..] AS value",
+		"WITH $values AS xs RETURN xs[$idx..] AS value",
+	} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"props": map[string]any{"name": "test"}, "values": []int64{1, 2}, "idx": int64(0), "threshold": "2026-01-01"}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}
+
+func TestRewriteQueryPreservesStandaloneCall(t *testing.T) {
+	for _, source := range []string{"CALL db.labels()", "CALL db.labels", "CALL db.labels() YIELD *", "CALL example.write($value)", "CALL db.labels() YIELD label WHERE label = $value"} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"value": "example"}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}
+
+func TestRewriteQueryPreservesShortestPathExpressions(t *testing.T) {
+	for _, source := range []string{
+		"MATCH (a), (b) RETURN shortestPath((a)-[:R*]->(b)) AS p",
+		"MATCH (a), (b) RETURN allShortestPaths((a)-[:R*]->(b)) AS p",
+		"MATCH (a), (b) SET a.value = $value RETURN shortestPath((a)-[:R*]->(b)) AS p",
+	} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"value": int64(1)}
+			rewritten, rebound, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, rewritten)
+			require.Equal(t, params, rebound)
+		})
+	}
+}
+
+func TestRewriteInQueryCallPreservesNativeText(t *testing.T) {
+	params := map[string]any{"props": map[string]any{"name": "start"}, "value": int64(1)}
+	for _, source := range []string{
+		"MATCH (n) CALL test.doNothing() RETURN n",
+		"MATCH (n $props) CALL test.write($value) RETURN n",
+		"WITH $value AS x CALL dbms.components() YIELD name RETURN x, name",
+	} {
+		for _, rewrite := range []func(string, map[string]any) (string, map[string]any, error){rewriteQuery, rewritePatternPropertyParameters} {
+			query, parameters, err := rewrite(source, params)
+			require.NoError(t, err)
+			require.Equal(t, source, query)
+			require.Equal(t, params, parameters)
+		}
+	}
+}
+
+func TestRewriteQueryPreservesPredicateAndFunctionSemantics(t *testing.T) {
+	for _, tc := range []struct{ name, source, want string }{
+		{"namespace", "MATCH (n $props) RETURN apoc.coll.sum([1, 2])", "return apoc.coll.sum([1, 2])"},
+		{"single namespace", "MATCH (n $props) RETURN custom.sum([1, 2])", "return custom.sum([1, 2])"},
+		{"conjunction", "MATCH (n $props) WHERE n:A:B RETURN n", "where (n:A and n:B)"},
+		{"negation", "MATCH (n $props) WHERE NOT n:A:B RETURN n", "where not (n:A and n:B)"},
+		{"mixed boolean", "MATCH (n $props) WHERE n:A:B OR n:C RETURN n", "where (n:A and n:B) or n:C"},
+		{"set", "MATCH (n $props) WHERE n:A:B SET n.x = 3.0 / 2.0 RETURN n.x", "where (n:A and n:B) set n.x = 3.0 / 2.0"},
+		{"create", "MATCH (n $props) WHERE n:A:B CREATE (m {x: 3.0 / 2.0}) RETURN m.x", "where (n:A and n:B) create (m {x: 3.0 / 2.0})"},
+		{"delete", "MATCH (n $props) WHERE n:A:B DELETE n", "where (n:A and n:B) delete n"},
+		{"temporal trigger", "MATCH (n) WHERE n:A:B AND n.created < date() RETURN n", "where (n:A and n:B) and date(n.created) < date()"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			params := map[string]any{"props": map[string]any{"tag": "probe"}}
+			query, rewritten, err := rewriteQuery(tc.source, params)
+			require.NoError(t, err)
+			require.Contains(t, query, tc.want)
+			require.Equal(t, map[string]any{"tag": "probe"}, params["props"])
+			require.Equal(t, params["props"], rewritten["props"])
+		})
+	}
 }

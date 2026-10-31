@@ -124,9 +124,16 @@ func NewComplexityVisitor() *ComplexityVisitor {
 }
 
 func (s *ComplexityVisitor) isHighlySelectivePropertyLookup(propertyLookup *cypher.PropertyLookup) (bool, error) {
-	if variable, typeOK := propertyLookup.Atom.(*cypher.Variable); !typeOK {
-		return false, fmt.Errorf("expected variable for property lookup atom but received %T", propertyLookup.Atom)
-	} else if tracked, isTracked := s.identifierTracker.Lookup(variable.Symbol); !isTracked {
+	variable, isVariable := propertyLookup.Atom.(*cypher.Variable)
+	if !isVariable {
+		// Property lookups over other atoms, such as temporal component access
+		// (datetime(...).epochmillis), cannot reference a tracked node variable and
+		// are never highly selective node-property predicates.
+		return false, nil
+	}
+
+	tracked, isTracked := s.identifierTracker.Lookup(variable.Symbol)
+	if !isTracked {
 		return false, fmt.Errorf("unable to lookup identifier %s", variable.Symbol)
 	} else if tracked.Type == typeNode {
 		_, isHighlySelectiveProperty := highlySelectiveNodeProperties[propertyLookup.Symbol]

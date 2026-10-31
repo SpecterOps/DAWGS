@@ -13,6 +13,7 @@ import (
 
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/internal/jsonutil"
 )
 
 type LoadResult struct {
@@ -774,9 +775,17 @@ func decodeNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	fragmentPath := filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path))
+	file, err := openCollectionFragment(inputDir, fileEntry.Path)
+	if err != nil {
+		return 0, fmt.Errorf("read node fragment %s: %w", fileEntry.Path, err)
+	}
+	defer file.Close()
 	validate := func(item FragmentNode) error {
 		if item.ID == "" {
 			return fmt.Errorf("node fragment %s contains empty source ID", fileEntry.Path)
+		}
+		if _, err := jsonutil.NormalizeNumbers(item.Properties); err != nil {
+			return fmt.Errorf("node fragment %s source ID %q: %w", fileEntry.Path, item.ID, err)
 		}
 
 		if handle != nil {
@@ -787,11 +796,10 @@ func decodeNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	var count int
-	var err error
 	if verifyIntegrity {
-		count, err = readVerifiedCompressedJSONLines(fragmentPath, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
+		count, err = readVerifiedCompressedJSONLinesFromReader(fragmentPath, file, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
 	} else {
-		count, err = readCompressedJSONLines(fragmentPath, codec, validate)
+		count, err = readCompressedJSONLinesFromReader(file, codec, validate)
 	}
 	if err != nil {
 		return count, fmt.Errorf("read node fragment %s: %w", fileEntry.Path, err)
@@ -814,12 +822,20 @@ func decodeEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	fragmentPath := filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path))
+	file, err := openCollectionFragment(inputDir, fileEntry.Path)
+	if err != nil {
+		return 0, fmt.Errorf("read edge fragment %s: %w", fileEntry.Path, err)
+	}
+	defer file.Close()
 	validate := func(item FragmentEdge) error {
 		if item.StartID == "" {
 			return fmt.Errorf("edge fragment %s contains empty start source ID", fileEntry.Path)
 		}
 		if item.EndID == "" {
 			return fmt.Errorf("edge fragment %s contains empty end source ID", fileEntry.Path)
+		}
+		if _, err := jsonutil.NormalizeNumbers(item.Properties); err != nil {
+			return fmt.Errorf("edge fragment %s (%s)-[%s]->(%s): %w", fileEntry.Path, item.StartID, item.Kind, item.EndID, err)
 		}
 
 		if handle != nil {
@@ -830,11 +846,10 @@ func decodeEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	var count int
-	var err error
 	if verifyIntegrity {
-		count, err = readVerifiedCompressedJSONLines(fragmentPath, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
+		count, err = readVerifiedCompressedJSONLinesFromReader(fragmentPath, file, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
 	} else {
-		count, err = readCompressedJSONLines(fragmentPath, codec, validate)
+		count, err = readCompressedJSONLinesFromReader(file, codec, validate)
 	}
 	if err != nil {
 		return count, fmt.Errorf("read edge fragment %s: %w", fileEntry.Path, err)

@@ -68,6 +68,7 @@ func TestRegularQueryWithParameterSequenceRejectsMismatchedSymbols(t *testing.T)
 	require.ErrorContains(t, err, "more symbols")
 }
 
+// TestCypherEmitter_FormatsMapLiteralPropertyKeys verifies that map keys are emitted bare or escaped according to property-key grammar.
 func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
 	var (
 		buffer  = &bytes.Buffer{}
@@ -87,10 +88,14 @@ func TestCypherEmitter_FormatsMapLiteralPropertyKeys(t *testing.T) {
 	require.Equal(t, "{``: 4, `   `: 5, `'`: 6, `a-aaa`: 2, `has``tick`: 3, match: 1}", buffer.String())
 }
 
+// TestCypherEmitter_FormatsPropertyLookupKeys verifies canonical rendering of bare and escaped lookup keys.
 func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
 	testCases := []struct {
-		name     string
-		symbol   string
+		// name labels the property-key form under test.
+		name string
+		// symbol is the raw property key stored in the AST.
+		symbol string
+		// expected is the canonical rendered property lookup.
 		expected string
 	}{
 		{
@@ -141,6 +146,7 @@ func TestCypherEmitter_FormatsPropertyLookupKeys(t *testing.T) {
 	}
 }
 
+// TestCypherEmitter_RejectsEmptyPropertyLookupKey verifies that an empty raw lookup key cannot be rendered.
 func TestCypherEmitter_RejectsEmptyPropertyLookupKey(t *testing.T) {
 	buffer := &bytes.Buffer{}
 	emitter := format.NewCypherEmitter(false)
@@ -416,5 +422,76 @@ func TestNewStringLiteral_InQuery(t *testing.T) {
 			require.Nil(t, err)
 			require.Equal(t, tc.expectedQuery, buffer.String())
 		})
+	}
+}
+
+// TestCypherEmitter_FloatLiteralsKeepFloatingPointSpelling verifies that the
+// emitter preserves the floating-point type of integral float literals, both
+// for parsed queries and for hand-built literal values.
+func TestCypherEmitter_FloatLiteralsKeepFloatingPointSpelling(t *testing.T) {
+	t.Run("parsed query", func(t *testing.T) {
+		var (
+			buffer            = &bytes.Buffer{}
+			emitter           = format.NewCypherEmitter(false)
+			regularQuery, err = frontend.ParseCypher(frontend.DefaultCypherContext(), "return 3.0 / 2.0 as a, 1e3 as b, [1.0, 2.5] as c")
+		)
+		require.NoError(t, err)
+		require.NoError(t, emitter.Write(regularQuery, buffer))
+		require.Equal(t, "return 3.0 / 2.0 as a, 1000.0 as b, [1.0, 2.5] as c", buffer.String())
+	})
+
+	t.Run("hand-built literals", func(t *testing.T) {
+		var (
+			buffer  = &bytes.Buffer{}
+			emitter = format.NewCypherEmitter(false)
+		)
+
+		require.NoError(t, emitter.WriteExpression(buffer, &cypher.ListLiteral{
+			cypher.NewLiteral(float64(3), false),
+			cypher.NewLiteral(-0.5, false),
+			cypher.NewLiteral(float32(2), false),
+		}))
+		require.Equal(t, "[3.0, -0.5, 2.0]", buffer.String())
+	})
+
+	t.Run("stripped literals keep float values redacted", func(t *testing.T) {
+		var (
+			buffer            = &bytes.Buffer{}
+			emitter           = format.NewCypherEmitter(true)
+			regularQuery, err = frontend.ParseCypher(frontend.DefaultCypherContext(), "return 3.0 as a")
+		)
+		require.NoError(t, err)
+		require.NoError(t, emitter.Write(regularQuery, buffer))
+		require.Equal(t, "return $STRIPPED as a", buffer.String())
+	})
+}
+
+func TestCypherEmitterKindMatcherSemantics(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		kinds     graph.Kinds
+		exclusive bool
+		want      string
+	}{
+		{"all labels", graph.StringsToKinds([]string{"A", "B"}), true, "(n:A and n:B)"},
+		{"any label", graph.StringsToKinds([]string{"A", "B"}), false, "(n:A or n:B)"},
+		{"one label", graph.Kinds{graph.StringKind("A")}, true, "n:A"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			err := format.NewCypherEmitter(false).WriteExpression(&output, cypher.NewKindMatcher(&cypher.Variable{Symbol: "n"}, tc.kinds, tc.exclusive))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, output.String())
+		})
+	}
+}
+
+func TestCypherEmitterFunctionNamespaces(t *testing.T) {
+	for _, source := range []string{"return sum([1, 2])", "return apoc.sum([1, 2])", "return apoc.coll.sum([1, 2])"} {
+		parsed, err := frontend.ParseCypher(frontend.NewContext(), source)
+		require.NoError(t, err)
+		output, err := format.RegularQuery(parsed, false)
+		require.NoError(t, err)
+		require.Equal(t, source, output)
 	}
 }

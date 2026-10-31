@@ -9,6 +9,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,6 +58,24 @@ func TestPathComponentFunctionsTranslateNullArguments(t *testing.T) {
 	require.Contains(t, formatted.Statement, "(null)::edgecomposite[]")
 }
 
+// TestListSizeGuardsDynamicJSONPropertiesByType verifies that size() distinguishes JSON strings and arrays at runtime.
+func TestListSizeGuardsDynamicJSONPropertiesByType(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("TestNode"))
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (n:TestNode) RETURN size(n.values)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted.Statement, "cypher_size(nullif(")
+	require.Contains(t, formatted.Statement, "properties -> E'values'")
+}
+
+// TestTailFunctionDoesNotDuplicatePathComponentExpression verifies nested tail calls hydrate path components only once.
 func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -68,10 +87,12 @@ func TestTailFunctionDoesNotDuplicatePathComponentExpression(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"), formatted)
+	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edge_ids_to_path"), formatted.Statement)
+	require.NotContains(t, formatted.Statement, "ordered_edges_to_path")
 	require.NotContains(t, formatted.Statement, "cardinality(((case when")
 }
 
+// TestTailPredicateStagesPathComponentExpression verifies predicates reuse a staged path-component projection.
 func TestTailPredicateStagesPathComponentExpression(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -83,11 +104,13 @@ func TestTailPredicateStagesPathComponentExpression(t *testing.T) {
 
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
-	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"))
+	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edge_ids_to_path"))
+	require.NotContains(t, formatted.Statement, "ordered_edges_to_path")
 	require.Contains(t, formatted.Statement, "lateral (select")
 	require.Contains(t, formatted.Statement, ".nodes")
 }
 
+// TestProjectionStagesPathBeforeReadingComponents verifies path hydration is staged before node and edge access.
 func TestProjectionStagesPathBeforeReadingComponents(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -100,11 +123,13 @@ func TestProjectionStagesPathBeforeReadingComponents(t *testing.T) {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Contains(t, formatted.Statement, "lateral (select")
-	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"), formatted)
+	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edge_ids_to_path"), formatted.Statement)
+	require.NotContains(t, formatted.Statement, "ordered_edges_to_path")
 	require.Contains(t, formatted.Statement, ".nodes")
 	require.Contains(t, formatted.Statement, ".edges")
 }
 
+// TestProjectionStagesRepeatedPathComponents verifies repeated component access shares one staged path hydration.
 func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 	kindMapper := pgutil.NewInMemoryKindMapper()
 
@@ -117,10 +142,228 @@ func TestProjectionStagesRepeatedPathComponents(t *testing.T) {
 	formatted, err := Translated(translation)
 	require.NoError(t, err)
 	require.Contains(t, formatted.Statement, "lateral (select")
-	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edges_to_path"), formatted)
-	require.Equal(t, 1, strings.Count(formatted.Statement, "from unnest"), formatted)
+	require.Equal(t, 1, strings.Count(formatted.Statement, "ordered_edge_ids_to_path"), formatted.Statement)
+	require.NotContains(t, formatted.Statement, "ordered_edges_to_path")
+	require.NotContains(t, formatted.Statement, "from unnest")
 	require.Contains(t, formatted.Statement, ".nodes")
 	require.Contains(t, formatted.Statement, ".edges")
+}
+
+// TestPathLengthUsesScalarDistanceWithoutHydration verifies that length(path)
+// consumes the selected scalar-distance result without carrying edge IDs.
+func TestPathLengthUsesOrderedEdgeIDsWithoutHydration(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = shortestPath((s)-[*1..15]->(e)) WHERE id(s) = 1 AND id(e) = 2 RETURN length(p)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted.Statement, "(s0.ep0)::int")
+	require.NotContains(t, formatted.Statement, "cardinality(")
+	require.NotContains(t, formatted.Statement, "ordered_edge_ids_to_path")
+	require.NotContains(t, formatted.Statement, "ordered_edges_to_path")
+	require.NotContains(t, formatted.Statement, "from unnest")
+}
+
+// TestIDOnlyTerminalProjectionCarriesScalarID verifies that an ID-only terminal consumer receives scalar state.
+func TestIDOnlyTerminalProjectionCarriesScalarID(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	kindMapper.Put(graph.StringKind("TestNode"))
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH ()-[]->(e:TestNode) RETURN id(e)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "n1.id as n1")
+	require.Contains(t, formatted.Statement, "select s0.n1 as \"id(e)\"")
+	require.NotContains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted.Statement, "n1.kind_ids operator")
+}
+
+// TestIDOnlyTerminalProjectionRetainsCompositeForMixedUse verifies that mixed ID and property consumers retain the terminal composite.
+func TestIDOnlyTerminalProjectionRetainsCompositeForMixedUse(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH ()-[]->(e) RETURN id(e), e.name`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted.Statement, "(s0.n1).id")
+	require.Contains(t, formatted.Statement, "(s0.n1).properties")
+}
+
+// TestIDOnlyTerminalProjectionRetainsCompositeForLaterPatternReuse verifies that a reused terminal remains a complete entity binding.
+func TestIDOnlyTerminalProjectionRetainsCompositeForLaterPatternReuse(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH ()-[]->(e) MATCH (e)-[]->() RETURN id(e)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.NotContains(t, formatted.Statement, "n1.id as n1")
+}
+
+// TestIDOnlyTerminalProjectionRetainsCompositeForObservedPath verifies that observing the path retains complete terminal state.
+func TestIDOnlyTerminalProjectionRetainsCompositeForObservedPath(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = ()-[*1..]->(e) WHERE id(e) = 2 RETURN p`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted.Statement, "ordered_edge_ids_to_path")
+}
+
+// TestIDOnlyExpansionContinuationCarriesScalarID verifies that an ID-only intermediate binding continues as scalar state.
+func TestIDOnlyExpansionContinuationCarriesScalarID(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[]->(e) RETURN id(mid), id(e)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "join lateral (select n1.id from node n1 where n1.id = s1.next_id offset 0) n1 on true")
+	require.Contains(t, formatted.Statement, "s0.n1 = e1.start_id")
+	require.Contains(t, formatted.Statement, "s0.n1 as n1")
+	require.NotContains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.NotContains(t, formatted.Statement, "(s0.n1).id = e1.start_id")
+}
+
+// TestIDOnlyExpansionContinuationRetainsCompositeForPropertyUse verifies that a property consumer prevents scalar-only continuation state.
+func TestIDOnlyExpansionContinuationRetainsCompositeForPropertyUse(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[]->(e) RETURN mid.name`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted.Statement, "(s0.n1).id = e1.start_id")
+}
+
+// TestIDOnlyExpansionContinuationSeedsFollowingExpansionFromScalarID verifies that a following traversal can join from a scalar intermediate ID.
+func TestIDOnlyExpansionContinuationSeedsFollowingExpansionFromScalarID(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[*1..]->(e) RETURN id(mid), id(e)`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "select distinct s0.n1 as root_id from s0")
+	require.Contains(t, formatted.Statement, "s0.n1 = s3.root_id")
+	require.NotContains(t, formatted.Statement, "select distinct (s0.n1).id as root_id from s0")
+}
+
+// TestIDOnlyExpansionContinuationRetainsCompositeForObservedPath verifies that observing the path prevents scalar-only intermediate state.
+func TestIDOnlyExpansionContinuationRetainsCompositeForObservedPath(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH p = (s)-[*1..]->(mid)-[]->(e) RETURN p`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted.Statement, "(s0.n1).id = e1.start_id")
+	require.Contains(t, formatted.Statement, "ordered_edge_ids_to_path")
+}
+
+// TestIDOnlyExpansionContinuationRetainsCompositeForMutation verifies that mutating an intermediate node retains its complete entity value.
+func TestIDOnlyExpansionContinuationRetainsCompositeForMutation(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+
+	query, err := frontend.ParseCypher(frontend.NewContext(), `MATCH (s)-[*1..]->(mid)-[]->(e) DELETE mid`)
+	require.NoError(t, err)
+
+	translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+	require.NoError(t, err)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+
+	require.Contains(t, formatted.Statement, "(n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1")
+	require.Contains(t, formatted.Statement, "(s0.n1).id = e1.start_id")
+	require.Contains(t, formatted.Statement, "delete from node")
+}
+
+// TestBoundPairShortestPathUsesStableSingletonEndpoints verifies deterministic
+// scalar endpoint construction for the contained compact executor.
+func TestBoundPairShortestPathUsesStableSingletonArrays(t *testing.T) {
+	kindMapper := pgutil.NewInMemoryKindMapper()
+	translateQuery := func(cypherQuery string) (Result, string) {
+		query, err := frontend.ParseCypher(frontend.NewContext(), cypherQuery)
+		require.NoError(t, err)
+		translation, err := Translate(context.Background(), query, kindMapper, nil, DefaultGraphID)
+		require.NoError(t, err)
+		formatted, err := Translated(translation)
+		require.NoError(t, err)
+		return translation, formatted.Statement
+	}
+
+	first, firstSQL := translateQuery(`MATCH p = shortestPath((s)-[*1..15]->(e)) WHERE id(s) = 1 AND id(e) = 2 RETURN p LIMIT 1`)
+	second, secondSQL := translateQuery(`MATCH p = shortestPath((s)-[*1..15]->(e)) WHERE id(s) = 41 AND id(e) = 42 RETURN p LIMIT 1`)
+
+	require.Equal(t, firstSQL, secondSQL)
+	require.Contains(t, firstSQL, "shortest_path_compact(")
+	require.NotContains(t, firstSQL, "insert into pg_temp.bsp_pair_filter")
+	require.NotContains(t, firstSQL, "traversal_pair_filter")
+	require.Contains(t, firstSQL, "limit 1")
+	require.Contains(t, firstSQL, "with singleton_endpoints as")
+	require.Contains(t, firstSQL, "singleton_endpoints.root_id")
+	require.Contains(t, firstSQL, "singleton_endpoints.terminal_id")
+	require.NotContains(t, firstSQL, "n0.id = 1")
+	require.NotContains(t, secondSQL, "n0.id = 41")
+	var firstEndpointValues, secondEndpointValues []any
+	for _, value := range first.Parameters {
+		if _, isString := value.(string); !isString {
+			firstEndpointValues = append(firstEndpointValues, value)
+		}
+	}
+	for _, value := range second.Parameters {
+		if _, isString := value.(string); !isString {
+			secondEndpointValues = append(secondEndpointValues, value)
+		}
+	}
+	require.ElementsMatch(t, []any{int64(1), int64(2)}, firstEndpointValues)
+	require.ElementsMatch(t, []any{int64(41), int64(42)}, secondEndpointValues)
+
 }
 
 func TestRelationshipEndpointFunctionsUseEdgeCompositeArguments(t *testing.T) {
@@ -220,4 +463,14 @@ func TestReturnedCollectNodeKeepsCompositeArray(t *testing.T) {
 	require.Contains(t, normalized, "array []::nodecomposite[]")
 	require.NotContains(t, normalized, "array_agg((n0).id)")
 	requireNoOptimizationLowering(t, translation.Optimization, "CollectIDMembership")
+}
+
+// A hydrated all-shortest dependency must contribute its edges to length(p).
+func TestAllShortestLengthUsesHydratedDependency(t *testing.T) {
+	translation := optimizerSafetyTranslation(t, `MATCH p=allShortestPaths((s)-[:MemberOf*1..17]->(e)) WHERE id(s)=$start_id AND id(e)=$end_id RETURN length(p)`)
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted.Statement, "all_shortest_paths_dag")
+	require.Contains(t, formatted.Statement, ".edges)")
+	require.NotContains(t, formatted.Statement, "cardinality(array []")
 }

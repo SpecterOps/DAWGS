@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"strings"
 
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v5"
@@ -18,6 +17,8 @@ import (
 )
 
 const (
+	// LargeNodeUpdateThreshold is the node count above which batch updates use
+	// the large-update execution path.
 	LargeNodeUpdateThreshold = 1_000_000
 )
 
@@ -41,21 +42,46 @@ func (s *Int2ArrayEncoder) Encode(values []int16) string {
 	return s.buffer.String()
 }
 
+// batch buffers graph mutations and flushes each operation group to PostgreSQL.
 type batch struct {
-	ctx                        context.Context
-	innerTransaction           *transaction
-	schemaManager              *SchemaManager
-	nodeDeletionBuffer         []graph.ID
+	// ctx scopes database operations performed while flushing buffered mutations.
+	ctx context.Context
+
+	// innerTransaction provides the connection and graph-selection context for buffered mutations.
+	innerTransaction *transaction
+
+	// schemaManager resolves graph metadata and maps graph kinds to their database identifiers.
+	schemaManager *SchemaManager
+
+	// nodeDeletionBuffer retains node identifiers awaiting a bulk delete.
+	nodeDeletionBuffer []graph.ID
+
+	// relationshipDeletionBuffer retains relationship identifiers awaiting a bulk delete.
 	relationshipDeletionBuffer []graph.ID
-	nodeCreateBuffer           []*graph.Node
-	nodeUpdateBuffer           []*graph.Node
-	nodeUpdateByBuffer         []graph.NodeUpdate
-	relationshipCreateBuffer   []*graph.Relationship
+
+	// nodeCreateBuffer retains nodes awaiting a bulk insert.
+	nodeCreateBuffer []*graph.Node
+
+	// nodeUpdateBuffer retains complete node replacements awaiting a bulk update.
+	nodeUpdateBuffer []*graph.Node
+
+	// nodeUpdateByBuffer retains identity-property node upserts awaiting validation and execution.
+	nodeUpdateByBuffer []graph.NodeUpdate
+
+	// relationshipCreateBuffer retains relationships awaiting conflict coalescing and insertion.
+	relationshipCreateBuffer []*graph.Relationship
+
+	// relationshipUpdateByBuffer retains identity-based relationship upserts awaiting validation and execution.
 	relationshipUpdateByBuffer []graph.RelationshipUpdate
-	batchWriteSize             int
-	kindIDEncoder              Int2ArrayEncoder
+
+	// batchWriteSize is the buffer length that triggers an automatic flush.
+	batchWriteSize int
+
+	// kindIDEncoder reuses one buffer when serializing PostgreSQL int2 arrays for node writes.
+	kindIDEncoder Int2ArrayEncoder
 }
 
+// newBatch opens the transaction used by a mutation batch and applies its configured flush threshold.
 func newBatch(ctx context.Context, conn *pgxpool.Conn, schemaManager *SchemaManager, cfg *Config) (*batch, error) {
 	if tx, err := newTransactionWrapper(ctx, conn, schemaManager, cfg, false); err != nil {
 		return nil, err
@@ -97,7 +123,7 @@ func (s *batch) CreateNodes(nodes []*graph.Node) ([]graph.ID, error) {
 			return nil, fmt.Errorf("bulk create node %d is nil", index)
 		}
 
-		mappedKindIDs, err := s.schemaManager.AssertKinds(s.ctx, node.Kinds)
+		mappedKindIDs, err := s.innerTransaction.kindMapper.AssertKinds(s.ctx, node.Kinds)
 		if err != nil {
 			return nil, fmt.Errorf("unable to map kinds: %w", err)
 		}
@@ -188,7 +214,7 @@ func (s *batch) largeUpdate(nodes []*graph.Node) error {
 	}
 
 	nodeRows := NewLargeNodeUpdateRows(len(nodes))
-	if err := nodeRows.AppendAll(s.ctx, nodes, s.schemaManager, s.kindIDEncoder); err != nil {
+	if err := nodeRows.appendAllWithMapper(s.ctx, nodes, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
 		return err
 	}
 
@@ -234,7 +260,7 @@ func (s *LargeNodeUpdateRows) Rows() [][]any {
 	return s.rows
 }
 
-func (s *LargeNodeUpdateRows) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *LargeNodeUpdateRows) appendWithMapper(ctx context.Context, node *graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	addedKindIDs, err := schemaManager.AssertKinds(ctx, node.Kinds)
 	if err != nil {
 		return fmt.Errorf("mapping added kinds for node %d: %w", node.ID, err)
@@ -262,9 +288,9 @@ func (s *LargeNodeUpdateRows) Append(ctx context.Context, node *graph.Node, sche
 }
 
 // AppendAll encodes every node in the slice and appends its row to the accumulator.
-func (s *LargeNodeUpdateRows) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *LargeNodeUpdateRows) appendAllWithMapper(ctx context.Context, nodes []*graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	for _, node := range nodes {
-		if err := s.Append(ctx, node, schemaManager, kindIDEncoder); err != nil {
+		if err := s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder); err != nil {
 			return err
 		}
 	}
@@ -288,6 +314,7 @@ func (s *batch) UpdateNodes(nodes []*graph.Node) error {
 	return nil
 }
 
+// flushNodeDeleteBuffer deletes the buffered node IDs and clears the buffer after a successful execution.
 func (s *batch) flushNodeDeleteBuffer() error {
 	if _, err := s.innerTransaction.conn.Exec(s.ctx, deleteNodeWithIDStatement, s.nodeDeletionBuffer); err != nil {
 		return err
@@ -297,6 +324,7 @@ func (s *batch) flushNodeDeleteBuffer() error {
 	return nil
 }
 
+// flushRelationshipDeleteBuffer deletes the buffered relationship IDs and clears the buffer after a successful execution.
 func (s *batch) flushRelationshipDeleteBuffer() error {
 	if _, err := s.innerTransaction.conn.Exec(s.ctx, deleteEdgeWithIDStatement, s.relationshipDeletionBuffer); err != nil {
 		return err
@@ -306,6 +334,7 @@ func (s *batch) flushRelationshipDeleteBuffer() error {
 	return nil
 }
 
+// flushNodeCreateBuffer rejects mixed ID allocation modes and dispatches the buffered nodes to the matching insert path.
 func (s *batch) flushNodeCreateBuffer() error {
 	var (
 		withoutIDs = false
@@ -331,6 +360,7 @@ func (s *batch) flushNodeCreateBuffer() error {
 	return s.flushNodeCreateBufferWithIDs()
 }
 
+// flushNodeCreateBufferWithIDs inserts buffered nodes whose IDs were assigned by the caller.
 func (s *batch) flushNodeCreateBufferWithIDs() error {
 	var (
 		numCreates    = len(s.nodeCreateBuffer)
@@ -345,7 +375,7 @@ func (s *batch) flushNodeCreateBufferWithIDs() error {
 	for idx, nextNode := range s.nodeCreateBuffer {
 		nodeIDs[idx] = nextNode.ID.Uint64()
 
-		if mappedKindIDs, err := s.schemaManager.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
+		if mappedKindIDs, err := s.innerTransaction.kindMapper.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
 			return fmt.Errorf("unable to map kinds %w", err)
 		} else {
 			kindIDSlices[idx] = kindIDEncoder.Encode(mappedKindIDs)
@@ -368,6 +398,7 @@ func (s *batch) flushNodeCreateBufferWithIDs() error {
 	return nil
 }
 
+// flushNodeCreateBufferWithoutIDs inserts buffered nodes using database-generated IDs.
 func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 	var (
 		numCreates    = len(s.nodeCreateBuffer)
@@ -379,7 +410,7 @@ func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 	)
 
 	for idx, nextNode := range s.nodeCreateBuffer {
-		if mappedKindIDs, err := s.schemaManager.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
+		if mappedKindIDs, err := s.innerTransaction.kindMapper.AssertKinds(s.ctx, nextNode.Kinds); err != nil {
 			return fmt.Errorf("unable to map kinds %w", err)
 		} else {
 			kindIDSlices[idx] = kindIDEncoder.Encode(mappedKindIDs)
@@ -402,19 +433,39 @@ func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 	return nil
 }
 
+// flushNodeUpsertBatch validates and executes one identity-based node upsert batch for the target graph.
 func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 	parameters := NewNodeUpsertParameters(len(updates.Updates))
 
-	if err := parameters.AppendAll(s.ctx, updates, s.schemaManager, s.kindIDEncoder); err != nil {
+	if err := parameters.appendAllWithMapper(s.ctx, updates, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
 		return err
 	}
 
+	for _, update := range updates.Updates {
+		if len(update.Node.DeletedKinds) > 0 {
+			// PostgreSQL batches normally autocommit each flush. The upsert and
+			// its follow-up removal must succeed or fail together within a flush.
+			tx, err := s.innerTransaction.conn.Begin(s.ctx)
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback(s.ctx)
+			if err := s.flushNodeUpsertBatchWithDriver(updates, parameters, tx); err != nil {
+				return err
+			}
+			return tx.Commit(s.ctx)
+		}
+	}
+	return s.flushNodeUpsertBatchWithDriver(updates, parameters, s.innerTransaction.conn)
+}
+
+func (s *batch) flushNodeUpsertBatchWithDriver(updates *sql.NodeUpdateBatch, parameters *NodeUpsertParameters, executor driver) error {
 	if graphTarget, err := s.innerTransaction.getTargetGraph(); err != nil {
 		return err
 	} else {
 		query := sql.FormatNodeUpsert(graphTarget, updates.IdentityProperties)
 
-		if rows, err := s.innerTransaction.conn.Query(s.ctx, query, parameters.Format(graphTarget)...); err != nil {
+		if rows, err := executor.Query(s.ctx, query, parameters.Format(graphTarget)...); err != nil {
 			return err
 		} else {
 			defer rows.Close()
@@ -432,12 +483,32 @@ func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
 			if err := rows.Err(); err != nil {
 				return err
 			}
+			rows.Close()
 		}
 	}
 
+	if removals := nodeUpsertKindRemovals(updates); len(removals) > 0 {
+		return s.flushNodeUpdateBatchWithDriver(removals, executor)
+	}
 	return nil
 }
 
+// nodeUpsertKindRemovals binds kind-removal intent to the IDs resolved by the
+// upsert. Apply these through the existing update-by-ID path in the same
+// transaction; an upsert's conflict clause only merges properties and kinds.
+func nodeUpsertKindRemovals(updates *sql.NodeUpdateBatch) []*graph.Node {
+	var removals []*graph.Node
+	for _, update := range updates.Updates {
+		if len(update.Node.DeletedKinds) > 0 {
+			node := graph.NewNode(update.IDFuture.Value, graph.NewProperties())
+			node.DeletedKinds = update.Node.DeletedKinds.Copy()
+			removals = append(removals, node)
+		}
+	}
+	return removals
+}
+
+// tryFlushNodeUpdateByBuffer validates, writes, and clears the buffered identity-based node updates.
 func (s *batch) tryFlushNodeUpdateByBuffer() error {
 	if updates, err := sql.ValidateNodeUpdateByBatch(s.nodeUpdateByBuffer); err != nil {
 		return err
@@ -449,10 +520,15 @@ func (s *batch) tryFlushNodeUpdateByBuffer() error {
 	return nil
 }
 
+// flushNodeUpdateBatch writes complete node replacements for the supplied nodes.
 func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
+	return s.flushNodeUpdateBatchWithDriver(nodes, s.innerTransaction.conn)
+}
+
+func (s *batch) flushNodeUpdateBatchWithDriver(nodes []*graph.Node, executor driver) error {
 	parameters := NewNodeUpdateParameters(len(nodes))
 
-	if err := parameters.AppendAll(s.ctx, nodes, s.schemaManager, s.kindIDEncoder); err != nil {
+	if err := parameters.appendAllWithMapper(s.ctx, nodes, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
 		return err
 	}
 
@@ -461,7 +537,7 @@ func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
 	} else {
 		query := sql.FormatNodesUpdate(graphTarget)
 
-		if rows, err := s.innerTransaction.conn.Query(s.ctx, query, parameters.Format()...); err != nil {
+		if rows, err := executor.Query(s.ctx, query, parameters.Format()...); err != nil {
 			return err
 		} else {
 			rows.Close()
@@ -471,6 +547,7 @@ func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
 	}
 }
 
+// tryFlushNodeUpdateBuffer writes and clears the buffered complete node updates.
 func (s *batch) tryFlushNodeUpdateBuffer() error {
 	if err := s.flushNodeUpdateBatch(s.nodeUpdateBuffer); err != nil {
 		return err
@@ -508,7 +585,7 @@ func (s *NodeUpdateParameters) Format() []any {
 	}
 }
 
-func (s *NodeUpdateParameters) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpdateParameters) appendWithMapper(ctx context.Context, node *graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	s.NodeIDs = append(s.NodeIDs, node.ID)
 
 	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, node.Kinds); err != nil {
@@ -534,9 +611,9 @@ func (s *NodeUpdateParameters) Append(ctx context.Context, node *graph.Node, sch
 	return nil
 }
 
-func (s *NodeUpdateParameters) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpdateParameters) appendAllWithMapper(ctx context.Context, nodes []*graph.Node, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	for _, node := range nodes {
-		if err := s.Append(ctx, node, schemaManager, kindIDEncoder); err != nil {
+		if err := s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder); err != nil {
 			return err
 		}
 	}
@@ -566,7 +643,7 @@ func (s *NodeUpsertParameters) Format(graphTarget model.Graph) []any {
 	}
 }
 
-func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdate, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpsertParameters) appendWithMapper(ctx context.Context, update *sql.NodeUpdate, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	s.IDFutures = append(s.IDFutures, update.IDFuture)
 
 	if mappedKindIDs, err := schemaManager.AssertKinds(ctx, update.Node.Kinds); err != nil {
@@ -584,9 +661,9 @@ func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdat
 	return nil
 }
 
-func (s *NodeUpsertParameters) AppendAll(ctx context.Context, updates *sql.NodeUpdateBatch, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+func (s *NodeUpsertParameters) appendAllWithMapper(ctx context.Context, updates *sql.NodeUpdateBatch, schemaManager KindMapper, kindIDEncoder Int2ArrayEncoder) error {
 	for _, nextUpdate := range updates.Updates {
-		if err := s.Append(ctx, nextUpdate, schemaManager, kindIDEncoder); err != nil {
+		if err := s.appendWithMapper(ctx, nextUpdate, schemaManager, kindIDEncoder); err != nil {
 			return err
 		}
 	}
@@ -620,7 +697,7 @@ func (s *RelationshipUpdateByParameters) Format(graphTarget model.Graph) []any {
 	}
 }
 
-func (s *RelationshipUpdateByParameters) Append(ctx context.Context, update *sql.RelationshipUpdate, schemaManager *SchemaManager) error {
+func (s *RelationshipUpdateByParameters) appendWithMapper(ctx context.Context, update *sql.RelationshipUpdate, schemaManager KindMapper) error {
 	s.StartIDs = append(s.StartIDs, update.StartID.Value)
 	s.EndIDs = append(s.EndIDs, update.EndID.Value)
 
@@ -638,9 +715,9 @@ func (s *RelationshipUpdateByParameters) Append(ctx context.Context, update *sql
 	return nil
 }
 
-func (s *RelationshipUpdateByParameters) AppendAll(ctx context.Context, updates *sql.RelationshipUpdateBatch, schemaManager *SchemaManager) error {
+func (s *RelationshipUpdateByParameters) appendAllWithMapper(ctx context.Context, updates *sql.RelationshipUpdateBatch, schemaManager KindMapper) error {
 	for _, nextUpdate := range updates.Updates {
-		if err := s.Append(ctx, nextUpdate, schemaManager); err != nil {
+		if err := s.appendWithMapper(ctx, nextUpdate, schemaManager); err != nil {
 			return err
 		}
 	}
@@ -648,6 +725,7 @@ func (s *RelationshipUpdateByParameters) AppendAll(ctx context.Context, updates 
 	return nil
 }
 
+// flushRelationshipUpdateByBuffer upserts prerequisite nodes and then applies identity-based relationship updates.
 func (s *batch) flushRelationshipUpdateByBuffer(updates *sql.RelationshipUpdateBatch) error {
 	if err := s.flushNodeUpsertBatch(updates.NodeUpdates); err != nil {
 		return err
@@ -655,7 +733,7 @@ func (s *batch) flushRelationshipUpdateByBuffer(updates *sql.RelationshipUpdateB
 
 	parameters := NewRelationshipUpdateByParameters(len(updates.Updates))
 
-	if err := parameters.AppendAll(s.ctx, updates, s.schemaManager); err != nil {
+	if err := parameters.appendAllWithMapper(s.ctx, updates, s.innerTransaction.kindMapper); err != nil {
 		return err
 	}
 
@@ -672,6 +750,7 @@ func (s *batch) flushRelationshipUpdateByBuffer(updates *sql.RelationshipUpdateB
 	return nil
 }
 
+// tryFlushRelationshipUpdateByBuffer validates, writes, and clears the buffered identity-based relationship updates.
 func (s *batch) tryFlushRelationshipUpdateByBuffer() error {
 	if updateBatch, err := sql.ValidateRelationshipUpdateByBatch(s.relationshipUpdateByBuffer); err != nil {
 		return err
@@ -683,13 +762,22 @@ func (s *batch) tryFlushRelationshipUpdateByBuffer() error {
 	return nil
 }
 
+// relationshipCreateBatch stores column-oriented values for one relationship insert statement.
 type relationshipCreateBatch struct {
-	startIDs         []uint64
-	endIDs           []uint64
-	edgeKindIDs      []int16
+	// startIDs contains each relationship's start-node identifier in insert-row order.
+	startIDs []uint64
+
+	// endIDs contains each relationship's end-node identifier in insert-row order.
+	endIDs []uint64
+
+	// edgeKindIDs contains each relationship's database kind identifier in insert-row order.
+	edgeKindIDs []int16
+
+	// edgePropertyBags contains each relationship's JSONB properties in insert-row order.
 	edgePropertyBags []pgtype.JSONB
 }
 
+// newRelationshipCreateBatch allocates relationship insert columns with capacity for size rows.
 func newRelationshipCreateBatch(size int) *relationshipCreateBatch {
 	return &relationshipCreateBatch{
 		startIDs:         make([]uint64, 0, size),
@@ -717,18 +805,35 @@ func (s *relationshipCreateBatch) EncodeProperties(edgePropertiesBatch []*graph.
 	return nil
 }
 
+// relationshipCreateBatchBuilder coalesces duplicate relationship keys while retaining their merged properties.
 type relationshipCreateBatchBuilder struct {
-	keyToEdgeID             map[string]uint64
+	// keyToPropertiesIndex locates the property bag associated with each unique relationship key.
+	keyToPropertiesIndex map[relationshipCreateKey]int
+
+	// relationshipUpdateBatch accumulates the column values emitted for unique relationship keys.
 	relationshipUpdateBatch *relationshipCreateBatch
-	edgePropertiesIndex     map[uint64]int
-	edgePropertiesBatch     []*graph.Properties
+
+	// edgePropertiesBatch retains mergeable properties parallel to relationshipUpdateBatch rows.
+	edgePropertiesBatch []*graph.Properties
 }
 
+// relationshipCreateKey identifies a relationship by endpoints and kind for conflict coalescing.
+type relationshipCreateKey struct {
+	// startID identifies the relationship's starting node.
+	startID graph.ID
+
+	// endID identifies the relationship's ending node.
+	endID graph.ID
+
+	// kind identifies the relationship kind independently of its property bag.
+	kind string
+}
+
+// newRelationshipCreateBatchBuilder allocates a conflict index and column buffers for size relationship inputs.
 func newRelationshipCreateBatchBuilder(size int) *relationshipCreateBatchBuilder {
 	return &relationshipCreateBatchBuilder{
-		keyToEdgeID:             map[string]uint64{},
+		keyToPropertiesIndex:    map[relationshipCreateKey]int{},
 		relationshipUpdateBatch: newRelationshipCreateBatch(size),
-		edgePropertiesIndex:     map[uint64]int{},
 	}
 }
 
@@ -736,21 +841,19 @@ func (s *relationshipCreateBatchBuilder) Build() (*relationshipCreateBatch, erro
 	return s.relationshipUpdateBatch, s.relationshipUpdateBatch.EncodeProperties(s.edgePropertiesBatch)
 }
 
+// Add coalesces edge into the relationship batch, merging properties when its endpoints and kind repeat.
 func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper KindMapper, edge *graph.Relationship) error {
-	keyBuilder := strings.Builder{}
+	key := relationshipCreateKey{
+		startID: edge.StartID,
+		endID:   edge.EndID,
+		kind:    edge.Kind.String(),
+	}
 
-	keyBuilder.WriteString(edge.StartID.String())
-	keyBuilder.WriteString(edge.EndID.String())
-	keyBuilder.WriteString(edge.Kind.String())
-
-	key := keyBuilder.String()
-
-	if existingPropertiesIdx, hasExisting := s.keyToEdgeID[key]; hasExisting {
+	if existingPropertiesIdx, hasExisting := s.keyToPropertiesIndex[key]; hasExisting {
 		s.edgePropertiesBatch[existingPropertiesIdx].Merge(edge.Properties)
 	} else {
 		var (
 			startID        = edge.StartID.Uint64()
-			edgeID         = edge.ID.Uint64()
 			endID          = edge.EndID.Uint64()
 			edgeProperties = edge.Properties.Clone()
 		)
@@ -761,20 +864,19 @@ func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper Kin
 			s.relationshipUpdateBatch.Add(startID, endID, edgeKindID)
 		}
 
-		s.keyToEdgeID[key] = edgeID
-
+		s.keyToPropertiesIndex[key] = len(s.edgePropertiesBatch)
 		s.edgePropertiesBatch = append(s.edgePropertiesBatch, edgeProperties)
-		s.edgePropertiesIndex[edgeID] = len(s.edgePropertiesBatch) - 1
 	}
 
 	return nil
 }
 
+// flushRelationshipCreateBuffer coalesces duplicate keys, inserts the resulting relationships, and clears the input buffer.
 func (s *batch) flushRelationshipCreateBuffer() error {
 	batchBuilder := newRelationshipCreateBatchBuilder(len(s.relationshipCreateBuffer))
 
 	for _, nextRel := range s.relationshipCreateBuffer {
-		if err := batchBuilder.Add(s.ctx, s.schemaManager, nextRel); err != nil {
+		if err := batchBuilder.Add(s.ctx, s.innerTransaction.kindMapper, nextRel); err != nil {
 			return err
 		}
 	}
@@ -784,7 +886,7 @@ func (s *batch) flushRelationshipCreateBuffer() error {
 	} else if graphTarget, err := s.innerTransaction.getTargetGraph(); err != nil {
 		return err
 	} else if _, err := s.innerTransaction.conn.Exec(s.ctx, createEdgeBatchStatement, graphTarget.ID, createBatch.startIDs, createBatch.endIDs, createBatch.edgeKindIDs, createBatch.edgePropertyBags); err != nil {
-		slog.Info(fmt.Sprintf("Num merged property bags: %d - Num edge keys: %d - StartID batch size: %d", len(batchBuilder.edgePropertiesIndex), len(batchBuilder.keyToEdgeID), len(batchBuilder.relationshipUpdateBatch.startIDs)))
+		slog.Info(fmt.Sprintf("Num property bags: %d - Num edge keys: %d - StartID batch size: %d", len(batchBuilder.edgePropertiesBatch), len(batchBuilder.keyToPropertiesIndex), len(batchBuilder.relationshipUpdateBatch.startIDs)))
 		return err
 	}
 
@@ -792,6 +894,7 @@ func (s *batch) flushRelationshipCreateBuffer() error {
 	return nil
 }
 
+// tryFlush writes any mutation buffer whose length exceeds batchWriteSize.
 func (s *batch) tryFlush(batchWriteSize int) error {
 	if len(s.nodeUpdateByBuffer) > batchWriteSize {
 		if err := s.tryFlushNodeUpdateByBuffer(); err != nil {
@@ -877,4 +980,44 @@ func (s *batch) DeleteRelationship(id graph.ID) error {
 
 func (s *batch) Close() {
 	s.innerTransaction.Close()
+}
+
+// Append retains the public schema-manager entry point.
+func (s *LargeNodeUpdateRows) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *LargeNodeUpdateRows) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendAllWithMapper(ctx, nodes, schemaManager, kindIDEncoder)
+}
+
+// Append retains the public schema-manager entry point.
+func (s *NodeUpdateParameters) Append(ctx context.Context, node *graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendWithMapper(ctx, node, schemaManager, kindIDEncoder)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *NodeUpdateParameters) AppendAll(ctx context.Context, nodes []*graph.Node, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendAllWithMapper(ctx, nodes, schemaManager, kindIDEncoder)
+}
+
+// Append retains the public schema-manager entry point.
+func (s *NodeUpsertParameters) Append(ctx context.Context, update *sql.NodeUpdate, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendWithMapper(ctx, update, schemaManager, kindIDEncoder)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *NodeUpsertParameters) AppendAll(ctx context.Context, updates *sql.NodeUpdateBatch, schemaManager *SchemaManager, kindIDEncoder Int2ArrayEncoder) error {
+	return s.appendAllWithMapper(ctx, updates, schemaManager, kindIDEncoder)
+}
+
+// Append retains the public schema-manager entry point.
+func (s *RelationshipUpdateByParameters) Append(ctx context.Context, update *sql.RelationshipUpdate, schemaManager *SchemaManager) error {
+	return s.appendWithMapper(ctx, update, schemaManager)
+}
+
+// AppendAll retains the public schema-manager entry point.
+func (s *RelationshipUpdateByParameters) AppendAll(ctx context.Context, updates *sql.RelationshipUpdateBatch, schemaManager *SchemaManager) error {
+	return s.appendAllWithMapper(ctx, updates, schemaManager)
 }

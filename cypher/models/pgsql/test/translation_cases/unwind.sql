@@ -18,11 +18,12 @@
 with s0 as (select array [1, 2, 3]::int8[] as i0) select i1 as x from s0, unnest(i0) as i1;
 
 -- case: match (n:NodeKind1) with collect(n.name) as names unwind names as name return name
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(((s1.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1) select i1 as name from s0, unnest(i0) as i1;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(nullif(((s1.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as i0 from s1) select i1 as name from s0, unnest(i0) as i1;
 
 -- case: match (n:NodeKind1) with collect(n.name) as names unwind names as name with name where name starts with 'test' return name
--- pgsql_params:{"__strlit0":"test%"}
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(((s1.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1), s2 as (select i1 as i1 from s0, unnest(i0) as i1 where (i1 like @__strlit0::text)) select s2.i1 as name from s2;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"string","__strlit2":"test%"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(nullif(((s1.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as i0 from s1), s2 as (select i1 as i1 from s0, unnest(i0) as i1 where (((jsonb_typeof(nullif((i1)::jsonb, (@__strlit0::text)::jsonb)::jsonb) = @__strlit1::text and nullif((i1)::jsonb, (@__strlit0::text)::jsonb)::jsonb #>> array []::text[] like @__strlit2::text) or (not (jsonb_typeof(nullif((i1)::jsonb, (@__strlit0::text)::jsonb)::jsonb) = @__strlit1::text) and null)))) select s2.i1 as name from s2;
 
 -- case: with ['a', 'b', 'c'] as names unwind names as name return name
 -- pgsql_params:{"__strlit0":"a","__strlit1":"b","__strlit2":"c"}
@@ -35,13 +36,14 @@ with s0 as (select array [1, 2, 3]::int8[] as i0) select i1 as x from s0, unnest
 with s0 as (select array [1, 2, 3, 1, 2]::int8[] as i0) select distinct i1 as x from s0, unnest(i0) as i1;
 
 -- case: with [1, 2, 3] as ids unwind ids as x return count(x)
-with s0 as (select array [1, 2, 3]::int8[] as i0) select count(i1)::int8 from s0, unnest(i0) as i1;
+with s0 as (select array [1, 2, 3]::int8[] as i0) select count(i1)::int8 as "count(x)" from s0, unnest(i0) as i1;
 
 -- case: match (n:NodeKind1) with collect(n.name) as names unwind names as name match (m:NodeKind2) where m.name = name return m
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(((s1.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s1), s2 as (select s0.i0 as i0, i1 as i1, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, unnest(i0) as i1, node n1 where ((n1.properties ->> E'name') = i1) and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s2.n1 as m from s2;
+-- pgsql_params:{"__strlit0":"null"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select array_remove(coalesce(array_agg(nullif(((s1.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as i0 from s1), s2 as (select s0.i0 as i0, i1 as i1, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s0, unnest(i0) as i1, node n1 where (nullif((n1.properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb = nullif((i1)::jsonb, (@__strlit0::text)::jsonb)::jsonb) and n1.kind_ids operator (pg_catalog.@>) array [2]::int2[]) select s2.n1 as m from s2;
 
 -- case: with [1, 2, 3] as ids unwind ids as x with x where x > 1 return x
-with s0 as (select array [1, 2, 3]::int8[] as i0), s1 as (select i1 as i1 from s0, unnest(i0) as i1 where (i1 > 1)) select s1.i1 as x from s1;
+with s0 as (select array [1, 2, 3]::int8[] as i0), s1 as (select i1 as i1 from s0, unnest(i0) as i1 where ((i1)::int8 > 1)) select s1.i1 as x from s1;
 
 -- case: with [1, 2, 3] as ids unwind ids as x return x limit 2
 with s0 as (select array [1, 2, 3]::int8[] as i0) select i1 as x from s0, unnest(i0) as i1 limit 2;
@@ -66,10 +68,10 @@ with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select i0 as kind, count(s0.n0)::int8 as count from s0, unnest((array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[]) as i0 group by i0 order by kind;
 
 -- case: match (au:AZUser) where au.name contains "ADMIN" match (u:User) where u.name contains "ADMIN" WITH COLLECT(u.name) + COLLECT(au.azname) as temp UNWIND temp as usernames return usernames
--- pgsql_params:{"__strlit0":"%ADMIN%"}
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where ((n0.properties ->> E'name') like @__strlit0::text) and n0.kind_ids operator (pg_catalog.@>) array [32]::int2[]), s2 as (select s1.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s1, node n1 where ((n1.properties ->> E'name') like @__strlit0::text) and n1.kind_ids operator (pg_catalog.@>) array [6]::int2[]) select array_remove(coalesce(array_agg(((s2.n1).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray || array_remove(coalesce(array_agg(((s2.n0).properties ->> E'azname'))::anyarray, array []::text[])::anyarray, null)::anyarray as i0 from s2) select i1 as usernames from s0, unnest(i0) as i1;
+-- pgsql_params:{"__strlit0":"string","__strlit1":"%ADMIN%","__strlit2":"null"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (((jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text and (n0.properties ->> E'name') like @__strlit1::text) or (not (jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text) and null))) and n0.kind_ids operator (pg_catalog.@>) array [32]::int2[]), s2 as (select s1.n0 as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from s1, node n1 where (((jsonb_typeof((n1.properties -> E'name')) = @__strlit0::text and (n1.properties ->> E'name') like @__strlit1::text) or (not (jsonb_typeof((n1.properties -> E'name')) = @__strlit0::text) and null))) and n1.kind_ids operator (pg_catalog.@>) array [6]::int2[]) select array_remove(coalesce(array_agg(nullif(((s2.n1).properties -> E'name'), (@__strlit2::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] || array_remove(coalesce(array_agg(nullif(((s2.n0).properties -> E'azname'), (@__strlit2::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] as i0 from s2) select i1 as usernames from s0, unnest(i0) as i1;
 
 -- case: MATCH (n) WITH collect(n.name) + ['tail'] AS names UNWIND names AS name RETURN name
--- pgsql_params:{"__strlit0":"tail"}
-with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select array_remove(coalesce(array_agg(((s1.n0).properties ->> E'name'))::anyarray, array []::text[])::anyarray, null)::anyarray || array [@__strlit0::text]::text[] as i0 from s1) select i1 as name from s0, unnest(i0) as i1;
+-- pgsql_params:{"__strlit0":"null","__strlit1":"tail"}
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0) select array_remove(coalesce(array_agg(nullif(((s1.n0).properties -> E'name'), (@__strlit0::text)::jsonb)::jsonb)::jsonb[], array []::jsonb[])::jsonb[], null)::jsonb[] || array [to_jsonb((@__strlit1::text)::text)::jsonb]::jsonb[] as i0 from s1) select i1 as name from s0, unnest(i0) as i1;
 

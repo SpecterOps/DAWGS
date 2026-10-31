@@ -111,25 +111,7 @@ func countStoreEndpointJoin(nodeAlias pgsql.Identifier, edgeEndpoint pgsql.Ident
 }
 
 func (s *Translator) countStoreNodeKindConstraint(kinds graph.Kinds) (pgsql.Expression, error) {
-	if len(kinds) == 0 {
-		return nil, nil
-	}
-
-	kindIDs, err := s.kindMapper.MapKinds(kinds)
-	if err != nil {
-		return nil, err
-	}
-
-	kindIDsLiteral, err := pgsql.AsLiteral(kindIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	return pgsql.NewBinaryExpression(
-		pgsql.CompoundIdentifier{countStoreNodeAlias, pgsql.ColumnKindIDs},
-		pgsql.OperatorPGArrayLHSContainsRHS,
-		kindIDsLiteral,
-	), nil
+	return s.nodeKindConstraint(countStoreNodeAlias, kinds)
 }
 
 func (s *Translator) countStoreEdgeKindConstraint(kinds graph.Kinds) (pgsql.Expression, error) {
@@ -137,7 +119,7 @@ func (s *Translator) countStoreEdgeKindConstraint(kinds graph.Kinds) (pgsql.Expr
 		return nil, nil
 	}
 
-	kindIDs, err := s.kindMapper.MapKinds(kinds)
+	kindIDs, _, err := s.kindMapper.MapMatchKinds(kinds)
 	if err != nil {
 		return nil, err
 	}

@@ -277,6 +277,22 @@ func NewReadingClauseVisitor() *ReadingClauseVisitor {
 	}
 }
 
+// Procedure calls have no shared AST or execution representation. Isolate the
+// invocation subtree so arguments and YIELD filters cannot alter the query AST.
+func (s *ReadingClauseVisitor) EnterOC_InQueryCall(ctx *parser.OC_InQueryCallContext) {
+	s.ctx.AddErrors(SyntaxError{
+		Line:            ctx.GetStart().GetLine(),
+		Column:          ctx.GetStart().GetColumn(),
+		OffendingSymbol: ctx.GetText(),
+		Message:         "in-query CALL is not supported",
+	})
+	s.ctx.Enter(&BaseVisitor{})
+}
+
+func (s *ReadingClauseVisitor) ExitOC_InQueryCall(ctx *parser.OC_InQueryCallContext) {
+	s.ctx.Exit()
+}
+
 func (s *ReadingClauseVisitor) EnterOC_Match(ctx *parser.OC_MatchContext) {
 	s.ctx.Enter(NewMatchVisitor(ctx))
 }
@@ -402,6 +418,22 @@ type QueryVisitor struct {
 	BaseVisitor
 
 	Query *cypher.RegularQuery
+}
+
+// Standalone procedures have no representation in RegularQuery. Reject them
+// before callers can mistake a nil AST for a successfully parsed query.
+func (s *QueryVisitor) EnterOC_StandaloneCall(ctx *parser.OC_StandaloneCallContext) {
+	s.ctx.AddErrors(SyntaxError{
+		Line:            ctx.GetStart().GetLine(),
+		Column:          ctx.GetStart().GetColumn(),
+		OffendingSymbol: ctx.GetText(),
+		Message:         "standalone CALL is not supported",
+	})
+	s.ctx.Enter(&BaseVisitor{})
+}
+
+func (s *QueryVisitor) ExitOC_StandaloneCall(ctx *parser.OC_StandaloneCallContext) {
+	s.ctx.Exit()
 }
 
 func (s *QueryVisitor) EnterOC_RegularQuery(ctx *parser.OC_RegularQueryContext) {
@@ -706,6 +738,7 @@ func (s *PropertyExpressionVisitor) EnterOC_PropertyKeyName(ctx *parser.OC_Prope
 	s.ctx.Enter(&SymbolicNameOrReservedWordVisitor{})
 }
 
+// ExitOC_PropertyKeyName assigns the parsed key to the property expression under construction.
 func (s *PropertyExpressionVisitor) ExitOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNameContext) {
 	s.PropertyLookup.SetSymbol(extractPropertyKeyName(s.ctx, ctx))
 }

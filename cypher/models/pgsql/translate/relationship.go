@@ -8,6 +8,7 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 )
 
+// translateRelationshipPattern validates a relationship pattern and records its binding, kinds, and range.
 func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.RelationshipPattern) error {
 	var (
 		currentQueryPart = s.query.CurrentPart()
@@ -37,10 +38,15 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 
 		// Capture the kind matchers for this relationship pattern
 		if len(relationshipPattern.Kinds) > 0 {
-			if kindIDs, err := s.kindMapper.MapKinds(relationshipPattern.Kinds); err != nil {
+			if kindIDs, _, err := s.kindMapper.MapMatchKinds(relationshipPattern.Kinds); err != nil {
 				return fmt.Errorf("failed to translate kinds: %w", err)
 			} else {
 				for _, edgeBinding := range edgeBindings {
+					for _, step := range patternPart.TraversalSteps {
+						if step.Edge == edgeBinding && step.Expansion != nil {
+							step.Expansion.RelationshipKindIDs = append([]int16(nil), kindIDs...)
+						}
+					}
 					if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(edgeBinding.Identifier), pgsql.NewBinaryExpression(
 						pgsql.CompoundIdentifier{edgeBinding.Identifier, pgsql.ColumnKindID},
 						pgsql.OperatorEquals,
@@ -56,6 +62,7 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 	return nil
 }
 
+// collectCreateEdgePattern records the endpoints, kind, properties, and binding needed to create one edge.
 func (s *Translator) collectCreateEdgePattern(relationshipPattern *cypher.RelationshipPattern, part *PatternPart, bindingResult BindingResult) error {
 	var (
 		queryPart = s.query.CurrentPart()
@@ -99,6 +106,7 @@ func (s *Translator) collectCreateEdgePattern(relationshipPattern *cypher.Relati
 	return nil
 }
 
+// exactRangeExpansionDecision returns the planned exact-range unrolling decision for target.
 func (s *Translator) exactRangeExpansionDecision(sourceTarget optimize.TraversalStepTarget, hasSourceTarget bool, relationshipPattern *cypher.RelationshipPattern) (optimize.ExactRangeExpansionDecision, bool) {
 	if !hasSourceTarget || relationshipPattern == nil {
 		return optimize.ExactRangeExpansionDecision{}, false
@@ -112,6 +120,7 @@ func (s *Translator) exactRangeExpansionDecision(sourceTarget optimize.Traversal
 	return decision, true
 }
 
+// translateExactRangeRelationshipPatternToSteps expands a fixed-depth relationship range into synthetic single-hop traversal steps.
 func (s *Translator) translateExactRangeRelationshipPatternToSteps(
 	firstEdge *BoundIdentifier,
 	part *PatternPart,
@@ -191,6 +200,7 @@ func (s *Translator) translateExactRangeRelationshipPatternToSteps(
 	return edgeBindings, nil
 }
 
+// translateRelationshipPatternToStep attaches one translated relationship pattern to the current traversal step.
 func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingResult, part *PatternPart, relationshipPattern *cypher.RelationshipPattern) ([]*BoundIdentifier, error) {
 	var (
 		expansion                     *Expansion
@@ -201,6 +211,31 @@ func (s *Translator) translateRelationshipPatternToStep(bindingResult BindingRes
 	)
 
 	if bindingResult.AlreadyBound {
+		if boundEdge := bindingResult.Binding; boundEdge.DataType == pgsql.EdgeComposite {
+			// Each occurrence scans its own edge alias. Keep the Cypher variable
+			// bound to the original value and correlate this scan by identity;
+			// otherwise frame rewriting redirects every join to the carried
+			// composite and leaves the new edge table unconstrained.
+			if scannedEdge, err := s.scope.DefineNew(pgsql.EdgeComposite); err != nil {
+				return nil, err
+			} else if err := s.treeTranslator.AddTranslationConstraint(
+				pgsql.AsIdentifierSet(scannedEdge.Identifier, boundEdge.Identifier),
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{scannedEdge.Identifier, pgsql.ColumnID},
+					pgsql.OperatorEquals,
+					pgsql.CompoundIdentifier{boundEdge.Identifier, pgsql.ColumnID},
+				),
+			); err != nil {
+				return nil, err
+			} else {
+				bindingResult.Binding = scannedEdge
+			}
+		}
+
+		if part.PatternBinding != nil {
+			part.PatternBinding.DependOn(bindingResult.Binding)
+		}
+
 		if isContinuation {
 			// This is a traversal continuation so copy the right node identifier of the preceding step and then
 			// add the new step

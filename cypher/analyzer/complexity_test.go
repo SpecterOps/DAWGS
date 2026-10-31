@@ -45,3 +45,20 @@ func TestQueryFitness(t *testing.T) {
 		}
 	}
 }
+
+// Property lookups over non-variable atoms, such as temporal component access,
+// previously failed complexity measurement with an error; they must measure as
+// ordinary non-selective comparisons instead.
+func TestQueryComplexityAcceptsNonVariablePropertyLookupAtoms(t *testing.T) {
+	for _, query := range []string{
+		`match (n:NodeKind1) where datetime($ts).epochmillis > 0 return n`,
+		`match (n:NodeKind1) where 0 < date(n.d).year return n`,
+		`return datetime('2020-01-01').epochmillis as value`,
+	} {
+		parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+		require.NoError(t, err, query)
+
+		_, err = analyzer.QueryComplexity(parsed)
+		require.NoError(t, err, query)
+	}
+}

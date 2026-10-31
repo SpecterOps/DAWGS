@@ -1,0 +1,2029 @@
+{
+  "families": [
+    {
+      "name": "Cross endpoint predicates through expansion continuation",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "s",
+            "kinds": [
+              "EndpointRoot"
+            ],
+            "properties": {
+              "v": 1,
+              "objectid": "source"
+            }
+          },
+          {
+            "id": "s2",
+            "kinds": [
+              "EndpointRoot"
+            ],
+            "properties": {
+              "v": 99,
+              "objectid": "other"
+            }
+          },
+          {
+            "id": "x",
+            "kinds": [
+              "EndpointMiddle"
+            ],
+            "properties": {
+              "v": 3
+            }
+          },
+          {
+            "id": "g1",
+            "kinds": [
+              "EndpointBoundary"
+            ],
+            "properties": {
+              "v": 99,
+              "objectid": "wanted"
+            }
+          },
+          {
+            "id": "g2",
+            "kinds": [
+              "EndpointBoundary"
+            ],
+            "properties": {
+              "v": 2
+            }
+          },
+          {
+            "id": "g3",
+            "kinds": [
+              "EndpointBoundary"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "d1",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 1
+            }
+          },
+          {
+            "id": "d2",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 2
+            }
+          },
+          {
+            "id": "d3",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 3
+            }
+          },
+          {
+            "id": "e",
+            "kinds": [
+              "EndpointTail"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "s",
+            "end_id": "g1",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "x",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "x",
+            "end_id": "g1",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "g2",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "g3",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s2",
+            "end_id": "g2",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "g1",
+            "end_id": "d1",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "g2",
+            "end_id": "d2",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "g3",
+            "end_id": "d3",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "d1",
+            "end_id": "e",
+            "kind": "EndpointU",
+            "properties": {}
+          },
+          {
+            "start_id": "d2",
+            "end_id": "e",
+            "kind": "EndpointU",
+            "properties": {}
+          },
+          {
+            "start_id": "d3",
+            "end_id": "e",
+            "kind": "EndpointU",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "e",
+            "kind": "EndpointP",
+            "properties": {}
+          },
+          {
+            "start_id": "s2",
+            "end_id": "e",
+            "kind": "EndpointP",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "original absent disjunction",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v = 123 OR g.v = 123 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "disjunction retains both endpoints",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "parameterized disjunction",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v = $value OR g.v = $value RETURN count(*) AS c"
+          },
+          "params": {
+            "value": 99
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "conjunction and grouped disjunction",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.objectid = 'source' AND (s.v = 99 OR g.v = 99) RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "false endpoint equality",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s = g RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "cross endpoint property equality",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v = g.v RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "cross endpoint inequality with null",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v <> g.v RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 5
+          }
+        },
+        {
+          "name": "negated disjunction",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE NOT (s.v = 99 OR g.v = 99) RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 1
+          }
+        },
+        {
+          "name": "two independent endpoint predicates",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE (s.v = 99 OR g.v = 99) AND (s.objectid = 'source' OR g.v = 2) RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 3
+          }
+        },
+        {
+          "name": "inbound expansion with fixed suffix",
+          "vars": {
+            "query": "MATCH (d)<-[:EndpointT]-(g)<-[:EndpointR*1..2]-(s) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "physical inbound expansion followed by hop",
+          "vars": {
+            "query": "MATCH (g)<-[:EndpointR*1..2]-(s)-[:EndpointP]->(d) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 3
+          }
+        },
+        {
+          "name": "zero hop endpoint predicate",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*0..2]->(g)-[:EndpointT]->(d) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 5
+          }
+        },
+        {
+          "name": "two fixed suffix steps",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d)-[:EndpointU]->(e) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "fixed prefix before expansion",
+          "vars": {
+            "query": "MATCH (prefix)-[:EndpointR]->(s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 1
+          }
+        },
+        {
+          "name": "expansion last control",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "fixed only control",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR]->(g)-[:EndpointT]->(d) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 3
+          }
+        },
+        {
+          "name": "carried root and scalar",
+          "vars": {
+            "query": "MATCH (s:EndpointRoot) WHERE s.objectid = 'source' WITH s, 'wanted' AS wanted MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.objectid = wanted OR g.objectid = wanted RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "exact path bag",
+          "vars": {
+            "query": "MATCH p = (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v = 99 OR g.v = 99 RETURN p"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "s",
+                "g1",
+                "d1"
+              ],
+              [
+                "s",
+                "x",
+                "g1",
+                "d1"
+              ],
+              [
+                "s2",
+                "g2",
+                "d2"
+              ],
+              [
+                "x",
+                "g1",
+                "d1"
+              ]
+            ],
+            "row_count": 4
+          }
+        },
+        {
+          "name": "duplicate incoming root rows",
+          "vars": {
+            "query": "UNWIND [1,1] AS duplicate WITH duplicate MATCH p = (s:EndpointRoot)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.objectid = 'source' AND (s.v = 99 OR g.v = 99) RETURN p"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "s",
+                "g1",
+                "d1"
+              ],
+              [
+                "s",
+                "x",
+                "g1",
+                "d1"
+              ],
+              [
+                "s",
+                "g1",
+                "d1"
+              ],
+              [
+                "s",
+                "x",
+                "g1",
+                "d1"
+              ]
+            ],
+            "row_count": 4
+          }
+        },
+        {
+          "name": "undirected fixed suffix",
+          "vars": {
+            "query": "MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]-(d:EndpointEnd) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        },
+        {
+          "name": "already bound suffix endpoint",
+          "vars": {
+            "query": "MATCH (d:EndpointEnd) WITH d MATCH (s)-[:EndpointR*1..2]->(g)-[:EndpointT]->(d) WHERE s.v = 99 OR g.v = 99 RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cross endpoint mutation selection",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "s",
+            "kinds": [
+              "EndpointRoot"
+            ],
+            "properties": {
+              "v": 1,
+              "objectid": "source"
+            }
+          },
+          {
+            "id": "s2",
+            "kinds": [
+              "EndpointRoot"
+            ],
+            "properties": {
+              "v": 99,
+              "objectid": "other"
+            }
+          },
+          {
+            "id": "x",
+            "kinds": [
+              "EndpointMiddle"
+            ],
+            "properties": {
+              "v": 3
+            }
+          },
+          {
+            "id": "g1",
+            "kinds": [
+              "EndpointBoundary"
+            ],
+            "properties": {
+              "v": 99,
+              "objectid": "wanted"
+            }
+          },
+          {
+            "id": "g2",
+            "kinds": [
+              "EndpointBoundary"
+            ],
+            "properties": {
+              "v": 2
+            }
+          },
+          {
+            "id": "g3",
+            "kinds": [
+              "EndpointBoundary"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "d1",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 1
+            }
+          },
+          {
+            "id": "d2",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 2
+            }
+          },
+          {
+            "id": "d3",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 3
+            }
+          },
+          {
+            "id": "e",
+            "kinds": [
+              "EndpointTail"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "EndpointOther"
+            ],
+            "properties": {
+              "v": 1
+            }
+          },
+          {
+            "id": "wrong-property",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 1
+            }
+          },
+          {
+            "id": "missing-property",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 1
+            }
+          },
+          {
+            "id": "wrong-direction",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 1
+            }
+          },
+          {
+            "id": "wrong-edge",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 1
+            }
+          },
+          {
+            "id": "other-root",
+            "kinds": [
+              "EndpointRoot"
+            ],
+            "properties": {
+              "v": 99,
+              "objectid": "decoy"
+            }
+          },
+          {
+            "id": "other-end",
+            "kinds": [
+              "EndpointEnd"
+            ],
+            "properties": {
+              "v": 1
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "s",
+            "end_id": "g1",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "x",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "x",
+            "end_id": "g1",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "g2",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "g3",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "s2",
+            "end_id": "g2",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "g1",
+            "end_id": "d1",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "g2",
+            "end_id": "d2",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "g3",
+            "end_id": "d3",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "d1",
+            "end_id": "e",
+            "kind": "EndpointU",
+            "properties": {}
+          },
+          {
+            "start_id": "d2",
+            "end_id": "e",
+            "kind": "EndpointU",
+            "properties": {}
+          },
+          {
+            "start_id": "d3",
+            "end_id": "e",
+            "kind": "EndpointU",
+            "properties": {}
+          },
+          {
+            "start_id": "s",
+            "end_id": "e",
+            "kind": "EndpointP",
+            "properties": {}
+          },
+          {
+            "start_id": "s2",
+            "end_id": "e",
+            "kind": "EndpointP",
+            "properties": {}
+          },
+          {
+            "start_id": "g1",
+            "end_id": "wrong-kind",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "g1",
+            "end_id": "wrong-property",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": false
+            }
+          },
+          {
+            "start_id": "g1",
+            "end_id": "missing-property",
+            "kind": "EndpointT",
+            "properties": {}
+          },
+          {
+            "start_id": "wrong-direction",
+            "end_id": "g1",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "g1",
+            "end_id": "wrong-edge",
+            "kind": "EndpointOtherT",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "other-root",
+            "end_id": "other-end",
+            "kind": "EndpointR",
+            "properties": {}
+          },
+          {
+            "start_id": "other-end",
+            "end_id": "other-end",
+            "kind": "EndpointT",
+            "properties": {
+              "enabled": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node mutation selects exact targets",
+          "vars": {
+            "query": "MATCH (s:EndpointRoot)-[:EndpointR*1..2]->(g)-[t:EndpointT]->(d:EndpointEnd) WHERE s.objectid = 'source' AND t.enabled = true AND (s.v = $value OR g.v = $value) SET d.selected = true"
+          },
+          "params": {
+            "value": 99
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "s",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 1,
+                      "objectid": "source"
+                    }
+                  },
+                  {
+                    "id": "s2",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "other"
+                    }
+                  },
+                  {
+                    "id": "x",
+                    "kinds": [
+                      "EndpointMiddle"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "g1",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "wanted"
+                    }
+                  },
+                  {
+                    "id": "g2",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "g3",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "d1",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "d2",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "d3",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "e",
+                    "kinds": [
+                      "EndpointTail"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "EndpointOther"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "missing-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-edge",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other-end",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "s",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "x",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "x",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g3",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "d1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g2",
+                    "end": "d2",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g3",
+                    "end": "d3",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "d1",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d2",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d3",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-kind",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-property",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "missing-property",
+                    "kind": "EndpointT",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "g1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-edge",
+                    "kind": "EndpointOtherT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "other-end",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-end",
+                    "end": "other-end",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "relationship mutation selects exact targets",
+          "vars": {
+            "query": "MATCH (s:EndpointRoot)-[:EndpointR*1..2]->(g)-[t:EndpointT]->(d:EndpointEnd) WHERE s.objectid = 'source' AND t.enabled = true AND (s.v = $value OR g.v = $value) SET t.selected = true"
+          },
+          "params": {
+            "value": 99
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "s",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 1,
+                      "objectid": "source"
+                    }
+                  },
+                  {
+                    "id": "s2",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "other"
+                    }
+                  },
+                  {
+                    "id": "x",
+                    "kinds": [
+                      "EndpointMiddle"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "g1",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "wanted"
+                    }
+                  },
+                  {
+                    "id": "g2",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "g3",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "d1",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "d2",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "d3",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "e",
+                    "kinds": [
+                      "EndpointTail"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "EndpointOther"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "missing-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-edge",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other-end",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "s",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "x",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "x",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g3",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "d1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "start": "g2",
+                    "end": "d2",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g3",
+                    "end": "d3",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "d1",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d2",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d3",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-kind",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-property",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "missing-property",
+                    "kind": "EndpointT",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "g1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-edge",
+                    "kind": "EndpointOtherT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "other-end",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-end",
+                    "end": "other-end",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "false mutation leaves complete state",
+          "vars": {
+            "query": "MATCH (s:EndpointRoot)-[:EndpointR*1..2]->(g)-[t:EndpointT]->(d:EndpointEnd) WHERE s.objectid = 'source' AND t.enabled = true AND (s.v = $value OR g.v = $value) SET d.selected = true, t.selected = true"
+          },
+          "params": {
+            "value": 123
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "s",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 1,
+                      "objectid": "source"
+                    }
+                  },
+                  {
+                    "id": "s2",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "other"
+                    }
+                  },
+                  {
+                    "id": "x",
+                    "kinds": [
+                      "EndpointMiddle"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "g1",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "wanted"
+                    }
+                  },
+                  {
+                    "id": "g2",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "g3",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "d1",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "d2",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "d3",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "e",
+                    "kinds": [
+                      "EndpointTail"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "EndpointOther"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "missing-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-edge",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other-end",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "s",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "x",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "x",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g3",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "d1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g2",
+                    "end": "d2",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g3",
+                    "end": "d3",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "d1",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d2",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d3",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-kind",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-property",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "missing-property",
+                    "kind": "EndpointT",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "g1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-edge",
+                    "kind": "EndpointOtherT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "other-end",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-end",
+                    "end": "other-end",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "mixed mutation without return",
+          "vars": {
+            "query": "MATCH (s:EndpointRoot)-[:EndpointR*1..2]->(g)-[t:EndpointT]->(d:EndpointEnd) WHERE s.objectid = 'source' AND t.enabled = true AND (s.v = $value OR g.v = $value) SET d.selected = true, t.selected = true"
+          },
+          "params": {
+            "value": 99
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "s",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 1,
+                      "objectid": "source"
+                    }
+                  },
+                  {
+                    "id": "s2",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "other"
+                    }
+                  },
+                  {
+                    "id": "x",
+                    "kinds": [
+                      "EndpointMiddle"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "g1",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "wanted"
+                    }
+                  },
+                  {
+                    "id": "g2",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "g3",
+                    "kinds": [
+                      "EndpointBoundary"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "d1",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "d2",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 2
+                    }
+                  },
+                  {
+                    "id": "d3",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 3
+                    }
+                  },
+                  {
+                    "id": "e",
+                    "kinds": [
+                      "EndpointTail"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "EndpointOther"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "missing-property",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "wrong-edge",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "EndpointRoot"
+                    ],
+                    "props": {
+                      "v": 99,
+                      "objectid": "decoy"
+                    }
+                  },
+                  {
+                    "id": "other-end",
+                    "kinds": [
+                      "EndpointEnd"
+                    ],
+                    "props": {
+                      "v": 1
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "s",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "x",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "x",
+                    "end": "g1",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "g3",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "g2",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "d1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "start": "g2",
+                    "end": "d2",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g3",
+                    "end": "d3",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "d1",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d2",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "d3",
+                    "end": "e",
+                    "kind": "EndpointU",
+                    "props": {}
+                  },
+                  {
+                    "start": "s",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "s2",
+                    "end": "e",
+                    "kind": "EndpointP",
+                    "props": {}
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-kind",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-property",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "missing-property",
+                    "kind": "EndpointT",
+                    "props": {}
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "g1",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "g1",
+                    "end": "wrong-edge",
+                    "kind": "EndpointOtherT",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "other-end",
+                    "kind": "EndpointR",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-end",
+                    "end": "other-end",
+                    "kind": "EndpointT",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        }
+      ]
+    }
+  ]
+}

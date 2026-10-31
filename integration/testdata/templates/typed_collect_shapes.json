@@ -1,0 +1,4913 @@
+{
+  "families": [
+    {
+      "name": "typed collections and mutations",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "CollectNode"
+            ],
+            "properties": {
+              "tag": "a",
+              "group": "alpha",
+              "seed": "1",
+              "flag": true,
+              "text": "1"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "CollectNode"
+            ],
+            "properties": {
+              "tag": "b",
+              "group": "alpha",
+              "seed": "2",
+              "flag": false,
+              "text": "true"
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "CollectNode"
+            ],
+            "properties": {
+              "tag": "c",
+              "group": "beta",
+              "seed": "2",
+              "flag": false,
+              "text": "[1, 2]"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "CollectNode"
+            ],
+            "properties": {
+              "tag": "missing",
+              "group": "missing"
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "CollectTarget"
+            ],
+            "properties": {
+              "tag": "target",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "role-decoy",
+            "kinds": [
+              "CollectTarget"
+            ],
+            "properties": {
+              "tag": "role-decoy",
+              "role": "keep",
+              "keep": true
+            }
+          },
+          {
+            "id": "kind-decoy",
+            "kinds": [
+              "OtherCollectTarget"
+            ],
+            "properties": {
+              "tag": "kind-decoy",
+              "role": "target",
+              "keep": true
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "CollectTarget"
+            ],
+            "properties": {
+              "tag": "missing-role",
+              "keep": true
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "target",
+            "end_id": "role-decoy",
+            "kind": "CollectEdge",
+            "properties": {
+              "role": "target",
+              "keep": true,
+              "flag": true
+            }
+          },
+          {
+            "start_id": "role-decoy",
+            "end_id": "target",
+            "kind": "CollectEdge",
+            "properties": {
+              "role": "target",
+              "keep": true,
+              "flag": false
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "kind-decoy",
+            "kind": "OtherCollectEdge",
+            "properties": {
+              "role": "target",
+              "keep": true,
+              "flag": false
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "missing-role",
+            "kind": "CollectEdge",
+            "properties": {
+              "role": "keep",
+              "keep": true,
+              "flag": false
+            }
+          },
+          {
+            "start_id": "missing-role",
+            "end_id": "role-decoy",
+            "kind": "CollectEdge",
+            "properties": {
+              "keep": true,
+              "flag": false
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "direct integer",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) RETURN collect(n.x)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "carried integer",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH n.x AS x RETURN collect(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "direct boolean",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) RETURN collect(n.flag)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "carried boolean",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH n.flag AS x RETURN collect(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "direct string",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) RETURN collect(n.text)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                "1"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "carried string",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH n.text AS x RETURN collect(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                "1"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "direct missing",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) RETURN collect(n.absent)"
+          },
+          "assert": {
+            "scalar_values": [
+              []
+            ]
+          }
+        },
+        {
+          "name": "carried missing",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH n.absent AS x RETURN collect(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              []
+            ]
+          }
+        },
+        {
+          "name": "integer unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              1,
+              2,
+              2
+            ]
+          }
+        },
+        {
+          "name": "distinct unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(DISTINCT n.x) AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "name": "boolean unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.flag) AS xs UNWIND xs AS x RETURN x AND true"
+          },
+          "assert": {
+            "scalar_values": [
+              true,
+              false,
+              false
+            ]
+          }
+        },
+        {
+          "name": "text unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.text) AS xs UNWIND xs AS x RETURN toUpper(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              "1",
+              "TRUE",
+              "[1, 2]"
+            ]
+          }
+        },
+        {
+          "name": "arithmetic unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x RETURN x + 1"
+          },
+          "assert": {
+            "scalar_values": [
+              2,
+              3,
+              3
+            ]
+          }
+        },
+        {
+          "name": "integer division unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x RETURN x / 2"
+          },
+          "assert": {
+            "scalar_values": [
+              0,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "name": "recollect",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs UNWIND xs AS x RETURN collect(x)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "nested alias",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs RETURN collect(xs)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                [
+                  1
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty collect",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WHERE n.tag = 'absent' RETURN collect(n.x)"
+          },
+          "assert": {
+            "scalar_values": [
+              []
+            ]
+          }
+        },
+        {
+          "name": "empty unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WHERE n.tag = 'absent' WITH collect(n.x) AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": []
+          }
+        },
+        {
+          "name": "null collect",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized RETURN collect(null)"
+          },
+          "assert": {
+            "scalar_values": [
+              []
+            ]
+          }
+        },
+        {
+          "name": "boolean literal",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized RETURN collect(true)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "list literal",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized RETURN collect([1, 2])"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                [
+                  1,
+                  2
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty list literal",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized RETURN collect([])"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                []
+              ]
+            ]
+          }
+        },
+        {
+          "name": "prepend list",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH ['tail'] + collect(n.text) AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              "tail",
+              "1"
+            ]
+          }
+        },
+        {
+          "name": "append list",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) + ['tail'] AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              "1",
+              "tail"
+            ]
+          }
+        },
+        {
+          "name": "alias append",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs, [3] AS ys WITH xs + ys AS zs UNWIND zs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              1,
+              3
+            ]
+          }
+        },
+        {
+          "name": "combine collections",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) + collect(n.flag) AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              1,
+              true
+            ]
+          }
+        },
+        {
+          "name": "relationship collect",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (a:CollectTarget {tag:'target'})-[r:CollectEdge {role:'target'}]->() RETURN collect(r.flag)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                true
+              ]
+            ]
+          }
+        },
+        {
+          "name": "relationship unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH ()-[r:CollectEdge]->() WITH collect(r.flag) AS xs UNWIND xs AS x RETURN x AND true"
+          },
+          "assert": {
+            "scalar_values": [
+              true,
+              false,
+              false,
+              false
+            ]
+          }
+        },
+        {
+          "name": "membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs RETURN 2 IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "head",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) RETURN head(collect(n.x))"
+          },
+          "assert": {
+            "scalar_values": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "grouped",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) RETURN n.group, size(collect(n.x))"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "alpha",
+                2
+              ],
+              [
+                "beta",
+                1
+              ],
+              [
+                "missing",
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "node SET x",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (t:CollectTarget {role:'target'}) SET t.value = xs"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": [
+                        1
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET x returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (t:CollectTarget {role:'target'}) SET t.value = xs RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": [
+                        1
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET x",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = xs"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": [
+                        1
+                      ]
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET x returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = xs RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": [
+                        1
+                      ]
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET flag",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.flag) AS xs MATCH (t:CollectTarget {role:'target'}) SET t.value = xs"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": [
+                        true
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET flag returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.flag) AS xs MATCH (t:CollectTarget {role:'target'}) SET t.value = xs RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": [
+                        true
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET flag",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.flag) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = xs"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": [
+                        true
+                      ]
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET flag returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.flag) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = xs RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": [
+                        true
+                      ]
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET text",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) AS xs MATCH (t:CollectTarget {role:'target'}) SET t.value = xs"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": [
+                        "1"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET text returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) AS xs MATCH (t:CollectTarget {role:'target'}) SET t.value = xs RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": [
+                        "1"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET text",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = xs"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": [
+                        "1"
+                      ]
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET text returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = xs RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": [
+                        "1"
+                      ]
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE arithmetic",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x CREATE (c:CollectCreated {tag:'created', value:x + 1})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN n.value",
+              "assert": {
+                "scalar_values": [
+                  2,
+                  3,
+                  3
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE empty",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WHERE n.tag = 'absent' WITH collect(n.x) AS xs UNWIND xs AS x CREATE (c:CollectCreated {tag:'created', value:x})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN n.value",
+              "assert": {
+                "scalar_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET unwound arithmetic",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x WITH x WHERE x = 2 MATCH (t:CollectTarget {role:'target'}) SET t.value = x + 1"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET unwound arithmetic",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x WITH x WHERE x = 2 MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = x + 1"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE arithmetic returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x CREATE (c:CollectCreated {tag:'created', value:x + 1}) RETURN c.value"
+          },
+          "assert": {
+            "scalar_values": [
+              2,
+              3,
+              3
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN n.value",
+              "assert": {
+                "scalar_values": [
+                  2,
+                  3,
+                  3
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 3
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE empty returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WHERE n.tag = 'absent' WITH collect(n.x) AS xs UNWIND xs AS x CREATE (c:CollectCreated {tag:'created', value:x}) RETURN c.value"
+          },
+          "assert": {
+            "scalar_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN n.value",
+              "assert": {
+                "scalar_values": []
+              }
+            },
+            {
+              "cypher": "MATCH (n:CollectCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET unwound arithmetic returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x WITH x WHERE x = 2 MATCH (t:CollectTarget {role:'target'}) SET t.value = x + 1 RETURN t"
+          },
+          "assert": {
+            "row_count": 2
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET unwound arithmetic returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x WITH x WHERE x = 2 MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge {role:'target'}]->() SET t.value = x + 1 RETURN t"
+          },
+          "assert": {
+            "row_count": 2
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "direct membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) RETURN 2 IN collect(n.x)"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "boolean membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.flag) AS xs RETURN true IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "typed numeric membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.text) AS xs RETURN 1 IN xs"
+          },
+          "assert": {
+            "scalar_values": [
+              false
+            ]
+          }
+        },
+        {
+          "name": "tail unwind",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH tail(collect(n.x) + [3]) AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "unwind ordered filter",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) AS xs UNWIND xs AS x WITH x WHERE x > 1 RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              2,
+              2
+            ]
+          }
+        },
+        {
+          "name": "append empty",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WITH collect(n.x) + [] AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              1,
+              2,
+              2
+            ]
+          }
+        },
+        {
+          "name": "empty aggregate append",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WHERE n.tag = 'absent' RETURN collect(n.x) + [3]"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty aggregate prepend",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WHERE n.tag = 'absent' RETURN [3] + collect(n.x)"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty aggregate parameter",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode) WHERE n.tag = 'absent' RETURN collect(n.x) + $tail"
+          },
+          "assert": {
+            "scalar_values": [
+              [
+                "tail"
+              ]
+            ]
+          },
+          "params": {
+            "tail": {
+              "$type": "string_list",
+              "prefix": "unused",
+              "count": 0,
+              "include": [
+                "tail"
+              ]
+            }
+          }
+        },
+        {
+          "name": "x property membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (m:CollectNode) WHERE m.x IN xs RETURN m.tag"
+          },
+          "assert": {
+            "scalar_values": [
+              "a"
+            ]
+          }
+        },
+        {
+          "name": "x property membership negated",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (m:CollectNode) WHERE NOT m.x IN xs RETURN m.tag"
+          },
+          "assert": {
+            "scalar_values": [
+              "b",
+              "c"
+            ]
+          }
+        },
+        {
+          "name": "flag property membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.flag) AS xs MATCH (m:CollectNode) WHERE m.flag IN xs RETURN m.tag"
+          },
+          "assert": {
+            "scalar_values": [
+              "a"
+            ]
+          }
+        },
+        {
+          "name": "flag property membership negated",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.flag) AS xs MATCH (m:CollectNode) WHERE NOT m.flag IN xs RETURN m.tag"
+          },
+          "assert": {
+            "scalar_values": [
+              "b",
+              "c"
+            ]
+          }
+        },
+        {
+          "name": "text property membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) AS xs MATCH (m:CollectNode) WHERE m.text IN xs RETURN m.tag"
+          },
+          "assert": {
+            "scalar_values": [
+              "a"
+            ]
+          }
+        },
+        {
+          "name": "text property membership negated",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) AS xs MATCH (m:CollectNode) WHERE NOT m.text IN xs RETURN m.tag"
+          },
+          "assert": {
+            "scalar_values": [
+              "b",
+              "c"
+            ]
+          }
+        },
+        {
+          "name": "numeric collection string property",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (m:CollectNode) WHERE m.text IN xs RETURN m"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "string collection numeric property",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.text) AS xs MATCH (m:CollectNode) WHERE m.x IN xs RETURN m"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "carried property membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.x) AS xs MATCH (m:CollectNode) WITH m.x AS x, xs WHERE x IN xs RETURN x"
+          },
+          "assert": {
+            "scalar_values": [
+              1
+            ]
+          }
+        },
+        {
+          "name": "relationship property membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectNode {tag:'a'}) WITH collect(n.flag) AS xs MATCH ()-[r:CollectEdge]->() WHERE r.flag IN xs RETURN r.flag"
+          },
+          "assert": {
+            "scalar_values": [
+              true
+            ]
+          }
+        },
+        {
+          "name": "node SET property membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectTarget {tag:'target'}) WITH collect(n.role) AS xs MATCH (t:CollectTarget) WHERE t.role IN xs SET t.value = 3"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node SET property membership returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectTarget {tag:'target'}) WITH collect(n.role) AS xs MATCH (t:CollectTarget) WHERE t.role IN xs SET t.value = 3 RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET property membership",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectTarget {tag:'target'}) WITH collect(n.role) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge]->() WHERE t.role IN xs SET t.value = 3"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship SET property membership returning",
+          "vars": {
+            "query": "MATCH (n:CollectNode) WHERE n.seed IS NOT NULL SET n.x = toInteger(n.seed) WITH count(n) AS initialized MATCH (n:CollectTarget {tag:'target'}) WITH collect(n.role) AS xs MATCH (a:CollectTarget {tag:'target'})-[t:CollectEdge]->() WHERE t.role IN xs SET t.value = 3 RETURN t"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "a",
+                      "group": "alpha",
+                      "seed": "1",
+                      "flag": true,
+                      "text": "1",
+                      "x": 1
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "b",
+                      "group": "alpha",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "true",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "c",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "c",
+                      "group": "beta",
+                      "seed": "2",
+                      "flag": false,
+                      "text": "[1, 2]",
+                      "x": 2
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "CollectNode"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "group": "missing"
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "role-decoy",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "role-decoy",
+                      "role": "keep",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherCollectTarget"
+                    ],
+                    "props": {
+                      "tag": "kind-decoy",
+                      "role": "target",
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "CollectTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": true,
+                      "value": 3
+                    }
+                  },
+                  {
+                    "start": "role-decoy",
+                    "end": "target",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherCollectEdge",
+                    "props": {
+                      "role": "target",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing-role",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "role": "keep",
+                      "keep": true,
+                      "flag": false
+                    }
+                  },
+                  {
+                    "start": "missing-role",
+                    "end": "role-decoy",
+                    "kind": "CollectEdge",
+                    "props": {
+                      "keep": true,
+                      "flag": false
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

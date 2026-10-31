@@ -2,32 +2,40 @@ package neo4j
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/cypher/format"
 	"github.com/specterops/dawgs/graph"
 )
 
-func newUpdateKey(identityKind graph.Kind, identityProperties []string, updateKinds graph.Kinds) string {
-	var keys []string
+func upsertIdentifier(name string) string { return "`" + strings.ReplaceAll(name, "`", "``") + "`" }
 
-	// Defensive check: identityKind may be nil or zero value
+func newUpdateKey(identityKind graph.Kind, identityProperties []string, updateKinds graph.Kinds, removedKinds ...graph.Kind) string {
+	kind := ""
 	if identityKind != nil && !identityKind.Is(graph.EmptyKind) {
-		keys = append(keys, identityKind.String())
+		kind = identityKind.String()
 	}
+	return encodeUpdateShape([]string{kind}, identityProperties, updateKinds.Strings(), graph.Kinds(removedKinds).Strings())
+}
 
-	keys = append(keys, identityProperties...)
-	keys = append(keys, updateKinds.Strings()...)
-
-	sort.Strings(keys)
-
-	return strings.Join(keys, "")
+// encodeUpdateShape preserves the role and boundaries of each set. All inputs
+// contain only strings, so JSON encoding cannot fail. Caller slices remain owned
+// by the caller, including their order.
+func encodeUpdateShape(fields ...[]string) string {
+	sets := make([][]string, len(fields))
+	for idx, field := range fields {
+		sets[idx] = append([]string{}, field...)
+		slices.Sort(sets[idx])
+		sets[idx] = slices.Compact(sets[idx])
+	}
+	encoded, _ := json.Marshal(sets)
+	return string(encoded)
 }
 
 func relUpdateKey(update graph.RelationshipUpdate) string {
@@ -37,7 +45,8 @@ func relUpdateKey(update graph.RelationshipUpdate) string {
 		newUpdateKey(update.EndIdentityKind, update.EndIdentityProperties, update.End.Kinds),
 	}
 
-	return strings.Join(keys, "")
+	encoded, _ := json.Marshal(keys)
+	return string(encoded)
 }
 
 type relUpdates struct {
@@ -100,7 +109,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 		output.WriteString("unwind $p as p merge (s")
 
 		if batch.startIdentityKind != nil && !batch.startIdentityKind.Is(graph.EmptyKind) {
-			output.WriteString(fmt.Sprintf(":%s", batch.startIdentityKind.String()))
+			output.WriteString(fmt.Sprintf(":%s", upsertIdentifier(batch.startIdentityKind.String())))
 		}
 
 		if len(batch.startIdentityProperties) > 0 {
@@ -114,9 +123,9 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.s.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
@@ -124,7 +133,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 
 		output.WriteString(") merge (e")
 		if batch.endIdentityKind != nil && !batch.endIdentityKind.Is(graph.EmptyKind) {
-			output.WriteString(fmt.Sprintf(":%s", batch.endIdentityKind.String()))
+			output.WriteString(fmt.Sprintf(":%s", upsertIdentifier(batch.endIdentityKind.String())))
 		}
 
 		if len(batch.endIdentityProperties) > 0 {
@@ -138,16 +147,16 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.e.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
 		}
 
 		output.WriteString(") merge (s)-[r:")
-		output.WriteString(batch.identityKind.String())
+		output.WriteString(upsertIdentifier(batch.identityKind.String()))
 
 		if len(batch.identityProperties) > 0 {
 			output.WriteString(" {")
@@ -160,9 +169,9 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.r.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
@@ -176,7 +185,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					continue // skip empty kinds
 				}
 				output.WriteString(", s:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -186,7 +195,7 @@ func cypherBuildRelationshipUpdateQueryBatch(updates []graph.RelationshipUpdate)
 					continue // skip empty kinds
 				}
 				output.WriteString(", e:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -213,7 +222,7 @@ type nodeUpdates struct {
 type nodeUpdateByMap map[string]*nodeUpdates
 
 func (s nodeUpdateByMap) add(update graph.NodeUpdate) {
-	updateKey := newUpdateKey(update.IdentityKind, update.IdentityProperties, update.Node.Kinds)
+	updateKey := newUpdateKey(update.IdentityKind, update.IdentityProperties, update.Node.Kinds, update.Node.DeletedKinds...)
 
 	if updates, hasUpdates := s[updateKey]; hasUpdates {
 		updates.properties = append(updates.properties, update.Node.Properties.Map)
@@ -230,40 +239,8 @@ func (s nodeUpdateByMap) add(update graph.NodeUpdate) {
 	}
 }
 
-func digestKeys(digester *xxhash.Digest, keys map[string]struct{}) {
-	sortedKinds := make([]string, 0, len(keys))
-
-	for nextKind := range keys {
-		sortedKinds = append(sortedKinds, nextKind)
-	}
-
-	slices.Sort(sortedKinds)
-
-	for _, nextKind := range sortedKinds {
-		digester.WriteString(nextKind)
-	}
-}
-
-func nodeToNodeUpdateKey(digester *xxhash.Digest, node *graph.Node) uint64 {
-	digester.Reset()
-
-	kindSet := map[string]struct{}{}
-
-	for _, addedKindStr := range node.AddedKinds.Strings() {
-		kindSet[addedKindStr] = struct{}{}
-	}
-
-	digestKeys(digester, kindSet)
-	clear(kindSet)
-
-	for _, removedKindStr := range node.DeletedKinds.Strings() {
-		kindSet[removedKindStr] = struct{}{}
-	}
-
-	digestKeys(digester, kindSet)
-	clear(kindSet)
-
-	return digester.Sum64()
+func nodeToNodeUpdateKey(node *graph.Node) string {
+	return encodeUpdateShape(node.AddedKinds.Strings(), node.DeletedKinds.Strings())
 }
 
 type nodeUpdateBatch struct {
@@ -272,32 +249,40 @@ type nodeUpdateBatch struct {
 	Parameters        []map[string]any
 }
 
+func nodeUpdateParameters(node *graph.Node) map[string]any {
+	properties := node.Properties.Map
+	if len(node.Properties.Deleted) > 0 {
+		// Neo4j's map merge removes properties whose supplied value is null.
+		// Keep deletion markers in this row's parameters without changing the
+		// caller's property map or adding property names to generated Cypher.
+		properties = make(map[string]any, len(node.Properties.Map)+len(node.Properties.Deleted))
+		maps.Copy(properties, node.Properties.Map)
+		for key := range node.Properties.Deleted {
+			properties[key] = nil
+		}
+	}
+	return map[string]any{"id": node.ID, "properties": properties}
+}
+
 func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[string]any) {
 	var (
 		queries         []string
 		queryParameters []map[string]any
 
 		output         = strings.Builder{}
-		batchedUpdates = map[uint64]*nodeUpdateBatch{}
-		digester       = xxhash.New()
+		batchedUpdates = map[string]*nodeUpdateBatch{}
 	)
 
 	for _, nodeToUpdate := range updates {
-		updateKey := nodeToNodeUpdateKey(digester, nodeToUpdate)
+		updateKey := nodeToNodeUpdateKey(nodeToUpdate)
 
 		if existingBatch, hasBatch := batchedUpdates[updateKey]; hasBatch {
-			existingBatch.Parameters = append(existingBatch.Parameters, map[string]any{
-				"id":         nodeToUpdate.ID,
-				"properties": nodeToUpdate.Properties.Map,
-			})
+			existingBatch.Parameters = append(existingBatch.Parameters, nodeUpdateParameters(nodeToUpdate))
 		} else {
 			batchedUpdates[updateKey] = &nodeUpdateBatch{
 				nodeKindsToAdd:    nodeToUpdate.AddedKinds,
 				nodeKindsToRemove: nodeToUpdate.DeletedKinds,
-				Parameters: []map[string]any{{
-					"id":         nodeToUpdate.ID,
-					"properties": nodeToUpdate.Properties.Map,
-				}},
+				Parameters:        []map[string]any{nodeUpdateParameters(nodeToUpdate)},
 			}
 		}
 	}
@@ -308,7 +293,7 @@ func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[str
 		if len(batch.nodeKindsToAdd) > 0 {
 			for _, kindToAdd := range batch.nodeKindsToAdd {
 				output.WriteString(", n:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -321,7 +306,7 @@ func cypherBuildNodeUpdateQueryBatch(updates []*graph.Node) ([]string, []map[str
 				}
 
 				output.WriteString("n:")
-				output.WriteString(kindToRemove.String())
+				output.WriteString(upsertIdentifier(kindToRemove.String()))
 			}
 		}
 
@@ -356,7 +341,7 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 		output.WriteString("unwind $p as p merge (n")
 
 		if batch.identityKind != nil && !batch.identityKind.Is(graph.EmptyKind) {
-			output.WriteString(fmt.Sprintf(":%s", batch.identityKind.String()))
+			output.WriteString(fmt.Sprintf(":%s", upsertIdentifier(batch.identityKind.String())))
 		}
 
 		if len(batch.identityProperties) > 0 {
@@ -370,9 +355,9 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 					output.WriteString(",")
 				}
 
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 				output.WriteString(":p.")
-				output.WriteString(identityProperty)
+				output.WriteString(upsertIdentifier(identityProperty))
 			}
 
 			output.WriteString("}")
@@ -383,7 +368,7 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 		if len(batch.nodeKindsToAdd) > 0 {
 			for _, kindToAdd := range batch.nodeKindsToAdd {
 				output.WriteString(", n:")
-				output.WriteString(kindToAdd.String())
+				output.WriteString(upsertIdentifier(kindToAdd.String()))
 			}
 		}
 
@@ -396,7 +381,7 @@ func cypherBuildNodeUpdateQueryByBatch(updates []graph.NodeUpdate) ([]string, []
 				}
 
 				output.WriteString("n:")
-				output.WriteString(kindToRemove.String())
+				output.WriteString(upsertIdentifier(kindToRemove.String()))
 			}
 		}
 

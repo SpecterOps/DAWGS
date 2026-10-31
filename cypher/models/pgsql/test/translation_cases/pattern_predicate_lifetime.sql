@@ -1,0 +1,44 @@
+-- Copyright 2026 Specter Ops, Inc.
+--
+-- Licensed under the Apache License, Version 2.0
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--     http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+--
+-- SPDX-License-Identifier: Apache-2.0
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) return s, t
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s2 as (select s0.n0 as n0 from s0 where ((with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.start_id) select count(*) > 0 from s1))), s3 as (select s2.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s2 join edge e1 on (s2.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])) select s3.n0 as s, s3.n2 as t from s3;
+
+-- case: match (s:NodeKind1) where not (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) return s, t
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s2 as (select s0.n0 as n0 from s0 where (not (with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.start_id) select count(*) > 0 from s1))), s3 as (select s2.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s2 join edge e1 on (s2.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])) select s3.n0 as s, s3.n2 as t from s3;
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]-() match (s)-[:EdgeKind2]->(t) return s, t
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s1 as (select s0.n0 as n0 from s0 where (exists (select 1 from edge e0 where e0.kind_id = any (array [3]::int2[]) and (e0.start_id = (s0.n0).id or e0.end_id = (s0.n0).id)))), s2 as (select s1.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s1 join edge e1 on (s1.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])) select s2.n0 as s, s2.n2 as t from s2;
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]->()-[:EdgeKind2]->() match (s)-[:EdgeKind2]->(t) return s, t
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s3 as (select s0.n0 as n0 from s0 where ((with s1 as (select e0.id as e0, s0.n0 as n0, n1.id as n1 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.start_id), s2 as (select s1.e0 as e0, s1.n0 as n0, s1.n1 as n1 from s1 join edge e1 on s1.n1 = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[]) and e1.id != s1.e0) select count(*) > 0 from s2))), s4 as (select s3.n0 as n0, (n3.id, n3.kind_ids, n3.properties)::nodecomposite as n3 from s3 join edge e2 on (s3.n0).id = e2.start_id join node n3 on n3.id = e2.end_id where e2.kind_id = any (array [4]::int2[])) select s4.n0 as s, s4.n3 as t from s4;
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) where (s)-[:EdgeKind1]->() return s, t
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s2 as (select s0.n0 as n0 from s0 where ((with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.start_id) select count(*) > 0 from s1))), s3 as (select s2.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s2 join edge e1 on (s2.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])) select s3.n0 as s, s3.n2 as t from s3 where ((with s4 as (select s3.n0 as n0, s3.n2 as n2 from edge e2 join node n3 on n3.id = e2.end_id where e2.kind_id = any (array [3]::int2[]) and (s3.n0).id = e2.start_id) select count(*) > 0 from s4));
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]->() optional match (s)-[:EdgeKind2]->(t) return s, t
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s2 as (select s0.n0 as n0 from s0 where ((with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.start_id) select count(*) > 0 from s1))), s3 as materialized (select s2.n0 as n0, row_number() over () as i0 from s2), s4 as (select (e1.id, e1.start_id, e1.end_id, e1.kind_id, e1.properties)::edgecomposite as e1, s3.i0 as i0, s3.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s3 join edge e1 on (s3.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])), s5 as (select s3.n0 as n0, s4.e1 as e1, s4.n2 as n2 from s3 left outer join s4 on s3.i0 = s4.i0) select s5.n0 as s, s5.n2 as t from s5;
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]->() with s match (s)-[:EdgeKind2]->(t) return s, t
+with s0 as (with s1 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s1.n0 as n0 from s1 where ((with s2 as (select s1.n0 as n0 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s1.n0).id = e0.start_id) select count(*) > 0 from s2))), s3 as (select s0.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s0 join edge e1 on (s0.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])) select s3.n0 as s, s3.n2 as t from s3;
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[r:EdgeKind2]->(t) set r.seen = true
+-- pgsql_params:{"__strlit0":"seen"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s2 as (select s0.n0 as n0 from s0 where ((with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.start_id) select count(*) > 0 from s1))), s3 as (select (e1.id, e1.start_id, e1.end_id, e1.kind_id, e1.properties)::edgecomposite as e1, s2.n0 as n0 from s2 join edge e1 on (s2.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])), s4 as (update edge e2 set properties = e2.properties || jsonb_build_object(@__strlit0::text, true)::jsonb from s3 where (s3.e1).id = e2.id returning (e2.id, e2.start_id, e2.end_id, e2.kind_id, e2.properties)::edgecomposite as e2), s5 as (select case when (s3.e1).id = (s4.e2).id then s4.e2 else s3.e1 end as e1, s3.n0 as n0 from s3 left outer join s4 on (s3.e1).id = (s4.e2).id) select 1;
+
+-- case: match (s:NodeKind1) where (s)-[:EdgeKind1]->() match (s)-[:EdgeKind2]->(t) create (c:NodeKind2 {name: t.name})
+-- pgsql_params:{"__strlit0":"node","__strlit1":"id","__strlit2":"name"}
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]), s2 as (select s0.n0 as n0 from s0 where ((with s1 as (select s0.n0 as n0 from edge e0 join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [3]::int2[]) and (s0.n0).id = e0.start_id) select count(*) > 0 from s1))), s3 as (select s2.n0 as n0, (n2.id, n2.kind_ids, n2.properties)::nodecomposite as n2 from s2 join edge e1 on (s2.n0).id = e1.start_id join node n2 on n2.id = e1.end_id where e1.kind_id = any (array [4]::int2[])), s4 as (select s3.n0 as n0, s3.n2 as n2, nextval(pg_get_serial_sequence(@__strlit0::text, @__strlit1::text))::int8 as n3_id from s3), s5 as (insert into node (graph_id, id, kind_ids, properties) select 0, s4.n3_id, array [2]::int2[], jsonb_build_object(@__strlit2::text, ((s4.n2).properties -> E'name'))::jsonb from s4 returning id as n3_id, (id, kind_ids, properties)::nodecomposite as n3), s6 as (select s4.n0 as n0, s4.n2 as n2, s5.n3 as n3 from s4, s5 where s5.n3_id = s4.n3_id) select 1;

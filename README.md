@@ -1,5 +1,16 @@
 # DAWGS
 
+PostgreSQL `WithGraph` selects an existing graph without creating partitions or
+reconciling indexes/constraints. Missing graphs return an error. Use explicit
+schema assertion to create or reconcile a graph; explicit assertion also applies
+to previously cached graphs. Kind registration and mapping inside transactions
+use the connection already owned by that transaction. New kind IDs become shared
+metadata only after commit, so rollback does not leave cached nonexistent IDs.
+
+Neo4j batch upserts quote kind and identity-property names, including spaces,
+keywords, Unicode and embedded backticks. Repeated relationship upserts retain
+the same identity and update their existing entities.
+
 Database Abstraction Wrapper for Graph Schemas
 
 ![A Corgi Treat](logo_small.png)
@@ -9,6 +20,324 @@ plugins. It exposes a backend abstraction for graph queries, with current backen
 The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
 support Cypher natively.
 
+The PostgreSQL driver bounds repeated work with immutable 256-entry Cypher AST and SQL translation caches. The shared AST
+cache is sharded to avoid serializing unrelated query shapes while preserving same-query AST reuse. Translation
+entries are keyed by normalized query text, graph ID, a collision-safe parameter-name/type shape, and the effective
+versioned traversal-policy identity; they retain SQL
+and parameter-source mappings, never request values or defaults, and fail closed when a required source value is absent.
+Cached query text is released by LRU eviction or driver close, and diagnostics expose aggregate counters without query
+text.
+
+Legacy query-builder relationship-kind filters preserve Boolean scope: conjunctive
+filters intersect their allowed kinds, disjoint filters match no relationships, and
+OR, XOR and NOT keep their predicates in WHERE. This also prevents mutations from
+affecting relationships selected only by an incorrect union of kinds.
+Legacy builder Boolean filters also preserve XOR grouping inside AND, including
+negated groups. PostgreSQL groups both XOR comparison operands and the lowered
+Boolean result, so read and mutation predicates retain the same selection.
+
+Neo4j raw-query rewrites for pattern-map parameters and temporal comparisons preserve
+qualified function names, conjunctive label predicates (`n:A:B`) and floating-point
+literal types. Builder filters that match any kind retain OR semantics. The shared
+`raw_rewrite_semantics_shapes` corpus checks reads and mutation targets on both
+backends; a Neo4j control executes the native `point.distance` function. Vendor
+`CYPHER` prefixes and index hints do not yet have a rewrite-fidelity guarantee.
+
+### PostgreSQL connection-local translation cache
+
+The PostgreSQL driver uses connection-local SQL translation caches. Pool construction owns the required connection
+lifecycle hooks; callers continue to hand the resulting `*pgxpool.Pool` to `dawgs.Open`:
+
+```go
+poolConfig, err := pgxpool.ParseConfig(connectionString)
+if err != nil {
+	return err
+}
+
+pool, err := pg.NewPool(poolConfig)
+if err != nil {
+	return err
+}
+database, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{Pool: pool})
+defer database.Close(ctx)
+```
+
+`pg.DefaultRuntimeConfig()` uses 64 retained translation entries per live physical PostgreSQL connection and a 5-50
+connection pool. Pass `pg.RuntimeConfig{TranslationCacheEntries: 0}` to `pg.NewPoolWithRuntimeConfig` to disable
+connection-local retention, or configure exact bounds with `pg.RuntimeConfig{TranslationCacheEntries: 64,
+SharedShortestPathTemplateEntries: 128, Pool: &pg.PoolConfig{MinConnections: 0, MaxConnections: 4}}`. The shared
+shortest-path tier retains only immutable SQL templates and fresh bindings are always negotiated per execution; set its
+capacity to zero to disable it. Negative cache capacity, negative minimums, zero maximums, and inverted limits are
+rejected. The theoretical aggregate entry bound is live physical connections multiplied by this capacity, not a global
+bound.
+
+A cache remains with its physical `*pgx.Conn` across pool lease release and reacquisition, and is removed when that
+connection closes or the driver closes. `TranslationCacheStats` reports opaque diagnostic connection IDs and aggregate,
+query-text-free counters only. Cached entries retain immutable SQL and parameter-source metadata; every hit binds the
+current caller values. The driver keeps the parse cache driver-wide, caches neither results nor routing decisions, and advances
+its generation after successful schema assertion and kind refresh. Stable-snapshot traversal workspaces are marked ready
+only for the current physical connection and schema generation, then reinitialized after reset, closure, or generation
+change. For out-of-band schema changes that affect types or generated SQL, reset or recreate the pool before continuing.
+
+PostgreSQL MATCH treats unregistered node labels and relationship types as empty matches without registering them.
+Known relationship-type alternatives remain eligible; label conjunctions, negation and OPTIONAL MATCH retain their
+normal semantics. Lookup, cancellation and database failures still return errors. Plans that depend on missing kinds
+bypass translation retention so later registration is visible; CREATE retains its kind-registration behavior.
+
+Closed pools are collectable after callers release them.
+The pool/runtime registry and runtime's pool reference are weak, so retaining or reusing `Pool.Config()` does not
+retain closed original pools. `Driver.Close` still releases its state synchronously.
+
+After schema assertion, applications may opt in to pre-prepare selected hot PostgreSQL statements without executing them:
+
+```go
+if err := database.WarmStatements(ctx, "select 1"); err != nil {
+	return err
+}
+```
+
+Warm-up touches each currently idle physical connection and uses pgx's normal `CacheStatement` identity, so the first
+regular execution adopts the prepared server statement rather than creating a second one. The driver records only SHA-256
+statement identities in its lifecycle state; `TranslationCacheStats` includes aggregate workspace and warm-up counters.
+For a persistent, explicitly selected warm set that also applies to new physical connections, use
+`database.SetStatementWarmupPolicy(ctx, statements...)`; passing no statements clears the future warm set. Pools supplied
+to `pg.NewDriver` must have been created by `pg.NewPool` or `pg.NewPoolWithRuntimeConfig` so those lifecycle hooks are in
+place.
+
+### Unsupported import and legacy creation clauses
+
+The DAWGS Cypher parser rejects `CREATE UNIQUE` and `LOAD CSV` with located
+`CREATE UNIQUE is not supported` and `LOAD CSV is not supported` errors.
+PostgreSQL text compilation returns these errors before executing any part of
+the query, including preceding writes. Check parse errors before formatting an
+AST. Neo4j text queries pass through to the native server, which determines
+syntax support and CSV access. Full shared support remains pending.
+
+### Procedure calls
+
+The DAWGS Cypher parser rejects standalone `CALL` with
+`standalone CALL is not supported`, including implicit invocations and `YIELD`.
+PostgreSQL text compilation returns this error before execution. Check parse
+errors before formatting an AST. Neo4j text queries retain native procedure
+execution through the driver. Full shared-parser procedure support remains
+pending. In-query `CALL` also returns a located `in-query CALL is not supported`
+error, including calls with arguments, `YIELD` and filters. PostgreSQL rejects
+the whole query before executing preceding writes. Native Neo4j in-query
+procedure execution remains available.
+
+### Shortest-path expressions
+
+The DAWGS Cypher parser rejects `shortestPath(...)` and `allShortestPaths(...)`
+in expression positions with `shortest-path expressions are not supported`.
+PostgreSQL returns this error before execution, including in write queries.
+Use the supported MATCH pattern form, such as
+`MATCH p = shortestPath((a)-[:R*1..3]->(b)) RETURN p`.
+Neo4j text queries retain native expression execution through the driver.
+
+### List indexing and slicing support
+
+The DAWGS Cypher parser rejects list indexing (`xs[0]`, including negative,
+parameterized and chained indexes) with `list indexing is not supported`.
+List slicing (`xs[0..2]`, including omitted, negative and parameterized bounds)
+returns `list slicing is not supported`.
+PostgreSQL text queries return these errors before execution, including in write
+queries. Check parse errors before formatting an AST. Full indexing and slicing
+semantics remain pending. Neo4j text queries retain native indexing and slicing
+when the driver passes the original query through after a declined rewrite.
+
+PostgreSQL result-column aliases preserve case and decoded Cypher spelling in
+`Result.Keys()`: `AS objectId` returns `objectId`, and ``AS `object id` ``
+returns `object id`. Backtick escapes and embedded double quotes are translated
+to SQL identifier quoting, including aliases carried through WITH and ORDER BY.
+Callers that relied on lowercase folding of mixed-case aliases must use their
+requested spelling when looking up result columns. The shared
+`result_alias_shapes` templates cover reads and SET/CREATE post-state; direct
+result-key checks run on both backends and in both PostgreSQL compiler modes.
+
+### PostgreSQL JSON result numbers
+
+PostgreSQL JSON/JSONB query results decode integer tokens as exact signed 64-bit `int64`
+values, and decimal/exponent tokens as `float64`. This applies recursively to maps,
+lists, node/relationship properties and paths, including direct pgx reads through DAWGS
+pools. Callers inspecting untyped results must accept `int64` where they previously
+received `float64`. Out-of-range integer tokens and floating-point overflow stop row
+iteration and appear in `Result.Error()`; check it after draining results. These rules
+apply to the JSON spelling returned by PostgreSQL; JSONB can normalize exponent
+spellings before returning them.
+
+JSON string values retain their exact contents, including strings such as `[1, 2]`,
+`{"k":"v"}` and `"q"`. Reading a string through `Result.Values()` or scanning it into
+a Go string does not parse its contents as another JSON value. Actual JSON objects
+and arrays continue to decode to maps and lists.
+
+Arithmetic between PostgreSQL properties uses their stored JSON types. Numeric
+values support `+`, `-`, `*`, `/`, `%` and `^`; integer operations retain signed
+64-bit precision and integer division truncates toward zero. String addition
+concatenates, list addition appends, and missing/null operands yield null.
+Unsupported operand types and integer overflow return query errors. Chained
+arithmetic and arithmetic on properties carried through WITH use the same rules.
+Known literal arithmetic and property/literal expressions retain their native
+SQL path. Run ordinary schema assertion when upgrading to install the
+`cypher_arithmetic(jsonb, jsonb, text)` helper.
+
+Integer versus float dispatch follows the stored JSON number spelling. Fractional
+spellings and floating results retain float behavior; JSON serialization or JSONB
+normalization that has already erased an integral float's fractional spelling
+cannot be reversed. Use explicit `toFloat` operands when that distinction matters
+for existing values. Runtime type dispatch adds per-row cost; local measurements
+and the remaining WITH alias-filter boundary are recorded in
+[the variance ledger](variance_findings_priority_complete.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
+
+### PostgreSQL WITH ordering and pagination
+
+`WITH` applies `ORDER BY`, `SKIP` and `LIMIT` at its own query boundary, including
+read-only queries. For example, `MATCH (n:User) WITH n ORDER BY n.score DESC
+SKIP 1 LIMIT 2 RETURN n.score` selects the second and third highest scores.
+Entity and scalar aliases resolve against that boundary's input. `WITH ... WHERE`
+filters the paginated output, and a later `WITH` or `RETURN` keeps its own
+ordering and pagination. Pagination counts retain the existing literal-only
+contract. The shared read and mutation regressions and their live validation
+status are recorded in [the active variance plan](variance_findings_priority.md#dawgs-040-with-ordering-and-pagination--2026-10-27).
+
+### PostgreSQL pattern predicate dependencies
+
+MATCH reordering preserves the node and relationship bindings referenced by
+WHERE pattern predicates, including negated and compound predicates. A more
+selective MATCH waits for any earlier bindings its predicate consumes; unresolved
+bindings keep the clause pinned. Shared regressions cover returned rows and
+complete mutation state on Neo4j and in both PostgreSQL optimizer modes. See the
+[validation ledger](variance_findings_priority_complete.md#dawgs-035-pattern-predicate-dependencies-and-mutation-boundary--2026-10-28).
+
+### PostgreSQL temporal parameters
+
+Go `time.Time` values whose location is `time.Local` map to PostgreSQL
+`timestamp without time zone`. Values with `time.UTC` or another explicit
+location map to `timestamp with time zone`, even when that location shares
+the local zone's name or offset. Use `value.UTC()` for an explicit UTC instant
+and `value.In(time.Local)` for a local timestamp. Parameter types also separate
+translation cache entries, and cache hits bind the current timestamp value.
+
+### PostgreSQL typed predicates
+
+String predicates (`STARTS WITH`, `ENDS WITH`, `CONTAINS` and regex matching)
+require string values on both sides. Numeric, Boolean and list properties yield
+null instead of matching their text representation. Missing properties and
+negated predicates preserve null as well. Use an explicit `toString` conversion
+when a textual comparison is intended.
+
+`STARTS WITH`, `ENDS WITH` and `CONTAINS` treat `%`, `_` and backslashes
+as literal characters, including after functions such as `toLower`, `toUpper`,
+`coalesce` and `toString`, and through WITH aliases. PostgreSQL escapes literal
+LIKE patterns before adding prefix/suffix wildcards; the `toLower` index
+prefilter uses the same escaped pattern. Parameter and property operands keep
+their existing runtime escaping. No schema migration is required. Live validation
+status is recorded in
+[the active variance plan](variance_findings_priority.md#dawgs-014-string-predicate-literal-escaping--2026-10-27).
+
+Ordered comparisons (`<`, `<=`, `>` and `>=`) retain dynamic property types:
+numbers compare numerically, strings compare by Unicode order, Booleans compare
+false before true, and lists compare lexicographically. Incompatible types and
+null operands yield null; numeric strings are not numbers. These rules also
+apply to properties carried through WITH and to mutation filters. Existing native
+temporal comparisons keep their cast path. Run ordinary schema assertion when
+upgrading to install `cypher_compare(jsonb, jsonb)`.
+
+Positive string filters retain indexable text lookups. Runtime ordered comparison
+adds per-row dispatch cost; local measurements and remaining representation
+boundaries are recorded in
+[the variance ledger](variance_findings_priority_complete.md#dawgs-018-typed-predicates--2026-10-26).
+
+### PostgreSQL properties carried through WITH
+
+Properties keep their stored value types across `WITH` and when copied into node
+or relationship `CREATE` maps, including after ordering and pagination. Numeric
+and Boolean values stay numeric and Boolean; strings retain their contents.
+`toString` extracts string
+contents without JSON quotes or extra escaping; case conversion, split (including
+a carried delimiter), size, head/tail, scalar casts, comparisons and Boolean predicates
+consume the carried value. `size` counts Unicode characters in strings and elements
+in lists. `coalesce` preserves the first non-null value's type, including when its
+fallback has a different type. Missing properties and stored JSON nulls both behave
+as null in these consumers. Node and relationship mutations use the same rules.
+
+Run ordinary schema assertion when upgrading to install `cypher_text(jsonb, text)`,
+`cypher_size(jsonb)` and `cypher_list(jsonb)`. Runtime text conversion accepts
+strings; explicit `toString` additionally accepts numbers and Booleans. Unsupported values return a
+query error. Direct property case conversion retains its functional-index path;
+native literal, typed-scalar and direct property-array coalesce paths remain available.
+
+This does not change empty-string split behavior, list UNWIND/collection support, or temporal storage
+representation. JSON cannot recover temporal or integral-float type information
+already lost during serialization. Helper costs and validation are recorded in
+[the variance ledger](variance_findings_priority_complete.md#dawgs-052-with-property-consumers--2026-10-26).
+
+### PostgreSQL property-list UNWIND
+
+`UNWIND` expands node and relationship property arrays without converting their
+numbers, Booleans or strings to text. WITH aliases and nested collected lists
+retain element types; each UNWIND expands one list level. Empty, missing and
+null inputs produce no rows, while a non-list property value produces one row.
+Duplicate elements retain their row multiplicity, including through SET and
+CREATE with or without RETURN. Native SQL-array inputs keep their existing path.
+
+No schema migration is required. The dynamic path materializes a SQL JSONB array
+for each input value; this change does not introduce an execution budget or
+qualify large-list performance. Stored JSON cannot recover type information
+already lost during serialization. Validation is recorded in the
+[completion ledger](variance_findings_priority_complete.md#dawgs-042-property-list-unwind--2026-10-29).
+
+### PostgreSQL integer conversion
+
+`toInteger` truncates numeric inputs toward zero: `1.9` becomes `1`, `-1.5`
+becomes `-1`, and fractions between `-1` and `1` become `0`. This applies to
+literals, parameters, properties, WITH aliases, native-array `UNWIND` bindings
+and mutation expressions. Integer
+inputs retain their exact signed 64-bit value, including values above 2^53.
+No schema migration is required. This repair covers numeric rounding; invalid
+strings and out-of-range conversion behavior remain separate compatibility limits.
+Live validation status is recorded in
+[the active variance plan](variance_findings_priority.md#dawgs-015-integer-truncation--2026-10-27).
+
+### PostgreSQL numeric aggregates
+
+`sum` preserves signed 64-bit integer precision, including values above 2^53.
+Floating-point inputs produce floating-point sums; mixed numeric inputs use
+floating-point arithmetic. Null and missing values do not contribute, and empty
+or all-null input returns integer zero. An empty grouped input produces no groups.
+`sum(DISTINCT ...)` counts each distinct numeric value once. These rules also apply
+to relationship properties, WITH aliases, and aggregate values used in later writes.
+Non-numeric inputs and integer overflow return query errors.
+
+Run ordinary schema assertion when upgrading to install `cypher_sum(jsonb)` and
+`cypher_sum_transition(jsonb, jsonb)`. The aggregate retains one numeric accumulator
+per group and uses runtime type dispatch. Its measured cost and the existing JSON
+limitations on integral float representation are recorded in
+[the variance ledger](variance_findings_priority_complete.md#dawgs-053-numeric-sum--2026-10-27).
+`avg` retains its existing floating-point input conversion and null result on empty
+input; this change does not provide exact integer averaging.
+
+### PostgreSQL collections
+
+`collect` preserves stored property value types, including exact signed 64-bit integers,
+Booleans, strings and nested lists. Missing and null values are excluded; empty
+or all-null input returns an empty list. DISTINCT retains value types as well.
+Values keep their types through WITH and UNWIND, so collected numbers support
+arithmetic and collected Booleans support Boolean expressions. Numeric-looking
+and JSON-looking strings remain strings.
+
+Property collections use JSONB elements internally. Native scalar and entity
+collections retain their existing representations. As with other JSON-backed
+values, an integral float's type cannot be recovered after storage has erased its
+fractional spelling. Validation and collection costs are recorded in
+[the variance ledger](variance_findings_priority_complete.md#dawgs-054-typed-collections--2026-10-27).
+
+Entity membership preserves node and relationship identity types through `collect`
+and `WITH`. A relationship never matches a collected node with the same numeric ID,
+and a numeric ID never matches an entity. Membership of bound entities uses their
+identity, including when a collection retains full entities. Negation and nullable/empty
+lists keep Cypher's membership semantics in both PostgreSQL compiler modes.
+See [the membership regression evidence](variance_findings_priority_complete.md#dawgs-056-entity-membership-types--2026-10-27).
+
 ## Quick Start
 
 Build the repository:
@@ -17,15 +346,37 @@ Build the repository:
 make build
 ```
 
-Run unit tests:
+Run unit tests (no database required, even when `CONNECTION_STRING` is set):
 
 ```bash
 make test
 ```
 
+After editing Cypher JSON cases or PostgreSQL translation fixtures, run
+`make test_update` and include the regenerated files. CI repeats this command
+and requires no diff, including fixture formatting.
+
 Run integration tests when a backend is available:
 
 Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j driver.
+`make test_integration` enables the `manual_integration` and `integration` build
+tags, including PostgreSQL composite/JSON codec and graph-wipe tests. Tests scoped
+to another backend skip automatically. `make test_all` runs the unit, integration,
+and BDD suites for the selected backend; run it separately for each backend.
+
+The unit suite validates record-assertion fields across the integration corpus.
+Templates can declare `node_kinds` and `edge_kinds` for query-only schema kinds;
+see [the corpus format](integration/testdata/README.md). These declarations also
+apply to plan capture and do not insert fixture entities.
+Tagged corpus datetimes normalize to a UTC fixed offset for equivalent instant
+comparisons on both backends.
+
+PostgreSQL integration tests require `pg_stat_statements` in `shared_preload_libraries`
+before the server starts. The CI PostgreSQL integration service configures this through
+`POSTGRES_INITDB_ARGS="--set=shared_preload_libraries=pg_stat_statements"` when initializing
+its fresh PostgreSQL 18 cluster. The tests attempt to create the extension as needed. If the test role lacks extension
+installation privileges, an administrator must first run `CREATE EXTENSION IF NOT EXISTS pg_stat_statements` in the
+selected test database.
 
 ```bash
 export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
@@ -37,7 +388,17 @@ export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:654
 make test_bdd_integration
 ```
 
-The BDD run also writes a Cucumber results file to `.coverage/opencypher-tck-report.json` and an HTML summary to `.coverage/opencypher-tck-report.html`. The HTML report shows total, passed, and failed scenario counts.
+The BDD run writes Cucumber results to `.coverage/opencypher-tck-results.json` and an HTML summary to `.coverage/opencypher-tck-report.html`.
+
+All untagged scenarios are enforced, including DAWGS features and upstream CREATE scenarios 1–2. Upstream scenarios 3–20 carry `@report-only` while their harness assertions or query semantics remain unsupported. They still execute and retain their failures in both reports, with the HTML identifying enforced and report-only scenarios separately. Remove the tag as each scenario becomes supported; new scenarios are enforced by default.
+
+Enforced failures, empty or invalid reports, runner errors, and ordinary Go-test failures fail the command. Report-only failures do not establish conformance or fail the gate. Run backend BDD checks sequentially because they share report paths.
+
+Integration suites and fixture-loading GraphBench runs delete graph data.
+Existing-graph GraphBench runs reject mutating cases and do not require
+fixture loading.
+PostgreSQL sessions remain read-write so temporary traversal
+workspaces use the same reset strategy as production.
 
 Use this module from another Go project:
 
@@ -58,9 +419,232 @@ make test_bench
 
 The PostgreSQL driver has a bounded, driver-wide Cypher compilation cache for both text Cypher and programmatic graph
 queries. Its default capacity is 256 entries; callers that need a different capacity can use
-`pg.NewDriverWithOptions`. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
+`pg.NewDriverWithOptions`. Builder identities include a bounded typed AST digest, so ASTs that render the same Cypher
+text cannot reuse one another's SQL. Runtime parameter values are rebound on each hit; unsupported fingerprint shapes
+compile without cache reuse. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
 newly started compilations across every PostgreSQL driver in the process. See
 [PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
+
+Aggregate traversal counts use ordinary traversal when the second `MATCH` labels the source or reuses it as the
+terminal. The shared `aggregate_traversal_count_shapes` integration templates verify source labels, cycle counts,
+ranking, and mutation effects; PostgreSQL coverage executes these cases with the optimizer enabled and disabled.
+
+`algo.ReachabilityCache` retains complete reach sets for requested components in separate bounded inbound and outbound
+caches. A traversal reuses complete cached results and visits each remaining component at most once, using one local
+reach bitmap. Warming an ancestor does not prewarm intermediate components; querying a new component can require another
+traversal. Cache capacity limits entries per direction (minimum one), rather than bitmap bytes. Reach results include
+the origin and its strongly connected component; `DirectionBoth` computes weak connectivity without caching that result.
+
+`cardinality.ThreadSafeDuplex` and `cardinality.ThreadSafeSimplex` synchronize every operation of their wrapped provider.
+Binary operations (`Or`, `And`, `Xor`, `AndNot`) snapshot another thread-safe wrapper before locking the receiver, so
+concurrent cross-wrapper operations, self-operations, and merges between wrapped HyperLogLog sketches complete without
+deadlock or silent drops. A snapshot reflects the other wrapper only at the moment it is taken; each operation is atomic
+for its receiver alone. Delegates passed to `Each` must not call back into the same wrapper.
+
+Bitmap `And` and `AndNot` with a non-native Duplex operand (a thread-safe wrapper or a custom implementation) copy the
+operand's values into a native bitmap and apply the native roaring operation. The receiver is never modified while it is
+being iterated, so intersections and differences with such operands are exact on both bitmap widths; native bitmap
+operands keep their direct native paths.
+
+`container.PackedMap` keeps every key/value association across repeated compactions: merging pending entries with a
+compacted bucket stores the merged values with the merged key set. `container.EFSet.Find` terminates without a match for
+targets below the stored minimum and for empty sets instead of underflowing its unsigned binary-search bound; a miss
+returns `(0, false)`.
+
+`traversal.NewPattern` chained expansions fetch each step's endpoint using that step's own direction, so patterns whose
+steps change direction (for example `OutboundWithDepth(1, 1).InboundWithDepth(1, 1)` over `a→b←c`) match. Each
+expansion's criteria still select the relationships entering or leaving the current node; only the fetched endpoint
+follows the expansion being performed.
+
+An optional following expansion (minimum depth 0) preserves the boundary segment instead of eager-fetching the step
+twice: the preserved segment performs the optional expansion when the traversal visits it, so every optional-step match
+reaches the terminal delegate exactly once, and the unmatched boundary segment is delegated once when the optional step
+has no matches. The shared `TestTraversalPatternDirectionChange` and `TestTraversalPatternOptionalStep` integration
+regressions run complete BreadthFirst pattern traversals on both backends, and the `traversal` package regressions pin
+the observed fetch directions and exact callback cardinality.
+
+Variable-length traversals that reuse a node bound by a fixed prefix retain that node's identity at every returned
+depth, including zero hops. Such terminals use ordinary traversal. The shared `bound_expansion_endpoint_shapes`
+templates check node identities, ordered path endpoints, and mutation selection in both PostgreSQL optimizer modes.
+
+Relationship expansions written as `*k` normalize to the exact range `*k..k`, including zero and explicit lengths
+above 15. Formatting preserves that exact range, and PostgreSQL uses the requested upper bound. Whitespace and
+comments within ranges are accepted. The shared `exact_expansion_length_shapes` templates check exact lengths,
+paths and mutation selection on both backends and in both PostgreSQL compiler modes. Open-ended PostgreSQL
+traversals preserve an absent maximum, including paths beyond 15 hops. Ordinary
+traversals exhaust relationship-unique trails; open shortest searches use a
+budgeted breadth-first workspace. Explicit Cypher bounds remain inclusive semantic
+limits. Open ranges do not select executors that require a finite upper bound.
+
+Run ordinary schema assertion before using the upgraded compiler: it installs the
+versioned open-search harnesses and admission helper. Open traversal admission
+allows 100,000 candidate trail states and 64 MiB of cumulative estimated trail
+state (128 bytes plus 8 bytes per relationship per admitted candidate). These are
+execution budgets, not a maximum depth or a measurement of PostgreSQL process
+memory. Exhaustion raises SQLSTATE `54000`; results remain provisional until the
+stream is drained/closed and its error checked. A failed write cannot commit,
+including preceding multipart stages. Context cancellation remains available.
+Operators may set positive PostgreSQL session/transaction settings
+`dawgs.traversal_state_limit` and `dawgs.traversal_byte_limit`; accounting is fresh
+for each driver query and shared by its multipart stages. Increasing budgets can
+increase execution time and temporary storage substantially. See the
+[open-ended traversal policy](docs/open_ended_traversal_policy.md).
+
+This changes successful results and mutation targets: queries can now reach
+entities beyond depth 15. Add an explicit `*1..15` bound where that was intended.
+Generic undirected shortest-path execution remains outside the existing support
+boundary; this repair preserves supported traversal directions.
+
+Bounded PostgreSQL `shortestPath` calls with singleton IDs use the current
+endpoint arrays throughout search, including bounds above 64. Their generated
+fragments cannot read generic endpoint-filter tables, and the bidirectional
+harness verifies endpoint IDs before returning or stopping. A prior query on a
+pooled connection cannot supply this call's terminal filter. Seeded self-endpoint
+checks first establish that the root belongs to the filtered seed relation, so
+unrelated edge rows cannot raise an endpoint error before the seed join.
+Install the updated
+SQL functions through ordinary schema assertion when deploying the compiler;
+existing graph data and temporary-table layouts need no migration. The shared
+`bounded_shortest_endpoint_shapes` corpus checks paths, scalar lengths, endpoint
+predicates and mutation targets on both backends and in both PostgreSQL compiler
+modes. Driver regressions cover fresh connections, filter-table reuse, changing
+parameters across leases, and complete 128-edge witnesses.
+Separate PostgreSQL issues with bounded all-shortest zero-hop results and
+`shortestPath` followed by `SET ... RETURN p` remain recorded in the
+[validation ledger](variance_findings_priority_complete.md#bounded-shortest-path-workspace-repair--2026-10-30).
+
+
+Predicates comparing variable-length traversal endpoints remain active when a fixed hop follows the expansion.
+The shared `expansion_endpoint_predicate_shapes` templates check filters, path multiplicity, zero hops, inbound
+traversals and exact node/relationship mutation selection on both backends and in both PostgreSQL compiler modes.
+
+Carried nodes retain the representation materialized before `WITH`, and inline property maps retain the fields their
+expressions read, including function arguments such as `id(source)` and `labels(source)`. `UNWIND` accepts empty lists
+carried through `WITH` aliases, including chained aliases. Leading `UNWIND` and `CREATE` clauses can feed multipart queries.
+
+Execute multipart writes in `WriteTransaction`. PostgreSQL executes each query part after the first write as a separate
+statement in that transaction, materializing its carried rows in temporary relations. Later `MATCH`, `SET`, and `DELETE`
+query parts therefore see earlier writes. Constant projections preserve incoming row counts, filters run before the
+next part's mutations, and entity aliases reflect updates while captured scalar values retain their values.
+Result closure releases the temporary relations; transaction completion also
+drops them. These executions bypass SQL translation retention and temporary-relation statement caching. Translation
+tools must use `translate.TranslatedStatements` and execute every returned statement in the same explicit transaction;
+the single-statement renderer rejects staged writes. The shared `node_representation_shapes`, `leading_multipart_shapes`,
+`empty_list_alias_shapes`, and `multipart_write_visibility_shapes` templates cover these behaviors.
+
+PostgreSQL `OPTIONAL MATCH` preserves the identity of each incoming row, including repeated values and pending
+`UNWIND` rows. Matches join back to their own input row; an unmatched row is retained once. PostgreSQL numbers
+the input in a materialized relation and removes that internal identity after the join. The shared
+`optional_row_identity_shapes` templates check fan-out, chained optional clauses, null bindings, aggregation,
+wildcards, variable-length paths and downstream writes on both backends and in both PostgreSQL compiler modes.
+
+A leading `OPTIONAL MATCH` starts with one implicit input row. If its complete pattern or WHERE predicate finds no
+match, it returns one row with null bindings; successful matches return their normal rows without an extra null row.
+Those rows remain available to aggregation, subsequent clauses and writes. The shared `leading_optional_shapes`
+templates cover empty graphs, rejected predicates, paths, chained optionals and complete SET/CREATE post-state.
+Multipart OPTIONAL inputs read the preceding materialized boundary, preserving
+pending UNWIND rows without referencing the enclosing WITH CTE from within itself.
+Their live acceptance status is recorded in `variance_findings_priority.md`.
+
+Pattern predicates in MATCH WHERE retain their relationship kinds and correlated input across later MATCH
+clauses. Deferred filters are evaluated before the next MATCH changes the input frame, including before an
+OPTIONAL MATCH. The shared `pattern_predicate_lifetime_shapes` templates cover directed, undirected,
+negated and multi-hop predicates, repeated predicates, fan-out, and SET/CREATE post-state in both
+PostgreSQL compiler modes and Neo4j. Aggregate traversal-count optimization still explicitly rejects
+pattern predicates under the separate DAWGS-030 containment.
+
+Fixed relationship patterns that reuse a bound relationship retain its identity across MATCH clauses, WITH aliases,
+OPTIONAL MATCH and pattern predicates. Each SQL edge scan correlates its ID to the carried relationship; unrelated
+edges cannot multiply the input rows or downstream writes. The shared `reused_relationship_shapes` templates check
+endpoint and path identities, duplicate rows, local property/kind constraints and complete mutation post-state on
+both backends and in both PostgreSQL compiler modes. Relationship-list reuse remains a separate support boundary.
+
+Within an ordinary MATCH clause, relationships remain unique across comma-separated patterns and consecutive
+variable-length segments. PostgreSQL compares fixed relationship IDs and rejects overlap between segment edge-ID
+arrays, retaining intermediate IDs until later patterns have checked them. Duplicate input rows and valid paths
+retain their multiplicity. Separate MATCH clauses, WITH boundaries, and pattern predicates have their own uniqueness
+scope. The shared `relationship_uniqueness_shapes` templates check exact paths, counts, optional nulls and stored
+mutation state on both backends and in both PostgreSQL compiler modes. PostgreSQL fan-out tests additionally check
+closed-form counts and report diagnostic EXPLAIN timings.
+
+Undirected fixed continuations pair the near and far endpoints for each relationship orientation. A non-loop edge
+therefore reaches its opposite endpoint; a self-loop still returns the same node once. The shared
+`undirected_continuation_shapes` templates check both orientations, duplicate paths, carried bindings, expansion
+prefixes and exact downstream write state on both backends and in both PostgreSQL compiler modes.
+
+An undirected pattern with a repeated endpoint, `(x)-[r]-(x)`, matches only self-loops and returns each matching
+relationship once per input row. A newly introduced `x` remains local to that pattern even when unrelated input rows
+already exist. The shared `undirected_self_reference_shapes` templates check loop identities, duplicate and empty inputs,
+optional matches, returned paths and exact SET/CREATE state on both backends and in both PostgreSQL compiler modes.
+
+Read-only multipart queries consume the preceding WITH output at each MATCH and export only the next WITH's
+bindings. Traversals never read their own future output boundary. Literal WITH projections preserve duplicate
+and empty input streams. Expansion seed predicates involving an input row also filter completed paths for that row.
+The shared `multipart_read_boundary_shapes` templates check fixed and variable-length
+paths, directions, aliases, bound endpoints, aggregation, pagination and complete SET/CREATE post-state on Neo4j
+and in both PostgreSQL compiler modes.
+
+`ORDER BY` resolves projection aliases inside arithmetic and supported function expressions.
+User aliases such as `i0`, `n0` and `s0` retain their Cypher meaning even when they
+match generated SQL names. DISTINCT ordering carries computed sort keys through
+an internal projection without exposing extra result columns; pagination follows
+deduplication. The shared `order_alias_shapes` templates cover ordered results,
+collisions, duplicate/null inputs and exact paginated SET/CREATE state on both
+backends and in both PostgreSQL compiler modes.
+
+PostgreSQL SET and REMOVE preserve the incoming row stream when several matches update the same node or relationship.
+Later update targets receive every input row, and null targets from OPTIONAL MATCH leave those rows available to later
+updates and RETURN. Entity aliases observe updated values while captured scalars retain their values. The shared
+`update_row_stream_shapes` templates check row counts, returned values, and exact node and relationship post-state in
+both PostgreSQL optimizer modes and on Neo4j. Property and kind additions/removals on each mutation target retain
+source order, including alternating SET/REMOVE of the same key or label. The `update_clause_order_shapes` templates
+check exact final state, untouched decoys, fan-out and null targets. Assignment expressions retain their existing
+input-frame evaluation; expressions that depend on earlier writes should use a `WITH` boundary between clauses.
+
+Cypher plain `DELETE` rejects a node with remaining incident relationships; explicitly deleting all of those
+relationships in the same query part permits the node deletion. `DETACH DELETE` removes inbound, outbound and
+self-loop relationships together with the node. PostgreSQL cleanup stays within the selected graph, including when
+explicit node IDs overlap between graphs. Schema assertion upgrades cleanup triggers on existing node partitions;
+new partitions receive them on creation. Run `AssertSchema` when upgrading an existing database before using the
+updated compiler. The Go node-deletion and batch APIs retain their cascading behavior.
+The shared `delete_node_shapes` templates check complete surviving node and relationship state on both backends and
+in both PostgreSQL compiler modes. Committed-fixture checks additionally verify rollback, commit errors and physical
+PostgreSQL edge storage. DELETE preserves the incoming rows for RETURN, including counts, captured scalars,
+null targets and repeated matches. Capture property values before deleting an entity when those values are needed
+later. The shared `delete_continuation_shapes` templates cover grouping, pagination and complete stored state.
+When a PostgreSQL query part creates or updates entities before DELETE, execution materializes its input rows at a
+statement boundary in the same transaction, so deletion observes the earlier writes. Failures roll back those writes;
+this path uses the same temporary-relation lifecycle as multipart mutations. Compiler consumers must use
+`TranslatedStatements` to execute staged results, as with multipart writes.
+
+PostgreSQL keeps `AND` operands within expressions in `RETURN`, `WITH`, function arguments and `SET`, preserving input
+rows. At `WHERE`, outer conjunctions become filter predicates. The shared `boolean_value_shapes` templates check
+Boolean values, missing properties, node/relationship assignments and exact stored state on both backends and in both
+PostgreSQL compiler modes.
+
+Batch identity keys distinguish entity kinds, property names and values, and relationship endpoints. `NodeUpdate.Key`,
+`RelationshipUpdate.Key`, and `Properties.HashInto` produce opaque identities whose encoding is not a stable storage
+format. Key generation leaves caller-owned identity-property slices in their original order.
+
+Neo4j `Batch.UpdateNodes` applies tracked property deletions alongside property and kind additions and removals.
+Different nodes in the same batch retain their own deletion sets. PostgreSQL `Batch.UpdateNodeBy` applies tracked
+kind removals after resolving the upserted node IDs, preserving other kinds and properties.
+
+PostgreSQL batch operations can commit flushed work before the batch delegate returns. A later delegate error does
+not undo completed flushes. Identity-based node upsert flushes containing kind removals apply the upsert and removals
+in one explicit transaction; other flushes keep their existing execution paths.
+
+Suffix reverse policies keep predicates correlated with carried values or other suffix bindings on the ordinary
+executor; forced reverse diagnostics reject those shapes. `correlated_suffix_shapes` checks exact paths, duplicate rows,
+and mutation selection. Additional constraints on an already-bound root use ordinary traversal as well. A bound expansion
+boundary, including a repeated root, also retains ordinary traversal; `bound_suffix_boundary_shapes` verifies this across
+zero-hop paths, genuine cycles, aliases, and mutation selection.
+
+The PostgreSQL aggregate traversal count lowering rejects `MATCH ... WHERE` clauses carrying pattern predicates with a
+normal translation error; those predicates cannot be expressed against the lowering's recursive CTEs, and declining the
+optimization would reach generic multi-match translation, which does not yet translate the same shape correctly. Plain
+shapes and property-only predicates keep their existing lowering. This containment is PostgreSQL-scoped: Neo4j executes
+pattern predicates natively.
 
 The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
 storage maintenance on the `node` and `edge` tables in the following order:
@@ -77,6 +661,16 @@ statement does not stop the remaining work; every failure is returned together a
 stops the pass before the next statement and is included in the returned error. A cancelled rebuild may leave an
 INVALID `_ccnew` index behind, which the next pass drops in step 1. The pass applies no thresholds and has no time
 limit; callers are responsible for scheduling it, for example behind a cooldown.
+
+The direct-write regression benchmark is integration-scoped because it
+measures real driver batch APIs. It reloads or clears its fixture outside the
+timed region and validates post-state after every iteration:
+
+```bash
+CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+  go test -tags manual_integration ./integration -run '^$' \
+  -bench BenchmarkMutationSafeDirectWrites -benchtime=1x
+```
 
 Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
 
@@ -95,18 +689,237 @@ The harness writes raw outputs and a Markdown report under `.bench/runs/` by def
 findings, includes the raw `benchstat` output for each benchmark suite, and ends with a table of all captured benchmark
 numbers.
 
-The integration benchmark runner includes committed `base`, `adcs_fanout`, and `traversal_shapes` datasets by default.
+The integration benchmark runner includes committed `base`,
+`fixed_suffix_expansion_fanout`, and `traversal_shapes` datasets by default.
 The traversal shape suite checks expected result counts for chain, fanout, bounded cycle, disconnected,
 edge-kind-selective, and multi-path shortest-path scenarios before recording timings.
 
 `make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
 `CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
-writes JSONL captures and markdown/JSON summaries under `.coverage/`.
+writes JSONL captures and markdown/JSON summaries under `.coverage/`. Captures record the DAWGS source version, which
+can be overridden with a command flag when needed. It reloads fixtures for each selected backend.
 
 `go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
-current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
-comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
-against a previous JSONL baseline.
+implemented execution modes are `postgres_sql` and `neo4j`; `local_traversal` is an explicit, non-gating
+`not_implemented` diagnostic placeholder, and AGE is reference-design input only. The command can emit JSONL records
+plus Markdown and JSON summaries, and can compare current timings against a previous JSONL baseline. Mutating scale
+cases must declare a `write_scenario`; each warm-up and timed iteration runs in a rollback transaction and verifies
+matched, affected, and post-state cardinality.
+Read timings retain every raw warm sample and are bracketed by untimed exact-row
+multiset checks. PostgreSQL datasets are vacuumed and analyzed after loading and
+before measured reads. Fixture reloads truncate the active relationship and node
+partitions together, and
+PostgreSQL captures fail before timing unless the active partitions' physical
+node and edge counts exactly match the declared fixture; active child-partition
+sizes are retained with each fixture. Node-ID expectations and recorded paths use stable
+fixture identities rather than backend-assigned IDs, while preserving duplicate
+rows and path order.
+For sanitized production-like data, `-existing-graph` uses a versioned
+logical-key anchor manifest and bypasses every schema/load/clear/vacuum path.
+It rejects mutation cases, verifies before/after cardinalities, redacts anchor
+values, and supports atomic checkpoints, resume, progress JSONL, and explicitly
+labeled adaptive discovery. See `cmd/graphbench/README.md` for the fixed
+confirmation and timeout-class workflows.
+The executable gate uses the complete corpus/backend declaration instead of the
+intersection of successful records, treats Neo4j only as an exact-result and
+informational latency oracle, and supports predeclared materiality thresholds.
+`make perf_aa` derives host-fingerprinted p50/p95 measurement resolution from
+order-balanced repeated A/A captures. Complete normal/envelope performance
+gates require that checksummed per-case evidence and use minimum 5%/100us
+floors; stress timing remains diagnostic. Exact case/dataset/category/tag selectors create diagnostic-only
+artifacts that the complete gate refuses; configured warmups and matched
+arm/block/run metadata support isolated confirmation. The GraphBench CLI accepts
+repeated `-aa-artifact` inputs so two immutable append-series arms can be
+validated without an external merge. `make perf_confirm`
+reports paired absolute and relative p50/p95 changes with optional block/reload
+A/A floors. Capture bundles can retain the source patch, untracked sources,
+module state, binary, manifest, raw records, and checksums. Opt-in pool
+concurrency blocks and PostgreSQL component/full-query
+references are documented in `cmd/graphbench/README.md`. Path-observed
+singleton captures include exact benchmark-only M0/M1 materializer arms with a
+shared search boundary; they do not enable an experimental production executor.
+Generated fixed-suffix expansion captures provide selectable exact root-reuse,
+late-hydration, factored-suffix forward, suffix-seeded reverse, and
+backward-viability forward arms plus versioned fixtures with independent
+suffix-density and reverse-fan-in controls. V3 fixtures additionally encode
+matching-root multiplicity and independent relationship-distinct cycle and
+self-loop controls at the productive boundary. The optimizer reports a typed
+expansion-search decision. Repository-native
+`EXPANSION-SUFFIX-SEEDED-REVERSE` is an exact qualification-only implementation.
+When a complete path is observed, that arm carries ordered node IDs alongside
+ordered edge IDs and hydrates both arrays directly in the translated statement;
+endpoint-only forms keep the smaller edge-only reverse state. The guarded
+candidate uses the same materializer while its exact forward fallback retains
+the generic path helper.
+Production selection remains on the stepwise incumbent because query shape and
+available metadata do not provide hard suffix-density or reverse-state bounds.
+The now-terminal, tool-only `orientation-probe-v2` experiment uses
+`F2 = root_rows + maximum_depth * forward_degree_rows` and
+`R2 = suffix_rows + boundary_rows + reverse_degree_rows`, selecting reverse
+only when every bounded probe is complete and `4 * R2 < 3 * F2`. Its frozen v3
+corpus contains eight selector-training cases and four evaluation holdouts whose
+timings remain unopened. Its frozen historical protocol required matched
+`shadow`, `incumbent`, `reverse`, and `guarded` artifacts captured under
+Repeatable Read with traversal telemetry. Degree evidence is represented as a
+scalar count over the same cap+1-limited adjacency stream, avoiding tuple
+materialization without changing the immutable score or fail-closed overflow
+rule. A promotable discovery would have needed a clean-tree report and freeze
+from the exact eight training cases before confirmation could open the complete
+eight-training/four-holdout cohort. That path is now archival only: v2 must not
+be recaptured or advanced, and its holdout timings remain unopened. Per-case A/A
+evidence also binds the PostgreSQL timing environment, including transaction
+isolation, and the exact validated fixture. See
+[GraphBench](cmd/graphbench/README.md) for the frozen protocol.
+No v2 qualification benchmark has passed. The driver/runtime seam recognizes
+exact-query manifests that name either the v1 or v2 selector identity so their
+diagnostic and guarded statements remain reproducible. The schema-v2 final
+verifier rejects legacy v1 evidence because it cannot bind the required source,
+corpus, and frozen cohort; it also terminally rejects v2 because that immutable
+policy generation failed its training overhead gate. A future attempt requires
+a new policy generation. Neither selector is enabled, and default production
+behavior remains unchanged.
+The latest five-round, eight-case v2 training prequalification produced exact,
+receipt-complete evidence but failed selected-arm overhead on every case: the
+guarded statement remained roughly 156-396 microseconds above its selected
+exact arm against the immutable 100-microsecond gate. A reduced-gating
+prototype also failed a fresh matched capture and was reverted. V2 is therefore
+a rejected selector generation rather than a pending clean-tree promotion; any
+next attempt must use a new policy identity and qualification freeze.
+The subsequent bounded experiment was the independent, tool-only
+`suffix-reverse-guard-v1` policy. It enrolls only complete-path fixed-suffix
+queries, performs no topology or degree probes, caps suffix payload and reverse
+state at 512 rows each, and dispatches either exact suffix-seeded reverse or the
+unchanged exact forward traversal in one Repeatable Read statement. Its
+six-round training feasibility gate is deliberately not a qualification or
+production seam; endpoint-only queries, mutations, protected holdouts, and the
+zero-value production translator remain outside the experiment. The gate also
+requires process timestamps to prove the declared physical doubled-Williams
+order and an artifact-bound schema-v4 A/A chronology proof. The first capture
+predates that enforcement and is invalid. A chronology-compliant recapture then
+failed the immutable guard-overhead bound on both training cases, so this
+generation is terminally stopped before holdout, manifest, driver-policy, or
+automatic-selector work.
+For the distinct one-fixed-prefix plus selective-terminal-expansion shape,
+production uses guarded `EXPANSION-ENDPOINT-SEEDED-REVERSE`: 32 endpoint and
+4096 reverse-state caps select either the reverse candidate or an exact
+same-statement forward fallback without exposing partial candidate rows.
+
+The fixed-suffix development generation remains available only to GraphBench
+through `-postgres-expansion-suffix-reverse-retry`. It executes a reverse-only
+bounded statement, buffers all candidate rows, and retries the exact forward
+incumbent after a savepoint rollback in the same Repeatable Read transaction.
+Its statement contains no topology probes or inactive forward body. The frozen
+development contract and stop gate are documented in
+[Suffix reverse transaction retry v1](docs/experiments/suffix_reverse_retry_v1.md).
+
+Separately, the PostgreSQL V2 driver implements the default-off manifest-v4
+topology route boundary. An installed v4 policy requires a compatible,
+current topology synopsis and a read-only Repeatable Read or Serializable
+transaction. The first matching query in that transaction records an
+incumbent-only decision; only a later matching query with the same snapshot,
+parameters, policy identity, and synopsis generation may execute the bounded
+reverse candidate with exact forward retry. No v4 promotion manifest ships
+with Dawgs, so this implementation does not change default production SQL.
+
+PostgreSQL recursive shortest-path execution includes contained S3/S4
+singleton selection, a guarded canonical inline witness canary, and an
+all-shortest predecessor-DAG executor, with exact same-statement fallback,
+reusable session-local workspace-v2 state, late hydration, event-chain runtime
+receipts, and
+a parameter-shape-aware translation cache. The implementation and its
+qualification boundaries are documented in
+[Recursive-descent cost controls](docs/recursive_descent_cost_controls.md).
+
+New inline SP and ordinary-orientation lowerings remain default-off. Canonical
+SP-I1 authorization now uses selector `sp-static-v6` and accepts only the
+qualified inbound, typed, single-kind, one-path `min=1`/`max=64` bucket; the
+automatic `sp-static-v5-contained` S3/S4 choices are unchanged. The
+guarded distance identity `SP-I2-C-D` uses selector `sp-static-v8-hidden-fanin`
+for exact inbound typed single-kind distance buckets, reverse-physical ID-only
+search, the preregistered production-form `state_limit=100000` and
+`frontier_limit=100000` guards, and exact S4 fallback. Those caps are immutable
+protocol inputs, not qualified values: the dirty-tree rehearsal stopped before
+creating a discovery report or freeze, its cycle-control point estimates missed
+the frozen bounds, and no protected holdout was opened. Syntax-open
+singleton shortest paths now use the documented effective maximum depth 15 and
+report `policy_default` depth provenance under `sp-static-v7-contained`.
+The PostgreSQL driver's `SetTraversalPolicy` API can expose one eligible
+candidate to an explicit normalized-query SHA-256 allowlist under a nonzero
+generation.
+The benchmark command can exercise that real V2 policy path only with a
+GraphBench-verified manifest; its usage and guardrails are documented in
+[`cmd/benchmark/README.md`](cmd/benchmark/README.md).
+Activation requires the exact promotion manifest, including its measured
+execution boundary, independently frozen operational candidate SQL SHA-256,
+and evidence digests. The SQL anchor is derived in a non-promotional preflight,
+then added to the provisional manifest before formal evidence is recaptured;
+the benchmark preflight renders but does not execute a candidate or authorize
+it for production policy selection.
+Manifest schema v2 also requires every evidence report to repeat the exact
+candidate, selector, source, binary,
+corpus, cap, bucket, and query-cohort identity; a digest-shaped string alone is
+not authorization. The verifier strictly decodes candidate-specific evidence,
+recomputes the bound native A/A digest and performance decisions, requires the
+reference workload digest to match the exact PostgreSQL A/A workload per cohort
+case, and closes every performance receipt against the complete set of resource
+case-round receipts. Confirmation and performance expose typed evidence rather
+than raw benchmark samples, so final verification can recompute their declared
+decisions but cannot independently replay every bootstrap draw; closing that
+reproducibility gap requires a producer-schema revision. The operational gate
+likewise validates an assembled 32-record native input but does not yet provide
+a standalone capture producer. Evidence roles,
+bucket names, query identities, and the canonical training/holdout split are
+closed sets; duplicate JSON keys, duplicate allowlist entries, extra roles, and
+filesystem-symlink escapes fail closed. The legacy
+`orientation-probe-v1` report lacks the source/corpus/cohort identity needed by
+this closure and therefore cannot authorize promotion. The structurally richer
+v2 report remains readable, but final authorization rejects that terminal
+generation because its immutable training overhead gate failed. B1/B2 and legacy
+unguarded `SP-I1-C-D` remain tooling-only. Endpoint-seeded reverse,
+inline ASP, inline canonical witness, and guarded inline distance each have an
+evidence-free emergency disable switch. If a manifest-backed candidate carries
+a rollback switch, it may carry exactly one and it must match: orientation with
+`DisableExpansionOrientation`, ASP-I1 with `DisableInlineASPDAG`, SP-I1 witness
+with `DisableInlineSPWitness`, or SP-I2 with `DisableInlineSPDistance`. An
+unrelated or second switch is rejected. `DisableEndpointSeededReverse` is
+standalone-only; every standalone rollback must omit a candidate and leave
+`promotion_manifest_sha256`, `promotion_manifest_json`, and
+`query_sha256_allowlist` empty. A matching rollback preserves the installed
+manifest and candidate anchor but derives an incumbent-only effective policy
+under a new cache generation. Resetting the policy to its zero value immediately
+returns all queries to incumbent cache identities. This is a reversible canary
+seam, not evidence that a candidate is qualified for broad production use.
+
+The PostgreSQL scale-plan gate runs as part of `make test_all` when
+`CONNECTION_STRING` selects PostgreSQL. It executes every required Cypher scale
+representative with `EXPLAIN ANALYZE`, enforces declared result or mutation
+cardinality, and checks stable mutation-target and anchored edge-index
+invariants. Run it directly with:
+
+```bash
+CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs" \
+  go test -tags manual_integration ./cmd/graphbench \
+  -run 'Test(PostgreSQLScalePlanInvariants|ScaleCorpusRequiredRepresentativesDeclareCardinality)' \
+  -count=1
+```
+
+Runtime and plan captures are intentionally generated under the ignored
+`.coverage/` directory. Keep them as reviewed environment-specific artifacts;
+use the stable `GFSE-*`, `REC-*`, `TRUST-*`, `PRUNE-*`, `HOP-*`, `SCAN-*`, and
+`LOOKUP-*` IDs to compare captures with their semantic fixtures and manifest
+entries.
+
+The SP-I2 distance V2 study is terminally stopped before formal timing. Its
+frozen 20,000-run prospective calibration, reconstructed from the clean V1
+trace, could not support the fixed A/A and qualification design at the required
+power. V2 therefore remains production-off and must not proceed to A/A,
+holdout, confirmation, or promotion; see
+[`cmd/graphbench/README.md`](cmd/graphbench/README.md) for the reproducible
+verification command. In plain terms, comparing the same implementation with
+itself still produced uncertainty of roughly `-5.4%` to `+6.3%` and
+`-116us` to `+133us`, wider than the allowed plus-or-minus 5% and 100us. The
+fixed study recognized the target and control outcomes only about 48% and 51%
+of the time, respectively, instead of the required 90% reliability.
 
 `go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
 manifest-based collections of compressed JSONL fragments. It supports
@@ -119,6 +932,17 @@ file creation refuses existing output paths. See
 [cmd/retriever/README.md](cmd/retriever/README.md) for dump, Parquet sidecar,
 archive, load, scrubbed dump, metrics verification, and benchmark
 examples.
+Full scrub recursively classifies nested map properties, including maps inside arrays. Explicit
+`preserve_keys` overrides preserve whole values. The `retriever-scrub-v3` policy records recursive container
+plans as `scrub_nested` in top-level action counts and rejects resume checkpoints from earlier scrub rules.
+Retriever JSONL loads and OpenGraph document imports preserve integer tokens as exact signed
+64-bit values, including inside arrays and nested maps. Decimal and exponent tokens use
+`float64` with ordinary binary floating-point rounding. Out-of-range integer tokens and
+floating-point overflow are rejected before import writes; backend property-shape limits still apply.
+`opengraph.ParseDocument` now returns `int64` for integer tokens instead of `float64`.
+Collection fragment paths must be clean relative paths with slash separators. Checksum,
+preflight and load reads resolve files beneath the collection root; escaping paths and
+symlinks are rejected, while contained relative symlinks are supported for directory loads.
 The same import/export functionality is available to library consumers from
 `github.com/specterops/dawgs/retriever`; callers provide an already-open
 `graph.Database`, and archive helpers support both path-based and stream-based
@@ -155,8 +979,21 @@ replace github.com/specterops/dawgs => /path/to/dawgs
 - [Development workflow](docs/development.md): build, test, integration, metrics, quality, and corpus-capture commands.
 - [Cypher library](cypher/README.md): parser generation and Cypher package overview.
 - [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
+- [CySQL traversal performance priorities](docs/cysql_traversal_priorities.md): source-grounded roadmap for orientation, SP/ASP, probes, statistics, telemetry, and qualification.
+- [Traversal priority implementation status](docs/experiments/traversal_priority_implementation_status_v1.md): implemented candidate identities, fail-closed gates, and current no-promotion disposition.
+- [Remaining traversal outlier delivery](docs/experiments/remaining_outlier_delivery_v1.md): SP-I2, fixed-suffix, qualification, promotion-closure, and rollback handoff.
+- [Production-wide SQL selection](docs/experiments/production_wide_sql_selection_v1.md): staged structural and topology-aware PostgreSQL routing contract.
+- [Topology fixed-suffix v4 status](docs/experiments/topology_fixed_suffix_v4_status_v1.md): implemented default-off routing boundary and promotion non-activation record.
+- [Topology fixed-suffix v4 capture procedure](docs/experiments/topology_fixed_suffix_v4_capture_v1.md): clean-source evidence sequence required before a v4 policy may be installed.
+- [Topology fixed-suffix first-use routing](docs/experiments/topology_fixed_suffix_first_use_v1.md): separately versioned v5 selector and its promotion contract.
+- [Composite fixed-suffix lowering](docs/experiments/fixed_suffix_composite_lowering_v1.md): query-atomic multi-region retry substrate.
+- [ASP A1 inline hydration disposition](docs/experiments/asp_a1_inline_hydration_v1.md): parameterized attribution, A1 hydration result, and B2 negative disposition.
+- [ASP N1 negative-exhaustion disposition](docs/experiments/asp_n1_negative_exhaustion_v1.md): bounded no-path proof with exact A1 fallback and its production-selection boundary.
 - [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
+- [Integration corpus](integration/testdata/README.md): fixture, mutation post-state, and typed-parameter schema.
+- [BloodHound regression coverage manifest](regression_coverage_manifest.md): per-query-form layer status and existing primitive links.
+- [BloodHound source-parity workflow](docs/regression_source_parity.md): dormant-form activation rules and repeatable BHE/BHCE source audits.
 - [Cypher syntax support](cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
 
 ## Repository Map

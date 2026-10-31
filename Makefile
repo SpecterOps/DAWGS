@@ -2,6 +2,7 @@ THIS_FILE := $(lastword $(MAKEFILE_LIST))
 
 # Go configuration
 GO_CMD ?= go
+GOIMPORTS_CMD ?= goimports
 CGO_ENABLED ?= 0
 BENCH ?= .
 BENCH_COUNT ?= 10
@@ -33,6 +34,37 @@ METRICS_ENFORCE ?= 0
 BENCHMARK_REPORT ?=
 BENCHMARK_BASELINE ?=
 BENCHMARK_REGRESSION ?= 0.20
+PERF_BASELINE ?=
+PERF_CANDIDATE ?=
+PERF_GATE_OUTPUT ?= $(METRICS_DIR)/perf-gate.json
+PERF_GATE_SEED ?= 1
+PERF_CONFIDENCE ?= 0.975
+PERF_REGRESSION ?= 0.05
+# Promotion-grade gates must override this with one or more workload names
+# whose improvement is required to clear the host A/A-aware materiality floor.
+PERF_TARGETS ?=
+PERF_MATERIALITY_RATIO ?= 0.95
+PERF_MATERIALITY_ABSOLUTE ?= 100us
+PERF_AA_ARTIFACT ?=
+PERF_AA_OUTPUT ?= $(METRICS_DIR)/perf-aa-resolution.json
+PERF_GATE_AA ?= $(PERF_AA_OUTPUT)
+PERF_LEFT ?=
+PERF_RIGHT ?=
+PERF_CONFIRM_AA ?=
+PERF_CONFIRM_OUTPUT ?= $(METRICS_DIR)/perf-confirmation.json
+PERF_CASES ?=
+PERF_FILTER_CASES ?=
+PERF_DIAGNOSTIC_GATE ?= 0
+PERF_BUNDLE_VERIFY_DIR ?=
+PERF_BUNDLE_VERIFY_OUTPUT ?= $(METRICS_DIR)/capture-bundle-verification.json
+PERF_BUNDLE_REQUIRE_CLEAN ?= 0
+PERF_EXPAND_INTO_ARTIFACT ?=
+PERF_EXPAND_INTO_OUTPUT ?= $(METRICS_DIR)/expand-into-study.json
+PERF_EXPAND_INTO_PROTOCOL ?= discovery
+PERF_TOURNAMENT_ARTIFACT ?=
+PERF_TOURNAMENT_OUTPUT ?= $(METRICS_DIR)/reference-tournament.json
+PERF_TOURNAMENT_ARMS ?=
+PERF_TOURNAMENT_PROTOCOL ?= confirmation
 FUZZ_REPORT ?=
 MUTATION_REPORT ?=
 BACKEND_RESULT_ARGS ?=
@@ -56,7 +88,7 @@ QUALITY_INPUTS += -mutation-report $(MUTATION_REPORT)
 endif
 QUALITY_INPUTS += -benchmark-regression $(BENCHMARK_REGRESSION)
 
-.PHONY: default all build deps tidy lint format test test_all test_integration test_bdd_integration test_neo4j test_pg test_update plan_corpus complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
+.PHONY: default all build deps tidy lint format test test_all test_integration test_bdd_integration test_neo4j test_pg test_update plan_corpus perf_gate perf_aa perf_confirm perf_bundle_verify perf_expand_into perf_tournament complexity complexity_check crap crap_check quality quality_check quality_backend quality_bench metrics metrics_check generate clean help
 
 # Default target
 default: help
@@ -79,11 +111,12 @@ tidy:
 # Code quality
 lint:
 	@echo "Running linter..."
-	@$(GO_CMD) vet ./...
+	@$(GO_CMD) vet -unreachable=false ./...
+	@$(GO_CMD) list ./... | grep -v '/cypher/parser$$' | xargs $(GO_CMD) vet -unreachable
 
 format:
 	@echo "Formatting code..."
-	@find ./ -name '*.go' -print0 | xargs -P 12 -0 -I '{}' goimports -w '{}'
+	@find ./ \( -path './.git' -o -path './.coverage' \) -prune -o -name '*.go' -print0 | xargs -P 12 -0 -I '{}' $(GOIMPORTS_CMD) -w '{}'
 
 # Test targets
 test: $(METRICS_DIR)
@@ -128,6 +161,93 @@ test_update:
 plan_corpus: $(METRICS_DIR)
 	@echo "Capturing Cypher plan corpus..."
 	@$(GO_CMD) run ./cmd/plancorpus
+
+perf_gate: $(METRICS_DIR)
+	@if [ -z "$(PERF_BASELINE)" ] || [ -z "$(PERF_CANDIDATE)" ]; then \
+		echo "PERF_BASELINE and PERF_CANDIDATE are required."; \
+		exit 1; \
+	fi
+	@if [ "$(PERF_DIAGNOSTIC_GATE)" != "1" ] && [ -z "$(strip $(PERF_TARGETS))" ]; then \
+		echo "PERF_TARGETS is required for a promotion-grade performance gate."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-gate-baseline "$(PERF_BASELINE)" \
+		-gate-candidate "$(PERF_CANDIDATE)" \
+		-gate-output "$(PERF_GATE_OUTPUT)" \
+		-gate-aa "$(PERF_GATE_AA)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)" \
+		-regression-threshold "$(PERF_REGRESSION)" \
+		-gate-targets "$(PERF_TARGETS)" \
+		-materiality-ratio "$(PERF_MATERIALITY_RATIO)" \
+		-materiality-absolute "$(PERF_MATERIALITY_ABSOLUTE)" \
+		-cases "$(PERF_FILTER_CASES)" \
+		-diagnostic-gate="$(PERF_DIAGNOSTIC_GATE)"
+
+perf_aa: $(METRICS_DIR)
+	@if [ -z "$(PERF_AA_ARTIFACT)" ]; then \
+		echo "PERF_AA_ARTIFACT is required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-aa-artifact "$(PERF_AA_ARTIFACT)" \
+		-aa-output "$(PERF_AA_OUTPUT)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)"
+
+perf_confirm: $(METRICS_DIR)
+	@if [ -z "$(PERF_LEFT)" ] || [ -z "$(PERF_RIGHT)" ]; then \
+		echo "PERF_LEFT and PERF_RIGHT are required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-confirm-left "$(PERF_LEFT)" \
+		-confirm-right "$(PERF_RIGHT)" \
+		-confirm-aa "$(PERF_CONFIRM_AA)" \
+		-confirm-output "$(PERF_CONFIRM_OUTPUT)" \
+		-confirm-cases "$(PERF_CASES)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)"
+
+perf_bundle_verify: $(METRICS_DIR)
+	@if [ -z "$(PERF_BUNDLE_VERIFY_DIR)" ]; then \
+		echo "PERF_BUNDLE_VERIFY_DIR is required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-bundle-verify "$(PERF_BUNDLE_VERIFY_DIR)" \
+		-bundle-verify-output "$(PERF_BUNDLE_VERIFY_OUTPUT)" \
+		-bundle-require-clean="$(PERF_BUNDLE_REQUIRE_CLEAN)"
+
+perf_expand_into: $(METRICS_DIR)
+	@if [ -z "$(PERF_EXPAND_INTO_ARTIFACT)" ]; then \
+		echo "PERF_EXPAND_INTO_ARTIFACT is required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-expand-into-artifact "$(PERF_EXPAND_INTO_ARTIFACT)" \
+		-expand-into-output "$(PERF_EXPAND_INTO_OUTPUT)" \
+		-expand-into-protocol "$(PERF_EXPAND_INTO_PROTOCOL)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)" \
+		-materiality-ratio "$(PERF_MATERIALITY_RATIO)" \
+		-materiality-absolute "$(PERF_MATERIALITY_ABSOLUTE)"
+
+perf_tournament: $(METRICS_DIR)
+	@if [ -z "$(PERF_TOURNAMENT_ARTIFACT)" ] || [ -z "$(PERF_TOURNAMENT_ARMS)" ]; then \
+		echo "PERF_TOURNAMENT_ARTIFACT and PERF_TOURNAMENT_ARMS are required."; \
+		exit 1; \
+	fi
+	@$(GO_CMD) run ./cmd/graphbench \
+		-reference-tournament-artifact "$(PERF_TOURNAMENT_ARTIFACT)" \
+		-reference-tournament-output "$(PERF_TOURNAMENT_OUTPUT)" \
+		-reference-tournament-arms "$(PERF_TOURNAMENT_ARMS)" \
+		-reference-tournament-protocol "$(PERF_TOURNAMENT_PROTOCOL)" \
+		-seed "$(PERF_GATE_SEED)" \
+		-confidence-level "$(PERF_CONFIDENCE)" \
+		-materiality-ratio "$(PERF_MATERIALITY_RATIO)" \
+		-materiality-absolute "$(PERF_MATERIALITY_ABSOLUTE)"
 
 # Metric targets
 $(METRICS_DIR):
@@ -240,6 +360,12 @@ help:
 	@echo "  test_neo4j  - Run Neo4j integration tests"
 	@echo "  test_pg     - Run PostgreSQL integration tests"
 	@echo "  plan_corpus - Capture shared corpus query plans for configured backends"
+	@echo "  perf_gate   - Compare complete declared GraphBench artifacts"
+	@echo "  perf_aa     - Calculate A/A measurement resolution for GraphBench"
+	@echo "  perf_confirm - Build a paired GraphBench confirmation report"
+	@echo "  perf_bundle_verify - Verify a portable GraphBench capture bundle"
+	@echo "  perf_expand_into - Build the fixed-one-hop three-arm study report"
+	@echo "  perf_tournament - Qualify a predeclared three- or five-arm reference tournament"
 	@echo "  test_update - Update test cases"
 	@echo "  complexity  - Report cyclomatic complexity"
 	@echo "  crap        - Report CRAP scores from unit test coverage"

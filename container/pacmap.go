@@ -113,7 +113,7 @@ func (s *packedBucket) merge() {
 	}
 
 	s.keys = mergedSet
-	s.values = s.values[0:len(s.values):len(s.values)]
+	s.values = values
 }
 
 func (s *packedBucket) Compact() {

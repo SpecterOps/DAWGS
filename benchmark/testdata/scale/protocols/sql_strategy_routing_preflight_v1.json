@@ -1,0 +1,113 @@
+{
+  "schema": "sql-strategy-routing-preflight-v1",
+  "generation": "sql-strategy-routing-preflight-v1",
+  "status": "frozen_preimplementation",
+  "production_default": "off",
+  "purpose": "diagnostic-only feasibility for externally selected single-arm fixed-suffix reverse SQL; not a retry, same-statement probe, cache implementation, schema change, production selector, or performance qualification",
+  "predecessors": {
+    "p0": {
+      "source_commit": "a4b29f2",
+      "binary_sha256": "6745fca9c3b79b48875a0d5555f375f458af34d938e20e545bb6bce27379fca2",
+      "round_1": ".coverage/p0-sql-routing-20260819/round-1.jsonl",
+      "round_1_sha256": "a50836f08eaf85fac839f09d15420f060445ffb5312bf3bf609552fc86ad26ca",
+      "round_2": ".coverage/p0-sql-routing-20260819/round-2.jsonl",
+      "round_2_sha256": "fb6198257d15c71f2dcb348e1d2c3d7a9579b27ef44d983b3d5fc50f0336e262",
+      "backend_delta_sha256": "7be78bef932ee10a2c5d7b11237c419ece655e8cedc239adaa13f6997adf0e55"
+    },
+    "terminal_generations": [
+      "orientation-probe-v2",
+      "suffix-reverse-guard-v1",
+      "suffix-reverse-retry-v1"
+    ]
+  },
+  "identities": {
+    "incumbent": "EXPANSION-STEPWISE-FORWARD",
+    "component": "EXPANSION-SUFFIX-SEEDED-REVERSE",
+    "diagnostic_label": "suffix-route-component-v1",
+    "selector": "none",
+    "fallback": "forbidden"
+  },
+  "execution_boundary": {
+    "statement": "one exact forced reverse statement or one exact incumbent statement",
+    "selection": "external diagnostic arm selection only",
+    "transaction": "caller-owned repeatable_read",
+    "same_statement_probe": "forbidden",
+    "inactive_forward_body": "forbidden",
+    "transaction_retry": "forbidden",
+    "persistent_cache": "forbidden",
+    "persistent_synopsis": "forbidden"
+  },
+  "roster": {
+    "tag": "suffix-route-component-v1",
+    "status": "open_training_only",
+    "requires_new_fixture_identities": true,
+    "targets": [
+      "GFSE-SRC-V1-TARGET-D16-F1024-sparse_endpoint_ids",
+      "GFSE-SRC-V1-TARGET-D17-F1025-sparse_path"
+    ],
+    "adverse_controls": [
+      "GFSE-SRC-V1-CONTROL-D08-F017-I1024-high_reverse_fanin",
+      "GFSE-SRC-V1-CONTROL-D05-F016-dense_suffix",
+      "GFSE-SRC-V1-CONTROL-D09-F513-no_path",
+      "GFSE-SRC-V1-CONTROL-CAP511",
+      "GFSE-SRC-V1-CONTROL-CAP512",
+      "GFSE-SRC-V1-CONTROL-CAP513",
+      "GFSE-SRC-V1-CONTROL-productive_cycle_path",
+      "GFSE-SRC-V1-CONTROL-productive_self_loop_path",
+      "GFSE-SRC-V1-CONTROL-multiple_relationship_distinct_paths"
+    ],
+    "excluded": [
+      "all protected declarations",
+      "all terminal-generation declarations",
+      "all shortest-path and all-shortest-path declarations",
+      "endpoint-seeded expansion declarations"
+    ]
+  },
+  "design": {
+    "modes": ["postgres_sql"],
+    "pool_size": 1,
+    "isolation": "repeatable_read",
+    "traversal_telemetry": "diagnostic",
+	"require_clean_source": true,
+    "warmup_iterations": 1,
+    "timed_iterations": 5,
+    "rounds": 4,
+    "comparison": "matched incumbent versus direct reverse component",
+    "records_per_arm_round": 11,
+    "timed_samples_per_arm_round": 55,
+    "arm_orders": [
+      ["incumbent", "reverse_component"],
+      ["reverse_component", "incumbent"],
+      ["incumbent", "reverse_component"],
+      ["reverse_component", "incumbent"]
+    ],
+    "cap_overrides_permitted": false,
+    "protected_case_access_permitted": false
+  },
+  "required_observations": [
+    "exact_public_rows_and_paths",
+    "reverse_runtime_identity",
+    "zero_inactive_forward_executor_work",
+    "suffix_boundary_reverse_receipt_and_ordered_hydration_counters",
+    "planning_execution_decode_and_first_session_timings",
+    "buffers_temp_wal_and_workspace_high_water",
+    "cancellation_and_pool_reuse",
+    "no_public_rows_before_complete_status"
+  ],
+  "next_authorization": {
+    "requires": [
+      "new fixture declarations and exact oracles",
+      "all direct component records exact with complete telemetry",
+      "material improvement on both frozen sparse target classes",
+      "a separately frozen cache-feasibility protocol before any automatic decision cache"
+    ],
+    "does_not_authorize": [
+      "production routing",
+      "translation-cache key changes",
+      "persistent topology schema",
+      "transaction retry",
+      "protected holdout access",
+      "promotion or Neo4j release-gate claims"
+    ]
+  }
+}

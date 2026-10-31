@@ -1,0 +1,552 @@
+{
+  "families": [
+    {
+      "name": "Undirected self reference",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "loop-a", "kinds": ["SelfRefNode"], "properties": {"name": "loop-a", "eligible": true}},
+          {"id": "loop-b", "kinds": ["SelfRefNode"], "properties": {"name": "loop-b", "eligible": true}},
+          {"id": "source", "kinds": ["SelfRefNode"], "properties": {"name": "source", "eligible": true}},
+          {"id": "sink", "kinds": ["SelfRefNode"], "properties": {"name": "sink", "eligible": true}},
+          {"id": "wrong-kind", "kinds": ["SelfRefOther"], "properties": {"name": "wrong-kind", "eligible": true}},
+          {"id": "wrong-prop", "kinds": ["SelfRefNode"], "properties": {"name": "wrong-prop", "eligible": false}},
+          {"id": "missing", "kinds": ["SelfRefNode"], "properties": {"name": "missing"}},
+          {"id": "isolated", "kinds": ["SelfRefNode"], "properties": {"name": "isolated", "eligible": true}},
+          {"id": "other", "kinds": ["SelfRefNode"], "properties": {"name": "other", "eligible": true}}
+        ],
+        "edges": [
+          {"start_id": "loop-a", "end_id": "loop-a", "kind": "SelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "loop-b", "end_id": "loop-b", "kind": "SelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "source", "end_id": "sink", "kind": "SelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "sink", "end_id": "source", "kind": "SelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "wrong-kind", "end_id": "wrong-kind", "kind": "SelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "wrong-prop", "end_id": "wrong-prop", "kind": "SelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "missing", "end_id": "missing", "kind": "SelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "other", "end_id": "other", "kind": "SelfRefEdge", "properties": {"marker": "no"}},
+          {"start_id": "source", "end_id": "source", "kind": "OtherSelfRefEdge", "properties": {"marker": "yes"}},
+          {"start_id": "source", "end_id": "loop-a", "kind": "SelfRefPrefix", "properties": {"marker": "prefix"}},
+          {"start_id": "sink", "end_id": "loop-b", "kind": "SelfRefPrefix", "properties": {"marker": "prefix"}}
+        ]
+      },
+      "variants": [
+        {
+          "name": "only genuine self loops",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x ORDER BY x.name"},
+          "assert": {
+            "ordered_node_ids": ["loop-a", "loop-b"],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "self loop count",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN count(*) AS c"},
+          "assert": {
+            "exact_int": 2
+          }
+        },
+        {
+          "name": "unconstrained repeated endpoint",
+          "vars": {"query": "MATCH (x)-[r:SelfRefEdge]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"], ["missing"], ["other"], ["wrong-kind"], ["wrong-prop"]],
+            "row_count": 6
+          }
+        },
+        {
+          "name": "anonymous relationship",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "right occurrence constraints",
+          "vars": {"query": "MATCH (x)-[r:SelfRefEdge {marker:'yes'}]-(x:SelfRefNode {eligible:true}) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "where property constraints",
+          "vars": {"query": "MATCH (x:SelfRefNode)-[r:SelfRefEdge]-(x) WHERE x.eligible = true AND r.marker = 'yes' RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "parameterized loop filters",
+          "vars": {"query": "MATCH (x:SelfRefNode)-[r:SelfRefEdge]-(x) WHERE x.eligible = $eligible AND r.marker = $marker RETURN x.name ORDER BY x.name"},
+          "params": {"eligible": true, "marker": "yes"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "non loop incident node excluded",
+          "vars": {"query": "MATCH (x:SelfRefNode {name:'sink'})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x"},
+          "assert": "empty"
+        },
+        {
+          "name": "conflicting repeated node constraints",
+          "vars": {"query": "MATCH (x:SelfRefNode {name:'source'})-[r:SelfRefEdge]-(x {name:'sink'}) RETURN x"},
+          "assert": "empty"
+        },
+        {
+          "name": "path repeats its only endpoint",
+          "vars": {"query": "MATCH p = (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN p"},
+          "assert": {
+            "path_node_ids": [["loop-a", "loop-a"], ["loop-b", "loop-b"]],
+            "path_lengths": [1, 1],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "returned relationship identities",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN r"},
+          "assert": {
+            "relationship_records": [
+              {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+              {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes"}}
+            ],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "distinct endpoint equality control",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(y) WHERE x = y RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "generic undirected loop control",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(y) RETURN count(*) AS c"},
+          "assert": {
+            "exact_int": 6
+          }
+        },
+        {
+          "name": "directed self loop control",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]->(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "bound endpoint control",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true}) MATCH (x)-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "bound alias control",
+          "vars": {"query": "MATCH (n:SelfRefNode {eligible:true}) WITH n AS x MATCH (x)-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "duplicate independent input rows",
+          "vars": {"query": "UNWIND [1, 1] AS row WITH row MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN row, x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [[1, "loop-a"], [1, "loop-a"], [1, "loop-b"], [1, "loop-b"]],
+            "row_count": 4
+          }
+        },
+        {
+          "name": "unrelated previous match",
+          "vars": {"query": "MATCH (seed:SelfRefNode {name:'isolated'}) MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "empty independent input",
+          "vars": {"query": "UNWIND [] AS row WITH row MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x"},
+          "assert": "empty"
+        },
+        {
+          "name": "unbound optional self reference",
+          "vars": {"query": "MATCH (seed:SelfRefNode {name:'isolated'}) OPTIONAL MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "bound optional non loop null",
+          "vars": {"query": "MATCH (x:SelfRefNode {name:'sink'}) OPTIONAL MATCH (x)-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN r"},
+          "assert": {
+            "ordered_row_values": [[null]],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "pattern predicate loop control",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true}) WHERE (x)-[:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "negated pattern predicate",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true}) WHERE NOT (x)-[:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["isolated"], ["other"], ["sink"], ["source"]],
+            "row_count": 4
+          }
+        },
+        {
+          "name": "self loop followed by incoming continuation",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x)<-[:SelfRefPrefix]-(y) RETURN x.name, y.name ORDER BY x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a", "source"], ["loop-b", "sink"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "bound continuation self reference",
+          "vars": {"query": "MATCH (seed:SelfRefNode {name:'source'})-[:SelfRefPrefix]->(x)-[r:SelfRefEdge {marker:'yes'}]-(x) RETURN x.name"},
+          "assert": {
+            "ordered_row_values": [["loop-a"]],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "node and relationship updates",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) SET x.visited = true, r.visited = true RETURN x.name ORDER BY x.name"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "loop-a", "kinds": ["SelfRefNode"], "props": {"name": "loop-a", "eligible": true, "visited": true}},
+                  {"id": "loop-b", "kinds": ["SelfRefNode"], "props": {"name": "loop-b", "eligible": true, "visited": true}},
+                  {"id": "source", "kinds": ["SelfRefNode"], "props": {"name": "source", "eligible": true}},
+                  {"id": "sink", "kinds": ["SelfRefNode"], "props": {"name": "sink", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["SelfRefOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["SelfRefNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing", "kinds": ["SelfRefNode"], "props": {"name": "missing"}},
+                  {"id": "isolated", "kinds": ["SelfRefNode"], "props": {"name": "isolated", "eligible": true}},
+                  {"id": "other", "kinds": ["SelfRefNode"], "props": {"name": "other", "eligible": true}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes", "visited": true}},
+                  {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes", "visited": true}},
+                  {"start": "source", "end": "sink", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "sink", "end": "source", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-kind", "end": "wrong-kind", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-prop", "end": "wrong-prop", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "missing", "end": "missing", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "other", "kind": "SelfRefEdge", "props": {"marker": "no"}},
+                  {"start": "source", "end": "source", "kind": "OtherSelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "loop-a", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}},
+                  {"start": "sink", "end": "loop-b", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}}
+                ]
+              }
+            }
+          ],
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "node update without return",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) SET x.visited = true"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "loop-a", "kinds": ["SelfRefNode"], "props": {"name": "loop-a", "eligible": true, "visited": true}},
+                  {"id": "loop-b", "kinds": ["SelfRefNode"], "props": {"name": "loop-b", "eligible": true, "visited": true}},
+                  {"id": "source", "kinds": ["SelfRefNode"], "props": {"name": "source", "eligible": true}},
+                  {"id": "sink", "kinds": ["SelfRefNode"], "props": {"name": "sink", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["SelfRefOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["SelfRefNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing", "kinds": ["SelfRefNode"], "props": {"name": "missing"}},
+                  {"id": "isolated", "kinds": ["SelfRefNode"], "props": {"name": "isolated", "eligible": true}},
+                  {"id": "other", "kinds": ["SelfRefNode"], "props": {"name": "other", "eligible": true}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "sink", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "sink", "end": "source", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-kind", "end": "wrong-kind", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-prop", "end": "wrong-prop", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "missing", "end": "missing", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "other", "kind": "SelfRefEdge", "props": {"marker": "no"}},
+                  {"start": "source", "end": "source", "kind": "OtherSelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "loop-a", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}},
+                  {"start": "sink", "end": "loop-b", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}}
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "relationship update without return",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) SET r.visited = true"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "loop-a", "kinds": ["SelfRefNode"], "props": {"name": "loop-a", "eligible": true}},
+                  {"id": "loop-b", "kinds": ["SelfRefNode"], "props": {"name": "loop-b", "eligible": true}},
+                  {"id": "source", "kinds": ["SelfRefNode"], "props": {"name": "source", "eligible": true}},
+                  {"id": "sink", "kinds": ["SelfRefNode"], "props": {"name": "sink", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["SelfRefOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["SelfRefNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing", "kinds": ["SelfRefNode"], "props": {"name": "missing"}},
+                  {"id": "isolated", "kinds": ["SelfRefNode"], "props": {"name": "isolated", "eligible": true}},
+                  {"id": "other", "kinds": ["SelfRefNode"], "props": {"name": "other", "eligible": true}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes", "visited": true}},
+                  {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes", "visited": true}},
+                  {"start": "source", "end": "sink", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "sink", "end": "source", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-kind", "end": "wrong-kind", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-prop", "end": "wrong-prop", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "missing", "end": "missing", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "other", "kind": "SelfRefEdge", "props": {"marker": "no"}},
+                  {"start": "source", "end": "source", "kind": "OtherSelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "loop-a", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}},
+                  {"start": "sink", "end": "loop-b", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}}
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "no false incident mutation",
+          "vars": {"query": "MATCH (x:SelfRefNode {name:'sink'})-[r:SelfRefEdge {marker:'yes'}]-(x) SET x.visited = true, r.visited = true"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "loop-a", "kinds": ["SelfRefNode"], "props": {"name": "loop-a", "eligible": true}},
+                  {"id": "loop-b", "kinds": ["SelfRefNode"], "props": {"name": "loop-b", "eligible": true}},
+                  {"id": "source", "kinds": ["SelfRefNode"], "props": {"name": "source", "eligible": true}},
+                  {"id": "sink", "kinds": ["SelfRefNode"], "props": {"name": "sink", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["SelfRefOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["SelfRefNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing", "kinds": ["SelfRefNode"], "props": {"name": "missing"}},
+                  {"id": "isolated", "kinds": ["SelfRefNode"], "props": {"name": "isolated", "eligible": true}},
+                  {"id": "other", "kinds": ["SelfRefNode"], "props": {"name": "other", "eligible": true}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "sink", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "sink", "end": "source", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-kind", "end": "wrong-kind", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-prop", "end": "wrong-prop", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "missing", "end": "missing", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "other", "kind": "SelfRefEdge", "props": {"marker": "no"}},
+                  {"start": "source", "end": "source", "kind": "OtherSelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "loop-a", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}},
+                  {"start": "sink", "end": "loop-b", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}}
+                ]
+              }
+            }
+          ],
+          "assert": "no_error"
+        },
+        {
+          "name": "mutation continuation through with",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) SET x.visited = true WITH x SET x.confirmed = true RETURN x.name ORDER BY x.name"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "loop-a", "kinds": ["SelfRefNode"], "props": {"name": "loop-a", "eligible": true, "visited": true, "confirmed": true}},
+                  {"id": "loop-b", "kinds": ["SelfRefNode"], "props": {"name": "loop-b", "eligible": true, "visited": true, "confirmed": true}},
+                  {"id": "source", "kinds": ["SelfRefNode"], "props": {"name": "source", "eligible": true}},
+                  {"id": "sink", "kinds": ["SelfRefNode"], "props": {"name": "sink", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["SelfRefOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["SelfRefNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing", "kinds": ["SelfRefNode"], "props": {"name": "missing"}},
+                  {"id": "isolated", "kinds": ["SelfRefNode"], "props": {"name": "isolated", "eligible": true}},
+                  {"id": "other", "kinds": ["SelfRefNode"], "props": {"name": "other", "eligible": true}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "sink", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "sink", "end": "source", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-kind", "end": "wrong-kind", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-prop", "end": "wrong-prop", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "missing", "end": "missing", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "other", "kind": "SelfRefEdge", "props": {"marker": "no"}},
+                  {"start": "source", "end": "source", "kind": "OtherSelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "loop-a", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}},
+                  {"start": "sink", "end": "loop-b", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}}
+                ]
+              }
+            }
+          ],
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "create cardinality with return",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) CREATE (:SelfRefAudit {target:x.name}) RETURN x.name ORDER BY x.name"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.name IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "loop-a", "kinds": ["SelfRefNode"], "props": {"name": "loop-a", "eligible": true}},
+                  {"id": "loop-b", "kinds": ["SelfRefNode"], "props": {"name": "loop-b", "eligible": true}},
+                  {"id": "source", "kinds": ["SelfRefNode"], "props": {"name": "source", "eligible": true}},
+                  {"id": "sink", "kinds": ["SelfRefNode"], "props": {"name": "sink", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["SelfRefOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["SelfRefNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing", "kinds": ["SelfRefNode"], "props": {"name": "missing"}},
+                  {"id": "isolated", "kinds": ["SelfRefNode"], "props": {"name": "isolated", "eligible": true}},
+                  {"id": "other", "kinds": ["SelfRefNode"], "props": {"name": "other", "eligible": true}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "sink", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "sink", "end": "source", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-kind", "end": "wrong-kind", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-prop", "end": "wrong-prop", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "missing", "end": "missing", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "other", "kind": "SelfRefEdge", "props": {"marker": "no"}},
+                  {"start": "source", "end": "source", "kind": "OtherSelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "loop-a", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}},
+                  {"start": "sink", "end": "loop-b", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SelfRefAudit) RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [["loop-a"], ["loop-b"]],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(*) AS c",
+              "assert": {
+                "exact_int": 11
+              }
+            }
+          ],
+          "assert": {
+            "ordered_row_values": [["loop-a"], ["loop-b"]],
+            "row_count": 2
+          }
+        },
+        {
+          "name": "create cardinality without return",
+          "vars": {"query": "MATCH (x:SelfRefNode {eligible:true})-[r:SelfRefEdge {marker:'yes'}]-(x) CREATE (:SelfRefAudit {target:x.name})"},
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.name IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "loop-a", "kinds": ["SelfRefNode"], "props": {"name": "loop-a", "eligible": true}},
+                  {"id": "loop-b", "kinds": ["SelfRefNode"], "props": {"name": "loop-b", "eligible": true}},
+                  {"id": "source", "kinds": ["SelfRefNode"], "props": {"name": "source", "eligible": true}},
+                  {"id": "sink", "kinds": ["SelfRefNode"], "props": {"name": "sink", "eligible": true}},
+                  {"id": "wrong-kind", "kinds": ["SelfRefOther"], "props": {"name": "wrong-kind", "eligible": true}},
+                  {"id": "wrong-prop", "kinds": ["SelfRefNode"], "props": {"name": "wrong-prop", "eligible": false}},
+                  {"id": "missing", "kinds": ["SelfRefNode"], "props": {"name": "missing"}},
+                  {"id": "isolated", "kinds": ["SelfRefNode"], "props": {"name": "isolated", "eligible": true}},
+                  {"id": "other", "kinds": ["SelfRefNode"], "props": {"name": "other", "eligible": true}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "loop-a", "end": "loop-a", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "loop-b", "end": "loop-b", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "sink", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "sink", "end": "source", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-kind", "end": "wrong-kind", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "wrong-prop", "end": "wrong-prop", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "missing", "end": "missing", "kind": "SelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "other", "end": "other", "kind": "SelfRefEdge", "props": {"marker": "no"}},
+                  {"start": "source", "end": "source", "kind": "OtherSelfRefEdge", "props": {"marker": "yes"}},
+                  {"start": "source", "end": "loop-a", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}},
+                  {"start": "sink", "end": "loop-b", "kind": "SelfRefPrefix", "props": {"marker": "prefix"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:SelfRefAudit) RETURN n.target ORDER BY n.target",
+              "assert": {
+                "ordered_row_values": [["loop-a"], ["loop-b"]],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(*) AS c",
+              "assert": {
+                "exact_int": 11
+              }
+            }
+          ],
+          "assert": "no_error"
+        }
+      ]
+    }
+  ]
+}

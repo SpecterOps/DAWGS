@@ -122,6 +122,22 @@ func NewAtomVisitor() Visitor {
 	return &AtomVisitor{}
 }
 
+// Shortest-path expressions have no AST representation. Ignore their subtree
+// after reporting an error so endpoint variables cannot replace the expression.
+func (s *AtomVisitor) EnterOC_ShortestPathPattern(ctx *parser.OC_ShortestPathPatternContext) {
+	s.ctx.AddErrors(SyntaxError{
+		Line:            ctx.GetStart().GetLine(),
+		Column:          ctx.GetStart().GetColumn(),
+		OffendingSymbol: ctx.GetText(),
+		Message:         "shortest-path expressions are not supported",
+	})
+	s.ctx.Enter(&BaseVisitor{})
+}
+
+func (s *AtomVisitor) ExitOC_ShortestPathPattern(ctx *parser.OC_ShortestPathPatternContext) {
+	s.ctx.Exit()
+}
+
 func (s *AtomVisitor) EnterOC_Parameter(ctx *parser.OC_ParameterContext) {
 	s.ctx.Enter(&SymbolicNameOrReservedWordVisitor{})
 }

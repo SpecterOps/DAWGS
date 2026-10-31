@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testKindMapper returns an in-memory mapper populated in argument order.
 func testKindMapper(kinds ...graph.Kind) *pgutil.InMemoryKindMapper {
 	mapper := pgutil.NewInMemoryKindMapper()
 
@@ -180,6 +181,7 @@ func TestBackendParityNeo4jPrepare(t *testing.T) {
 	}
 }
 
+// TestBackendParityPGTranslateTraversalDepth verifies traversal-depth controls reach PostgreSQL's recursive path translation.
 func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 	edgeKind := graph.StringKind("MemberOf")
 	mapper := testKindMapper(edgeKind)
@@ -197,7 +199,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 			),
 			expectedSQLContains: []string{
 				"with recursive",
-				"ordered_edges_to_path",
+				"ordered_edge_ids_to_path",
 				"n0.id = @pi0::int8",
 				"e0.kind_id = any (array [1]::int2[])",
 				"depth < 2",
@@ -216,7 +218,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 				"n0.id = @pi0::int8",
 				"e0.kind_id = any (array [1]::int2[])",
 				"depth < 2",
-				"select (s0.n0).id, (s0.n1).id from s0",
+				"select s0.n0 as \"id(s)\", s0.n1 as \"id(e)\" from s0",
 			},
 		},
 	}
@@ -239,6 +241,7 @@ func TestBackendParityPGTranslateTraversalDepth(t *testing.T) {
 	}
 }
 
+// TestBackendParityPGTranslate verifies v2 builders produce stable PostgreSQL SQL and parameter bindings across query forms.
 func TestBackendParityPGTranslate(t *testing.T) {
 	userKind := graph.StringKind("User")
 	edgeKind := graph.StringKind("MemberOf")
@@ -257,8 +260,8 @@ func TestBackendParityPGTranslate(t *testing.T) {
 				v2.Node().ID(),
 				v2.Node().Kinds(),
 			),
-			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and (n0.properties ->> E'name') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit0::text)::text)) select (s0.n0).id, (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] from s0;",
-			expectedParams: map[string]any{"pi0": "admin", "__strlit0": "%"},
+			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.kind_ids operator (pg_catalog.&&) array [1]::int2[] and ((jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text and (n0.properties ->> E'name') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text) or (not (jsonb_typeof((n0.properties -> E'name')) = @__strlit0::text) and null)))) select (s0.n0).id as \"id(n)\", (array(select _kind.name from generate_subscripts((s0.n0).kind_ids, 1) as _kind_idx, kind _kind where _kind.id = ((s0.n0).kind_ids)[_kind_idx] order by _kind_idx))::text[] as \"labels(n)\" from s0;",
+			expectedParams: map[string]any{"pi0": "admin", "__strlit0": "string", "__strlit1": "%"},
 		},
 		"relationship read": {
 			builder: v2.New().Where(
@@ -269,7 +272,7 @@ func TestBackendParityPGTranslate(t *testing.T) {
 				v2.Relationship().ID(),
 				v2.End().ID(),
 			),
-			expectedSQL:    "with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0, (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1 from edge e0 join node n0 on (n0.id = @pi0::int8) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [2]::int2[])) select (s0.n0).id, (s0.e0).id, (s0.n1).id from s0;",
+			expectedSQL:    "with s0 as (select (e0.id, e0.start_id, e0.end_id, e0.kind_id, e0.properties)::edgecomposite as e0, n0.id as n0, n1.id as n1 from edge e0 join node n0 on (n0.id = @pi0::int8) and n0.id = e0.start_id join node n1 on n1.id = e0.end_id where e0.kind_id = any (array [2]::int2[])) select s0.n0 as \"id(s)\", (s0.e0).id as \"id(r)\", s0.n1 as \"id(e)\" from s0;",
 			expectedParams: map[string]any{"pi0": 1},
 		},
 		"update node": {
@@ -278,7 +281,7 @@ func TestBackendParityPGTranslate(t *testing.T) {
 			).Update(
 				v2.SetProperty(v2.Node().Property("name"), "updated"),
 			),
-			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.id = @pi0::int8)), s1 as (update node n1 set properties = n1.properties || jsonb_build_object(@__strlit0::text, @pi1::text)::jsonb from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n0) select 1;",
+			expectedSQL:    "with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where (n0.id = @pi0::int8)), s1 as (update node n1 set properties = n1.properties || jsonb_build_object(@__strlit0::text, @pi1::text)::jsonb from s0 where (s0.n0).id = n1.id returning (n1.id, n1.kind_ids, n1.properties)::nodecomposite as n1), s2 as (select case when (s0.n0).id = (s1.n1).id then s1.n1 else s0.n0 end as n0 from s0 left outer join s1 on (s0.n0).id = (s1.n1).id) select 1;",
 			expectedParams: map[string]any{"__strlit0": "name", "pi0": 1, "pi1": "updated"},
 		},
 		"delete relationship": {
@@ -318,6 +321,7 @@ func TestBackendParityPGTranslate(t *testing.T) {
 	}
 }
 
+// TestBackendParityPGTranslateShortestPaths verifies shortest-path controls select the expected PostgreSQL search harness.
 func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 	edgeKind := graph.StringKind("MemberOf")
 	mapper := testKindMapper(edgeKind)
@@ -334,7 +338,7 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			).Return(
 				v2.Path(),
 			),
-			expectedHarness: "bidirectional_sp_harness",
+			expectedHarness: "unidirectional_sp_harness_v2",
 		},
 		"all shortest paths": {
 			builder: v2.New().WithAllShortestPaths().Where(
@@ -344,7 +348,7 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			).Return(
 				v2.Path(),
 			),
-			expectedHarness: "bidirectional_asp_harness",
+			expectedHarness: "unidirectional_asp_harness_v2",
 		},
 	}
 
@@ -359,18 +363,25 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			sql, err := translate.Translated(translation)
 			require.NoError(t, err)
 			require.Contains(t, sql.Statement, testCase.expectedHarness)
-			require.Contains(t, sql.Statement, "ordered_edges_to_path")
-			require.True(t, hasStringParameterContaining(translation.Parameters, "n0.id = 1"))
-			require.True(t, hasStringParameterContaining(translation.Parameters, "n1.id = 2"))
-
-			serializedHarnessQueryHasKindConstraint := false
-			for _, parameterValue := range translation.Parameters {
-				if serializedQuery, typeOK := parameterValue.(string); typeOK && strings.Contains(serializedQuery, "array [1]::int2[]") {
-					serializedHarnessQueryHasKindConstraint = true
-					break
+			require.NotContains(t, sql.Statement, "singleton_endpoints")
+			require.Contains(t, sql.Statement, "false)", "open bound presence is explicit")
+			require.Contains(t, sql.Statement, "ordered_edge_ids_to_path")
+			fragments := ""
+			for _, value := range translation.Parameters {
+				if fragment, ok := value.(string); ok {
+					fragments += fragment + "\n"
 				}
 			}
-			require.True(t, serializedHarnessQueryHasKindConstraint, "expected serialized shortest-path harness query to contain edge kind constraint: %#v", translation.Parameters)
+			for _, value := range sql.Parameters {
+				if fragment, ok := value.(string); ok {
+					fragments += fragment + "\n"
+				}
+			}
+			require.Contains(t, fragments, "array [1]::int2[]")
+			require.Contains(t, fragments, "n0.id = 1")
+			require.Contains(t, fragments, "n1.id = 2")
+			require.Contains(t, fragments, "dawgs_admit_traversal_v1")
+
 		})
 	}
 }

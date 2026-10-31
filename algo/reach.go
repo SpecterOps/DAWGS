@@ -11,43 +11,6 @@ import (
 	"github.com/specterops/dawgs/query"
 )
 
-// reachCursor tracks the DFS state for a single component while exploring the
-// component graph. It stores the component identifier, the list of adjacent
-// components to be visited, an index into that adjacency slice, the bitmap of
-// components reachable from this component (including itself), and a pointer to
-// the cursor of its parent component (used to roll up reachability when the
-// DFS backtracks).
-type reachCursor struct {
-	component   uint64
-	adjacent    []uint64
-	adjacentIdx int
-	reach       cardinality.Duplex[uint64]
-	ancestor    *reachCursor
-}
-
-// Complete merges the reach bitmap of this cursor into its ancestor’s bitmap.
-// It is called when the DFS finishes processing a component, allowing the
-// parent component to inherit the reachability of its child.
-func (s *reachCursor) Complete() {
-	if s.ancestor != nil {
-		s.ancestor.reach.Or(s.reach)
-	}
-}
-
-// NextAdjacent returns the next adjacent component identifier to be explored.
-// The boolean indicates whether a component was returned (true) or the slice
-// has been exhausted (false). The internal index is advanced on each call.
-func (s *reachCursor) NextAdjacent() (uint64, bool) {
-	if s.adjacentIdx < len(s.adjacent) {
-		next := s.adjacent[s.adjacentIdx]
-		s.adjacentIdx += 1
-
-		return next, true
-	}
-
-	return 0, false
-}
-
 // ReachabilityCacheStats aggregates cache statistics for both inbound and
 // outbound component‑reach caches.
 type ReachabilityCacheStats struct {
@@ -57,8 +20,8 @@ type ReachabilityCacheStats struct {
 
 // ReachabilityCache holds a component graph derived from a directed graph and
 // two caches (inbound and outbound) that store the reachability set
-// for each component. The caches are sized by the caller and automatically
-// evict the least‑recently‑used entries when full.
+// for requested components. Only complete results are cached. The caches are
+// sized by the caller and use second-chance eviction when full.
 type ReachabilityCache struct {
 	components             ComponentGraph
 	inboundComponentReach  cache.Cache[uint64, cardinality.Duplex[uint64]]
@@ -68,49 +31,12 @@ type ReachabilityCache struct {
 // NewReachabilityCache creates a ReachabilityCache for the supplied directed
 // graph. The component graph is built first, then two bounded caches are
 // allocated with the given maxCacheSize (the maximum number of component
-// reachability entries to retain).
+// reachability entries to retain per direction, with a minimum of one).
 func NewReachabilityCache(ctx context.Context, digraph container.DirectedGraph, maxCacheSize int) *ReachabilityCache {
 	return &ReachabilityCache{
 		components:             NewComponentGraph(ctx, digraph),
 		inboundComponentReach:  cache.NewSieve[uint64, cardinality.Duplex[uint64]](maxCacheSize),
 		outboundComponentReach: cache.NewSieve[uint64, cardinality.Duplex[uint64]](maxCacheSize),
-	}
-}
-
-// newReachCursor creates a reachCursor for a non‑root component during DFS.
-// It pre‑populates the cursor’s reach bitmap with the component itself and all
-// of its adjacent components (according to the supplied direction). The
-// previous cursor becomes the ancestor so that reachability can be rolled up.
-func (s *ReachabilityCache) newReachCursor(component uint64, direction graph.Direction, previous *reachCursor) *reachCursor {
-	var (
-		adjacentComponents = container.AdjacentNodes(s.components.Digraph(), component, direction)
-		componentReach     = cardinality.NewBitmap64With(append(adjacentComponents, component)...)
-	)
-
-	return &reachCursor{
-		component:   component,
-		adjacent:    adjacentComponents,
-		adjacentIdx: 0,
-		reach:       componentReach,
-		ancestor:    previous,
-	}
-}
-
-// newRootReachCursor creates a reachCursor for the root component of a DFS.
-// Unlike newReachCursor, the initial reach bitmap contains only the root
-// component itself (its adjacent components are stored separately for later
-// traversal).
-func (s *ReachabilityCache) newRootReachCursor(component uint64, direction graph.Direction) *reachCursor {
-	var (
-		adjacentComponents = container.AdjacentNodes(s.components.Digraph(), component, direction)
-		componentReach     = cardinality.NewBitmap64With(component)
-	)
-
-	return &reachCursor{
-		component:   component,
-		adjacent:    adjacentComponents,
-		adjacentIdx: 0,
-		reach:       componentReach,
 	}
 }
 
@@ -170,13 +96,13 @@ func (s *ReachabilityCache) componentReachToMemberReachSlice(componentReach card
 
 // cacheComponentReach stores the reach bitmap for a component in the appropriate
 // cache (inbound or outbound) based on the supplied direction.
-func (s *ReachabilityCache) cacheComponentReach(cursor *reachCursor, direction graph.Direction) {
+func (s *ReachabilityCache) cacheComponentReach(component uint64, direction graph.Direction, reach cardinality.Duplex[uint64]) {
 	switch direction {
 	case graph.DirectionInbound:
-		s.inboundComponentReach.Put(cursor.component, cursor.reach)
+		s.inboundComponentReach.Put(component, reach)
 
 	case graph.DirectionOutbound:
-		s.outboundComponentReach.Put(cursor.component, cursor.reach)
+		s.outboundComponentReach.Put(component, reach)
 	}
 }
 
@@ -199,46 +125,44 @@ func (s *ReachabilityCache) cachedComponentReach(component uint64, direction gra
 	return entry, found
 }
 
-// componentReachDFS performs a depth‑first search over the component graph to
+// componentReachDFS performs a depth-first search over the component graph to
 // compute the set of components reachable from the given start component in
-// the specified direction.  Results are cached so that subsequent calls for
-// the same component/direction can be answered in O(1) time.
+// the specified direction. Only the requested component's completed result is
+// cached: a shared visited set cannot establish intermediate components' reach.
+// Cached bitmaps are immutable after publication and can safely be merged into
+// the local result, including when their entries are concurrently evicted.
 func (s *ReachabilityCache) componentReachDFS(component uint64, direction graph.Direction) cardinality.Duplex[uint64] {
 	if cachedReach, cached := s.cachedComponentReach(component, direction); cached {
 		return cachedReach
 	}
 
 	var (
-		stack      deque.Deque[*reachCursor]
-		rootCursor = s.newRootReachCursor(component, direction)
+		stack deque.Deque[uint64]
+		reach = cardinality.NewBitmap64With(component)
 	)
-
-	// Mark the root component as visited and add it to the stack
-	stack.PushBack(rootCursor)
-
-	for stack.Len() > 0 {
-		nextCursor := stack.Back()
-
-		if nextAdjacentComponent, hasNext := nextCursor.NextAdjacent(); !hasNext {
-			stack.PopBack()
-
-			// Complete the cursor to roll up reach cardinalities
-			nextCursor.Complete()
-
-			// Update the cache with this component's reach
-			s.cacheComponentReach(nextCursor, direction)
-		} else if rootCursor.reach.CheckedAdd(nextAdjacentComponent) {
-			// This is a component not yet visited, check if it is cached. If it
-			// is cached, Or(...) its reach and if not traverse into it.
-			if cachedReach, cached := s.cachedComponentReach(nextAdjacentComponent, direction); cached {
-				nextCursor.reach.Or(cachedReach)
-			} else {
-				stack.PushBack(s.newReachCursor(nextAdjacentComponent, direction, nextCursor))
-			}
+	visitAdjacent := func(adjacent uint64) bool {
+		if reach.CheckedAdd(adjacent) {
+			stack.PushBack(adjacent)
 		}
+		return true
 	}
 
-	return rootCursor.reach
+	stack.PushBack(component)
+
+	for stack.Len() > 0 {
+		nextComponent := stack.PopBack()
+		if nextComponent != component {
+			if cachedReach, cached := s.cachedComponentReach(nextComponent, direction); cached {
+				reach.Or(cachedReach)
+				continue
+			}
+		}
+
+		s.components.Digraph().EachAdjacentNode(nextComponent, direction, visitAdjacent)
+	}
+
+	s.cacheComponentReach(component, direction, reach)
+	return reach
 }
 
 // ReachSliceOfComponentContainingMember returns the reach of the component containing the given member and direction as

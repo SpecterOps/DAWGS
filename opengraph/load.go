@@ -26,6 +26,7 @@ import (
 
 	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/internal/jsonutil"
 )
 
 // IDMap maps document string node IDs to their database-assigned IDs.
@@ -56,15 +57,30 @@ func assertGraphKinds(ctx context.Context, db graph.Database, g *Graph) error {
 }
 
 // ParseDocument decodes and validates a Document from r without writing to a database.
+// Property integer tokens become int64; decimal and exponent tokens become
+// float64. Numbers outside those ranges are rejected, including in nested values.
 func ParseDocument(r io.Reader) (Document, error) {
 	var doc Document
 
-	if err := json.NewDecoder(r).Decode(&doc); err != nil {
+	decoder := json.NewDecoder(r)
+	decoder.UseNumber()
+	if err := decoder.Decode(&doc); err != nil {
 		return doc, fmt.Errorf("opengraph: decode error: %w", err)
 	}
 
 	if err := Validate(doc); err != nil {
 		return doc, fmt.Errorf("opengraph: validation error: %w", err)
+	}
+
+	for _, node := range doc.Graph.Nodes {
+		if _, err := jsonutil.NormalizeNumbers(node.Properties); err != nil {
+			return Document{}, fmt.Errorf("opengraph: node %q: %w", node.ID, err)
+		}
+	}
+	for index, edge := range doc.Graph.Edges {
+		if _, err := jsonutil.NormalizeNumbers(edge.Properties); err != nil {
+			return Document{}, fmt.Errorf("opengraph: edge %d (%s)-[%s]->(%s): %w", index, edge.StartID, edge.Kind, edge.EndID, err)
+		}
 	}
 
 	return doc, nil
