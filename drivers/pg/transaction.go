@@ -121,7 +121,12 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 		targetSchemaSet:    false,
 	}
 
-	wrapper.kindMapper = &transactionKindMapper{tx: wrapper, ids: schemaManager.GetKindIDsByKind()}
+	wrapper.kindMapper = &transactionKindMapper{tx: wrapper, snapshot: schemaManager.kindCache.current.Load()}
+	if !cfg.skipKindRefresh {
+		if err := wrapper.serviceKinds(); err != nil {
+			return nil, err
+		}
+	}
 	if allocateTransaction {
 		if pgxTx, err := conn.BeginTx(ctx, cfg.Options); err != nil {
 			return nil, err
@@ -205,6 +210,10 @@ func (s *transaction) targetGraphID() (int32, error) {
 
 // CreateNode inserts a node with properties and kinds into the target graph.
 func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Kind) (*graph.Node, error) {
+	s.invalidateTopologyRouteDecisions()
+	if err := s.serviceKinds(); err != nil {
+		return nil, err
+	}
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
 	} else if kindIDSlice, err := s.kindMapper.AssertKinds(s.ctx, kinds); err != nil {
@@ -214,7 +223,7 @@ func (s *transaction) CreateNode(properties *graph.Properties, kinds ...graph.Ki
 	} else {
 		var (
 			node   graph.Node
-			result = s.Raw(createNodeStatement, map[string]any{
+			result = s.raw(createNodeStatement, map[string]any{
 				"graph_id":   graphTarget.ID,
 				"kind_ids":   kindIDSlice,
 				"properties": propertiesJSONB,
@@ -270,6 +279,10 @@ func (s *transaction) Nodes() graph.NodeQuery {
 
 // CreateRelationshipByIDs inserts a relationship with the supplied endpoints, kind, and properties.
 func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, kind graph.Kind, properties *graph.Properties) (*graph.Relationship, error) {
+	s.invalidateTopologyRouteDecisions()
+	if err := s.serviceKinds(); err != nil {
+		return nil, err
+	}
 	if graphTarget, err := s.getTargetGraph(); err != nil {
 		return nil, err
 	} else if kindIDSlice, err := s.kindMapper.AssertKinds(s.ctx, graph.Kinds{kind}); err != nil {
@@ -279,7 +292,7 @@ func (s *transaction) CreateRelationshipByIDs(startNodeID, endNodeID graph.ID, k
 	} else {
 		var (
 			edge   graph.Relationship
-			result = s.Raw(createEdgeStatement, map[string]any{
+			result = s.raw(createEdgeStatement, map[string]any{
 				"graph_id":   graphTarget.ID,
 				"start_id":   startNodeID,
 				"end_id":     endNodeID,
@@ -384,7 +397,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		return graph.NewErrorResult(err)
 	}
 	if s.kindMapper != nil {
-		if err := s.kindMapper.refresh(); err != nil {
+		if err := s.serviceKinds(); err != nil {
 			return graph.NewErrorResult(err)
 		}
 	}
@@ -440,7 +453,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 			if translateErr != nil {
 				return translate.Result{}, "", translateErr
 			}
-			if s.kindMapper != nil && s.kindMapper.hasUncommittedKinds {
+			if s.kindMapper != nil && s.kindMapper.bypassTranslations() {
 				translated.HasMissingKinds = true
 			}
 			formatStarted := time.Now()
@@ -458,7 +471,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	}
 	translateCached := func(activePolicy TraversalPolicy, identity string) (string, map[string]any, error) {
 		builder := buildTranslation(activePolicy)
-		if s.translationCache == nil || (s.kindMapper != nil && s.kindMapper.hasUncommittedKinds) {
+		if s.translationCache == nil || (s.kindMapper != nil && s.kindMapper.bypassTranslations()) {
 			translated, formatted, err := builder()
 			if err != nil {
 				return "", nil, err
@@ -495,7 +508,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	var sqlQuery string
 	var translatedParameters map[string]any
 	cacheStarted := time.Now()
-	if s.translationCache == nil || (s.kindMapper != nil && s.kindMapper.hasUncommittedKinds) {
+	if s.translationCache == nil || (s.kindMapper != nil && s.kindMapper.bypassTranslations()) {
 		translated, translatedSQL, translateErr := buildCurrentTranslation()
 		if translateErr != nil {
 			profile.Cache = time.Since(cacheStarted)
@@ -549,6 +562,9 @@ func cypherMayMutate(value string) bool {
 // Raw executes PostgreSQL SQL directly after invalidating topology route observations.
 func (s *transaction) Raw(query string, parameters map[string]any) graph.Result {
 	s.invalidateTopologyRouteDecisions()
+	if err := s.serviceKinds(); err != nil {
+		return graph.NewErrorResult(err)
+	}
 	return s.raw(query, parameters)
 }
 

@@ -414,7 +414,18 @@ func TestConnectionCacheProviderRecordsSQLGenerationProfiles(t *testing.T) {
 	})
 	provider.RecordSQLGenerationProfile(SQLGenerationProfile{QueryClass: "other", Parse: time.Millisecond})
 
+	for _, class := range []string{"kind_lookup", "kind_refresh", "kind_register"} {
+		provider.RecordSQLGenerationProfile(SQLGenerationProfile{QueryClass: class, Dispatch: time.Millisecond})
+	}
+
 	stats := provider.stats().SQLGeneration
+	require.EqualValues(t, 1, stats.KindLookup.Count)
+	require.EqualValues(t, 1, stats.KindRefresh.Count)
+	require.EqualValues(t, 1, stats.KindRegistration.Count)
+	require.Equal(t, time.Millisecond, stats.KindLookup.Dispatch)
+	require.Equal(t, time.Millisecond, stats.KindRefresh.Dispatch)
+	require.Equal(t, time.Millisecond, stats.KindRegistration.Dispatch)
+
 	require.Equal(t, uint64(1), stats.ShortestPath.Count)
 	require.Equal(t, 5*time.Millisecond, stats.ShortestPath.Translate)
 	require.Equal(t, 7*time.Millisecond, stats.ShortestPath.Dispatch)

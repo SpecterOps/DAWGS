@@ -783,7 +783,7 @@ func TestTransactionQueryRejectsPromotionSQLAnchorDrift(t *testing.T) {
 	manager := NewSchemaManager(nil, 0)
 	manager.setDefaultGraph(model.Graph{ID: 1, Name: "test"}, graph.Graph{Name: "test"})
 	for index, name := range []string{"ExpansionRoot", "Expand", "EnterSuffix", "SuffixHead", "ContinueSuffix", "SuffixMiddle", "CompleteSuffix", "SuffixTerminal"} {
-		manager.kindsByID[graph.StringKind(name)] = int16(index + 1)
+		manager.kindCache.merge(map[graph.Kind]int16{graph.StringKind(name): int16(index + 1)}, 0)
 	}
 	policy := testTraversalPolicy(query, "", true)
 	require.NoError(t, (&Driver{SchemaManager: manager}).SetTraversalPolicy(policy))

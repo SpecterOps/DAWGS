@@ -3,12 +3,14 @@ package pg
 import "time"
 
 // SQLGenerationProfile is a query-text-free timing sample for the PostgreSQL
-// Cypher-to-SQL execution boundary. Durations end once pgx has accepted the
-// query and returned its row stream; server planning and execution are
+// Cypher-to-SQL execution boundary. Graph-query durations end once pgx has
+// accepted the query and returned its row stream; server planning and execution are
 // captured separately through PostgreSQL EXPLAIN diagnostics.
 //
 // The profile intentionally contains neither Cypher nor SQL text, parameter
-// values, backend identifiers, nor result data.
+// values, backend identifiers, nor result data. Metadata operations use the
+// kind_lookup, kind_refresh and kind_register classes; their Dispatch measures
+// the complete metadata operation, including consuming and closing its rows.
 type SQLGenerationProfile struct {
 	// QueryClass is a low-cardinality category that omits query text and values.
 	QueryClass string

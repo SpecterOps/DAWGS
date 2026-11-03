@@ -93,8 +93,7 @@ func TestResolveKindIDsDefinedFastPath(t *testing.T) {
 		userKind  = graph.StringKind("User")
 		groupKind = graph.StringKind("Group")
 	)
-	driver.kindsByID[userKind] = 1
-	driver.kindsByID[groupKind] = 2
+	driver.kindCache.merge(map[graph.Kind]int16{userKind: 1, groupKind: 2}, 0)
 
 	t.Run("defined kinds resolve with no missing", func(t *testing.T) {
 		ids, missing, err := driver.resolveKindIDs(ctx, graph.Kinds{userKind, groupKind})

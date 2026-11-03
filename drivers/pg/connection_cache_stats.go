@@ -290,8 +290,15 @@ func (s *SQLGenerationTiming) add(profile SQLGenerationProfile) {
 	s.Dispatch += profile.Dispatch
 }
 
-// SQLGenerationStats separates shortest-path timing from other graph work.
+// SQLGenerationStats separates metadata operations and graph-query generation timings.
 type SQLGenerationStats struct {
+	// KindLookup counts targeted catalog reads; Dispatch includes their full duration.
+	KindLookup SQLGenerationTiming `json:"kind_lookup"`
+	// KindRefresh counts full catalog reloads; Dispatch includes their full duration.
+	KindRefresh SQLGenerationTiming `json:"kind_refresh"`
+	// KindRegistration counts registration operations, including concurrent-insert retries.
+	KindRegistration SQLGenerationTiming `json:"kind_registration"`
+
 	// ShortestPath aggregates generation timings for shortest-path queries.
 	ShortestPath SQLGenerationTiming `json:"shortest_path"`
 

@@ -32,12 +32,13 @@ func (s *liveQuery) runRegularQuery(allShortestPaths bool) graph.Result {
 		return graph.NewErrorResult(err)
 	} else if err := s.tx.beginTraversalBudget(prepared.query); err != nil {
 		return graph.NewErrorResult(err)
-	} else if err := s.tx.kindMapper.refresh(); err != nil {
+	} else if err := s.tx.serviceKinds(); err != nil {
 		return graph.NewErrorResult(err)
 	} else if sqlQuery, bindings, err := s.tx.schemaManager.compileWithMapper(s.ctx, prepared.source, prepared.parameters, graphID, &prepared.identity, prepared.translationQuery, s.tx.kindMapper); err != nil {
 		return graph.NewErrorResult(err)
 	} else {
-		return s.tx.Raw(commentRegularQuery(prepared.commentSource, sqlQuery), bindings)
+		s.tx.invalidateTopologyRouteDecisions()
+		return s.tx.raw(commentRegularQuery(prepared.commentSource, sqlQuery), bindings)
 	}
 }
 

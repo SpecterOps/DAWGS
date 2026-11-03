@@ -103,6 +103,17 @@ func (s *batch) WithGraph(schema graph.Graph) graph.Batch {
 	return s
 }
 
+// prepareMutation services metadata and resolves graph selection before any
+// kind IDs are bound. The resulting snapshot stays in use through the flush,
+// including statements executed in a private pgx transaction.
+func (s *batch) prepareMutation() error {
+	if err := s.innerTransaction.serviceKinds(); err != nil {
+		return err
+	}
+	_, err := s.innerTransaction.getTargetGraph()
+	return err
+}
+
 func (s *batch) CreateNode(node *graph.Node) error {
 	s.nodeCreateBuffer = append(s.nodeCreateBuffer, node)
 	return s.tryFlush(s.batchWriteSize)
@@ -111,6 +122,9 @@ func (s *batch) CreateNode(node *graph.Node) error {
 func (s *batch) CreateNodes(nodes []*graph.Node) ([]graph.ID, error) {
 	if len(nodes) == 0 {
 		return nil, nil
+	}
+	if err := s.prepareMutation(); err != nil {
+		return nil, err
 	}
 
 	var (
@@ -202,20 +216,24 @@ func (s *batch) UpdateNodeBy(update graph.NodeUpdate) error {
 // This path is more efficient than a parameterised UPDATE for very large batches
 // (see LargeUpdateThreshold).
 func (s *batch) largeUpdate(nodes []*graph.Node) error {
+	if err := s.prepareMutation(); err != nil {
+		return err
+	}
+	nodeRows := NewLargeNodeUpdateRows(len(nodes))
+	if err := nodeRows.appendAllWithMapper(s.ctx, nodes, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
+		return err
+	}
+	graphTarget, err := s.innerTransaction.getTargetGraph()
+	if err != nil {
+		return err
+	}
 	tx, err := s.innerTransaction.conn.Begin(s.ctx)
 	if err != nil {
 		return err
 	}
-
 	defer tx.Rollback(s.ctx)
-
 	if _, err := tx.Exec(s.ctx, sql.FormatCreateNodeUpdateStagingTable(sql.NodeUpdateStagingTable)); err != nil {
 		return fmt.Errorf("creating node update staging table: %w", err)
-	}
-
-	nodeRows := NewLargeNodeUpdateRows(len(nodes))
-	if err := nodeRows.appendAllWithMapper(s.ctx, nodes, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
-		return err
 	}
 
 	// Stream the rows into the staging table via COPY FROM.
@@ -226,11 +244,6 @@ func (s *batch) largeUpdate(nodes []*graph.Node) error {
 		pgx.CopyFromRows(nodeRows.Rows()),
 	); err != nil {
 		return fmt.Errorf("copying nodes into staging table: %w", err)
-	}
-
-	graphTarget, err := s.innerTransaction.getTargetGraph()
-	if err != nil {
-		return err
 	}
 
 	if _, err := tx.Exec(s.ctx, sql.FormatMergeNodeLargeUpdate(graphTarget, sql.NodeUpdateStagingTable)); err != nil {
@@ -336,6 +349,9 @@ func (s *batch) flushRelationshipDeleteBuffer() error {
 
 // flushNodeCreateBuffer rejects mixed ID allocation modes and dispatches the buffered nodes to the matching insert path.
 func (s *batch) flushNodeCreateBuffer() error {
+	if err := s.prepareMutation(); err != nil {
+		return err
+	}
 	var (
 		withoutIDs = false
 		withIDs    = false
@@ -435,6 +451,9 @@ func (s *batch) flushNodeCreateBufferWithoutIDs() error {
 
 // flushNodeUpsertBatch validates and executes one identity-based node upsert batch for the target graph.
 func (s *batch) flushNodeUpsertBatch(updates *sql.NodeUpdateBatch) error {
+	if err := s.prepareMutation(); err != nil {
+		return err
+	}
 	parameters := NewNodeUpsertParameters(len(updates.Updates))
 
 	if err := parameters.appendAllWithMapper(s.ctx, updates, s.innerTransaction.kindMapper, s.kindIDEncoder); err != nil {
@@ -522,6 +541,9 @@ func (s *batch) tryFlushNodeUpdateByBuffer() error {
 
 // flushNodeUpdateBatch writes complete node replacements for the supplied nodes.
 func (s *batch) flushNodeUpdateBatch(nodes []*graph.Node) error {
+	if err := s.prepareMutation(); err != nil {
+		return err
+	}
 	return s.flushNodeUpdateBatchWithDriver(nodes, s.innerTransaction.conn)
 }
 
@@ -730,6 +752,9 @@ func (s *batch) flushRelationshipUpdateByBuffer(updates *sql.RelationshipUpdateB
 	if err := s.flushNodeUpsertBatch(updates.NodeUpdates); err != nil {
 		return err
 	}
+	if err := s.prepareMutation(); err != nil {
+		return err
+	}
 
 	parameters := NewRelationshipUpdateByParameters(len(updates.Updates))
 
@@ -873,6 +898,9 @@ func (s *relationshipCreateBatchBuilder) Add(ctx context.Context, kindMapper Kin
 
 // flushRelationshipCreateBuffer coalesces duplicate keys, inserts the resulting relationships, and clears the input buffer.
 func (s *batch) flushRelationshipCreateBuffer() error {
+	if err := s.prepareMutation(); err != nil {
+		return err
+	}
 	batchBuilder := newRelationshipCreateBatchBuilder(len(s.relationshipCreateBuffer))
 
 	for _, nextRel := range s.relationshipCreateBuffer {

@@ -1,7 +1,8 @@
 # Development Workflow
 
-This document covers repository workflows for contributors. The top-level [README](../README.md) keeps the main
-quick-start commands and links to detailed documentation.
+This document covers repository workflows for contributors. The top-level [README](../README.md) introduces the project and supported backends.
+See [testing](testing.md) for integration prerequisites, fixture regeneration, and BDD reporting,
+and [benchmarking](benchmarking.md) for capture contracts and traversal qualification.
 
 ## Build And Test
 
