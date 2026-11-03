@@ -7,12 +7,19 @@ import (
 	"github.com/specterops/dawgs/cypher/models/cypher"
 
 	"github.com/specterops/dawgs/cypher/parser"
+	"github.com/specterops/dawgs/graph"
 )
 
 type SymbolicNameOrReservedWordVisitor struct {
 	BaseVisitor
 
 	Name string
+}
+
+// kind decodes the name visitor's source token exactly once.
+// Other symbolic-name consumers retain their own decoding contracts.
+func (s *SymbolicNameOrReservedWordVisitor) kind() graph.Kind {
+	return graph.StringKind(cypher.UnescapeKindName(s.Name))
 }
 
 func (s *SymbolicNameOrReservedWordVisitor) EnterOC_SchemaName(ctx *parser.OC_SchemaNameContext) {

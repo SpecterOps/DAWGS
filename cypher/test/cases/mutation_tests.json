@@ -1828,6 +1828,246 @@
         "query": "match ()-[r:DAWGS023NeverRegistered]->() delete r return count(*) as c",
         "fitness": 1
       }
+    },
+    {
+      "name": "Quoted kind: set `new label`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:`new label`",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: set `has``tick`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:`has``tick`",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: remove `Base`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has space`) remove n:Base",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: remove `has space`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has space`) remove n:`has space`",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: ordered label changes",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:`new label` remove n:`new label`",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: quoted set targets",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base) set n.touched = true",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: quoted edge delete",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:AZContains]->() delete r",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node delete",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has space`) detach delete n",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: quoted relationship create",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:Base {name: 'a'}), (b:Base {name: 'b'}) create (a)-[:`has space` {name: 'new'}]->(b)",
+        "fitness": 17
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node create `Base`",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:Base {name: 'created'})",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node create ```Base```",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:```Base``` {name: 'created'})",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node create `has``tick`",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:`has``tick` {name: 'created'})",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: set `new label` RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:`new label` return count(*)",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: set `has``tick` RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:`has``tick` return count(*)",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: remove `Base` RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has space`) remove n:Base return count(*)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: remove `has space` RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has space`) remove n:`has space` return count(*)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: ordered label changes RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:`new label` remove n:`new label` return count(*)",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: quoted set targets RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base) set n.touched = true return count(*)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: quoted edge delete RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:AZContains]->() delete r return count(*)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node delete RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has space`) detach delete n return count(*)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: quoted relationship create RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:Base {name: 'a'}), (b:Base {name: 'b'}) create (a)-[:`has space` {name: 'new'}]->(b) return count(*)",
+        "fitness": 17
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node create `Base` RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:Base {name: 'created'}) return count(*)",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node create ```Base``` RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:```Base``` {name: 'created'}) return count(*)",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: quoted node create `has``tick` RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "create (n:`has``tick` {name: 'created'}) return count(*)",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: set ordinary quoted label",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:Other",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: ordinary quoted relationship create",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:Base {name: 'a'}), (b:Base {name: 'b'}) create (b)-[:AZContains {name: 'new'}]->(a)",
+        "fitness": 17
+      }
+    },
+    {
+      "name": "Quoted kind: ordered multiple label changes",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:Other:`new label` remove n:`has space`",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: set ordinary quoted label RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:Other return count(*)",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Quoted kind: ordinary quoted relationship create RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (a:Base {name: 'a'}), (b:Base {name: 'b'}) create (b)-[:AZContains {name: 'new'}]->(a) return count(*)",
+        "fitness": 17
+      }
+    },
+    {
+      "name": "Quoted kind: ordered multiple label changes RETURN count(*)",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base {name: 'a'}) set n:Other:`new label` remove n:`has space` return count(*)",
+        "fitness": 6
+      }
     }
   ]
 }

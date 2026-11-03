@@ -7,7 +7,6 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/specterops/dawgs/cypher/parser"
-	"github.com/specterops/dawgs/graph"
 )
 
 // PropertiesVisitor
@@ -409,7 +408,7 @@ func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_NodeLabel(ctx *parser.O
 
 func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_NodeLabel(ctx *parser.OC_NodeLabelContext) {
 	matcher := s.Expression.(*cypher.KindMatcher)
-	matcher.Kinds = append(matcher.Kinds, graph.StringKind(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name))
+	matcher.Kinds = append(matcher.Kinds, s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).kind())
 }
 
 func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_Atom(ctx *parser.OC_AtomContext) {

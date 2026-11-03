@@ -49,7 +49,7 @@ func (s *NodePatternVisitor) EnterOC_LabelName(ctx *parser.OC_LabelNameContext) 
 }
 
 func (s *NodePatternVisitor) ExitOC_LabelName(ctx *parser.OC_LabelNameContext) {
-	kind := graph.StringKind(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name)
+	kind := s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).kind()
 	s.NodePattern.Kinds = append(s.NodePattern.Kinds, kind)
 }
 
@@ -72,10 +72,9 @@ func (s *RelationshipPatternVisitor) EnterOC_RelTypeName(ctx *parser.OC_RelTypeN
 }
 
 func (s *RelationshipPatternVisitor) ExitOC_RelTypeName(ctx *parser.OC_RelTypeNameContext) {
-	relationshipType := graph.StringKind(ctx.GetText())
+	relationshipType := s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).kind()
 
 	s.RelationshipPattern.Kinds = s.RelationshipPattern.Kinds.Add(relationshipType)
-	s.ctx.Exit()
 }
 
 func (s *RelationshipPatternVisitor) EnterOC_Variable(ctx *parser.OC_VariableContext) {

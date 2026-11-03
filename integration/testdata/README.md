@@ -58,6 +58,15 @@ and one or more `post_assertions`. The primary mutation result is fully drained
 and checked before post-state queries run in the same transaction. Each
 post-state entry contains `cypher`, optional `params`, and `assert`.
 
+`quoted_kind_shapes.json` checks 61 shared variants for quoted labels and
+relationship types: ordinary names, spaces, punctuation, embedded and surrounding
+literal backticks, predicates, alternatives, directions, optional nulls, bounded
+expansion and shortest paths. Mutations cover CREATE, SET, REMOVE and DELETE with
+and without RETURN, exact surviving fixture records, creation counts, independent
+reads, and unchanged decoys. Query-only update labels are explicitly declared.
+PostgreSQL runs every variant with both optimizer modes; Neo4j uses the same
+fixtures and expectations. Builder and driver rewrite tests cover generated tokens.
+
 `delete_node_shapes.json` checks plain deletion of isolated nodes, explicit
 relationship targets, DETACH cleanup of both directions and self-loops, mixed
 plain/detached targets, duplicate input rows, null and missing targets, and WITH

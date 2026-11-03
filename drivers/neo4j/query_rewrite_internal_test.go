@@ -3,8 +3,40 @@ package neo4j
 import (
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	"github.com/specterops/dawgs/cypher/models/walk"
+	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
+
+func TestQueryRewritePreservesKindNames(t *testing.T) {
+	for _, source := range []string{
+		"MATCH (n:`Base` $props)-[r:`has``tick`]->(m:```Base```) WHERE n:`has space` RETURN n, r",
+		"MATCH (n:`Base`)-[r:`has``tick`]->(m:```Base```) WHERE n:`has space` AND n.seen >= datetime($at) RETURN n, r",
+	} {
+		t.Run(source, func(t *testing.T) {
+			params := map[string]any{"props": map[string]any{"name": "`literal`"}, "at": "2026-11-03T00:00:00Z"}
+			query, rewritten, err := rewriteQuery(source, params)
+			require.NoError(t, err)
+			require.NotEqual(t, source, query, "must exercise parse/emit rewrite")
+			for key, value := range params {
+				require.Equal(t, value, rewritten[key])
+			}
+			parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
+			require.NoError(t, err)
+			var names []string
+			require.NoError(t, walk.CypherStructural(parsed, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+				if kinds, ok := node.(graph.Kinds); ok {
+					for _, kind := range kinds {
+						names = append(names, kind.String())
+					}
+				}
+			})))
+			require.ElementsMatch(t, []string{"Base", "has`tick", "`Base`", "has space"}, names)
+		})
+	}
+}
 
 func TestRewritePatternPropertyParameters(t *testing.T) {
 	params := map[string]any{

@@ -9,6 +9,13 @@ desired.
 
 ## Format
 
+`quoted_kinds.sql` checks that known quoted matches, negation, relationship
+alternatives, CREATE and label updates use semantic kind IDs. Literal surrounding
+backticks, spaces and embedded backticks have distinct predeclared names. The
+database-free translator tests also compare quoted/bare SQL in both optimizer
+modes and trace lookup versus registration calls. Shared live mutation and read
+expectations are in `integration/testdata/templates/quoted_kind_shapes.json`.
+
 A test case is presented to the test framework as a SQL query that is preceded by a comment with the `case:` tag. The
 end of the query is determined by matching a closing ';' character.
 
