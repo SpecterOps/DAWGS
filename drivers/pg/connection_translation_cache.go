@@ -456,17 +456,24 @@ func (s *connectionCacheProvider) RecordTraversalRouteDecision(decision Traversa
 }
 
 // RecordSQLGenerationProfile retains query-text-free timing totals for the
-// v2 architecture. A profile is recorded after pgx has returned a row stream,
-// not after its rows are consumed.
+// v2 architecture. Graph-query profiles end at row-stream dispatch; metadata
+// operation profiles include consuming and closing the metadata result.
 func (s *connectionCacheProvider) RecordSQLGenerationProfile(profile SQLGenerationProfile) {
 	if s == nil {
 		return
 	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	if profile.QueryClass == "shortest_path" {
+	switch profile.QueryClass {
+	case "shortest_path":
 		s.sqlGeneration.ShortestPath.add(profile)
-	} else {
+	case "kind_lookup":
+		s.sqlGeneration.KindLookup.add(profile)
+	case "kind_refresh":
+		s.sqlGeneration.KindRefresh.add(profile)
+	case "kind_register":
+		s.sqlGeneration.KindRegistration.add(profile)
+	default:
 		s.sqlGeneration.Other.add(profile)
 	}
 }

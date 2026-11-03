@@ -63,12 +63,21 @@ func (s Query) describeGraphPartition(name string) (model.GraphPartition, error)
 }
 
 func (s Query) SelectKinds() (map[graph.Kind]int16, error) {
+	return s.selectKinds(sqlSelectKinds, nil)
+}
+
+// SelectKindsByNames resolves only requested names and never registers them.
+func (s Query) SelectKindsByNames(names []string) (map[graph.Kind]int16, error) {
+	return s.selectKinds("select id, name from kind where name = ANY(@names::text[])", map[string]any{"names": names})
+}
+
+func (s Query) selectKinds(statement string, parameters map[string]any) (map[graph.Kind]int16, error) {
 	var (
 		kindID   int16
 		kindName string
 
 		kinds  = map[graph.Kind]int16{}
-		result = s.tx.Raw(sqlSelectKinds, nil)
+		result = s.tx.Raw(statement, parameters)
 	)
 
 	defer result.Close()
@@ -490,5 +499,8 @@ func (s Query) InsertOrGetKind(kind graph.Kind) (int16, error) {
 		return -1, err
 	}
 
+	// Autocommit may still fail while draining the command completion (for
+	// example, a deferred constraint). Never advertise an ID before it commits.
+	result.Close()
 	return kindID, result.Error()
 }

@@ -67,7 +67,7 @@ func TestNodeUpsertKindRemovalExecution(t *testing.T) {
 			manager.hasDefaultGraph = true
 			manager.defaultGraph = model.Graph{ID: 1, Partitions: model.GraphPartitions{Node: model.NewGraphPartition("node_1")}}
 			removed := graph.StringKind("Removed")
-			manager.kindsByID[removed] = 7
+			manager.kindCache.merge(map[graph.Kind]int16{removed: 7}, 0)
 			node := graph.PrepareNode(graph.AsProperties(map[string]any{"id": "one"}))
 			node.DeleteKinds(removed)
 			updates := sql.NewNodeUpdateBatch()

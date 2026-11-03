@@ -2,8 +2,11 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/specterops/dawgs/cypher/models/pgsql"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +49,9 @@ type Config struct {
 	// skipStableSnapshotTraversalWorkspaces prevents ordinary-expansion tool
 	// studies from paying unrelated SP/ASP temporary-workspace setup.
 	skipStableSnapshotTraversalWorkspaces bool
+
+	// skipKindRefresh lets schema bootstrap create storage before loading kinds.
+	skipKindRefresh bool
 }
 
 // OptionSetQueryExecMode classifies option set query exec mode for downstream policy decisions.
@@ -327,16 +333,7 @@ func (s *Driver) FetchKinds(_ context.Context) (graph.Kinds, error) {
 
 // RefreshKinds discards and reloads the driver's in-memory kind mapping.
 func (s *Driver) RefreshKinds(ctx context.Context) error {
-
-	if err := s.SchemaManager.Fetch(ctx); err != nil {
-		return err
-	}
-
-	s.compilationCache.Invalidate()
-	if s.runtime != nil && s.runtime.provider != nil {
-		s.runtime.provider.advanceSchemaGeneration()
-	}
-	return nil
+	return s.SchemaManager.Fetch(ctx)
 }
 
 // WarmStatements prepares selected SQL on currently idle physical
@@ -392,29 +389,20 @@ func (s *Driver) WipeGraph(ctx context.Context, retain graph.TransactionDelegate
 	})
 }
 
-// resolveKindIDs maps kinds to their integer IDs, refreshing the schema cache once on a miss. It returns the resolved
-// IDs alongside any kinds that remain undefined after the refresh, so callers can decide whether an unresolved kind is
+// resolveKindIDs maps kinds to their integer IDs with targeted lookups on name misses. It returns resolved
+// IDs alongside any kinds that remain undefined, so callers can decide whether an unresolved kind is
 // a tolerable no-op (include predicates) or must fail closed (exclude predicates).
 func (s *Driver) resolveKindIDs(ctx context.Context, kinds graph.Kinds) ([]int16, graph.Kinds, error) {
 	if len(kinds) == 0 {
 		return nil, nil, nil
 	}
 
-	s.lock.RLock()
-	if kindIDs, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
-		s.lock.RUnlock()
-		return kindIDs, nil, nil
+	ids, err := s.MapKinds(ctx, kinds)
+	var missing *pgsql.MissingKindsError
+	if errors.As(err, &missing) {
+		return missing.KindIDs, missing.Kinds, nil
 	}
-	s.lock.RUnlock()
-
-	if err := s.Fetch(ctx); err != nil {
-		return nil, nil, err
-	}
-
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	kindIDs, missingKinds := s.mapKinds(kinds)
-	return kindIDs, missingKinds, nil
+	return ids, nil, err
 }
 
 // DeleteNodesByKinds performs a server-side, set-based delete of nodes using the kind_ids GIN index instead of

@@ -1,0 +1,933 @@
+{
+  "version": 1,
+  "start": "21c7bafc1e1d91c3507dff86da9fe3a81c96a76d",
+  "base": "3dd2046654bbc71091092c840357ef02e29f1a3b",
+  "tip": "cdfadee7c510bbedcb877707ae209b802aa6e77e",
+  "review_basis": [
+    "Commit diffs and historical documentation",
+    "variance_findings_priority.md",
+    "variance_findings_priority_complete.md"
+  ],
+  "commits": [
+    {
+      "commit": "21c7bafc1e1d91c3507dff86da9fe3a81c96a76d",
+      "original_subject": "chore: Updated Go version to '1.27.3'. BED-10193 (#160)",
+      "message": "chore(deps): update Go to 1.27.3\n\nUpdate the module's Go directive from 1.27.2 to 1.27.3.\n\nRefs: BED-10193 (#160)\n",
+      "evidence": [
+        "commit diff"
+      ],
+      "review_note": "BED-10193; pull request #160."
+    },
+    {
+      "commit": "02fb656431409226fa89e187feef5181d1a38654",
+      "original_subject": "feat(testing): enforce disposable database targets",
+      "message": "feat(testing): require disposable database targets\n\nAdd explicit destructive-test opt-in and a credential-free target\nallowlist. Wire the guard into integration commands and CI, and document\nthe required environment variables.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "0d0db61cc724cf299c1a70a91aafe40c866d5e54",
+      "original_subject": "test(regression): establish cross-backend query corpus",
+      "message": "test(regression): establish a cross-backend query corpus\n\nAdd shared fixtures, typed parameters, mutation post-state templates and\nlegacy-builder regressions. Track query-form coverage and validate the\nregression manifest.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "63872fa67f62cd8de4c60426c441ae872acd994b",
+      "original_subject": "feat(cypher): stage regression forms and PostgreSQL lowering",
+      "message": "feat(cypher): add traversal lowering and regression forms\n\nAdd traversal admission plans, endpoint and suffix strategies,\nshortest-path lowering, path functions and graph-scoped SQL rendering.\nExtend parser, builder and SQL regression fixtures.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "4faac5fdfd43835856e757f9cfcc6b40aaf2cef2",
+      "original_subject": "feat(pg): add graph-scoped execution and policy foundations",
+      "message": "feat(pg): add graph-scoped execution and traversal policies\n\nAdd bounded parse/translation caches, graph-scoped execution, traversal\nworkspaces and manifest-backed routing policies. Add topology metadata,\nschema upgrades and driver regression coverage.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "c290f1a168583714440f2bd85a4e08ba4a7580b0",
+      "original_subject": "feat(pg-v2): add connection-local cached driver",
+      "message": "feat(pg-v2): add a connection-local cached driver\n\nIntroduce the v2 pool/runtime hooks, per-connection translation\nretention, shared shortest-path templates and cache diagnostics. Cover\nlifecycle, configuration and live execution.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "2099f2d974111050bd45b283788dc75952dfecd1",
+      "original_subject": "test(pg): cover traversal and mutation integration semantics",
+      "message": "test(pg): cover traversal and mutation integration semantics\n\nAdd PostgreSQL traversal-plan, inline all-shortest, deletion and\ngraph-wipe controls. Extend the PostgreSQL walker for the emitted query\nforms.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "309787461b0a4d1f0692e8c3e8bf4ec661b1cbf6",
+      "original_subject": "feat(benchmark): add traversal qualification corpus",
+      "message": "feat(benchmark): add a traversal qualification corpus\n\nAdd reproducible traversal scenarios, plan capture and reporting for\nboth PostgreSQL runtimes. Include scale fixtures and shortest-path\npolicy selection.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "7890b48159acfb392a4d6716438c96dc8a801e7a",
+      "original_subject": "feat(graphbench): add reproducible qualification gates",
+      "message": "feat(graphbench): add reproducible qualification gates\n\nAdd capture bundles, A/A resolution, paired confirmation, resource and\noperational gates, and manifest-backed promotion evidence. Include\ntraversal telemetry, selector studies and reference tournaments.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "fdd7195c2d5be77363a16b196fbe9c503e6692ce",
+      "original_subject": "feat(plancorpus): add normalized backend plan deltas",
+      "message": "feat(plancorpus): report normalized backend plan deltas\n\nCapture backend-specific plan diagnostics from the shared corpus,\nnormalize plan structure and report comparable deltas. Extend command\noptions, output provenance and regression coverage.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "2131a6f4cb3b0ddcbc10bc44e8e856e2ffcdd823",
+      "original_subject": "docs: add durable traversal protocols and operations guidance",
+      "message": "docs(traversal): document qualification and routing protocols\n\nRecord traversal experiments, routing and promotion contracts,\nsource-parity procedures and operational limits. Update translation,\ndevelopment and repository guidance.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "d6c52a53fd0c7a2ae54f79d7d8faba7742b140a5",
+      "original_subject": "fix(pg-v2): lower first-use topology retry candidates",
+      "message": "fix(pg): lower first-use topology retry candidates\n\nAdmit the first-use fixed-suffix policy to guarded suffix lowering and\nemit the transaction-retry form. Add a regression for the versioned\nselector.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "7f486417520ad57ca7c2c9e784010f92903c255f",
+      "original_subject": "fix(pg): preserve expansion path identity and order",
+      "message": "fix(pg): preserve expansion identity and path order\n\nHydrate repeated expansion endpoints once and reverse raw path-ID\nsegments with the other path components. Cover self-loop aliases and\nreversed suffix paths.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "2b9968f1864fad42f96898021798e6eef5bc187c",
+      "original_subject": "test(graphbench): skip PostgreSQL WAL probe on Neo4j",
+      "message": "test(graphbench): skip the PostgreSQL WAL probe on Neo4j\n\nSelect the PostgreSQL-only adjacency feasibility probe by\nCONNECTION_STRING so Neo4j integration runs skip it.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "19ae3558fb0904ff1ad302e3dceaa827f9a4c18a",
+      "original_subject": "feat(pg): finalize connection-local driver runtime",
+      "message": "feat(pg)!: consolidate the connection-local driver runtime\n\nMove the v2 runtime, pool hooks, translation cache and diagnostics into\ndrivers/pg. Remove the separate v2 driver and obsolete shared SQL\ntranslation implementation.\n\nBREAKING CHANGE: callers of drivers/pg/v2 must migrate to drivers/pg and\nconstruct pools with pg.NewPool or pg.NewPoolWithRuntimeConfig.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "69b8d7db993996bd31ba4060316b548fa1daa34b",
+      "original_subject": "chore: bhe compat work",
+      "message": "fix(pg): preserve all-shortest harness argument positions\n\nDistinguish SP and ASP endpoint-array offsets so singleton all-shortest\ncalls retain their maximum-depth argument. Add a compiler regression and\nthe crypto module requirement.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "79381e4f20ee48f34f62ea51d2b96b49416d0df2",
+      "original_subject": "chore: dependency updates",
+      "message": "chore(deps): update Go dependencies and checksums\n\nUpgrade CUE, RoaringBitmap, bitset, go-pretty, compress and indirect\ndependencies, and refresh go.sum.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "2adbd02a2d9841e55eaa9782bc2c8276155d4191",
+      "original_subject": "chore: remove live dataset guards and broken tests",
+      "message": "fix(pg): rebind cached literals and remove database guards\n\nRetain formatter-extracted string literals separately from request\nparameters and rebind both on cache hits. Remove disposable-target\nguards, align callers and SQL fixtures with formatted statements, and\nupdate test setup.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "8d348f9a93e414e2f963d4da0ed16235eed7907e",
+      "original_subject": "wip",
+      "message": "fix(pg): retain constrained aggregate traversal semantics\n\nDecline aggregate-count lowering when the second MATCH labels the source\nor reuses it as the terminal. Add shared read/mutation controls,\nPostgreSQL plan checks and review findings.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "ca8356efd87dc77ebb04083016b6b4f6b9e7b261",
+      "original_subject": "chore: fixing up correctness runs",
+      "message": "fix(pg): preserve bound traversal and multipart inputs\n\nKeep bound endpoint identity, carried node representations and\ninline-map dependencies. Repair leading UNWIND/CREATE frames, hoist\nwrite CTEs, and decline unsafe correlated suffix reversal.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "97a273f9ebe3aa081ced2f80ba30b0ae2259e104",
+      "original_subject": "feat: correcting semantic gaps",
+      "message": "fix(pg): stage multipart writes for read-after-write visibility\n\nExecute later multipart stages as separate statements in the same\ntransaction, retaining carried rows and updated aliases. Fix empty-list\naliases and bound suffix admission, and make pool/runtime references\nweak.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "ef83275131664126a7d90d8b81d890ae23926ef4",
+      "original_subject": "variance work",
+      "message": "docs(variance): record backend semantic findings\n\nAdd the detailed variance investigation covering query semantics,\ndrivers, values, analysis utilities and transfer tooling.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "1703d69f22080406b4e039e9c60857ae7a48d414",
+      "original_subject": "fix: dawgs 041",
+      "message": "fix(bdd): enforce supported scenarios and Go test failures\n\nRemove the TestMain exit override, enforce untagged scenarios and\nexplicitly tag unsupported compatibility cases as report-only. Validate\nrunner/report consistency and record the prioritized variance findings.\n\nRefs: DAWGS-084\n",
+      "findings": [
+        "DAWGS-084"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "The original DAWGS-041 subject is incorrect: this changes the DAWGS-084 BDD gate, not SET translation."
+    },
+    {
+      "commit": "a97eb47b38178b2b951b29a792c0fc1b2725f690",
+      "original_subject": "fix: semantic work",
+      "message": "fix(graph): preserve update rows and batch mutation intent\n\nPreserve SET input rows, duplicates and null targets while binding\nassignments to each target's input frame. Frame typed batch identities,\npropagate Neo4j property deletions and apply PostgreSQL upsert kind\nremovals transactionally.\n\nRefs: DAWGS-041, DAWGS-064, DAWGS-070, DAWGS-087\n",
+      "findings": [
+        "DAWGS-041",
+        "DAWGS-064",
+        "DAWGS-070",
+        "DAWGS-087"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "This combined changeset implements the SET row-stream repair and three batch repairs."
+    },
+    {
+      "commit": "c27262cd785fc8f9ce556216f18b154a49c289dd",
+      "original_subject": "fix: dawgs finding 045",
+      "message": "fix(cypher): preserve SET and REMOVE clause order\n\nApply property and kind mutation intent in clause order while retaining\none write per target and the complete input row stream. Dependent\nassignment-expression sequencing remains separate work.\n\nRefs: DAWGS-045\n",
+      "findings": [
+        "DAWGS-045"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "7cfdf2c92cca90a7968c94774a006a5012510707",
+      "original_subject": "fix: dawgs 058",
+      "message": "fix(pg): distinguish builder ASTs in translation cache keys\n\nAdd a bounded typed AST fingerprint in a separate builder identity\ndomain. Preserve same-shape parameter rebinding and bypass reuse for\nunsupported fingerprint shapes.\n\nRefs: DAWGS-058\n",
+      "findings": [
+        "DAWGS-058"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "04681134956748804b472f391a108dedee07bf7e",
+      "original_subject": "fix: dawgs 073",
+      "message": "fix(algo): cache complete requested reachability sets\n\nRetain only complete requested-component reach sets across diamonds,\nSCCs, directions and eviction. Add concurrent-read regressions and\nrecord the bulk-query performance follow-up.\n\nRefs: DAWGS-073\n",
+      "findings": [
+        "DAWGS-073"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "1885b607d848a0c7b098fc6f6cdca69d86352856",
+      "original_subject": "fix: dawgs 080",
+      "message": "fix(retriever): classify nested scrub keys recursively\n\nApply key-specific policy within nested maps and arrays, retaining\nexplicit preserve overrides and parent redaction. Advance scrub policy\nidentity and cover checkpoint/output accounting.\n\nRefs: DAWGS-080\n",
+      "findings": [
+        "DAWGS-080"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "e08fc7d9091ef7fc324490c521295ac5959a6245",
+      "original_subject": "dawgs 101 and 102",
+      "message": "fix(import): preserve exact numbers and contain fragment reads\n\nNormalize JSON integer tokens without float64 rounding and reject\noverflow before writes. Use a root-aware opener for checksum, preflight\nand load reads to reject parent-relative and symlink escapes.\n\nRefs: DAWGS-101, DAWGS-102\n",
+      "findings": [
+        "DAWGS-101",
+        "DAWGS-102"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "b55ef82646ee56c0778dae08d2c459a5f2dee506",
+      "original_subject": "feat: dawgs 006",
+      "message": "fix(cypher): keep Boolean operands inside value expressions\n\nExtract predicates at WHERE boundaries instead of turning AND operands\nin projections or assignments into row filters. Add shared read and\ncomplete mutation-state regressions.\n\nRefs: DAWGS-006\n",
+      "findings": [
+        "DAWGS-006"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "b6df1679c058b45aadf8968c2f49714618848cfa",
+      "original_subject": "fix: dawgs 028",
+      "message": "fix(pg): retain expansion endpoint predicates in continuations\n\nRender pending cross-endpoint predicates over materialized\nvariable-length endpoints before fixed continuation steps. Cover exact\npaths, duplicate rows and mutation selection.\n\nRefs: DAWGS-028\n",
+      "findings": [
+        "DAWGS-028"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "3f016a91a834ea95d0ed71999db7ec511510b97f",
+      "original_subject": "dawgs 024",
+      "message": "fix(pg): preserve duplicate OPTIONAL MATCH input identity\n\nNumber input rows and correlate derived optional matches by row identity\nrather than equal exported values. Remove internal identities from\nvisible projections and cover mutation cardinality.\n\nRefs: DAWGS-024\n",
+      "findings": [
+        "DAWGS-024"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "5ffb52a2b60701b72e716e5b9c79134bbe8aec38",
+      "original_subject": "fix: dawgs 027",
+      "message": "fix(pg): correlate reused relationship variables by identity\n\nAllocate a fresh edge alias for each fixed relationship occurrence and\nconstrain it to the previously bound relationship ID. Add shared path,\nrow-count and mutation regressions.\n\nRefs: DAWGS-026\n",
+      "findings": [
+        "DAWGS-026"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "The original DAWGS-027 subject is incorrect; this is the DAWGS-026 reused-relationship repair."
+    },
+    {
+      "commit": "2d1b30b3b01dbe67098faa2de711e904e5bd2c3b",
+      "original_subject": "fix: dawgs 027",
+      "message": "fix(pg): pair undirected continuation endpoints correctly\n\nBind near and far orientations together so a later undirected hop\nreaches the opposite endpoint. Preserve self-loop handling and cover\nexact paths and complete mutation state.\n\nRefs: DAWGS-027\n",
+      "findings": [
+        "DAWGS-027"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "cfaeafb758e1d2a8c6dc693ef00ab867500156e6",
+      "original_subject": "fix: dawgs 031",
+      "message": "fix(pg): enforce relationship uniqueness across MATCH parts\n\nTrack relationship history across comma-separated pattern parts and\nconsecutive expansions. Preserve duplicate inputs, optional null rows\nand mixed fixed/variable path semantics.\n\nRefs: DAWGS-031\n",
+      "findings": [
+        "DAWGS-031"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "c12b38dcb125194be2e2762fc1601e0145db9eab",
+      "original_subject": "fix: dawgs 033",
+      "message": "fix(pg): constrain repeated undirected endpoints to self-loops\n\nRequire both endpoints to equal the repeated local node for patterns\nsuch as (x)-[r]-(x). Preserve unrelated input rows and cover exact\nrelationship/path identities.\n\nRefs: DAWGS-033\n",
+      "findings": [
+        "DAWGS-033"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "ccde5ed7308f42da6c9557d74f16cee13d39f4df",
+      "original_subject": "fix: dawgs 020",
+      "message": "fix(cypher): normalize exact-length relationship ranges\n\nParse *k as *k..k and accept whitespace and comments within ranges.\nCover zero, short and above-15-hop paths plus complete mutation\npost-state.\n\nRefs: DAWGS-020\n",
+      "findings": [
+        "DAWGS-020"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "8aa782154e3271268d2adc3a10b4c99f6552eabc",
+      "original_subject": "fix: dawgs 072",
+      "message": "fix(ops): cancel parallel fetch submission on worker failure\n\nDeliver the originating worker error, cancel the operation context to\nunblock submission, and join all workers. Cover both parallel fetch\nhelpers, caller cancellation and successful ranges.\n\nRefs: DAWGS-072\n",
+      "findings": [
+        "DAWGS-072"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "033685e9ef61712fc357f6d770aec7be05aaedb1",
+      "original_subject": "chore: repro dawgs 065",
+      "message": "test(pg): reproduce kind-registration pool wedges\n\nAdd bounded single-connection, saturated-pool and read-side miss probes\nplus a cached-kind control. Pin the existing nested-acquisition behavior\nwithout claiming a runtime repair.\n\nRefs: DAWGS-065\n",
+      "findings": [
+        "DAWGS-065"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "This commit adds reproductions only; the repair arrives in cdfadee7."
+    },
+    {
+      "commit": "3e93e1d7c42d106d33363ba124c902f1e454780f",
+      "original_subject": "fix: dawgs 099",
+      "message": "fix(cardinality): avoid nested wrapper locks in binary operations\n\nSnapshot thread-safe operands before locking the receiver, preventing\ncross-wrapper and self-operation deadlocks. Preserve wrapped HyperLogLog\nmerges and cover both bitmap widths.\n\nRefs: DAWGS-099\n",
+      "findings": [
+        "DAWGS-099"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "dbedfe58ec3c4cb8ced832c07f67aa7e9d4a8798",
+      "original_subject": "fix: dawgs 077",
+      "message": "fix(cardinality): avoid mutation during bitmap fallback iteration\n\nCopy non-native Duplex operands into a native bitmap before And or\nAndNot on both widths. Cover native, wrapped, custom and\ncontainer-boundary cases.\n\nRefs: DAWGS-076\n",
+      "findings": [
+        "DAWGS-076"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "The original DAWGS-077 subject is incorrect; this is the DAWGS-076 bitmap fallback repair."
+    },
+    {
+      "commit": "9bf2cb07560123f0003b68cb17d567cdec262b84",
+      "original_subject": "fix: dawgs 077",
+      "message": "fix(container): preserve merged values and terminate EFSet search\n\nStore PackedMap's merged values alongside merged keys. Return no match\nfor empty EFSet inputs and targets below the stored minimum.\n\nRefs: DAWGS-077\n",
+      "findings": [
+        "DAWGS-077"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "68d7408af5a2eb6bf940962aebac7adafbb9e843",
+      "original_subject": "fix: dawgs 077, 095",
+      "message": "fix(traversal): preserve step direction and optional cardinality\n\nFetch each following expansion with its own direction and let preserved\noptional segments expand once. Add exact callback-cardinality controls\nand supplementary EFSet regressions.\n\nRefs: DAWGS-074, DAWGS-095, DAWGS-077\n",
+      "findings": [
+        "DAWGS-074",
+        "DAWGS-095",
+        "DAWGS-077"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "Runtime changes repair DAWGS-074 and DAWGS-095; DAWGS-077 receives additional tests only."
+    },
+    {
+      "commit": "4d0745ccfe1966ab4074a1038ada36d483a89487",
+      "original_subject": "fix: dawgs 003",
+      "message": "fix(pg): contain quantifier projections and propagate fetch errors\n\nAvoid nil-pattern panics in scalar-list quantifier projections and\nreturn the existing unsupported projection error. Propagate\nFetchNodeProperties iteration errors and add regressions for both paths.\n\nRefs: DAWGS-003, DAWGS-100\n",
+      "findings": [
+        "DAWGS-003",
+        "DAWGS-100"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "The changeset also contains the DAWGS-100 iteration-error repair."
+    },
+    {
+      "commit": "711e29392046246a3ecdd0ffbf3f293b16f74e25",
+      "original_subject": "fix: dawgs 004",
+      "message": "fix(cypher): complete literal null predicates safely\n\nPush assembled IS/IS NOT predicates, infer their Boolean result\nindependently of operand compatibility, and reject empty expression\nstacks. Cover scalar projections, WHERE filters and mutation selection.\n\nRefs: DAWGS-004\n",
+      "findings": [
+        "DAWGS-004"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "a119bfbcde04320946d96bb1b4268c903dc61f03",
+      "original_subject": "fix: dawgs 011",
+      "message": "fix(pg): reject unsupported temporal components and contain panics\n\nReturn explicit errors for component access on constructed temporal\nvalues and convert compiler panics into errors in both translation-cache\npaths. Restore complexity analysis for non-variable property atoms.\n\nRefs: DAWGS-011\n",
+      "findings": [
+        "DAWGS-011"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "eae7ebdd60b4dfd16371a39cde679c4cc0b48917",
+      "original_subject": "fix: dawgs 030",
+      "message": "fix(pg): reject unsupported aggregate pattern predicates\n\nReturn explicit producer-boundary errors for pattern predicates in\naggregate traversal MATCH filters. Avoid the panic without falling back\nto an equally unsupported generic translation.\n\nRefs: DAWGS-030\n",
+      "findings": [
+        "DAWGS-030"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "ada8286dc5dd18bc50cc1749f32e2f0bf97f4d97",
+      "original_subject": "fix: dawgs 086",
+      "message": "fix(query): reject empty v2 kind predicates and mutations\n\nValidate empty kind filters, assignments and removals at Build,\nincluding hand-built matchers and Boolean nesting. Retain populated-kind\nrendering.\n\nRefs: DAWGS-086\n",
+      "findings": [
+        "DAWGS-086"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "30577116963fb503a596fcef3c9a0bdc1c295811",
+      "original_subject": "fix: dawgs 008",
+      "message": "fix(cypher): preserve repeated NOT parity\n\nApply even/odd negation parity in both frontend expression paths. Add\nparser, SQL and shared read/mutation regressions.\n\nRefs: DAWGS-008\n",
+      "findings": [
+        "DAWGS-008"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "053097985a5d51fde226f1981950e6ec3e81b28b",
+      "original_subject": "fix: dawgs 009, 051",
+      "message": "fix(pg): preserve float literals and exact JSON integers\n\nKeep fractional suffixes on integral float literals in both emitters.\nInstall connection-local JSON codecs that preserve signed 64-bit integer\ntokens across scalar, collection and graph-composite results.\n\nRefs: DAWGS-009, DAWGS-051\n",
+      "findings": [
+        "DAWGS-009",
+        "DAWGS-051"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "bffb31120547c64e309457801593f2b64b4eabb1",
+      "original_subject": "fix: dawgs 057",
+      "message": "fix(pg): preserve decoded JSON string contents\n\nDecode only raw JSON bytes instead of interpreting strings already\ndecoded by pgx a second time. Cover scalar, nested, wire and committed\nmutation-result identities.\n\nRefs: DAWGS-057\n",
+      "findings": [
+        "DAWGS-057"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "96515b80c56c36a23681264aef30cf7d985aefd1",
+      "original_subject": "fix: dawgs 016",
+      "message": "fix(pg): dispatch property arithmetic by stored value type\n\nSelect arithmetic behavior from JSON value types instead of text\ncoercion. Cover integer precision, floating remainder, strings, lists,\nnulls and complete mutation post-state.\n\nRefs: DAWGS-016\n",
+      "findings": [
+        "DAWGS-016"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "8417df5c2e9c18d606bbb39c2bf306c5dc6558af",
+      "original_subject": "fix: dawgs 018",
+      "message": "fix(pg): preserve typed predicate and comparison semantics\n\nGuard both operands of nullable string predicates and compare compatible\ndynamic JSON types, including lexicographic lists. Extend shared\nread/mutation controls and schema helper coverage.\n\nRefs: DAWGS-018\n",
+      "findings": [
+        "DAWGS-018"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "eee1d2972c9894cc4327093934886a9e4f0d73da",
+      "original_subject": "fix: dawgs 052",
+      "message": "fix(pg): preserve property types through WITH consumers\n\nRetain stored values through aliases, casts, string/list functions,\nBoolean predicates and heterogeneous coalesce. Add shared result and\nmutation-state regressions.\n\nRefs: DAWGS-052\n",
+      "findings": [
+        "DAWGS-052"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "e859d90f912c439c86599f7d71508d3cf5ba7539",
+      "original_subject": "fix: dawgs 053",
+      "message": "fix(pg): preserve exact numeric SUM semantics\n\nKeep integer precision, honor DISTINCT and return zero for empty or\nall-null SUM inputs. Add typed result, alias and complete mutation-state\ncontrols.\n\nRefs: DAWGS-053\n",
+      "findings": [
+        "DAWGS-053"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "7922e9cb75351ade7aad45b6847b77873c8eb374",
+      "original_subject": "fix: dawgs 054",
+      "message": "fix(pg): preserve collection and UNWIND value types\n\nRetain JSON scalar types in property collections, list operations and\nUNWIND. Cover heterogeneous values, committed properties and complete\nmutation state.\n\nRefs: DAWGS-054\n",
+      "findings": [
+        "DAWGS-054"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "d10503db1079151ce913be7b0069c5dbfa472aff",
+      "original_subject": "fix: dawgs 056",
+      "message": "fix(pg): retain entity types in ID-only collections\n\nCarry node/relationship element identity through collection projections\nand scope copies so overlapping numeric IDs cannot match the wrong\nentity type. Add shared membership and committed-state controls.\n\nRefs: DAWGS-056\n",
+      "findings": [
+        "DAWGS-056"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "eca58d1eef9eacffba4c469a9285060d5ba9c1b0",
+      "original_subject": "fix: test drift due to latest fixes",
+      "message": "fix(pg): distinguish explicit timestamp zones from time.Local\n\nClassify local timestamps by location identity rather than zone name.\nCover parameter cache rebinding, temporal error boundaries and\nbackend-selected integration tags without requiring a database for unit\ntests.\n",
+      "evidence": [
+        "commit diff"
+      ],
+      "review_note": "This changes timestamp behavior as well as test setup; it is not only fixture drift."
+    },
+    {
+      "commit": "803dfcb5986173a608e361201fb121b7ec4cd76f",
+      "original_subject": "fix: dawgs 015",
+      "message": "fix(pg): truncate numeric toInteger conversions toward zero\n\nPreserve exact integer inputs while truncating fractional literals,\nparameters, properties and aliases toward zero. Cover signed boundaries,\nresult types and mutation expressions.\n\nRefs: DAWGS-015\n",
+      "findings": [
+        "DAWGS-015"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "bcb05f4163c8735998a5b7c5c27bf5b92f81208e",
+      "original_subject": "fix: dawgs 014",
+      "message": "fix(pg): escape LIKE metacharacters in string predicates\n\nTreat percent, underscore and escape characters literally for CONTAINS,\nSTARTS WITH and ENDS WITH across supported operand shapes. Add shared\nread and complete mutation-state templates.\n\nRefs: DAWGS-014\n",
+      "findings": [
+        "DAWGS-014"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "8736fefaa960fedfee7cc77d71179d8a1c970d50",
+      "original_subject": "fix: dawgs 040",
+      "message": "fix(pg): preserve WITH ordering and pagination\n\nMaterialize read-only WITH ordering, alias resolution, SKIP and LIMIT\nbefore later filtering and writes. Preserve input cardinality across\nmultipart boundaries.\n\nRefs: DAWGS-040\n",
+      "findings": [
+        "DAWGS-040"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "5b8ff91cf405afd04b720ba4c4bd29bca72f2538",
+      "original_subject": "fix: dawgs 021",
+      "message": "fix(pg): preserve the implicit row in leading OPTIONAL MATCH\n\nSupply one implicit input row and retain matched-side predicates so\nunmatched patterns yield null bindings. Cover aggregation, chained\noptionals, paths and mutations.\n\nRefs: DAWGS-021\n",
+      "findings": [
+        "DAWGS-021"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "931a9d4d0c184a9ae334bf2ac3ea6c5417100bfa",
+      "original_subject": "fix: test drift",
+      "message": "fix(pg): retain CREATE property and UNWIND element types\n\nCopy stored JSON values into CREATE maps, retain native-array UNWIND\nelement types and read multipart OPTIONAL inputs from the preceding\nframe. Validate corpus record assertions, support template schema kinds\nand normalize tagged instants.\n",
+      "evidence": [
+        "commit diff"
+      ],
+      "review_note": "The original test-drift subject hides three translator fixes and corpus workflow changes."
+    },
+    {
+      "commit": "7bcb4299209911fcffcadb05b5036ee70a03426b",
+      "original_subject": "fix: dawgs 036",
+      "message": "fix(pg): preserve MATCH pattern predicate lifetime\n\nResolve predicate futures once with their type constraints and\nmaterialize pending filters before a later MATCH changes the correlation\nframe. Cover repeated predicates and exact mutation selection.\n\nRefs: DAWGS-036\n",
+      "findings": [
+        "DAWGS-036"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "f84e94842371320c1f231bdb1d858ac9220b6d7a",
+      "original_subject": "fix: dawgs 035",
+      "message": "fix(pg): retain pattern predicate dependencies before writes\n\nInclude node and relationship references in optimizer dependencies so\nunresolved bindings stay pinned. Apply deferred MATCH filters before\nmutations, including writes without RETURN.\n\nRefs: DAWGS-035\n",
+      "findings": [
+        "DAWGS-035"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "401608dfdd66f2e70fa67942e30d0baee83ab2b5",
+      "original_subject": "fix: dawgs 046",
+      "message": "fix(pg): preserve multipart traversal input boundaries\n\nRead preceding materialized frames instead of enclosing WITH outputs and\nkeep duplicate/empty streams through literal projections. Cover exact\npaths and SET/CREATE post-state.\n\nRefs: DAWGS-046\n",
+      "findings": [
+        "DAWGS-046"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "e8b13875c00d353bec5b5688562214c7614e2d05",
+      "original_subject": "fix: dawgs 039",
+      "message": "fix(pg): enforce plain DELETE and graph-scoped detach cleanup\n\nReject plain node DELETE when incident relationships remain outside the\ndeletion set. Apply DETACH cleanup on parent and partition paths with\ngraph-scoped endpoint identity.\n\nRefs: DAWGS-039\n",
+      "findings": [
+        "DAWGS-039"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "3140dd4b1ff7346327d9dee31c59cb5d2d7866f6",
+      "original_subject": "fix: dawgs 047",
+      "message": "fix(pg): resolve ORDER BY aliases by binding identity\n\nExpand nested aliases with grouping, qualify bare UNWIND inputs and\ncarry hidden DISTINCT sort keys. Preserve visible columns, ordering,\npagination and mutation selection.\n\nRefs: DAWGS-047\n",
+      "findings": [
+        "DAWGS-047"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "570ea11bd4a315e8ccf47ede565d6befb0c5bfa9",
+      "original_subject": "fix: dawgs 042",
+      "message": "fix(pg): retain property-list UNWIND types and input rows\n\nPreserve JSON element types through direct properties, WITH aliases and\nnested lists. Materialize pending UNWIND inputs before SET while\nretaining duplicates and empty streams.\n\nRefs: DAWGS-042\n",
+      "findings": [
+        "DAWGS-042"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "9cb6bc7efdfaeb15b9e6221ec8c90c727efd4c57",
+      "original_subject": "fix: dawgs 043",
+      "message": "fix(pg): preserve DELETE continuation and write visibility\n\nReserve DELETE CTE names without advancing the input stream so final\nprojections retain cardinality and captured values. Stage preceding\nSET/CREATE writes before DELETE in the same transaction.\n\nRefs: DAWGS-043\n",
+      "findings": [
+        "DAWGS-043"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "c2b206b630e498f6eea1a72a26ca9643aacfcbb6",
+      "original_subject": "fix: test drift",
+      "message": "test(cypher): normalize mutation and property UNWIND fixtures\n\nRefresh parser mutation cases to canonical formatting and remove a\nduplicate license header from the generated property-UNWIND SQL fixture.\n",
+      "evidence": [
+        "commit diff"
+      ]
+    },
+    {
+      "commit": "3d062e7e662948a75ec263a6d12d104a345330ca",
+      "original_subject": "fix: dawgs 023",
+      "message": "fix(pg): treat unknown MATCH kinds as empty matches\n\nResolve absent kinds without registration while preserving alternatives,\nconjunctions, negation and OPTIONAL MATCH. Bypass translation retention\nfor missing-kind plans so later registration becomes visible.\n\nRefs: DAWGS-023\n",
+      "findings": [
+        "DAWGS-023"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "aa0988b0899e1342b0c2df856329c89204328ddd",
+      "original_subject": "fix: dawgs 001",
+      "message": "fix(cypher): reject unsupported list indexing explicitly\n\nReturn a located parser error and isolate the indexing subtree before\nPostgreSQL execution. Cover read/mutation rejection and native Neo4j\npass-through; full shared indexing support remains open.\n\nRefs: DAWGS-001\n",
+      "findings": [
+        "DAWGS-001"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "15952e099dea933fab42ea46b4934097c081ddc2",
+      "original_subject": "fix: dawgs 002",
+      "message": "fix(cypher): reject unsupported list slicing explicitly\n\nReturn a located parser error for omitted, negative, parameterized and\nchained slice bounds. Cover rejection before writes and native Neo4j\nslicing; full shared slicing support remains open.\n\nRefs: DAWGS-002\n",
+      "findings": [
+        "DAWGS-002"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "dae537a0c8d5893aa1dc07b211e04fb8a12b7cf6",
+      "original_subject": "fix: dawgs 017",
+      "message": "fix(cypher): reject unsupported standalone CALL explicitly\n\nReturn a located parser error for explicit and implicit procedure\ninvocations, including YIELD, instead of a successful nil AST. Preserve\nnative Neo4j procedure execution.\n\nRefs: DAWGS-017\n",
+      "findings": [
+        "DAWGS-017"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "67c68ae53bb862b052b100f8b85a1964f18e98d7",
+      "original_subject": "fix: dawgs 010",
+      "message": "fix(cypher): reject unsupported shortest-path expressions\n\nIsolate expression subtrees and return located parser errors instead of\nprojecting the terminal node. Retain supported MATCH syntax and native\nNeo4j expressions.\n\nRefs: DAWGS-010\n",
+      "findings": [
+        "DAWGS-010"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "90227a4fcb58715a51500c4d019ad3714d070670",
+      "original_subject": "fix: dawgs 013",
+      "message": "fix(cypher): reject unsupported import and legacy clauses\n\nReturn located errors for CREATE UNIQUE and LOAD CSV before PostgreSQL\ntext execution, including preceding writes. Preserve native Neo4j query\ntext and diagnostics.\n\nRefs: DAWGS-013\n",
+      "findings": [
+        "DAWGS-013"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "be062e7e87b5a3f6e9d0c51bb0ef60c781655ca9",
+      "original_subject": "fix: dawgs 059",
+      "message": "fix(cypher): reject unsupported in-query CALL explicitly\n\nIsolate the invocation subtree and return a located parser error instead\nof dropping arguments or YIELD filters from PostgreSQL execution. Cover\nread/mutation rejection and native procedure controls.\n\nRefs: DAWGS-103\n",
+      "findings": [
+        "DAWGS-103"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "The original DAWGS-059 subject is swapped with 68ac7243; this is DAWGS-103 containment."
+    },
+    {
+      "commit": "68ac7243573c5b7d9d7114ce614d03dbe294982b",
+      "original_subject": "fix: dawgs 103",
+      "message": "fix(neo4j): intersect conjunctive relationship-kind filters\n\nIntersect positive conjunctive kind lists and retain an explicit false\npredicate for disjoint sets. Keep OR, XOR and NOT filters in WHERE so\nreads and mutations select the intended relationships.\n\nRefs: DAWGS-059\n",
+      "findings": [
+        "DAWGS-059"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "The original DAWGS-103 subject is swapped with be062e7e; this is the DAWGS-059 builder repair."
+    },
+    {
+      "commit": "6fc7f9997cf7036a2f2cdf4fa1a8529ffe625c10",
+      "original_subject": "fix: dawgs 060",
+      "message": "fix(cypher): preserve raw-query rewrite fidelity\n\nRender qualified function separators and conjunctive parsed labels while\nretaining builder any-kind OR behavior and float literal types. Add\nshared read/mutation and native namespaced-function controls.\n\nRefs: DAWGS-060\n",
+      "findings": [
+        "DAWGS-060"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "1a23bdbf74ac103c5f00359e87403e3dc9262dd8",
+      "original_subject": "fix: dawgs 085",
+      "message": "fix(cypher): retain XOR grouping inside conjunctions\n\nParenthesize builder XOR groups inside AND and group PostgreSQL XOR\noperands and results. Add render, SQL and shared truth-table\nread/mutation controls.\n\nRefs: DAWGS-085\n",
+      "findings": [
+        "DAWGS-085"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "b74dff272c131debbf06232a39ad6a8d1a2235aa",
+      "original_subject": "fix: dawgs 055",
+      "message": "fix(pg): preserve escaped identifier spelling and result keys\n\nDecode Cypher identifier escapes, retain case and double embedded SQL\nquotes. Apply the same rendering to CTE names and cover exact result\nkeys and mutation targets.\n\nRefs: DAWGS-055\n",
+      "findings": [
+        "DAWGS-055"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ]
+    },
+    {
+      "commit": "cdfadee7c510bbedcb877707ae209b802aa6e77e",
+      "original_subject": "fix+chore: release prep and carving out remaining work",
+      "message": "fix(drivers): repair schema, kind and traversal release blockers\n\nSeparate graph selection from schema reconciliation and use\ntransaction-owned connections for kind mapping with commit-only metadata\npublication. Remove implicit open-traversal depth caps, add explicit\nresource failures and rollback, and repair shortest-path length and\nbounded endpoint workspaces.\n\nQuote Neo4j upsert identifiers and reconcile the active/completed\nvariance ledgers. Preserve the regex default and recorded\ncapacity/performance limits; the ledger does not qualify the complete\nPostgreSQL release gate as passing.\n\nRefs: DAWGS-019, DAWGS-061, DAWGS-063, DAWGS-065\n",
+      "findings": [
+        "DAWGS-019",
+        "DAWGS-061",
+        "DAWGS-063",
+        "DAWGS-065"
+      ],
+      "evidence": [
+        "variance_findings_priority.md",
+        "variance_findings_priority_complete.md"
+      ],
+      "review_note": "Includes the bounded shortest-path workspace follow-up as well as the four release repairs; GraphBench changes are formatting only."
+    }
+  ]
+}

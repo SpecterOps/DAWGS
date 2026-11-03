@@ -205,7 +205,7 @@ func TestCompileRegularQuerySeparatesTextAndExclusiveKindASTs(t *testing.T) {
 			builder.Apply(query.Where(cypher.NewKindMatcher(query.Node(), kinds, true)), query.Returning(query.Node()))
 			prepared := compilePreparedBuilderQuery(t, builder)
 			manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 8})
-			manager.kindsByID[kinds[0]], manager.kindsByID[kinds[1]] = 1, 2
+			manager.kindCache.merge(map[graph.Kind]int16{kinds[0]: 1, kinds[1]: 2}, 0)
 			compileBuilder := func() string {
 				sql, _, err := manager.compileRegularQuery(context.Background(), prepared, 7)
 				require.NoError(t, err)
@@ -258,7 +258,7 @@ func TestCompileRegularQueryUnsupportedIdentityBypassesCache(t *testing.T) {
 	prepared := compilePreparedBuilderQuery(t, builder)
 	require.False(t, prepared.identity.valid)
 	manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 8})
-	manager.kindsByID[kind] = 1
+	manager.kindCache.merge(map[graph.Kind]int16{kind: 1}, 0)
 	firstSQL, _, err := manager.compileRegularQuery(context.Background(), prepared, 7)
 	require.NoError(t, err)
 	secondSQL, _, err := manager.compileRegularQuery(context.Background(), prepared, 7)

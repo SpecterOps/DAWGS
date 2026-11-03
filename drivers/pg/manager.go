@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -90,13 +91,10 @@ type SchemaManager struct {
 	// graphs indexes asserted database graph models by schema name.
 	graphs map[string]model.Graph
 
-	// kindsByID maps graph kind names to their PostgreSQL int2 identifiers.
-	kindsByID map[graph.Kind]int16
+	// kindCache owns immutable metadata independently of graph reconciliation.
+	kindCache *kindCache
 
-	// kindIDsByKind maps PostgreSQL int2 identifiers back to graph kind names.
-	kindIDsByKind map[int16]graph.Kind
-
-	// lock protects cached graph and kind metadata from concurrent access.
+	// lock protects cached graph metadata.
 	lock *sync.RWMutex
 
 	// graphQueryMemoryLimit caps memory available to a graph query transaction.
@@ -144,8 +142,7 @@ func newSchemaManagerWithOptionsAndProvider(pool *pgxpool.Pool, graphQueryMemory
 		translationCacheProvider: provider,
 		hasDefaultGraph:          false,
 		graphs:                   map[string]model.Graph{},
-		kindsByID:                map[graph.Kind]int16{},
-		kindIDsByKind:            map[int16]graph.Kind{},
+		kindCache:                newKindCache(),
 		lock:                     &sync.RWMutex{},
 		graphQueryMemoryLimit:    graphQueryMemoryLimit,
 		compilationCache:         compilationCache,
@@ -188,96 +185,79 @@ func (s *SchemaManager) WriteTransaction(ctx context.Context, txDelegate graph.T
 	}
 }
 
-// fetch replaces both in-memory kind indexes with the kinds visible through tx.
-func (s *SchemaManager) fetch(tx graph.Transaction) error {
-	kinds, err := query.On(tx).SelectKinds()
+// GetKindIDsByKind returns an owned, independently mutable snapshot.
+func (s *SchemaManager) GetKindIDsByKind() map[int16]graph.Kind {
+	return maps.Clone(s.kindCache.current.Load().ids)
+}
+
+// invalidateKindTranslations also invalidates physical-connection translations.
+func (s *SchemaManager) invalidateKindTranslations() {
+	s.compilationCache.Invalidate()
+	if provider, ok := s.translationCacheProvider.(interface{ advanceSchemaGeneration() uint64 }); ok {
+		provider.advanceSchemaGeneration()
+	}
+}
+
+// Fetch explicitly reloads committed metadata on a safe autocommit connection.
+// Bootstrap bypasses automatic servicing, so pending requests cause only one fetch.
+func (s *SchemaManager) Fetch(ctx context.Context) error {
+	// A failed lease is still an outstanding request to resynchronize metadata.
+	s.kindCache.invalidate()
+	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
 		return err
 	}
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.kindsByID = kinds
-	s.kindIDsByKind = make(map[int16]graph.Kind, len(kinds))
-	for kind, id := range kinds {
-		s.kindIDsByKind[id] = kind
+	defer conn.Release()
+	wrapper := &transaction{ctx: ctx, conn: conn, schemaManager: s, queryExecMode: pgx.QueryExecModeSimpleProtocol}
+	wrapper.kindMapper = &transactionKindMapper{tx: wrapper, snapshot: s.kindCache.current.Load()}
+	if err := s.kindCache.lockRefresh(ctx); err != nil {
+		return err
 	}
-	return nil
-}
-
-// GetKindIDsByKind returns an owned snapshot of the kind cache.
-func (s *SchemaManager) GetKindIDsByKind() map[int16]graph.Kind {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return maps.Clone(s.kindIDsByKind)
-}
-
-// Fetch refreshes committed kind metadata without holding a lock while leasing a connection.
-func (s *SchemaManager) Fetch(ctx context.Context) error {
-	return s.ReadTransaction(ctx, func(tx graph.Transaction) error { return s.fetch(tx) }, OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol))
-}
-
-// mapKinds partitions semantic kinds into cached database IDs and unresolved kinds without refreshing the cache.
-func (s *SchemaManager) mapKinds(kinds graph.Kinds) ([]int16, graph.Kinds) {
-	var (
-		missingKinds = make(graph.Kinds, 0, len(kinds))
-		ids          = make([]int16, 0, len(kinds))
-	)
-
-	for _, kind := range kinds {
-		if id, hasID := s.kindsByID[kind]; hasID {
-			ids = append(ids, id)
-		} else {
-			missingKinds = append(missingKinds, kind)
+	defer s.kindCache.unlockRefresh()
+	s.kindCache.fence()
+	for {
+		installed, err := wrapper.reloadKinds(true)
+		if err != nil {
+			return err
+		}
+		if installed {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 	}
-
-	return ids, missingKinds
 }
 
-// MapKind resolves kind from the cache, refreshing it once on a miss.
+func (s *SchemaManager) mapKinds(kinds graph.Kinds) ([]int16, graph.Kinds) {
+	mapper := &transactionKindMapper{snapshot: s.kindCache.current.Load()}
+	return mapper.mapKinds(kinds)
+}
+
+// MapKind resolves a name, looking up only missing names on one owned connection.
 func (s *SchemaManager) MapKind(ctx context.Context, kind graph.Kind) (int16, error) {
-	s.lock.RLock()
-
-	if id, hasID := s.kindsByID[kind]; hasID {
-		s.lock.RUnlock()
-		return id, nil
-	}
-
-	s.lock.RUnlock()
-	if err := s.Fetch(ctx); err != nil {
+	ids, err := s.MapKinds(ctx, graph.Kinds{kind})
+	if err != nil {
+		var missing *pgsql.MissingKindsError
+		if errors.As(err, &missing) {
+			return -1, fmt.Errorf("unable to map kind: %s", kind.String())
+		}
 		return -1, err
 	}
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	if id, hasID := s.kindsByID[kind]; hasID {
-		return id, nil
-	} else {
-		return -1, fmt.Errorf("unable to map kind: %s", kind.String())
-	}
+	return ids[0], nil
 }
 
-// MapKinds resolves kinds from the cache, refreshing it once when any kind is missing.
 func (s *SchemaManager) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
-	s.lock.RLock()
-
-	if mappedKinds, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
-		s.lock.RUnlock()
-		return mappedKinds, nil
+	if ids, missing := s.mapKinds(kinds); len(missing) == 0 {
+		return ids, nil
 	}
-
-	s.lock.RUnlock()
-	if err := s.Fetch(ctx); err != nil {
-		return nil, err
-	}
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	if mappedKinds, missingKinds := s.mapKinds(kinds); len(missingKinds) == 0 {
-		return mappedKinds, nil
-	} else {
-		return nil, &pgsql.MissingKindsError{Kinds: missingKinds, KindIDs: mappedKinds}
-	}
+	var ids []int16
+	err := s.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		var err error
+		ids, err = tx.(*transaction).kindMapper.MapKinds(ctx, kinds)
+		return err
+	})
+	return ids, err
 }
 
 // ReadTransaction executes txDelegate on a leased read-only connection or transaction.
@@ -345,61 +325,40 @@ func EnsureStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.
 	return nil
 }
 
-// mapKindIDs partitions database kind IDs into cached semantic kinds and unresolved IDs without refreshing the cache.
-func (s *SchemaManager) mapKindIDs(kindIDs []int16) (graph.Kinds, []int16) {
-	var (
-		missingIDs = make([]int16, 0, len(kindIDs))
-		kinds      = make(graph.Kinds, 0, len(kindIDs))
-	)
+// MapKindID resolves an ID without database I/O, including during result decoding.
+func (s *SchemaManager) MapKindID(ctx context.Context, id int16) (graph.Kind, error) {
+	kinds, err := s.MapKindIDs(ctx, []int16{id})
+	if err != nil {
+		return nil, err
+	}
+	return kinds[0], nil
+}
 
-	for _, kindID := range kindIDs {
-		if kind, hasKind := s.kindIDsByKind[kindID]; hasKind {
+func (s *SchemaManager) MapKindIDs(ctx context.Context, ids []int16) (graph.Kinds, error) {
+	snapshot := s.kindCache.current.Load()
+	kinds := make(graph.Kinds, 0, len(ids))
+	var missing []int16
+	for _, id := range ids {
+		kind, ok := snapshot.ids[id]
+		if !ok {
+			kind, ok = s.kindCache.current.Load().ids[id]
+		}
+		if ok {
 			kinds = append(kinds, kind)
 		} else {
-			missingIDs = append(missingIDs, kindID)
+			missing = append(missing, id)
 		}
 	}
-
-	return kinds, missingIDs
-}
-
-// MapKindID resolves one PostgreSQL kind identifier from the cache, refreshing it once on a miss.
-func (s *SchemaManager) MapKindID(ctx context.Context, kindID int16) (graph.Kind, error) {
-	if kindIDs, err := s.MapKindIDs(ctx, []int16{kindID}); err != nil {
-		return nil, err
-	} else {
-		return kindIDs[0], nil
+	if len(missing) > 0 {
+		s.kindCache.invalidate()
+		return nil, fmt.Errorf("unable to map kind ids: %v", missing)
 	}
-}
-
-// MapKindIDs resolves PostgreSQL kind identifiers from the cache, refreshing it once on a miss.
-func (s *SchemaManager) MapKindIDs(ctx context.Context, kindIDs []int16) (graph.Kinds, error) {
-	s.lock.RLock()
-
-	if kinds, missingKinds := s.mapKindIDs(kindIDs); len(missingKinds) == 0 {
-		s.lock.RUnlock()
-		return kinds, nil
-	}
-
-	s.lock.RUnlock()
-	if err := s.Fetch(ctx); err != nil {
-		return nil, err
-	}
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	if kinds, missingKinds := s.mapKindIDs(kindIDs); len(missingKinds) == 0 {
-		return kinds, nil
-	} else {
-		return nil, fmt.Errorf("unable to map kind ids: %v", missingKinds)
-	}
+	return kinds, nil
 }
 
 // AssertKinds registers kinds on one leased connection and publishes only committed metadata.
 func (s *SchemaManager) AssertKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
-	s.lock.RLock()
 	ids, missing := s.mapKinds(kinds)
-	s.lock.RUnlock()
 	if len(missing) == 0 {
 		return ids, nil
 	}
@@ -409,9 +368,6 @@ func (s *SchemaManager) AssertKinds(ctx context.Context, kinds graph.Kinds) ([]i
 		return err
 	})
 	if err != nil {
-		return nil, err
-	}
-	if err := s.Fetch(ctx); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -515,6 +471,23 @@ func (s *SchemaManager) assertSchema(tx graph.Transaction, schema graph.Schema) 
 		return err
 	}
 
+	// Schema assertion may follow an external reset. Validate its private catalog
+	// view after creating storage rather than trusting stale positive entries.
+	owner := tx.(*transaction)
+	epoch := s.kindCache.current.Load().epoch
+	started := time.Now()
+	kinds, err := query.On(metadataTransaction{owner}).SelectKinds()
+	owner.recordKindWork("kind_refresh", started)
+	if err != nil {
+		return err
+	}
+	ids := make(map[int16]graph.Kind, len(kinds))
+	for kind, id := range kinds {
+		ids[id] = kind
+	}
+	owner.kindMapper.snapshot = &kindSnapshot{kinds: kinds, ids: ids, epoch: epoch, loaded: true}
+	owner.kindMapper.privateCatalog = true
+
 	for _, graphSchema := range schema.Graphs {
 		if _, err := tx.(*transaction).kindMapper.AssertKinds(tx.(*transaction).ctx, append(append(graph.Kinds{}, graphSchema.Nodes...), graphSchema.Edges...)); err != nil {
 			return err
@@ -528,10 +501,11 @@ func (s *SchemaManager) assertSchema(tx graph.Transaction, schema graph.Schema) 
 func (s *SchemaManager) AssertSchema(ctx context.Context, schema graph.Schema) error {
 	if err := s.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		return s.assertSchema(tx, schema)
-	}, OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol)); err != nil {
+	}, OptionSetQueryExecMode(pgx.QueryExecModeSimpleProtocol), func(config *graph.TransactionConfig) {
+		config.DriverConfig.(*Config).skipKindRefresh = true
+	}); err != nil {
 		return err
 	}
 
-	s.compilationCache.Invalidate()
 	return s.Fetch(ctx)
 }

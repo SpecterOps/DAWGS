@@ -96,7 +96,7 @@ func (s *SchemaManager) compileWithMapper(ctx context.Context, source string, pa
 			return "", translationCacheBuildResult{}, err
 		} else {
 			maps.Copy(translated.Parameters, sqlQuery.Parameters)
-			if local, ok := mapper.(*transactionKindMapper); ok && local.hasUncommittedKinds {
+			if local, ok := mapper.(*transactionKindMapper); ok && local.bypassTranslations() {
 				translated.HasMissingKinds = true
 			}
 			return sqlQuery.Statement, translationCacheBuildResult{
@@ -108,7 +108,7 @@ func (s *SchemaManager) compileWithMapper(ctx context.Context, source string, pa
 		}
 	}
 
-	if local, ok := mapper.(*transactionKindMapper); ok && local.hasUncommittedKinds {
+	if local, ok := mapper.(*transactionKindMapper); ok && local.bypassTranslations() {
 		return translationCache.buildUncached(build)
 	}
 	if !optimized {
