@@ -645,6 +645,7 @@ func (s *UpdatingClauseVisitor) ExitOC_Merge(ctx *parser.OC_MergeContext) {
 type NodeLabelsVisitor struct {
 	BaseVisitor
 
+	// Kinds contains decoded semantic names used by SET and REMOVE.
 	Kinds graph.Kinds
 }
 
@@ -653,7 +654,7 @@ func (s *NodeLabelsVisitor) EnterOC_LabelName(ctx *parser.OC_LabelNameContext) {
 }
 
 func (s *NodeLabelsVisitor) ExitOC_LabelName(ctx *parser.OC_LabelNameContext) {
-	kind := graph.StringKind(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name)
+	kind := s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).kind()
 	s.Kinds = append(s.Kinds, kind)
 }
 

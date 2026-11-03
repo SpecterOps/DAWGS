@@ -152,6 +152,9 @@ func translationTestKinds() graph.Kinds {
 		"RegressionKind98",
 		"RegressionKind99",
 		"RegressionKind100",
+		"has space",
+		"has`tick",
+		"`Base`",
 	})...)
 }
 

@@ -999,6 +999,254 @@
         "query": "match (n:MemberOf) where n.k > -1.0 return n.k as x",
         "fitness": 3
       }
+    },
+    {
+      "name": "Quoted kind: node Base",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base) return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: node `Base`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base) return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: node `has space`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has space`) return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: node `has``tick`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`has``tick`) return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: node ```Base```",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:```Base```) return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: node `a-b`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:`a-b`) return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: node `QuotedKindMissing`",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:QuotedKindMissing) return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: edge AZContains",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:AZContains]->() return count(r)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: edge `AZContains`",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:AZContains]->() return count(r)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: edge `has space`",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:`has space`]->() return count(r)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: edge `has``tick`",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:`has``tick`]->() return count(r)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: edge ```AZContains```",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:```AZContains```]->() return count(r)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: edge `QuotedKindMissing`",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:QuotedKindMissing]->() return count(r)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: label conjunction",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base:`has space`) return count(n)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: mixed labels",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base) where (n:Base and n:`has space`) return count(n)",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Quoted kind: positive predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) where n:Base return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: unusual predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) where n:`has``tick` return count(n)",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: negated predicate",
+      "type": "string_match",
+      "details": {
+        "query": "match (n) where not n:Base return count(n)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: unknown negation",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base) where not n:QuotedKindMissing return count(n)",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Quoted kind: unknown conjunction",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base:QuotedKindMissing) return count(n)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: alternatives",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:AZContains|`has``tick`]->() return count(r)",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Quoted kind: unknown alternative",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:QuotedKindMissing|AZContains]->() return count(r)",
+        "fitness": 0
+      }
+    },
+    {
+      "name": "Quoted kind: incoming",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base)<-[r:AZContains]-(s) return count(r)",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Quoted kind: undirected",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:AZContains]-() return count(r)",
+        "fitness": -2
+      }
+    },
+    {
+      "name": "Quoted kind: bounded expansion",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:Base {name: 'a'})-[:AZContains|`has``tick`*1..2]->(t) return count(t)",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Quoted kind: shortest path",
+      "type": "string_match",
+      "details": {
+        "query": "match p = shortestPath((s:Base {name: 'a'})-[:AZContains|`has``tick`*1..2]->(t:`a-b`)) return length(p)",
+        "fitness": 12
+      }
+    },
+    {
+      "name": "Quoted kind: empty input",
+      "type": "string_match",
+      "details": {
+        "query": "match (s:Base {name: 'absent'})-[:AZContains]->(t) return count(t)",
+        "fitness": 7
+      }
+    },
+    {
+      "name": "Quoted kind: optional null preservation",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Base) optional match (n)-[r:QuotedKindMissing]->(m) return n.name, m order by n.name asc",
+        "fitness": 2
+      }
+    },
+    {
+      "name": "Quoted kind: semantic type string",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:AZContains]->() return type(r)",
+        "fitness": 1
+      }
+    },
+    {
+      "name": "Quoted kind: literal backticks in type string",
+      "type": "string_match",
+      "details": {
+        "query": "match ()-[r:```AZContains```]->() where type(r) = '`AZContains`' return type(r)",
+        "fitness": 4
+      }
+    },
+    {
+      "name": "Quoted kind: property alias and parameter compatibility",
+      "type": "string_match",
+      "details": {
+        "query": "match (`node`:Base {name: $name}) return `node`.name as `alias`, '`Base`'",
+        "fitness": 6
+      }
     }
   ]
 }

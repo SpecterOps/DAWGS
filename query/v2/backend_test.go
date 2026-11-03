@@ -6,13 +6,53 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
+	cypherfmt "github.com/specterops/dawgs/cypher/models/cypher/format"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/cypher/models/walk"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/specterops/dawgs/graph"
 	"github.com/specterops/dawgs/query/neo4j"
 	v2 "github.com/specterops/dawgs/query/v2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildersPreserveRawKindNames(t *testing.T) {
+	for _, raw := range []string{"Base", "has space", "a-b", "has`tick", "`Base`", "x`) MATCH (n) //"} {
+		kind := graph.StringKind(raw)
+		for name, builder := range map[string]v2.QueryBuilder{
+			"node predicate":         v2.New().Where(v2.Node().Kinds().Has(kind)).Return(v2.Node()),
+			"relationship pattern":   v2.New().Where(v2.Relationship().Kind().Is(kind)).Return(v2.Relationship()),
+			"relationship predicate": v2.New().Where(v2.Not(v2.Relationship().Kind().Is(kind))).Return(v2.Relationship()),
+			"create":                 v2.New().Create(v2.NodePattern(graph.Kinds{kind}, nil)).Return(v2.Node()),
+		} {
+			t.Run(name+"/"+raw, func(t *testing.T) {
+				prepared, err := builder.Build()
+				require.NoError(t, err)
+				emitter := neo4j.NewQueryBuilder(prepared.Query)
+				require.NoError(t, emitter.Prepare())
+				source, err := emitter.Render()
+				require.NoError(t, err)
+				require.Contains(t, source, ":"+cypher.EscapeKindName(raw))
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), source)
+				require.NoError(t, err)
+				var names []string
+				require.NoError(t, walk.CypherStructural(parsed, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
+					if kinds, ok := node.(graph.Kinds); ok {
+						for _, kind := range kinds {
+							names = append(names, kind.String())
+						}
+					}
+				})))
+				require.Equal(t, []string{raw}, names)
+				canonical, err := cypherfmt.RegularQuery(parsed, false)
+				require.NoError(t, err)
+				require.Equal(t, source, canonical)
+			})
+		}
+	}
+}
 
 // testKindMapper returns an in-memory mapper populated in argument order.
 func testKindMapper(kinds ...graph.Kind) *pgutil.InMemoryKindMapper {

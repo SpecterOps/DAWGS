@@ -24,7 +24,7 @@ func writeJoinedKinds(output io.Writer, delimiter string, kinds graph.Kinds) err
 			}
 		}
 
-		if _, err := io.WriteString(output, kind.String()); err != nil {
+		if _, err := io.WriteString(output, cypher.EscapeKindName(kind.String())); err != nil {
 			return err
 		}
 	}
@@ -692,7 +692,7 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 			return err
 		}
 
-		if _, err := io.WriteString(output, typedExpression.String()); err != nil {
+		if _, err := io.WriteString(output, cypher.EscapeKindName(typedExpression.String())); err != nil {
 			return err
 		}
 
@@ -731,7 +731,7 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 				return err
 			}
 
-			if _, err := io.WriteString(output, matcher.String()); err != nil {
+			if _, err := io.WriteString(output, cypher.EscapeKindName(matcher.String())); err != nil {
 				return err
 			}
 		}
