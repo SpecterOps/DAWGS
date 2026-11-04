@@ -4,6 +4,9 @@ Validation date: 2026-05-27.
 
 This records the validation pass for the Cypher AST tooling test-hardening work.
 
+Historical evidence for the dated checkout below. For the maintained traversal
+contract, see [Cypher walker semantics](../cypher_walker_semantics.md).
+
 ## Review Remediation Preflight
 
 - Branch: `main`, 21 commits ahead of `upstream/main`.

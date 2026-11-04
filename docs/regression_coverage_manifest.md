@@ -3,7 +3,7 @@
 Baseline audit for the source-derived regression program, recorded when the
 regression harness was established. This file is the authoritative coverage
 contract and gap map for the stable query-form IDs; use the tracked
-[source-parity workflow](docs/regression_source_parity.md) for the associated
+[source-parity workflow](regression_source_parity.md) for the associated
 audit procedure. Update a cell when a case is added, and link the exact test or
 generated case that changed it.
 
@@ -77,21 +77,21 @@ instead of being cloned under BloodHound-specific names:
   null, and mutation subtests](query/neo4j/neo4j_test.go).
 - `QB-PROJ`: [`TestQueryBuilder_Render` relationship projection
   subtests](query/neo4j/neo4j_test.go).
-- `CY-MUT`: [Cypher create/update/delete parser cases](cypher/test/cases/mutation_tests.json).
-- `PG-PRED`: [PostgreSQL node/predicate translation goldens](cypher/models/pgsql/test/translation_cases/nodes.sql).
-- `PG-DEL`: [PostgreSQL delete translation goldens](cypher/models/pgsql/test/translation_cases/delete.sql).
-- `PG-BIND`: [PostgreSQL binding and rewrite goldens](cypher/models/pgsql/test/translation_cases/pattern_binding.sql).
-- `IT-PRED`: [backend-equivalent node predicate cases](integration/testdata/cases/nodes_inline.json).
-- `IT-HOP`: [backend-equivalent directed one-hop template cases](integration/testdata/templates/pattern_shapes.json).
-- `IT-MUT`: [primitive mutation cases](integration/testdata/cases/delete_inline.json) and
-  [the initial exact post-state harness sentinel](integration/testdata/cases/mutation_post_state_inline.json).
-- `SC-HOP`: [`one_hop_typed_from_bound_id`](benchmark/testdata/scale/cases/traversal.json).
+- `CY-MUT`: [Cypher create/update/delete parser cases](../cypher/test/cases/mutation_tests.json).
+- `PG-PRED`: [PostgreSQL node/predicate translation goldens](../cypher/models/pgsql/test/translation_cases/nodes.sql).
+- `PG-DEL`: [PostgreSQL delete translation goldens](../cypher/models/pgsql/test/translation_cases/delete.sql).
+- `PG-BIND`: [PostgreSQL binding and rewrite goldens](../cypher/models/pgsql/test/translation_cases/pattern_binding.sql).
+- `IT-PRED`: [backend-equivalent node predicate cases](../integration/testdata/cases/nodes_inline.json).
+- `IT-HOP`: [backend-equivalent directed one-hop template cases](../integration/testdata/templates/pattern_shapes.json).
+- `IT-MUT`: [primitive mutation cases](../integration/testdata/cases/delete_inline.json) and
+  [the initial exact post-state harness sentinel](../integration/testdata/cases/mutation_post_state_inline.json).
+- `SC-HOP`: [`one_hop_typed_from_bound_id`](../benchmark/testdata/scale/cases/traversal.json).
 - `SC-LOOKUP`: [`objectid_exact_string_anchor` and
   `boolean_property_filter`](benchmark/testdata/scale/cases/lookups.json).
 - `SC-COUNT`: [`all_node_count`, `typed_node_count`, and
   `typed_edge_count`](benchmark/testdata/scale/cases/counts.json).
-- `DR-BATCH`: [`TestBatchTransaction_NodeUpdate`](drivers/neo4j/batch_integration_test.go#L48).
-- `PI-IDX`: [`TestPostgreSQLPropertyIndexPlans`](integration/pgsql_property_index_plan_test.go#L58).
+- `DR-BATCH`: [`TestBatchTransaction_NodeUpdate`](../drivers/neo4j/batch_integration_test.go#L48).
+- `PI-IDX`: [`TestPostgreSQLPropertyIndexPlans`](../integration/pgsql_property_index_plan_test.go#L58).
 - `LOGIC-QB`: [`TestQueryBuilder_LOGIC01PreservesBranchLocalRelationshipKinds`,
   `TestQueryBuilder_LogicalForms`, and
   `TestQueryBuilder_LOGIC05ProjectionOrder`](query/neo4j/neo4j_test.go), plus
@@ -99,112 +99,112 @@ instead of being cloned under BloodHound-specific names:
   `TestLegacyBuilderPostgreSQL_LOGIC05ProjectionOrder`](cypher/models/pgsql/test/logical_forms_legacy_builder_test.go).
 - `LOGIC-CY`: [`LOGIC-04` filtered relationship and node delete parser
   cases](cypher/test/cases/mutation_tests.json).
-- `LOGIC-PG`: [`reconciliation.sql`](cypher/models/pgsql/test/translation_cases/reconciliation.sql)
-  and [`post_processing.sql`](cypher/models/pgsql/test/translation_cases/post_processing.sql).
-- `LOGIC-IT`: [`TestLegacyBuilderLogicalForms`](integration/logical_forms_legacy_builder_test.go)
-  and the backend-equivalent [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json)
-  and [`post_processing_shapes.json`](integration/testdata/templates/post_processing_shapes.json) corpora.
+- `LOGIC-PG`: [`reconciliation.sql`](../cypher/models/pgsql/test/translation_cases/reconciliation.sql)
+  and [`post_processing.sql`](../cypher/models/pgsql/test/translation_cases/post_processing.sql).
+- `LOGIC-IT`: [`TestLegacyBuilderLogicalForms`](../integration/logical_forms_legacy_builder_test.go)
+  and the backend-equivalent [`reconciliation_shapes.json`](../integration/testdata/templates/reconciliation_shapes.json)
+  and [`post_processing_shapes.json`](../integration/testdata/templates/post_processing_shapes.json) corpora.
 - `LOGIC-PC`: the `LOGIC-01`, `LOGIC-02`, and `LOGIC-04` families in
-  [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json),
+  [`reconciliation_shapes.json`](../integration/testdata/templates/reconciliation_shapes.json),
   loaded directly by `cmd/plancorpus` with fixture-ID parameter resolution.
-- `REC-QB`: [`TestQueryBuilder_ReconciliationForms`](query/neo4j/neo4j_test.go)
-  and [`TestLegacyBuilderPostgreSQL_ReconciliationForms`](cypher/models/pgsql/test/reconciliation_forms_legacy_builder_test.go).
+- `REC-QB`: [`TestQueryBuilder_ReconciliationForms`](../query/neo4j/neo4j_test.go)
+  and [`TestLegacyBuilderPostgreSQL_ReconciliationForms`](../cypher/models/pgsql/test/reconciliation_forms_legacy_builder_test.go).
 - `REC-CY`: the `REC-01` through `REC-04` and `REC-06` through `REC-08`
-  mutation parser cases in [`mutation_tests.json`](cypher/test/cases/mutation_tests.json).
+  mutation parser cases in [`mutation_tests.json`](../cypher/test/cases/mutation_tests.json).
 - `REC-PG`: the `REC-01` through `REC-08` PostgreSQL goldens in
-  [`reconciliation.sql`](cypher/models/pgsql/test/translation_cases/reconciliation.sql).
+  [`reconciliation.sql`](../cypher/models/pgsql/test/translation_cases/reconciliation.sql).
 - `REC-IT`: the exact reconciliation semantic families in
-  [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json)
-  and the [`FetchStartNodes` de-dup contract](integration/delegated_enrollment_legacy_builder_test.go).
+  [`reconciliation_shapes.json`](../integration/testdata/templates/reconciliation_shapes.json)
+  and the [`FetchStartNodes` de-dup contract](../integration/delegated_enrollment_legacy_builder_test.go).
 - `REC-PC`: the `REC-01` through `REC-08` families loaded from
-  [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json)
+  [`reconciliation_shapes.json`](../integration/testdata/templates/reconciliation_shapes.json)
   by `cmd/plancorpus`.
 - `REC-SC`: the repeatable `REC-01`, `REC-02`, `REC-04`, `REC-06`, and
   `REC-08` write scenarios in
-  [`reconciliation.json`](benchmark/testdata/scale/cases/reconciliation.json).
-- `TRUST-PRUNE-QB`: [`TestQueryBuilder_TrustAndPruningForms`](query/neo4j/neo4j_test.go)
-  and [`TestLegacyBuilderPostgreSQL_TrustAndPruningForms`](cypher/models/pgsql/test/trust_pruning_forms_legacy_builder_test.go).
+  [`reconciliation.json`](../benchmark/testdata/scale/cases/reconciliation.json).
+- `TRUST-PRUNE-QB`: [`TestQueryBuilder_TrustAndPruningForms`](../query/neo4j/neo4j_test.go)
+  and [`TestLegacyBuilderPostgreSQL_TrustAndPruningForms`](../cypher/models/pgsql/test/trust_pruning_forms_legacy_builder_test.go).
 - `TRUST-PRUNE-PG`: the `TRUST-01` through `TRUST-03` and `PRUNE-01` through
   `PRUNE-04` PostgreSQL goldens in
-  [`reconciliation.sql`](cypher/models/pgsql/test/translation_cases/reconciliation.sql)
-  and [`post_processing.sql`](cypher/models/pgsql/test/translation_cases/post_processing.sql).
+  [`reconciliation.sql`](../cypher/models/pgsql/test/translation_cases/reconciliation.sql)
+  and [`post_processing.sql`](../cypher/models/pgsql/test/translation_cases/post_processing.sql).
 - `TRUST-PRUNE-IT`: the exact truth/null and hydration families in
-  [`reconciliation_shapes.json`](integration/testdata/templates/reconciliation_shapes.json)
-  and [`post_processing_shapes.json`](integration/testdata/templates/post_processing_shapes.json),
-  plus [`TestLegacyBuilderTrustAndPruningSelectors`](integration/trust_pruning_legacy_builder_test.go).
+  [`reconciliation_shapes.json`](../integration/testdata/templates/reconciliation_shapes.json)
+  and [`post_processing_shapes.json`](../integration/testdata/templates/post_processing_shapes.json),
+  plus [`TestLegacyBuilderTrustAndPruningSelectors`](../integration/trust_pruning_legacy_builder_test.go).
 - `TRUST-PRUNE-PC`: the `TRUST-01` through `TRUST-03` and `PRUNE-01` through
   `PRUNE-04` families loaded from the shared template corpus by `cmd/plancorpus`.
 - `TRUST-PRUNE-SC`: the dense trust reads, pruning selectors, and mutation-safe
   batch-delete equivalents in
-  [`trust_pruning.json`](benchmark/testdata/scale/cases/trust_pruning.json),
-  backed by [`NewTrustPruningScaleFixture`](testutil/reconciliation_fixture.go).
+  [`trust_pruning.json`](../benchmark/testdata/scale/cases/trust_pruning.json),
+  backed by [`NewTrustPruningScaleFixture`](../testutil/reconciliation_fixture.go).
 - `PRUNE-DR`: [`TestDirectBatchPruning` and
   `BenchmarkDirectBatchPruning`](integration/trust_pruning_legacy_builder_test.go),
   including IDs absent at delete time and a mixed-direction high-degree cascade.
-- `HOP-QB`: [`TestQueryBuilder_StandaloneHopForms`](query/neo4j/neo4j_test.go)
-  and [`TestLegacyBuilderPostgreSQL_StandaloneHopForms`](cypher/models/pgsql/test/standalone_hop_forms_legacy_builder_test.go).
+- `HOP-QB`: [`TestQueryBuilder_StandaloneHopForms`](../query/neo4j/neo4j_test.go)
+  and [`TestLegacyBuilderPostgreSQL_StandaloneHopForms`](../cypher/models/pgsql/test/standalone_hop_forms_legacy_builder_test.go).
 - `HOP-PG`: the `HOP-01` through `HOP-10` PostgreSQL goldens in
-  [`stepwise_traversal.sql`](cypher/models/pgsql/test/translation_cases/stepwise_traversal.sql).
+  [`stepwise_traversal.sql`](../cypher/models/pgsql/test/translation_cases/stepwise_traversal.sql).
 - `HOP-IT`: the backend-equivalent standalone-hop families in
-  [`post_processing_hop_shapes.json`](integration/testdata/templates/post_processing_hop_shapes.json),
-  plus [`TestLegacyBuilderStandaloneHops`](integration/standalone_hops_legacy_builder_test.go).
+  [`post_processing_hop_shapes.json`](../integration/testdata/templates/post_processing_hop_shapes.json),
+  plus [`TestLegacyBuilderStandaloneHops`](../integration/standalone_hops_legacy_builder_test.go).
 - `HOP-PC`: the `HOP-01` through `HOP-10` families loaded from
-  [`post_processing_hop_shapes.json`](integration/testdata/templates/post_processing_hop_shapes.json)
+  [`post_processing_hop_shapes.json`](../integration/testdata/templates/post_processing_hop_shapes.json)
   by `cmd/plancorpus`.
 - `HOP-SC`: the repeatable standalone-hop scenarios in
-  [`hops.json`](benchmark/testdata/scale/cases/hops.json), backed by
-  [`NewHopScaleFixture`](testutil/reconciliation_fixture.go).
+  [`hops.json`](../benchmark/testdata/scale/cases/hops.json), backed by
+  [`NewHopScaleFixture`](../testutil/reconciliation_fixture.go).
 - `SCAN-LOOKUP-QB`: [`TestQueryBuilder_RelationshipScans` and
   `TestQueryBuilder_NodeLookups`](query/neo4j/relationship_scans_node_lookups_test.go), plus
   [`TestLegacyBuilderPostgreSQL_RelationshipScans` and
   `TestLegacyBuilderPostgreSQL_NodeLookups`](cypher/models/pgsql/test/relationship_scans_node_lookups_legacy_builder_test.go).
 - `SCAN-LOOKUP-PG`: the `SCAN-01` through `SCAN-08` and `LOOKUP-01` through
   `LOOKUP-14`/`LOOKUP-16` PostgreSQL goldens in
-  [`relationship_scans_node_lookups.sql`](cypher/models/pgsql/test/translation_cases/relationship_scans_node_lookups.sql).
+  [`relationship_scans_node_lookups.sql`](../cypher/models/pgsql/test/translation_cases/relationship_scans_node_lookups.sql).
 - `SCAN-LOOKUP-IT`: the backend-equivalent scan, lookup, and count families in
-  [`relationship_scan_shapes.json`](integration/testdata/templates/relationship_scan_shapes.json),
-  [`basic_lookup_shapes.json`](integration/testdata/templates/basic_lookup_shapes.json),
-  [`advanced_lookup_shapes.json`](integration/testdata/templates/advanced_lookup_shapes.json),
-  and [`count_shapes.json`](integration/testdata/templates/count_shapes.json),
-  plus [`TestLegacyBuilderRelationshipScansAndNodeLookups`](integration/relationship_scans_node_lookups_legacy_builder_test.go).
+  [`relationship_scan_shapes.json`](../integration/testdata/templates/relationship_scan_shapes.json),
+  [`basic_lookup_shapes.json`](../integration/testdata/templates/basic_lookup_shapes.json),
+  [`advanced_lookup_shapes.json`](../integration/testdata/templates/advanced_lookup_shapes.json),
+  and [`count_shapes.json`](../integration/testdata/templates/count_shapes.json),
+  plus [`TestLegacyBuilderRelationshipScansAndNodeLookups`](../integration/relationship_scans_node_lookups_legacy_builder_test.go).
 - `SCAN-LOOKUP-PC`: the `SCAN-*` and applicable `LOOKUP-*` families loaded from
   the shared scan/lookup template corpus by `cmd/plancorpus`.
 - `SCAN-LOOKUP-SC`: the required wide-scan, large-list, adjacency, count, and NTLM
-  scenarios in [`scans_lookups.json`](benchmark/testdata/scale/cases/scans_lookups.json),
-  backed by [`NewScanLookupScaleFixture`](testutil/reconciliation_fixture.go).
+  scenarios in [`scans_lookups.json`](../benchmark/testdata/scale/cases/scans_lookups.json),
+  backed by [`NewScanLookupScaleFixture`](../testutil/reconciliation_fixture.go).
 - `WRITE-DR`: [`TestDirectWriteDeleteRelationshipBoundariesAndSurvivors` through
   `TestDirectWriteExactKeyMissThenCreateNode`](integration/direct_write_mutations_test.go),
   covering direct batch and transactional APIs on the selected backend with the
-  shared [`NewDirectWriteScaleFixture`](testutil/reconciliation_fixture.go), plus
+  shared [`NewDirectWriteScaleFixture`](../testutil/reconciliation_fixture.go), plus
   the PostgreSQL conflict-key/property-index regression in
-  [`batch_test.go`](drivers/pg/batch_test.go).
+  [`batch_test.go`](../drivers/pg/batch_test.go).
 - `WRITE-IT`: the exact-key create/update, full-node update, and exact-key
-  miss/create workflows in [`direct_write_mutations_test.go`](integration/direct_write_mutations_test.go),
+  miss/create workflows in [`direct_write_mutations_test.go`](../integration/direct_write_mutations_test.go),
   with selector and driver-operation assertions kept separate.
 - `WRITE-SC`: the reset-per-iteration, post-state-checked
-  [`BenchmarkMutationSafeDirectWrites`](integration/direct_write_mutations_test.go)
+  [`BenchmarkMutationSafeDirectWrites`](../integration/direct_write_mutations_test.go)
   at 1,000 items and across the 2,000-item DAWGS flush boundary.
-- `SCALE-PI`: [`TestPostgreSQLScalePlanInvariants`](cmd/graphbench/postgresql_plan_invariants_integration_test.go)
+- `SCALE-PI`: [`TestPostgreSQLScalePlanInvariants`](../cmd/graphbench/postgresql_plan_invariants_integration_test.go)
   executes every required Cypher scale representative through PostgreSQL with
   `EXPLAIN ANALYZE`, exact read/write cardinality, rollback-isolated mutation
   post-state, mutation-target, binding, and anchor-index assertions. The
-  backend-independent [`TestScaleCorpusRequiredRepresentativesDeclareCardinality`](cmd/graphbench/scale_corpus_contract_test.go)
+  backend-independent [`TestScaleCorpusRequiredRepresentativesDeclareCardinality`](../cmd/graphbench/scale_corpus_contract_test.go)
   prevents a required stable ID or its cardinality contract from disappearing.
 - `SCALE-BASELINE`: `cmd/graphbench` captures translated SQL, lowering
   metadata, plans, buffer/runtime metrics, and cardinalities for the complete
   scale corpus; `cmd/plancorpus` captures the shared semantic corpus with source
   metadata. Generated captures remain review artifacts under the ignored
   `.coverage/` directory rather than committed machine-specific baselines.
-- `DORMANT-GATE`: [`TestDormantFormsStayOutOfPlanCorpus`](cmd/plancorpus/dormant_forms_guard_test.go)
-  and [`TestDormantFormsStayOutOfScaleCorpus`](cmd/graphbench/dormant_forms_guard_test.go)
+- `DORMANT-GATE`: [`TestDormantFormsStayOutOfPlanCorpus`](../cmd/plancorpus/dormant_forms_guard_test.go)
+  and [`TestDormantFormsStayOutOfScaleCorpus`](../cmd/graphbench/dormant_forms_guard_test.go)
   keep every `FUTURE-*` ID out of active semantic, plan, and scale gates. The
   activation and ongoing source-review procedure is recorded in
-  [`regression_source_parity.md`](docs/regression_source_parity.md).
+  [`regression_source_parity.md`](regression_source_parity.md).
 - `COMPLETION-SC`: the `SCAN-01` ID-only, `SCAN-06` shallow IDs/kind,
   `SCAN-02` relationship hydration, and `LOOKUP-09` node hydration scale cases
   are classified and enforced by
-  [`TestScaleCorpusDistinguishesProjectionClasses`](cmd/graphbench/scale_corpus_contract_test.go).
-- `COMPLETION-GATE`: [`TestRegressionCoverageManifestClosesEveryActiveID`](regression_manifest_test.go)
+  [`TestScaleCorpusDistinguishesProjectionClasses`](../cmd/graphbench/scale_corpus_contract_test.go).
+- `COMPLETION-GATE`: [`TestRegressionCoverageManifestClosesEveryActiveID`](../regression_manifest_test.go)
   requires all 64 stable active IDs to remain present without an `A` or `P`
   layer while preserving `FUTURE-01` as non-production-complete.
 
@@ -342,12 +342,12 @@ contract:
 
 These prerequisites are intentionally not marked `C` against production IDs:
 
-- Mutation post-state assertions: [standalone sentinel](integration/testdata/cases/mutation_post_state_inline.json)
-  and [template rollback/repeat sentinel](integration/testdata/templates/mutation_post_state_shapes.json).
+- Mutation post-state assertions: [standalone sentinel](../integration/testdata/cases/mutation_post_state_inline.json)
+  and [template rollback/repeat sentinel](../integration/testdata/templates/mutation_post_state_shapes.json).
 - Reusable deterministic fixture and list/fanout generators:
-  [`NewReconciliationFixture`](integration/regression_fixture.go).
+  [`NewReconciliationFixture`](../integration/regression_fixture.go).
 - Backend-selected legacy query execution:
-  [`WithLegacyNodeQuery` and `WithLegacyRelationshipQuery`](integration/legacy_query_harness.go).
+  [`WithLegacyNodeQuery` and `WithLegacyRelationshipQuery`](../integration/legacy_query_harness.go).
 - Mutation-safe scale execution and list-valued fixture IDs:
-  [`WriteScenario`](cmd/graphbench/types.go) and
-  [`resolveCaseParams`](cmd/graphbench/datasets.go).
+  [`WriteScenario`](../cmd/graphbench/types.go) and
+  [`resolveCaseParams`](../cmd/graphbench/datasets.go).

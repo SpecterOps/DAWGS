@@ -29,6 +29,9 @@ to another backend skip automatically. `make test_all` runs the unit, integratio
 and BDD suites for the selected backend; run it separately for each backend.
 
 The unit suite validates record-assertion fields across the integration corpus.
+It also checks the active query-form coverage contract in the
+[BloodHound regression manifest](regression_coverage_manifest.md); the
+[source-parity workflow](regression_source_parity.md) describes how to maintain it.
 Templates can declare `node_kinds` and `edge_kinds` for query-only schema kinds;
 see [the corpus format](../integration/testdata/README.md). These declarations also
 apply to plan capture and do not insert fixture entities.

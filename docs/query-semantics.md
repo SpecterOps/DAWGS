@@ -103,7 +103,7 @@ normalization that has already erased an integral float's fractional spelling
 cannot be reversed. Use explicit `toFloat` operands when that distinction matters
 for existing values. Runtime type dispatch adds per-row cost; local measurements
 and the remaining WITH alias-filter boundary are recorded in
-[the variance ledger](../variance_findings_priority_complete.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
+[the variance ledger](reviews/variance_findings_priority_complete.md#dawgs-016-runtime-property-arithmetic--2026-10-26).
 
 ## PostgreSQL WITH ordering and pagination
 
@@ -114,7 +114,7 @@ Entity and scalar aliases resolve against that boundary's input. `WITH ... WHERE
 filters the paginated output, and a later `WITH` or `RETURN` keeps its own
 ordering and pagination. Pagination counts retain the existing literal-only
 contract. The shared read and mutation regressions and their live validation
-status are recorded in [the active variance plan](../variance_findings_priority_complete.md#dawgs-040-with-ordering-and-pagination--2026-10-27).
+status are recorded in [the completion ledger](reviews/variance_findings_priority_complete.md#dawgs-040-with-ordering-and-pagination--2026-10-27).
 
 ## PostgreSQL pattern predicate dependencies
 
@@ -123,7 +123,7 @@ WHERE pattern predicates, including negated and compound predicates. A more
 selective MATCH waits for any earlier bindings its predicate consumes; unresolved
 bindings keep the clause pinned. Shared regressions cover returned rows and
 complete mutation state on Neo4j and in both PostgreSQL optimizer modes. See the
-[validation ledger](../variance_findings_priority_complete.md#dawgs-035-pattern-predicate-dependencies-and-mutation-boundary--2026-10-28).
+[validation ledger](reviews/variance_findings_priority_complete.md#dawgs-035-pattern-predicate-dependencies-and-mutation-boundary--2026-10-28).
 
 ## PostgreSQL temporal parameters
 
@@ -164,7 +164,7 @@ LIKE patterns before adding prefix/suffix wildcards; the `toLower` index
 prefilter uses the same escaped pattern. Parameter and property operands keep
 their existing runtime escaping. No schema migration is required. Live validation
 status is recorded in
-[the active variance plan](../variance_findings_priority_complete.md#dawgs-014-string-predicate-literal-escaping--2026-10-27).
+[the completion ledger](reviews/variance_findings_priority_complete.md#dawgs-014-string-predicate-literal-escaping--2026-10-27).
 
 Ordered comparisons (`<`, `<=`, `>` and `>=`) retain dynamic property types:
 numbers compare numerically, strings compare by Unicode order, Booleans compare
@@ -177,7 +177,7 @@ upgrading to install `cypher_compare(jsonb, jsonb)`.
 Positive string filters retain indexable text lookups. Runtime ordered comparison
 adds per-row dispatch cost; local measurements and remaining representation
 boundaries are recorded in
-[the variance ledger](../variance_findings_priority_complete.md#dawgs-018-typed-predicates--2026-10-26).
+[the variance ledger](reviews/variance_findings_priority_complete.md#dawgs-018-typed-predicates--2026-10-26).
 
 ## PostgreSQL properties carried through WITH
 
@@ -201,7 +201,7 @@ native literal, typed-scalar and direct property-array coalesce paths remain ava
 This does not change empty-string split behavior, list UNWIND/collection support, or temporal storage
 representation. JSON cannot recover temporal or integral-float type information
 already lost during serialization. Helper costs and validation are recorded in
-[the variance ledger](../variance_findings_priority_complete.md#dawgs-052-with-property-consumers--2026-10-26).
+[the variance ledger](reviews/variance_findings_priority_complete.md#dawgs-052-with-property-consumers--2026-10-26).
 
 ## PostgreSQL property-list UNWIND
 
@@ -216,7 +216,7 @@ No schema migration is required. The dynamic path materializes a SQL JSONB array
 for each input value; this change does not introduce an execution budget or
 qualify large-list performance. Stored JSON cannot recover type information
 already lost during serialization. Validation is recorded in the
-[completion ledger](../variance_findings_priority_complete.md#dawgs-042-property-list-unwind--2026-10-29).
+[completion ledger](reviews/variance_findings_priority_complete.md#dawgs-042-property-list-unwind--2026-10-29).
 
 ## PostgreSQL integer conversion
 
@@ -228,7 +228,7 @@ inputs retain their exact signed 64-bit value, including values above 2^53.
 No schema migration is required. This repair covers numeric rounding; invalid
 strings and out-of-range conversion behavior remain separate compatibility limits.
 Live validation status is recorded in
-[the active variance plan](../variance_findings_priority_complete.md#dawgs-015-integer-truncation--2026-10-27).
+[the completion ledger](reviews/variance_findings_priority_complete.md#dawgs-015-integer-truncation--2026-10-27).
 
 ## PostgreSQL numeric aggregates
 
@@ -244,7 +244,7 @@ Run ordinary schema assertion when upgrading to install `cypher_sum(jsonb)` and
 `cypher_sum_transition(jsonb, jsonb)`. The aggregate retains one numeric accumulator
 per group and uses runtime type dispatch. Its measured cost and the existing JSON
 limitations on integral float representation are recorded in
-[the variance ledger](../variance_findings_priority_complete.md#dawgs-053-numeric-sum--2026-10-27).
+[the variance ledger](reviews/variance_findings_priority_complete.md#dawgs-053-numeric-sum--2026-10-27).
 `avg` retains its existing floating-point input conversion and null result on empty
 input; this change does not provide exact integer averaging.
 
@@ -261,14 +261,14 @@ Property collections use JSONB elements internally. Native scalar and entity
 collections retain their existing representations. As with other JSON-backed
 values, an integral float's type cannot be recovered after storage has erased its
 fractional spelling. Validation and collection costs are recorded in
-[the variance ledger](../variance_findings_priority_complete.md#dawgs-054-typed-collections--2026-10-27).
+[the variance ledger](reviews/variance_findings_priority_complete.md#dawgs-054-typed-collections--2026-10-27).
 
 Entity membership preserves node and relationship identity types through `collect`
 and `WITH`. A relationship never matches a collected node with the same numeric ID,
 and a numeric ID never matches an entity. Membership of bound entities uses their
 identity, including when a collection retains full entities. Negation and nullable/empty
 lists keep Cypher's membership semantics in both PostgreSQL compiler modes.
-See [the membership regression evidence](../variance_findings_priority_complete.md#dawgs-056-entity-membership-types--2026-10-27).
+See [the membership regression evidence](reviews/variance_findings_priority_complete.md#dawgs-056-entity-membership-types--2026-10-27).
 
 ## Aggregate traversal counts
 
@@ -326,7 +326,7 @@ modes. Driver regressions cover fresh connections, filter-table reuse, changing
 parameters across leases, and complete 128-edge witnesses.
 Separate PostgreSQL issues with bounded all-shortest zero-hop results and
 `shortestPath` followed by `SET ... RETURN p` remain recorded in the
-[validation ledger](../variance_findings_priority_complete.md#bounded-shortest-path-workspace-repair--2026-10-30).
+[validation ledger](reviews/variance_findings_priority_complete.md#bounded-shortest-path-workspace-repair--2026-10-30).
 
 ## Query boundaries, matching, and mutations
 
@@ -360,7 +360,8 @@ Those rows remain available to aggregation, subsequent clauses and writes. The s
 templates cover empty graphs, rejected predicates, paths, chained optionals and complete SET/CREATE post-state.
 Multipart OPTIONAL inputs read the preceding materialized boundary, preserving
 pending UNWIND rows without referencing the enclosing WITH CTE from within itself.
-Their live acceptance status is recorded in `variance_findings_priority.md`.
+Their live acceptance status is recorded in the
+[variance priority plan](reviews/variance_findings_priority.md).
 
 Pattern predicates in MATCH WHERE retain their relationship kinds and correlated input across later MATCH
 clauses. Deferred filters are evaluated before the next MATCH changes the input frame, including before an

@@ -10,14 +10,14 @@
 - [Testing](testing.md): integration prerequisites, fixture regeneration, and BDD reporting.
 - [Benchmarking and traversal qualification](benchmarking.md): captures, experimental policies, and qualification boundaries.
 - [Library utilities and tools](library-and-tools.md): traversal helpers, collections, and import/export.
-- [Commit message maintenance](commit-message-maintenance.md): historical message-map tooling.
 
 ## Reference guides
 
 - [Cypher library](../cypher/README.md): parser generation and Cypher package overview.
+- [Cypher walker semantics](cypher_walker_semantics.md): semantic and structural traversal contracts.
 - [PostgreSQL translation](postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
 - [CySQL traversal performance priorities](cysql_traversal_priorities.md): source-grounded roadmap for orientation, SP/ASP, probes, statistics, telemetry, and qualification.
-- [Traversal priority implementation status](experiments/traversal_priority_implementation_status_v1.md): implemented candidate identities, fail-closed gates, and current no-promotion disposition.
+- [Traversal implementation snapshot](experiments/traversal_priority_implementation_status_v1.md): dated component identities and fail-closed gates; later dispositions are in the delivery record below.
 - [Remaining traversal outlier delivery](experiments/remaining_outlier_delivery_v1.md): SP-I2, fixed-suffix, qualification, promotion-closure, and rollback handoff.
 - [Production-wide SQL selection](experiments/production_wide_sql_selection_v1.md): staged structural and topology-aware PostgreSQL routing contract.
 - [Topology fixed-suffix v4 status](experiments/topology_fixed_suffix_v4_status_v1.md): implemented default-off routing boundary and promotion non-activation record.
@@ -29,9 +29,15 @@
 - [Plan corpus capture](../cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](../cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
 - [Integration corpus](../integration/testdata/README.md): fixture, mutation post-state, and typed-parameter schema.
-- [BloodHound regression coverage manifest](../regression_coverage_manifest.md): per-query-form layer status and existing primitive links.
+- [BloodHound regression coverage manifest](regression_coverage_manifest.md): per-query-form layer status and existing primitive links.
 - [BloodHound source-parity workflow](regression_source_parity.md): dormant-form activation rules and repeatable BHE/BHCE source audits.
 - [Cypher syntax support](../cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
+
+## Reviews and proposals
+
+- [Review and validation records](reviews/README.md): active variance backlog, completed repairs, dated audits, and the retained PostgreSQL V2 PR draft.
+- [Cypher V4 proposal](plans/cypher-support-v4.md): unimplemented translation ideas; use the query semantics and syntax references above for current support.
+- [Traversal experiment records](experiments/README.md): implementation contracts, qualification procedures, and historical dispositions.
 
 ## Repository Map
 

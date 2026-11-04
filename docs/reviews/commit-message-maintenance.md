@@ -2,14 +2,14 @@
 
 Reference for the reviewed historical message map and its maintenance script.
 
-[Documentation index](README.md) · [Project overview](../README.md)
+[Documentation index](../README.md) · [Project overview](../../README.md)
 
-The reviewed [message map](../scripts/commit_messages.json) covers all **83 commits**
+The reviewed [message map](../../scripts/commit_messages.json) covers all **83 commits**
 from `21c7bafc1e1d91c3507dff86da9fe3a81c96a76d` through
 `cdfadee7c510bbedcb877707ae209b802aa6e77e`, inclusive. Messages follow
 Conventional Commits and describe the actual diffs, checked against
-[the priority plan](../variance_findings_priority.md) and
-[the completed work ledger](../variance_findings_priority_complete.md). Review notes
+[the priority plan](variance_findings_priority.md) and
+[the completed work ledger](variance_findings_priority_complete.md). Review notes
 identify mislabeled findings, combined repairs and reproduction-only changes.
 
 Preview the messages, then apply them with an interactive rebase:

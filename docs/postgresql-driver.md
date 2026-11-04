@@ -103,7 +103,7 @@ obsolete catalog view.
 `KindRegistration` counts and durations for actual metadata work. Their `Dispatch`
 field includes reading and closing metadata results. Ordinary cached metadata
 checks emit no timing sample and read no clock. See the
-[P1 performance and validation results](../perf_regressions.md#p1-implementation-results)
+[recorded kind-cache performance results](reviews/pg-v2-pr-draft.md#postgresql-warmed-kind-cache-comparison)
 for regression coverage, measurements and their limits.
 
 Closed pools are collectable after callers release them.

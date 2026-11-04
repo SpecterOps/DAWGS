@@ -2350,7 +2350,7 @@ scoped to the Neo4j emitter; shared query expectations remain backend-equivalent
 
 Upgrade with ordinary schema assertion before issuing queries from the new
 compiler. Queries and mutations may now reach beyond depth 15; use an explicit
-Cypher bound to retain an intended cutoff. The [runtime policy](docs/open_ended_traversal_policy.md)
+Cypher bound to retain an intended cutoff. The [runtime policy](../open_ended_traversal_policy.md)
 and README document budgets, errors, migration and support limits.
 
 ### Release repair validation
@@ -2578,7 +2578,7 @@ Expected: count 0, all four property indexes/constraints retained. Observed: cou
 
 ### DAWGS-019 open-ended traversal design and runtime evidence — 2026-10-24
 
-The selected [open-ended traversal policy](docs/open_ended_traversal_policy.md) promises complete ordinary, shortest and all-shortest query semantics, with identifiable failure if execution resources prevent completion. Explicit Cypher upper bounds remain semantic limits. Execution budgets must not silently narrow a query or permit partial writes to commit. The document defines streaming/error behavior, budget/fallback accounting, schema/selector/cache migration, downstream result/write impact and the shared semantic plus driver-scoped resource acceptance matrix. This completes the queue's **M design action**; the coordinated runtime implementation is **L** and remains open. Current execution still caps omitted maxima at 15; no cap removal or rejection was implemented here.
+The selected [open-ended traversal policy](../open_ended_traversal_policy.md) promises complete ordinary, shortest and all-shortest query semantics, with identifiable failure if execution resources prevent completion. Explicit Cypher upper bounds remain semantic limits. Execution budgets must not silently narrow a query or permit partial writes to commit. The document defines streaming/error behavior, budget/fallback accounting, schema/selector/cache migration, downstream result/write impact and the shared semantic plus driver-scoped resource acceptance matrix. This completes the queue's **M design action**; the coordinated runtime implementation is **L** and remains open. Current execution still caps omitted maxima at 15; no cap removal or rejection was implemented here.
 
 An 18-node / 17-edge chain supplies **80 variants on Neo4j and 80 in each PostgreSQL compiler mode**, all in rollback transactions. Both PostgreSQL modes return no rows for open ordinary/shortest/all-shortest queries targeting depths 16 and 17, without errors. A minimum-only ordinary `*16..` also returns no rows. Explicit upper bounds reach those endpoints, and `RETURN p` checks the complete ordered nodes and relationship counts. Open SET and CREATE queries without RETURN affect **15 rows on PostgreSQL versus 17 on Neo4j**. Comparison identifies **28 truncation discrepancies per PostgreSQL mode**. The complete fixture, query matrix, observed results and limitations are in the policy document; this small chain is not resource/performance qualification or downstream service replay.
 

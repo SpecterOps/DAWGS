@@ -1,6 +1,10 @@
 # Quoted kind remediation
 
-This change implements the workspace remediation plan `dawgs_remediation_plan_1.md` (2026-11-03).
+Completed 2026-11-03; implementation recorded in commit `618c5601`.
+This report retains the implementation contract, regression evidence, and
+acceptance results from the completed quoted-kind remediation.
+
+[Review index](README.md) · [Query semantics](../query-semantics.md)
 
 ## Contract and implementation
 
@@ -50,8 +54,8 @@ this document.
 ## Validation completed 2026-11-03
 
 The quoted-kind acceptance contract passed. Broader BHE accuracy remains qualified
-by the independent findings below. Changes remain in the working tree; no commit
-was requested.
+by the independent findings below. Validation results describe the recorded
+2026-11-03 source and environment.
 
 | Validation | Result |
 | --- | --- |
@@ -154,7 +158,7 @@ source hashes, exact commands, failed-before/final tests, regeneration hashes,
 full backend logs, separate BDD JSON/HTML reports, 88 probes, cycle logs,
 resources, snapshots and SQL oracles are archived in
 `.test-results/quoted-kinds-20261103/` at the workspace root. See the
-[structured validation record](../../.test-results/quoted-kinds-20261103/validation.json).
+[structured validation record](../../../.test-results/quoted-kinds-20261103/validation.json).
 
 ## Boundaries
 

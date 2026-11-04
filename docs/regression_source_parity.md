@@ -21,7 +21,7 @@ now". The compiled `ReconcileOutboundKindsForTenants` helper does not by itself
 make the form production-active.
 
 Keep `FUTURE-01` in the dormant section of
-`regression_coverage_manifest.md`. Do not add it to
+`docs/regression_coverage_manifest.md`. Do not add it to
 `integration/testdata/cases`, `integration/testdata/templates`, or
 `benchmark/testdata/scale/cases` while the caller remains disabled. Unit gates
 in `cmd/plancorpus` and `cmd/graphbench` reject every `FUTURE-*` ID from those
@@ -33,7 +33,7 @@ When a reviewed source snapshot enables the caller:
 2. Move the manifest row from dormant to active and update the corpus gates in
    the same change.
 3. Add the exact outbound builder composition and the `PG`, `IT`, `PC`, and
-   `SC` layers required by `regression_coverage_manifest.md`.
+   `SC` layers required by `docs/regression_coverage_manifest.md`.
 4. Cover empty, single-item, 1,000-item, boundary, and stress tenant lists;
    include direction, kind, tenant, endpoint, and missing/null decoys.
 5. Use exact mutation post-state and rollback/reset isolation. Reuse the
@@ -76,7 +76,7 @@ For each candidate:
    add a test that sequences the application traversal.
 5. Recheck projection independently from predicates, and recheck relationship
    kind-list and ID-list cardinalities after schema-set changes.
-6. Apply the coverage contract from `regression_coverage_manifest.md`, then run
+6. Apply the coverage contract from `docs/regression_coverage_manifest.md`, then run
    both backend suites and refresh PostgreSQL plan/scale captures when
    applicable.
 
@@ -90,7 +90,7 @@ For each reviewed BHE/BHCE update:
 - [ ] Trace helpers to an active entry point and label helper-only, test-only,
   commented-out, or dormant forms accurately.
 - [ ] Normalize every active call with the tuple in
-  `regression_coverage_manifest.md`.
+  `docs/regression_coverage_manifest.md`.
 - [ ] Map the tuple to an existing stable ID or add a new ID and source link.
 - [ ] If stepwise traversal criteria change, update only the corresponding
   standalone `HOP-*` cases; do not sequence the downstream traversal.
@@ -127,7 +127,7 @@ Append one record per reviewed source update:
   `8c5fba7` with the dormant-form parity-gate changes
 - Active IDs: the `LOGIC-*`, `REC-*`, `TRUST-*`, `PRUNE-*`, `HOP-*`,
   `SCAN-*`, `LOOKUP-*`, and `WRITE-*` rows in
-  `regression_coverage_manifest.md`
+  `docs/regression_coverage_manifest.md`
 - Dormant forms: `FUTURE-01`; both reviewed callers remain in the disabled
   Azure reconciliation block
 - Validation: PostgreSQL and Neo4j `make test_all`; PostgreSQL scale-plan and

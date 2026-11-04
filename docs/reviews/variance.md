@@ -1,5 +1,10 @@
 # DAWGS Cypher Variances
 
+Historical baseline report for the source revision named below. Later repairs
+change many of these outcomes. Use the [active priority plan](variance_findings_priority.md)
+and [completed-action ledger](variance_findings_priority_complete.md) for subsequent
+dispositions. Source references and measurements retain their original review scope.
+
 ## Table of contents
 
 - [Introduction and how to read this report](#introduction-and-how-to-read-this-report)

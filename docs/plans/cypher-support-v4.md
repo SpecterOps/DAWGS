@@ -1,5 +1,10 @@
 # Cypher Translation Support V4 Plan
 
+Status: unimplemented proposal. This document describes possible future work.
+Use [query semantics](../query-semantics.md) and the
+[syntax reference](../../cypher/Cypher%20Syntax%20Support.md) for current support
+and rejection behavior.
+
 This plan organizes implementation work for the next CySQL translation completeness targets:
 list indexing and slicing, CASE expressions, existential subqueries, recursive pattern predicates,
 list and pattern comprehensions, and UNION / UNION ALL.
