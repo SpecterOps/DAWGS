@@ -1,5 +1,9 @@
 # Traversal priority implementation status v1
 
+Historical implementation snapshot. Later candidate dispositions and delivery
+boundaries are recorded in [remaining outlier delivery](remaining_outlier_delivery_v1.md)
+and the [experiment index](README.md).
+
 Date: 2026-08-13
 
 Status: canonical-I1 qualified; SP-I2 unqualified; suffix guard rejected; production unchanged

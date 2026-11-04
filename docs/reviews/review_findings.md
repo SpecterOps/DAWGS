@@ -1,5 +1,10 @@
 # Translator review and remediation ledger
 
+Historical review and repair record from 2026-10-21–22. Worktree, suite, and
+backend status below describe that review. Later repairs and follow-ups are
+tracked in the [variance priority plan](variance_findings_priority.md) and
+[completed-action ledger](variance_findings_priority_complete.md).
+
 ## Current state
 
 - Original review date: 2026-10-21; follow-up review and remediation: 2026-10-22.
@@ -9,7 +14,7 @@
 - Implementation: stages 1–5 complete. F3 uses conservative admission: unsupported correlated suffixes, additional root constraints, and primer-only predicates retain the exact incumbent; forced reverse diagnostics decline them. Final-source unit and focused PostgreSQL checks pass; remaining full-suite qualification obstacles are classified below.
 - Review method: parallel subdirectory reviews plus focused PostgreSQL reproductions.
 - Test backend: PostgreSQL 18.6. Current qualification uses the user-supplied `CONNECTION_STRING`; the original review used its authorized local configuration.
-- The review itself left tracked source files unchanged. Subsequent repairs are recorded below and currently form an uncommitted worktree patch.
+- The review itself left tracked source files unchanged. Subsequent repairs were recorded below as an uncommitted worktree patch at the time of validation.
 
 Finding IDs are permanent. Source line numbers refer to the reviewed checkout and may move as repairs land. The findings and reproductions below are self-contained; local `.coverage` artifacts supplement them but are ignored by Git and are not the durable record.
 
@@ -32,7 +37,7 @@ Finding IDs are permanent. Source line numbers refer to the reviewed checkout an
 
 ### F1 — Carried nodes acquire the wrong representation
 
-**Severity:** High. **Location:** [translate/traversal.go](cypher/models/pgsql/translate/traversal.go), reviewed lines 910–912, `applyIDOnlyNodeProjection`.
+**Severity:** High. **Location:** [translate/traversal.go](../../cypher/models/pgsql/translate/traversal.go), reviewed lines 910–912, `applyIDOnlyNodeProjection`.
 
 The translator marks an existing binding `IDOnly` without converting the composite already materialized by an earlier frame. Subsequent joins and projections then treat that composite as a scalar ID.
 
@@ -58,7 +63,7 @@ It returns a node composite for `id(a)` and an integer for `id(b)`. Both forms r
 
 ### F2 — Inline property maps lose required node properties
 
-**Severity:** High. **Location:** [optimize/source_references.go](cypher/models/pgsql/optimize/source_references.go), reviewed lines 179–181, `fieldRequirementCollector`.
+**Severity:** High. **Location:** [optimize/source_references.go](../../cypher/models/pgsql/optimize/source_references.go), reviewed lines 179–181, `fieldRequirementCollector`.
 
 Field-requirement collection ignores variable references while inside a pattern. That also ignores expression consumers inside inline property maps, so an intermediate node needed for `m.x` can be reduced to its ID.
 
@@ -78,7 +83,7 @@ Expected: evaluate the property comparison and return matching endpoint IDs. Act
 
 ### F3 — Suffix-reverse execution drops correlated predicates
 
-**Severity:** High. **Location:** [translate/expansion_suffix_seeded.go](cypher/models/pgsql/translate/expansion_suffix_seeded.go), reviewed lines 889 and 894–899, `buildFixedSuffixCTEWithOptions`.
+**Severity:** High. **Location:** [translate/expansion_suffix_seeded.go](../../cypher/models/pgsql/translate/expansion_suffix_seeded.go), reviewed lines 889 and 894–899, `buildFixedSuffixCTEWithOptions`.
 
 The suffix builder retains local predicates but discards the nonlocal remainder. A predicate that references a scalar carried through `WITH` therefore disappears from the reverse candidate. This affects enabled suffix-reverse/topology policies using this lowering; the database reproduction explicitly selected `ToolOptions{EnableExpansionSuffixReverseGuard: true}`.
 
@@ -100,7 +105,7 @@ Expected: zero rows. Actual: the guarded reverse candidate returns one path; the
 
 ### F4 — Expansions lose an already-bound terminal's identity
 
-**Severity:** High. **Location:** [translate/expansion.go](cypher/models/pgsql/translate/expansion.go), reviewed lines 4279–4287, `buildExpansionPatternStep`.
+**Severity:** High. **Location:** [translate/expansion.go](../../cypher/models/pgsql/translate/expansion.go), reviewed lines 4279–4287, `buildExpansionPatternStep`.
 
 The expansion primer joins the terminal node only when a terminal satisfaction expression remains. Reusing a previously bound node still requires endpoint equality even when its other predicates have already been consumed by the prefix.
 
@@ -116,7 +121,7 @@ Expected: zero rows, because the terminal must equal `a1`. Actual: one row retur
 
 ### F5 — Traversal-count optimization discards additional source labels
 
-**Severity:** High. **Location:** [optimize/lowering_plan.go](cypher/models/pgsql/optimize/lowering_plan.go), reviewed lines 3198–3201, `aggregateTraversalMatch`.
+**Severity:** High. **Location:** [optimize/lowering_plan.go](../../cypher/models/pgsql/optimize/lowering_plan.go), reviewed lines 3198–3201, `aggregateTraversalMatch`.
 
 The aggregate fast path accepts a second source pattern with additional labels, but its candidate-source filter uses only labels from the first match.
 
@@ -133,7 +138,7 @@ Expected: zero rows. Actual: the optimized query returns the ineligible source w
 
 ### F6 — Traversal-count optimization treats outgoing paths as cycles
 
-**Severity:** High. **Location:** [optimize/lowering_plan.go](cypher/models/pgsql/optimize/lowering_plan.go), reviewed lines 3207–3208, `aggregateTraversalMatch`.
+**Severity:** High. **Location:** [optimize/lowering_plan.go](../../cypher/models/pgsql/optimize/lowering_plan.go), reviewed lines 3207–3208, `aggregateTraversalMatch`.
 
 The aggregate fast path accepts the same source and terminal symbol without retaining their identity constraint. Its traversal counts outgoing paths without requiring `next_id = root_id`.
 
@@ -150,7 +155,7 @@ Expected: zero rows. Actual: the optimized query returns one row with count `1`;
 
 ### F7 — Leading `UNWIND` / `CREATE` followed by `WITH` generates self-referencing SQL
 
-**Severity:** High. **Locations:** [translate/unwind.go](cypher/models/pgsql/translate/unwind.go), reviewed lines 61–70; [translate/create.go](cypher/models/pgsql/translate/create.go), reviewed lines 43–44.
+**Severity:** High. **Locations:** [translate/unwind.go](../../cypher/models/pgsql/translate/unwind.go), reviewed lines 61–70; [translate/create.go](../../cypher/models/pgsql/translate/create.go), reviewed lines 43–44.
 
 A multipart placeholder frame is treated as an existing physical SQL source. The resulting CTE reads `s0` while defining `s0`.
 
@@ -238,7 +243,7 @@ Before stage 1, record whether an affected suffix policy is active. If F3 is act
 
 ## Validation and closure gates
 
-- Follow [AGENTS.md](AGENTS.md) for every implementation session. Add required mutation and template coverage for parsing, translation, rendering, or integration-semantic changes, and regenerate fixture artifacts through the repository workflow.
+- Follow [AGENTS.md](../../AGENTS.md) for every implementation session. Add required mutation and template coverage for parsing, translation, rendering, or integration-semantic changes, and regenerate fixture artifacts through the repository workflow.
 - Put backend-equivalent semantic cases in the shared integration corpus. Keep PostgreSQL optimizer/SQL-arm assertions in driver-scoped coverage; do not introduce backend-specific expectations or skips into shared cases.
 - Record a failing reproduction before each repair and a passing result after it. SQL snapshot agreement alone does not establish correctness: check actual rows, identities, counts, scalar types, path structure, and mutation effects as applicable.
 - Format edited code, run focused tests appropriate to the changed packages, then run `make test_all` for the backend selected by `CONNECTION_STRING`.

@@ -43,8 +43,6 @@ Integration tests use a disposable PostgreSQL or Neo4j database selected by
 
 ## Guides
 
-=======
-
 - [PostgreSQL driver](docs/postgresql-driver.md): connections, caches, schema upgrades, and storage.
 - [Query semantics](docs/query-semantics.md): backend behavior and compatibility.
 - [Import and export](cmd/retriever/README.md): dump, load, scrub, and archive graphs.

@@ -2,7 +2,9 @@
 
 Date: 2026-08-17
 
-Status: open training roster frozen; no production selector or protected holdout is authorized
+Status: terminally rejected by the clean P1 capture on 2026-08-18. The frozen
+protocol below is retained as historical evidence; no production selector or
+protected holdout is authorized. See the [terminal result](#clean-p1-open-result-terminal).
 
 ## Purpose
 

@@ -28,7 +28,7 @@ import (
 // TestRegressionCoverageManifestClosesEveryActiveID verifies that every active
 // query form has complete coverage while dormant forms remain unactivated.
 func TestRegressionCoverageManifestClosesEveryActiveID(t *testing.T) {
-	raw, err := os.ReadFile("regression_coverage_manifest.md")
+	raw, err := os.ReadFile("docs/regression_coverage_manifest.md")
 	require.NoError(t, err)
 
 	var (
