@@ -21,9 +21,41 @@ from s0;
 
 ## Scope Management
 
+Plain node DELETE materializes its input before checking incident relationships.
+The check uses matched input IDs, keeping error evaluation away from unrelated
+stored nodes regardless of the DELETE join plan. Relationship exclusions cover
+all explicitly deleted edges and detached nodes in the query part, including
+other input rows; optional null targets are omitted from those ID arrays.
+The schema helper reads the statement snapshot so data-modifying CTE execution
+order cannot turn a connected-node plain DELETE into a detach. DETACH cleanup
+uses graph-scoped statement triggers on both parent tables and node partitions.
+
 Translation requires some amount of query planning and result dependency negotiation. This translation driver organizes
 openCypher query plans as an incrementally named variable in the SQL translation as `sN` where `N` is the scope's
 frame.
+
+A fixed relationship pattern that reuses a named relationship gets a fresh SQL edge binding, constrained by ID
+to the original binding. The Cypher alias continues to refer to the original value. Endpoint joins and inline
+kind/property constraints use the fresh scan; frame rewriting qualifies the original value through its carried
+frame. This also keeps property constraints inside a correlated pattern predicate. Bound paths record the fresh
+edge as a dependency so that path construction includes every hop.
+
+An undirected fixed continuation pairs both endpoint orientations in the terminal
+node join: `(near = start AND far = end) OR (far = start AND near = end)`.
+Frame rewriting qualifies the near endpoint before the new step is materialized,
+preserving both scalar-ID and composite representations. This excludes a false
+return to the near node while retaining self-loops and duplicate input paths.
+
+Relationship uniqueness spans all comma-separated parts of an ordinary MATCH.
+Each part retains preceding traversal steps from that clause, and projection
+pruning keeps fixed relationship IDs and expansion path arrays needed by later
+parts. Fixed steps compare IDs or exclude membership in earlier paths;
+completed expansions exclude preceding fixed IDs and reject overlap with earlier
+edge-ID arrays. These are row predicates, preserving valid path and input-row
+multiplicity. Separate MATCH clauses and pattern predicates start fresh scopes;
+OPTIONAL MATCH applies uniqueness before merging null-extended input rows.
+Checks compare preceding step pairs and expansion arrays after traversal;
+they do not prune recursive search using the preceding paths.
 
 Consider the following openCypher query:
 
@@ -521,3 +553,21 @@ with s0 as (with ex0(root_id, next_id, depth, satisfied, is_cycle, path)
 select edges_to_path(variadic ep0)::pathcomposite as p
 from s0;
 ```
+
+Pattern-predicate futures belong to the MATCH that collected them and are
+resolved once. Before entering another MATCH, a pending predicate filter is
+consumed into a projection over its original frame. This keeps correlation
+references in scope and prevents later scans from consuming old filters into
+new joins. OPTIONAL MATCH consumes its own remaining filters in its outer join.
+
+A multipart query part reserves a frame for its closing WITH output before its
+reading clauses are translated. That frame is not an input relation. New
+traversal frames link to the preceding materialized frame, while the scope stack
+retains the reserved frame for unwinding at the boundary. This applies to fixed
+hops, bound endpoints and expansions. Literal WITH projections also retain the
+current input frame so duplicate and empty streams preserve their cardinality.
+
+Ordinary expansion seeds retain root IDs rather than input-row identities.
+Predicates that reference an outer input therefore also gate the completed-path
+projection, including zero-hop results. This preserves the association between
+each path and its input values when the projection rejoins the prior frame.

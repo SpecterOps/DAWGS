@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -205,8 +206,8 @@ func TestScrubberTimestampAndRedactionBranches(t *testing.T) {
 		"email_map":   map[string]any{"primary": "alice@example.com"},
 		"seen_at":     "2026-01-01T00:00:00Z",
 	})
-	if counts[string(actionRedact)] == 0 || counts[string(actionShiftTimestamp)] == 0 || counts[string(actionPseudonymize)] == 0 {
-		t.Fatalf("expected redact, shift, and pseudonymize counts, got %+v", counts)
+	if counts[string(actionRedact)] != 1 || counts[string(actionShiftTimestamp)] != 1 || counts[string(actionScrubNested)] != 1 {
+		t.Fatalf("expected redact, shift, and nested scrub counts, got %+v", counts)
 	}
 
 	if scrubbed["description"] != scrubber.config.RedactionMarker {
@@ -215,6 +216,9 @@ func TestScrubberTimestampAndRedactionBranches(t *testing.T) {
 
 	if scrubbed["seen_at"] != "2026-01-18T00:00:00Z" {
 		t.Fatalf("timestamp property was not shifted: %#v", scrubbed["seen_at"])
+	}
+	if !reflect.DeepEqual(scrubbed["email_map"], map[string]any{"primary": scrubber.pseudonymizeString("alice@example.com", "email")}) {
+		t.Fatalf("nested email was not scrubbed: %#v", scrubbed["email_map"])
 	}
 }
 
@@ -357,6 +361,152 @@ func TestScrubberPseudonymizesTicketLikeValues(t *testing.T) {
 
 	if got, ok := scrubbed["request_id"].(string); !ok || !strings.HasPrefix(got, "value-") {
 		t.Fatalf("ticket was not pseudonymized as generic value: %#v", scrubbed["request_id"])
+	}
+}
+
+func TestScrubberRecursivelyClassifiesNestedProperties(t *testing.T) {
+	scrubber, err := newScrubber(nil, "test-salt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Every map field should receive the same policy as a top-level property,
+	// regardless of the outer key's classification or the surrounding arrays.
+	nested := map[string]any{
+		"email":       "alice@example.com",
+		"ssn":         "123-45-6789",
+		"password":    "nested-secret",
+		"description": "private free text",
+		"created_at":  "2026-01-01T00:00:00Z",
+		"kind":        "User",
+		"enabled":     true,
+		"score":       42,
+		"empty":       "",
+		"null":        nil,
+		"owner_sid":   "S-1-5-21-1-2-3-500",
+		"children": []any{
+			map[string]any{"token": "deeper-secret"},
+			[]any{map[string]any{"email": "alice@example.com"}},
+		},
+	}
+	want := map[string]any{
+		"email":       scrubber.pseudonymizeString("alice@example.com", "email"),
+		"ssn":         scrubber.pseudonymizeString("123-45-6789", ""),
+		"password":    "[REDACTED]",
+		"description": "[REDACTED]",
+		"created_at":  "2026-01-18T00:00:00Z",
+		"kind":        "User",
+		"enabled":     true,
+		"score":       42,
+		"empty":       "",
+		"null":        nil,
+		"owner_sid":   scrubber.pseudonymizeString("S-1-5-21-1-2-3-500", "object_sid"),
+		"children": []any{
+			map[string]any{"token": "[REDACTED]"},
+			[]any{map[string]any{"email": scrubber.pseudonymizeString("alice@example.com", "email")}},
+		},
+	}
+	before, err := json.Marshal(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"extra", "email_map", "created_at", "path"} {
+		t.Run(key, func(t *testing.T) {
+			for _, wrap := range []func(any) any{
+				func(value any) any { return value },
+				func(value any) any { return []any{value} },
+				func(value any) any { return []any{[]any{value}} },
+			} {
+				got, _ := scrubber.scrubProperty(key, wrap(nested))
+				if !reflect.DeepEqual(got, wrap(want)) {
+					t.Fatalf("nested policy mismatch:\n got: %#v\nwant: %#v", got, wrap(want))
+				}
+			}
+		})
+	}
+	after, err := json.Marshal(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("scrubbing mutated the input: %s", after)
+	}
+}
+
+func TestScrubberNestedPreserveAndRedactionPrecedence(t *testing.T) {
+	scrubber, err := newScrubber(strings.NewReader(`
+[classifier]
+preserve_keys = ["keep", "objectid", "password_override"]
+`), "test-salt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretMap := map[string]any{"password": "deliberately preserved"}
+	for _, value := range []any{secretMap, []any{secretMap}, []any{[]any{secretMap}}} {
+		for _, key := range []string{"keep", "KEEP", "password_override"} {
+			got, plan := scrubber.scrubProperty(key, value)
+			if plan.Action != actionPreserve || !reflect.DeepEqual(got, value) {
+				t.Fatalf("explicit preserve override ignored: %+v %#v", plan, got)
+			}
+		}
+	}
+	got, _ := scrubber.scrubProperty("email_map", map[string]any{"keep": secretMap})
+	if !reflect.DeepEqual(got, map[string]any{"keep": secretMap}) {
+		t.Fatalf("nested preserve override ignored: %#v", got)
+	}
+	for _, key := range []string{"password", "description"} {
+		got, plan := scrubber.scrubProperty(key, map[string]any{"keep": secretMap})
+		if plan.Action != actionRedact || !reflect.DeepEqual(got, map[string]any{"keep": "[REDACTED]"}) {
+			t.Fatalf("parent redaction ignored: %+v %#v", plan, got)
+		}
+	}
+	// Graph references retain their existing priority over preserve overrides.
+	got, _ = scrubber.scrubProperty("extra", map[string]any{"objectid": "S-1-5-21-1-2-3-500"})
+	if !reflect.DeepEqual(got, map[string]any{"objectid": scrubber.pseudonymizeString("S-1-5-21-1-2-3-500", "object_sid")}) {
+		t.Fatalf("nested graph reference was preserved: %#v", got)
+	}
+}
+
+func TestScrubberNestedContainersAndActionCounts(t *testing.T) {
+	scrubber, err := newScrubber(nil, "test-salt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	properties := map[string]any{
+		"extra":    map[string]any{"password": "secret"},
+		"items":    []any{nil, true, 42, map[string]any{"token": "secret"}},
+		"mixed":    []any{"Alice", map[string]any{"created_at": "2026-01-01T00:00:00Z"}},
+		"empty":    []any{},
+		"null_map": map[string]any(nil),
+		"null_arr": []any(nil),
+	}
+	got, counts := scrubber.scrubPropertiesWithCounts(properties)
+	want := map[string]any{
+		"extra":    map[string]any{"password": "[REDACTED]"},
+		"items":    []any{nil, true, 42, map[string]any{"token": "[REDACTED]"}},
+		"mixed":    []any{scrubber.pseudonymizeString("Alice", ""), map[string]any{"created_at": "2026-01-18T00:00:00Z"}},
+		"empty":    []any{},
+		"null_map": map[string]any(nil),
+		"null_arr": []any(nil),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("nested values = %#v, want %#v", got, want)
+	}
+	// Counts describe top-level property plans, without double-counting children.
+	wantCounts := map[string]int{"scrub_nested": 5, "pseudonymize": 1}
+	if !reflect.DeepEqual(counts.mapValue(), wantCounts) {
+		t.Fatalf("action counts = %v, want %v", counts.mapValue(), wantCounts)
+	}
+	var total scrubActionCounts
+	total.addCounts(counts)
+	total.addCounts(counts)
+	if !reflect.DeepEqual(total.mapValue(), map[string]int{"scrub_nested": 10, "pseudonymize": 2}) {
+		t.Fatalf("aggregated action counts = %v", total.mapValue())
+	}
+	got["extra"].(map[string]any)["password"] = "changed output"
+	got["items"].([]any)[3].(map[string]any)["token"] = "changed output"
+	if properties["extra"].(map[string]any)["password"] != "secret" || properties["items"].([]any)[3].(map[string]any)["token"] != "secret" {
+		t.Fatal("scrubbed containers alias source containers")
 	}
 }
 

@@ -63,12 +63,21 @@ func (s Query) describeGraphPartition(name string) (model.GraphPartition, error)
 }
 
 func (s Query) SelectKinds() (map[graph.Kind]int16, error) {
+	return s.selectKinds(sqlSelectKinds, nil)
+}
+
+// SelectKindsByNames resolves only requested names and never registers them.
+func (s Query) SelectKindsByNames(names []string) (map[graph.Kind]int16, error) {
+	return s.selectKinds("select id, name from kind where name = ANY(@names::text[])", map[string]any{"names": names})
+}
+
+func (s Query) selectKinds(statement string, parameters map[string]any) (map[graph.Kind]int16, error) {
 	var (
 		kindID   int16
 		kindName string
 
 		kinds  = map[graph.Kind]int16{}
-		result = s.tx.Raw(sqlSelectKinds, nil)
+		result = s.tx.Raw(statement, parameters)
 	)
 
 	defer result.Close()
@@ -217,6 +226,18 @@ func (s Query) DropSchema() error {
 	return nil
 }
 
+// InstallP5AdjacencyShadow installs the opt-in P5 adjacency materialization
+// used only by the feasibility study. Normal schema creation never calls it.
+func (s Query) InstallP5AdjacencyShadow() error {
+	return s.exec(sqlP5AdjacencyShadowUp, nil)
+}
+
+// DropP5AdjacencyShadow removes the opt-in P5 feasibility schema without
+// changing the core graph schema.
+func (s Query) DropP5AdjacencyShadow() error {
+	return s.exec(sqlP5AdjacencyShadowDown, nil)
+}
+
 func (s Query) insertGraph(name string) (model.Graph, error) {
 	var (
 		graphID int32
@@ -244,6 +265,12 @@ func (s Query) insertGraph(name string) (model.Graph, error) {
 func (s Query) CreatePartitionTable(name, parent string, graphID int32) (model.GraphPartition, error) {
 	if err := s.exec(formatCreatePartitionTable(name, parent, graphID), nil); err != nil {
 		return model.GraphPartition{}, err
+	}
+	// Keep each command separate for pgx connections using prepared statements.
+	if parent == model.NodeTable {
+		if err := s.exec(formatCreateNodeDeleteTrigger(name), nil); err != nil {
+			return model.GraphPartition{}, err
+		}
 	}
 
 	return model.GraphPartition{
@@ -462,6 +489,9 @@ func (s Query) InsertOrGetKind(kind graph.Kind) (int16, error) {
 	defer result.Close()
 
 	if !result.Next() {
+		if err := result.Error(); err != nil {
+			return -1, err
+		}
 		return -1, pgx.ErrNoRows
 	}
 
@@ -469,5 +499,8 @@ func (s Query) InsertOrGetKind(kind graph.Kind) (int16, error) {
 		return -1, err
 	}
 
+	// Autocommit may still fail while draining the command completion (for
+	// example, a deferred constraint). Never advertise an ID before it commits.
+	result.Close()
 	return kindID, result.Error()
 }

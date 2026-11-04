@@ -1,0 +1,17 @@
+{
+  "schema": "sp-i2-terminal-rejection-v1",
+  "generation": "sp-i2-distance-v1",
+  "executor": "SP-I2-C-D",
+  "policy": "sp-i2-distance-guarded-v1",
+  "selector": "sp-static-v8-hidden-fanin",
+  "source_commit": "3865cbc57758b7b20b7ffe431f27235873422eed",
+  "discovery_report_sha256": "f80b0f54624de79e9161673f7c9971662bcd5286bf70829176febc6de2681309",
+  "failed_gate": {
+    "metric": "p95_ratio_upper",
+    "observed": 1.2528773826285173,
+    "limit": 1.05
+  },
+  "freeze_created": false,
+  "holdout_opened": false,
+  "terminal": true
+}

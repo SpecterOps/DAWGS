@@ -9,10 +9,43 @@ type threadSafeDuplex[T uint32 | uint64] struct {
 	lock     *sync.Mutex
 }
 
+// ThreadSafeDuplex synchronizes all operations of the wrapped Duplex with a
+// single lock. Binary operations (Or, And, Xor, AndNot) snapshot another
+// thread-safe wrapper before acquiring the receiver's lock, so opposing
+// cross-wrapper operations and self-operations cannot form a lock-order cycle.
+// Each operation is atomic for its receiver; there is no cross-operand
+// atomicity, and a snapshot reflects the other wrapper only at the moment it
+// was taken. Delegates passed to Each must not call back into the same wrapper.
 func ThreadSafeDuplex[T uint32 | uint64](provider Duplex[T]) Duplex[T] {
 	return threadSafeDuplex[T]{
 		provider: provider,
 		lock:     &sync.Mutex{},
+	}
+}
+
+// detachProvider returns a lock-free snapshot of other when it is another
+// thread-safe wrapper. Reading a wrapped provider directly would acquire its
+// lock; doing that while holding the receiver's lock reintroduces the
+// cross-wrapper lock-order cycle, and self-operations would acquire the same
+// lock twice. The snapshot is taken before the receiver's lock is held, so
+// wrapper locks are only ever acquired one at a time. Unwrapped providers are
+// returned unchanged because they coordinate no locks with the receiver.
+func detachProvider[T uint32 | uint64](other Provider[T]) Provider[T] {
+	switch typedOther := other.(type) {
+	case threadSafeDuplex[T]:
+		typedOther.lock.Lock()
+		defer typedOther.lock.Unlock()
+
+		return typedOther.provider.Clone()
+
+	case threadSafeSimplex[T]:
+		typedOther.lock.Lock()
+		defer typedOther.lock.Unlock()
+
+		return typedOther.provider.Clone()
+
+	default:
+		return other
 	}
 }
 
@@ -31,10 +64,12 @@ func (s threadSafeDuplex[T]) Add(values ...T) {
 }
 
 func (s threadSafeDuplex[T]) AndNot(other Provider[T]) {
+	snapshot := detachProvider(other)
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.provider.AndNot(other)
+	s.provider.AndNot(snapshot)
 }
 
 func (s threadSafeDuplex[T]) Remove(value T) {
@@ -45,24 +80,30 @@ func (s threadSafeDuplex[T]) Remove(value T) {
 }
 
 func (s threadSafeDuplex[T]) Xor(other Provider[T]) {
+	snapshot := detachProvider(other)
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.provider.Xor(other)
+	s.provider.Xor(snapshot)
 }
 
 func (s threadSafeDuplex[T]) And(other Provider[T]) {
+	snapshot := detachProvider(other)
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.provider.And(other)
+	s.provider.And(snapshot)
 }
 
 func (s threadSafeDuplex[T]) Or(other Provider[T]) {
+	snapshot := detachProvider(other)
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.provider.Or(other)
+	s.provider.Or(snapshot)
 }
 
 func (s threadSafeDuplex[T]) Cardinality() uint64 {
@@ -112,6 +153,11 @@ type threadSafeSimplex[T uint32 | uint64] struct {
 	lock     *sync.Mutex
 }
 
+// ThreadSafeSimplex synchronizes all operations of the wrapped Simplex with a
+// single lock. Or snapshots another thread-safe wrapper before acquiring the
+// receiver's lock, so cross-wrapper merges cannot form a lock-order cycle and
+// merge with a wrapped sketch reaches its implementation instead of being
+// silently dropped by provider dispatch. There is no cross-operand atomicity.
 func ThreadSafeSimplex[T uint32 | uint64](provider Simplex[T]) Simplex[T] {
 	return threadSafeSimplex[T]{
 		provider: provider,
@@ -134,10 +180,12 @@ func (s threadSafeSimplex[T]) Add(values ...T) {
 }
 
 func (s threadSafeSimplex[T]) Or(other Provider[T]) {
+	snapshot := detachProvider(other)
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.provider.Or(other)
+	s.provider.Or(snapshot)
 }
 
 func (s threadSafeSimplex[T]) Cardinality() uint64 {

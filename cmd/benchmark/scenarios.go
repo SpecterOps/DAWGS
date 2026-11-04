@@ -25,35 +25,47 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
-// Measurement captures the warm-up result shape for a benchmark scenario.
+// Measurement pairs a benchmark duration with the number of rows observed.
 type Measurement struct {
-	RowCount          int64
-	DistinctRowCount  *int64
+	// RowCount records the number of rows produced.
+	RowCount int64
+	// DistinctRowCount records unique rows returned by the benchmark scenario.
+	DistinctRowCount *int64
+	// DuplicateRowCount records repeated rows retained by the benchmark scenario.
 	DuplicateRowCount *int64
 }
 
-// Scenario defines a single benchmark query to run against a loaded dataset.
+// Scenario defines one query, its parameters, and expected cardinality.
 type Scenario struct {
-	Section      string // grouping key in the report (e.g. "Match Nodes")
-	Dataset      string
-	Label        string // human-readable row label
+	// Section groups baseline rows under a Markdown summary section.
+	Section string // grouping key in the report (e.g. "Match Nodes")
+	// Dataset identifies the fixture dataset.
+	Dataset string
+	// Label provides the benchfmt label for the benchmark scenario.
+	Label string // human-readable row label
+	// ExpectedRows sets the row count required for a scenario to succeed.
 	ExpectedRows *int64
-	Cypher       string
-	Query        func(tx graph.Transaction) (Measurement, error)
+	// Cypher contains the Cypher statement under test.
+	Cypher string
+	// Parameters supplies the immutable parameters bound when Cypher is executed.
+	Parameters map[string]any
+	// Query executes the scenario in a transaction and returns its duration and observed row count.
+	Query func(tx graph.Transaction) (Measurement, error)
 }
 
+// traversalShapesDataset is the fixture key shared by traversal-shape scenario selection and dataset loading.
 const traversalShapesDataset = "traversal_shapes"
 
 // defaultDatasets is the set of datasets committed to the repo.
-var defaultDatasets = []string{"base", "adcs_fanout", traversalShapesDataset}
+var defaultDatasets = []string{"base", "fixed_suffix_expansion_fanout", traversalShapesDataset}
 
 // scenariosForDataset returns all benchmark scenarios for a given dataset and its loaded ID map.
 func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	switch dataset {
 	case "base":
 		return baseScenarios(idMap)
-	case "adcs_fanout":
-		return adcsFanoutScenarios()
+	case "fixed_suffix_expansion_fanout":
+		return fixedSuffixExpansionFanoutScenarios()
 	case traversalShapesDataset:
 		return traversalShapesScenarios(idMap)
 	case "local/phantom":
@@ -63,21 +75,31 @@ func scenariosForDataset(dataset string, idMap opengraph.IDMap) []Scenario {
 	}
 }
 
+// expectRows returns an addressable row expectation so zero expected rows remains distinguishable from an unspecified expectation.
 func expectRows(rows int64) *int64 {
 	return &rows
 }
 
+// countNodes measures the transaction-visible node cardinality for dataset sanity benchmarks.
 func countNodes(tx graph.Transaction) (int64, error) {
 	return tx.Nodes().Count()
 }
 
+// countEdges measures the transaction-visible relationship cardinality for dataset sanity benchmarks.
 func countEdges(tx graph.Transaction) (int64, error) {
 	return tx.Relationships().Count()
 }
 
+// cypherQuery adapts Cypher text into a benchmark callback that drains the result and records returned row count.
 func cypherQuery(cypher string) func(tx graph.Transaction) (Measurement, error) {
+	return cypherQueryWithParameters(cypher, nil)
+}
+
+// cypherQueryWithParameters adapts parameterized Cypher text into a benchmark
+// callback that drains the result and records returned row count.
+func cypherQueryWithParameters(cypher string, parameters map[string]any) func(tx graph.Transaction) (Measurement, error) {
 	return func(tx graph.Transaction) (Measurement, error) {
-		result := tx.Query(cypher, nil)
+		result := tx.Query(cypher, parameters)
 		defer result.Close()
 
 		var rowCount int64
@@ -89,6 +111,7 @@ func cypherQuery(cypher string) func(tx graph.Transaction) (Measurement, error) 
 	}
 }
 
+// countQuery adapts a cardinality callback into a benchmark Measurement while preserving the callback error.
 func countQuery(query func(tx graph.Transaction) (int64, error)) func(tx graph.Transaction) (Measurement, error) {
 	return func(tx graph.Transaction) (Measurement, error) {
 		rowCount, err := query(tx)
@@ -100,16 +123,26 @@ func countQuery(query func(tx graph.Transaction) (int64, error)) func(tx graph.T
 	}
 }
 
+// cypherScenario builds a row-counting Scenario from its corpus identity and Cypher text.
 func cypherScenario(section, dataset, label, cypher string) Scenario {
+	return cypherScenarioWithParameters(section, dataset, label, cypher, nil)
+}
+
+// cypherScenarioWithParameters builds a row-counting Scenario whose Cypher
+// identity remains stable while its endpoint values vary with fixture loading.
+// That stability is required by the exact-query traversal-policy allowlist.
+func cypherScenarioWithParameters(section, dataset, label, cypher string, parameters map[string]any) Scenario {
 	return Scenario{
-		Section: section,
-		Dataset: dataset,
-		Label:   label,
-		Cypher:  cypher,
-		Query:   cypherQuery(cypher),
+		Section:    section,
+		Dataset:    dataset,
+		Label:      label,
+		Cypher:     cypher,
+		Parameters: parameters,
+		Query:      cypherQueryWithParameters(cypher, parameters),
 	}
 }
 
+// cypherPathScenario builds a Scenario that validates and counts path-valued columns while consuming results.
 func cypherPathScenario(section, dataset, label, cypher string, pathColumns int) Scenario {
 	return Scenario{
 		Section: section,
@@ -120,11 +153,13 @@ func cypherPathScenario(section, dataset, label, cypher string, pathColumns int)
 	}
 }
 
+// expectScenarioRows returns scenario with an explicit correctness expectation attached.
 func expectScenarioRows(scenario Scenario, rows int64) Scenario {
 	scenario.ExpectedRows = expectRows(rows)
 	return scenario
 }
 
+// cypherPathQuery adapts Cypher text into a benchmark callback that validates path columns and hashes their node/edge identities while draining rows.
 func cypherPathQuery(cypher string, pathColumns int) func(tx graph.Transaction) (Measurement, error) {
 	return func(tx graph.Transaction) (Measurement, error) {
 		result := tx.Query(cypher, nil)
@@ -171,6 +206,7 @@ func cypherPathQuery(cypher string, pathColumns int) func(tx graph.Transaction) 
 	}
 }
 
+// pathRowKey serializes path node and edge IDs into an unambiguous key used to prevent result materialization from being optimized away.
 func pathRowKey(paths []graph.Path) string {
 	var builder strings.Builder
 
@@ -213,15 +249,16 @@ func pathRowKey(paths []graph.Path) string {
 
 // --- Base dataset scenarios (n1 -> n2 -> n3) ---
 
+// baseScenarios defines cardinality, lookup, and one-hop checks for the three-node base fixture.
 func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	ds := "base"
 	return []Scenario{
 		{Section: "Match Nodes", Dataset: ds, Label: ds, ExpectedRows: expectRows(3), Query: countQuery(countNodes)},
 		{Section: "Match Edges", Dataset: ds, Label: ds, ExpectedRows: expectRows(2), Query: countQuery(countEdges)},
-		expectScenarioRows(cypherScenario("Shortest Paths", ds, "n1 -> n3", fmt.Sprintf(
-			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-			idMap["n1"], idMap["n3"],
-		)), 1),
+		expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", ds, "n1 -> n3",
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+			map[string]any{"start_id": idMap["n1"], "end_id": idMap["n3"]},
+		), 1),
 		expectScenarioRows(cypherScenario("Traversal", ds, "n1", fmt.Sprintf(
 			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
 			idMap["n1"],
@@ -235,46 +272,49 @@ func baseScenarios(idMap opengraph.IDMap) []Scenario {
 	}
 }
 
-const adcsFanoutObjectID = "S-1-5-21-2643190041-1319121918-239771340-513"
+// fixedSuffixFanoutRootKey identifies the fanout fixture root whose generated ID is injected into fixed-suffix scenarios.
+const fixedSuffixFanoutRootKey = "fixed-suffix-fanout-root"
 
-func adcsFanoutScenarios() []Scenario {
+// fixedSuffixExpansionFanoutScenarios exercises bounded reverse-suffix expansion at increasing depths and with path projection enabled.
+func fixedSuffixExpansionFanoutScenarios() []Scenario {
 	var (
-		ds = "adcs_fanout"
+		ds = "fixed_suffix_expansion_fanout"
 		p1 = fmt.Sprintf(`
-		MATCH (n:Group) WHERE n.objectid = '%s'
-		MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
+		MATCH (root:ExpansionRoot) WHERE root.root_key = '%s'
+		MATCH p1 = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
 		RETURN p1
-		`, adcsFanoutObjectID)
+		`, fixedSuffixFanoutRootKey)
 		p2 = fmt.Sprintf(`
-		MATCH (n:Group) WHERE n.objectid = '%s'
-		MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca:EnterpriseCA)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d:Domain)
-		WHERE ct.authenticationenabled = true
-		AND ct.requiresmanagerapproval = false
-		AND ct.enrolleesuppliessubject = true
-		AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
+		MATCH (root:ExpansionRoot) WHERE root.root_key = '%s'
+		MATCH p2 = (root)-[:Expand*0..16]->()-[:OptionA|OptionB|OptionC]->(predicate:PredicateNode)-[:JoinSuffix]->(head:SuffixHead)-[:HeadToBridge|HeadToAlternateBridge*1..16]->(:BridgeNode)-[:ReachTerminal]->(terminal:SuffixTerminal)
+		WHERE predicate.eligible = true
+		AND predicate.requires_review = false
+		AND predicate.allows_direct = true
+		AND (predicate.version = 1 OR predicate.required_approvals = 0)
 		RETURN p2
-		`, adcsFanoutObjectID)
+		`, fixedSuffixFanoutRootKey)
 		combinedMatch = fmt.Sprintf(`
-		MATCH (n:Group) WHERE n.objectid = '%s'
-		MATCH p1 = (n)-[:MemberOf*0..]->()-[:Enroll]->(ca:EnterpriseCA)-[:TrustedForNTAuth]->(:NTAuthStore)-[:NTAuthStoreFor]->(d:Domain)
-		MATCH p2 = (n)-[:MemberOf*0..]->()-[:GenericAll|Enroll|AllExtendedRights]->(ct:CertTemplate)-[:PublishedTo]->(ca)-[:IssuedSignedBy|EnterpriseCAFor*1..]->(:RootCA)-[:RootCAFor]->(d)
-		WHERE ct.authenticationenabled = true
-		AND ct.requiresmanagerapproval = false
-		AND ct.enrolleesuppliessubject = true
-		AND (ct.schemaversion = 1 OR ct.authorizedsignatures = 0)
-		`, adcsFanoutObjectID)
+		MATCH (root:ExpansionRoot) WHERE root.root_key = '%s'
+		MATCH p1 = (root)-[:Expand*0..16]->()-[:EnterSuffix]->(head:SuffixHead)-[:ContinueSuffix]->(:SuffixMiddle)-[:CompleteSuffix]->(terminal:SuffixTerminal)
+		MATCH p2 = (root)-[:Expand*0..16]->()-[:OptionA|OptionB|OptionC]->(predicate:PredicateNode)-[:JoinSuffix]->(head)-[:HeadToBridge|HeadToAlternateBridge*1..16]->(:BridgeNode)-[:ReachTerminal]->(terminal)
+		WHERE predicate.eligible = true
+		AND predicate.requires_review = false
+		AND predicate.allows_direct = true
+		AND (predicate.version = 1 OR predicate.required_approvals = 0)
+		`, fixedSuffixFanoutRootKey)
 	)
 
 	return []Scenario{
-		cypherPathScenario("ADCS Fanout", ds, "p1 only", p1, 1),
-		cypherPathScenario("ADCS Fanout", ds, "p2 only", p2, 1),
-		cypherPathScenario("ADCS Fanout", ds, "combined", combinedMatch+"RETURN p1,p2", 2),
-		cypherScenario("ADCS Fanout", ds, "combined endpoints", combinedMatch+"RETURN id(ca), id(d), id(ct)"),
+		cypherPathScenario("Fixed Suffix Expansion Fanout", ds, "p1 only", p1, 1),
+		cypherPathScenario("Fixed Suffix Expansion Fanout", ds, "p2 only", p2, 1),
+		cypherPathScenario("Fixed Suffix Expansion Fanout", ds, "combined", combinedMatch+"RETURN p1,p2", 2),
+		cypherScenario("Fixed Suffix Expansion Fanout", ds, "combined endpoints", combinedMatch+"RETURN id(head), id(terminal), id(predicate)"),
 	}
 }
 
 // --- Traversal shape scenarios ---
 
+// traversalShapesScenarios covers single-hop, bounded variable-length, shortest-path, and repeated-edge traversal forms over the shared fixture.
 func traversalShapesScenarios(idMap opengraph.IDMap) []Scenario {
 	ds := traversalShapesDataset
 	return []Scenario{
@@ -320,19 +360,20 @@ func traversalShapesScenarios(idMap opengraph.IDMap) []Scenario {
 			"MATCH (s)-[*1..]->(e) WHERE id(s) = %d RETURN e",
 			idMap["s0"],
 		)), 6),
-		expectScenarioRows(cypherScenario("Shortest Paths", ds, "diamond many paths", fmt.Sprintf(
-			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-			idMap["d0"], idMap["d4"],
-		)), 3),
-		expectScenarioRows(cypherScenario("Shortest Paths", ds, "disconnected", fmt.Sprintf(
-			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = %d AND id(e) = %d RETURN p",
-			idMap["x0"], idMap["x1"],
-		)), 0),
+		expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", ds, "diamond many paths",
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $start_id AND id(e) = $end_id RETURN p",
+			map[string]any{"start_id": idMap["d0"], "end_id": idMap["d4"]},
+		), 3),
+		expectScenarioRows(cypherScenarioWithParameters("Shortest Paths", ds, "disconnected",
+			"MATCH p = allShortestPaths((s)-[*1..]->(e)) WHERE id(s) = $disconnected_start_id AND id(e) = $disconnected_end_id RETURN p",
+			map[string]any{"disconnected_start_id": idMap["x0"], "disconnected_end_id": idMap["x1"]},
+		), 0),
 	}
 }
 
 // --- Phantom scenarios (hardcoded node IDs from the dataset) ---
 
+// phantomScenarios preserves legacy benchmark cases that intentionally address the phantom fixture by its stable generated IDs.
 func phantomScenarios(idMap opengraph.IDMap) []Scenario {
 	var (
 		ds        = "local/phantom"

@@ -2,7 +2,7 @@
 bh-rfc: unlisted
 title: "dawgrun: Playground for DAWGS"
 authors: |
-    [Sean Johnson](sjohnson@specterops.io)
+    [Sean Johnson](mailto:sjohnson@specterops.io)
 status: DRAFT
 created: 2026-01-29
 audiences: |

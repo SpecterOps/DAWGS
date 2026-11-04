@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func cacheableBuild(sql string, parameters map[string]any, sources map[string]string) func() (string, translationCacheBuildResult, error) {
+func cacheableCompilationBuild(sql string, parameters map[string]any, sources map[string]string) func() (string, translationCacheBuildResult, error) {
 	return func() (string, translationCacheBuildResult, error) {
 		return sql, translationCacheBuildResult{
 			parameters:       parameters,
@@ -27,7 +27,7 @@ func TestTranslationCacheRebindsCurrentValues(t *testing.T) {
 	firstParameters := map[string]any{"needle": graph.ID(1)}
 	key := translationCache.Key("RETURN $needle", 7, firstParameters)
 
-	_, bindings, err := translationCache.GetOrBuild(key, firstParameters, cacheableBuild("select @p0", map[string]any{"p0": uint64(1)}, map[string]string{"p0": "needle"}))
+	_, bindings, err := translationCache.GetOrBuild(key, firstParameters, cacheableCompilationBuild("select @p0", map[string]any{"p0": uint64(1)}, map[string]string{"p0": "needle"}))
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"p0": uint64(1)}, bindings)
 
@@ -100,7 +100,7 @@ func TestTranslationCacheBypassesOversizedSource(t *testing.T) {
 }
 
 func TestCacheableTranslationRequiresExactParameterProvenance(t *testing.T) {
-	_, cacheable := cacheableTranslation("select @p0", translationCacheBuildResult{
+	_, cacheable := cacheableCompilation("select @p0", translationCacheBuildResult{
 		parameters:       map[string]any{"p0": int64(1)},
 		parameterSources: map[string]string{"p1": "value"},
 	}, map[string]any{"value": int64(1)}, nil)
@@ -112,9 +112,9 @@ func TestTranslationCacheReportsEviction(t *testing.T) {
 	translationCache := newTranslationCache(1)
 	parameters := map[string]any{"value": int64(1)}
 
-	_, _, err := translationCache.GetOrBuild(translationCache.Key("RETURN $value", 1, parameters), parameters, cacheableBuild("select @p0", map[string]any{"p0": int64(1)}, map[string]string{"p0": "value"}))
+	_, _, err := translationCache.GetOrBuild(translationCache.Key("RETURN $value", 1, parameters), parameters, cacheableCompilationBuild("select @p0", map[string]any{"p0": int64(1)}, map[string]string{"p0": "value"}))
 	require.NoError(t, err)
-	_, _, err = translationCache.GetOrBuild(translationCache.Key("RETURN $value + 1", 1, parameters), parameters, cacheableBuild("select @p0", map[string]any{"p0": int64(1)}, map[string]string{"p0": "value"}))
+	_, _, err = translationCache.GetOrBuild(translationCache.Key("RETURN $value + 1", 1, parameters), parameters, cacheableCompilationBuild("select @p0", map[string]any{"p0": int64(1)}, map[string]string{"p0": "value"}))
 	require.NoError(t, err)
 
 	stats := translationCache.Stats()
@@ -262,7 +262,7 @@ func TestTranslationCacheWaiterCancellationDoesNotInterruptLeader(t *testing.T) 
 func TestTranslationCacheParameterlessHitAndClose(t *testing.T) {
 	translationCache := newTranslationCache(1)
 	key := translationCache.Key("RETURN 1", 1, nil)
-	build := cacheableBuild("select 1", map[string]any{}, map[string]string{})
+	build := cacheableCompilationBuild("select 1", map[string]any{}, map[string]string{})
 
 	_, bindings, err := translationCache.GetOrBuild(key, nil, build)
 	require.NoError(t, err)
@@ -340,24 +340,22 @@ func TestTranslationCachePanicReleasesWaiters(t *testing.T) {
 	leaderStarted := make(chan struct{})
 	releaseLeader := make(chan struct{})
 	leaderDone := make(chan struct{})
-	panicValue := make(chan any, 1)
+	leaderErr := make(chan error, 1)
 	waiterDone := make(chan error, 1)
 
 	go func() {
 		defer close(leaderDone)
-		defer func() {
-			panicValue <- recover()
-		}()
-		_, _, _ = translationCache.GetOrBuild(key, parameters, func() (string, translationCacheBuildResult, error) {
+		_, _, err := translationCache.GetOrBuild(key, parameters, func() (string, translationCacheBuildResult, error) {
 			close(leaderStarted)
 			<-releaseLeader
 			panic("boom")
 		})
+		leaderErr <- err
 	}()
 
 	<-leaderStarted
 	go func() {
-		_, _, err := translationCache.GetOrBuild(key, parameters, cacheableBuild(
+		_, _, err := translationCache.GetOrBuild(key, parameters, cacheableCompilationBuild(
 			"select @p0",
 			map[string]any{"p0": int64(1)},
 			map[string]string{"p0": "value"},
@@ -368,7 +366,9 @@ func TestTranslationCachePanicReleasesWaiters(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	close(releaseLeader)
 	<-leaderDone
-	require.Equal(t, "boom", <-panicValue)
+	// The panicking build is contained as an ordinary error naming the panic
+	// value instead of re-panicking through the caller.
+	require.ErrorContains(t, <-leaderErr, "cypher translation panicked: boom")
 	select {
 	case err := <-waiterDone:
 		require.NoError(t, err)
@@ -397,7 +397,7 @@ func TestTranslationCacheCloseReleasesWaiters(t *testing.T) {
 
 	<-leaderStarted
 	go func() {
-		_, _, err := translationCache.GetOrBuildContext(context.Background(), key, parameters, cacheableBuild(
+		_, _, err := translationCache.GetOrBuildContext(context.Background(), key, parameters, cacheableCompilationBuild(
 			"select @p0",
 			map[string]any{"p0": int64(1)},
 			map[string]string{"p0": "value"},
@@ -447,4 +447,19 @@ func TestTranslationCacheInvalidationDoesNotPublishStaleBuild(t *testing.T) {
 	require.Equal(t, int64(2), builds.Load())
 	require.Equal(t, int64(1), translationCache.Stats().Size)
 	require.Equal(t, uint64(1), translationCache.Stats().Generation)
+}
+
+// A panicking build on the bypass path (disabled capacity) must also surface as
+// an ordinary error rather than a panic escaping the driver.
+func TestTranslationCacheBypassContainsBuildPanic(t *testing.T) {
+	translationCache := newTranslationCache(0)
+	parameters := map[string]any{"value": int64(1)}
+	key := translationCache.Key("RETURN $value", 1, parameters)
+
+	_, _, err := translationCache.GetOrBuild(key, parameters, func() (string, translationCacheBuildResult, error) {
+		panic("bypass boom")
+	})
+	require.ErrorContains(t, err, "cypher translation panicked: bypass boom")
+	require.Contains(t, err.Error(), "goroutine", "contained panic error keeps its stack for diagnosis")
+	require.Equal(t, int64(1), translationCache.Stats().BuildFailures)
 }

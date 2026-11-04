@@ -6,11 +6,14 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 )
 
+// pathCompositeEdgesExpression returns the edge-array expression represented by a path binding.
 func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (pgsql.Expression, error) {
 	var edgeArrayReferences []pgsql.Expression
 
 	for _, dependency := range pathBinding.Dependencies {
 		switch dependency.DataType {
+		case pgsql.PathComposite:
+			edgeArrayReferences = append(edgeArrayReferences, pathCompositeColumnReference(scope, dependency, pgsql.ColumnEdges))
 		case pgsql.ExpansionPath:
 			if edgeArrayReference, err := expansionPathEdgeArrayExpression(scope, dependency); err != nil {
 				return nil, err
@@ -45,6 +48,7 @@ func pathCompositeEdgesExpression(scope *Scope, pathBinding *BoundIdentifier) (p
 	return pgsql.ArrayLiteral{CastType: pgsql.EdgeCompositeArray}, nil
 }
 
+// pathCompositeEdgeIDArrayExpression returns ordered edge IDs from any supported carried path representation.
 func pathCompositeEdgeIDArrayExpression(scope *Scope, pathBinding *BoundIdentifier) (pgsql.Expression, error) {
 	var edgeIDArrayReferences []pgsql.Expression
 
@@ -88,6 +92,7 @@ func pathCompositeEdgeIDArrayExpression(scope *Scope, pathBinding *BoundIdentifi
 	}, nil
 }
 
+// buildPathEdgeIDArrayFutures records deferred replacements for path edge-ID references in a query part.
 func (s *Translator) buildPathEdgeIDArrayFutures() error {
 	for _, future := range s.query.CurrentPart().pathEdgeIDArrayFutures {
 		if edgeIDArrayExpression, err := pathCompositeEdgeIDArrayExpression(s.scope, future.Data); err != nil {
@@ -100,6 +105,7 @@ func (s *Translator) buildPathEdgeIDArrayFutures() error {
 	return nil
 }
 
+// resolvePathCompositeFieldReference replaces a deferred path field with the expression that materializes it.
 func resolvePathCompositeFieldReference(scope *Scope, reference pgsql.RowColumnReference) (pgsql.Expression, bool, error) {
 	identifier, isIdentifier := unwrapParenthetical(reference.Identifier).(pgsql.Identifier)
 	if !isIdentifier {
@@ -139,6 +145,7 @@ func resolvePathCompositeFieldReference(scope *Scope, reference pgsql.RowColumnR
 	}
 }
 
+// resolvePathCompositeFieldReferencesInProjection resolves deferred path fields in every projection item.
 func resolvePathCompositeFieldReferencesInProjection(scope *Scope, projection pgsql.Projection) (pgsql.Projection, error) {
 	rewritten := make(pgsql.Projection, len(projection))
 
@@ -165,6 +172,7 @@ func resolvePathCompositeFieldReferencesInProjection(scope *Scope, projection pg
 	return rewritten, nil
 }
 
+// resolvePathCompositeFieldReferencesInFromClause resolves deferred path fields in a source and its join constraints.
 func resolvePathCompositeFieldReferencesInFromClause(scope *Scope, fromClause pgsql.FromClause) (pgsql.FromClause, error) {
 	if resolvedSource, err := resolvePathCompositeFieldReferences(scope, fromClause.Source); err != nil {
 		return pgsql.FromClause{}, err
@@ -193,6 +201,7 @@ func resolvePathCompositeFieldReferencesInFromClause(scope *Scope, fromClause pg
 	return fromClause, nil
 }
 
+// resolvePathCompositeFieldReferencesInFromClauses resolves deferred path fields across all query sources.
 func resolvePathCompositeFieldReferencesInFromClauses(scope *Scope, fromClauses []pgsql.FromClause) ([]pgsql.FromClause, error) {
 	rewritten := make([]pgsql.FromClause, len(fromClauses))
 
@@ -208,6 +217,7 @@ func resolvePathCompositeFieldReferencesInFromClauses(scope *Scope, fromClauses 
 	return rewritten, nil
 }
 
+// resolvePathCompositeFieldReferences walks a query part and substitutes every recorded path-field future.
 func resolvePathCompositeFieldReferences(scope *Scope, expression pgsql.Expression) (pgsql.Expression, error) {
 	switch typedExpression := expression.(type) {
 	case nil:
@@ -259,6 +269,16 @@ func resolvePathCompositeFieldReferences(scope *Scope, expression pgsql.Expressi
 			} else {
 				typedExpression.Parameters[idx] = resolved
 			}
+		}
+		for _, orderBy := range typedExpression.OrderBy {
+			if orderBy == nil {
+				continue
+			}
+			resolved, err := resolvePathCompositeFieldReferences(scope, orderBy.Expression)
+			if err != nil {
+				return nil, err
+			}
+			orderBy.Expression = resolved
 		}
 
 		return typedExpression, nil

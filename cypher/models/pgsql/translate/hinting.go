@@ -2,6 +2,7 @@ package translate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -18,6 +19,7 @@ func GetTypeHint(expression pgsql.Expression) (pgsql.DataType, bool) {
 	return pgsql.UnsetDataType, false
 }
 
+// applyUnaryExpressionTypeHints casts a unary operand to the type required by its operator.
 func applyUnaryExpressionTypeHints(expression *pgsql.UnaryExpression) error {
 	if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression.Operand); isPropertyLookup {
 		expression.Operand = rewritePropertyLookupOperator(propertyLookup, pgsql.Boolean)
@@ -26,6 +28,7 @@ func applyUnaryExpressionTypeHints(expression *pgsql.UnaryExpression) error {
 	return nil
 }
 
+// inferBinaryExpressionType returns the result type implied by a binary operator and its operand hints.
 func inferBinaryExpressionType(expression *pgsql.BinaryExpression) (pgsql.DataType, error) {
 	var (
 		leftHint, isLeftHinted   = GetTypeHint(expression.LOperand)
@@ -93,6 +96,7 @@ func inferBinaryExpressionType(expression *pgsql.BinaryExpression) (pgsql.DataTy
 	}
 }
 
+// inferUnaryExpressionType returns the result type implied by a unary operator and operand hint.
 func inferUnaryExpressionType(expression pgsql.UnaryExpression) (pgsql.DataType, error) {
 	switch expression.Operator {
 	case pgsql.OperatorNot, pgsql.OperatorIs, pgsql.OperatorIsNot:
@@ -112,6 +116,7 @@ func inferUnaryExpressionType(expression pgsql.UnaryExpression) (pgsql.DataType,
 	}
 }
 
+// inferAllExpressionType returns the boolean type of a valid ALL predicate after checking its operands.
 func inferAllExpressionType(expression pgsql.AllExpression) (pgsql.DataType, error) {
 	if expressionType, err := InferExpressionType(expression.Expression); err != nil {
 		return pgsql.UnsetDataType, err
@@ -122,6 +127,46 @@ func inferAllExpressionType(expression pgsql.AllExpression) (pgsql.DataType, err
 	}
 }
 
+// inferCaseExpressionType finds the common result type of a CASE expression's branches.
+func inferCaseExpressionType(expression pgsql.Case) (pgsql.DataType, error) {
+	var (
+		resultType = pgsql.UnknownDataType
+		branches   = append(append([]pgsql.Expression(nil), expression.Then...), expression.Else)
+	)
+
+	for _, branch := range branches {
+		if branch == nil {
+			continue
+		}
+
+		branchType, err := InferExpressionType(branch)
+		if err != nil {
+			return pgsql.UnsetDataType, err
+		}
+		if branchType == pgsql.Null || !branchType.IsKnown() {
+			continue
+		}
+
+		if !resultType.IsKnown() {
+			resultType = branchType
+			continue
+		}
+
+		if resultType == branchType {
+			continue
+		}
+
+		if supertype, valid := resultType.CoerceToSupertype(branchType); valid {
+			resultType = supertype
+		} else {
+			return pgsql.UnknownDataType, nil
+		}
+	}
+
+	return resultType, nil
+}
+
+// InferExpressionType derives the PostgreSQL data type produced by an expression when it can be determined statically.
 func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	switch typedExpression := expression.(type) {
 	case pgsql.Identifier, pgsql.RowColumnReference:
@@ -164,9 +209,12 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 			// This is unknown, not unset meaning that it can be re-cast by future inference inspections
 			return pgsql.UnknownDataType, nil
 
-		case pgsql.OperatorAnd, pgsql.OperatorOr, pgsql.OperatorEquals, pgsql.OperatorGreaterThan, pgsql.OperatorGreaterThanOrEqualTo,
+		case pgsql.OperatorAnd, pgsql.OperatorOr, pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals, pgsql.OperatorGreaterThan, pgsql.OperatorGreaterThanOrEqualTo,
 			pgsql.OperatorLessThan, pgsql.OperatorLessThanOrEqualTo, pgsql.OperatorIn, pgsql.OperatorJSONBFieldExists,
-			pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorPGArrayOverlap, pgsql.OperatorPGArrayLHSContainsRHS:
+			pgsql.OperatorLike, pgsql.OperatorILike, pgsql.OperatorPGArrayOverlap, pgsql.OperatorPGArrayLHSContainsRHS,
+			pgsql.OperatorIs, pgsql.OperatorIsNot:
+			// Null predicates apply to values of any type and always produce a
+			// boolean result, so operand type compatibility is not required.
 			return pgsql.Boolean, nil
 
 		default:
@@ -193,6 +241,16 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	case pgsql.AllExpression:
 		return inferAllExpressionType(typedExpression)
 
+	case *pgsql.Case:
+		if typedExpression == nil {
+			return pgsql.UnknownDataType, nil
+		}
+
+		return inferCaseExpressionType(*typedExpression)
+
+	case pgsql.Case:
+		return inferCaseExpressionType(typedExpression)
+
 	case *pgsql.AliasedExpression:
 		if typedExpression == nil {
 			return pgsql.UnknownDataType, nil
@@ -218,17 +276,25 @@ func InferExpressionType(expression pgsql.Expression) (pgsql.DataType, error) {
 	}
 }
 
+// contextAwareKindMapper adapts request-scoped kind resolution to translation helpers that do not accept a context.
 type contextAwareKindMapper struct {
-	ctx        context.Context
+	// missingKinds is shared with nested predicate translators for cache qualification.
+	missingKinds *bool
+	// ctx carries cancellation and deadlines into kind-name lookups.
+	ctx context.Context
+	// kindMapper performs the underlying graph kind-name resolution.
 	kindMapper pgsql.KindMapper
+	// parameters is the translation parameter map shared with the owning translator.
 	parameters map[string]any
 }
 
+// newContextAwareKindMapper wraps a mapper with request context and retains the associated translation parameter map.
 func newContextAwareKindMapper(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any) *contextAwareKindMapper {
 	return &contextAwareKindMapper{
-		ctx:        ctx,
-		kindMapper: kindMapper,
-		parameters: parameters,
+		missingKinds: new(bool),
+		ctx:          ctx,
+		kindMapper:   kindMapper,
+		parameters:   parameters,
 	}
 }
 
@@ -236,10 +302,22 @@ func (s *contextAwareKindMapper) MapKinds(kinds graph.Kinds) ([]int16, error) {
 	return s.kindMapper.MapKinds(s.ctx, kinds)
 }
 
+// MapMatchKinds distinguishes unknown names from lookup failures without registering kinds.
+func (s *contextAwareKindMapper) MapMatchKinds(kinds graph.Kinds) ([]int16, bool, error) {
+	ids, err := s.MapKinds(kinds)
+	var missing *pgsql.MissingKindsError
+	if errors.As(err, &missing) {
+		*s.missingKinds = true
+		return missing.KindIDs, true, nil
+	}
+	return ids, false, err
+}
+
 func (s *contextAwareKindMapper) AssertKinds(kinds graph.Kinds) ([]int16, error) {
 	return s.kindMapper.AssertKinds(s.ctx, kinds)
 }
 
+// relationshipTypeKindIDExpression returns the scalar kind-ID field used to implement type(relationship).
 func relationshipTypeKindIDExpression(expression pgsql.Expression) (pgsql.Expression, bool) {
 	functionCall, isFunctionCall := unwrapParenthetical(expression).(pgsql.FunctionCall)
 	if !isFunctionCall || functionCall.Function != pgsql.FunctionKindName || len(functionCall.Parameters) != 1 {
@@ -249,6 +327,7 @@ func relationshipTypeKindIDExpression(expression pgsql.Expression) (pgsql.Expres
 	return functionCall.Parameters[0], true
 }
 
+// literalKindID resolves a string kind name through the context-bound mapper and returns its numeric PostgreSQL literal.
 func literalKindID(kindMapper *contextAwareKindMapper, literal pgsql.Literal) (pgsql.Literal, bool, error) {
 	if literal.CastType != pgsql.Text {
 		return pgsql.Literal{}, false, nil
@@ -259,7 +338,7 @@ func literalKindID(kindMapper *contextAwareKindMapper, literal pgsql.Literal) (p
 		return pgsql.Literal{}, false, err
 	}
 
-	kindIDs, err := kindMapper.MapKinds(kinds)
+	kindIDs, _, err := kindMapper.MapMatchKinds(kinds)
 	if err != nil {
 		return pgsql.Literal{}, false, err
 	}
@@ -270,10 +349,12 @@ func literalKindID(kindMapper *contextAwareKindMapper, literal pgsql.Literal) (p
 	return pgsql.NewLiteral(kindIDs[0], pgsql.Int2), true, nil
 }
 
+// mapsRelationshipTypeLiteralToKindID reports whether operator permits mapping a relationship type name to its kind ID.
 func mapsRelationshipTypeLiteralToKindID(operator pgsql.Operator) bool {
 	return operator.IsIn(pgsql.OperatorEquals, pgsql.OperatorNotEquals, pgsql.OperatorCypherNotEquals)
 }
 
+// applyTypeFunctionLikeTypeHints normalizes operands for equality involving type(relationship).
 func applyTypeFunctionLikeTypeHints(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) error {
 	mapTypeLiteralToKindID := mapsRelationshipTypeLiteralToKindID(expression.Operator)
 
@@ -431,11 +512,46 @@ func applyTypeFunctionLikeTypeHints(kindMapper *contextAwareKindMapper, expressi
 	return nil
 }
 
+// applyBinaryExpressionTypeHints rewrites property lookups and casts operands to types compatible with the binary operator.
 func applyBinaryExpressionTypeHints(kindMapper *contextAwareKindMapper, expression *pgsql.BinaryExpression) error {
 	switch expression.Operator {
 	case pgsql.OperatorPropertyLookup:
 		// Don't directly hint property lookups but replace the operator with the JSON operator
 		expression.Operator = pgsql.OperatorJSONTextField
+		return nil
+	}
+
+	if isStringPredicate(expression.Operator) {
+		return nil // typedStringPredicate retains both operands' runtime types.
+	}
+	if expression.Operator == pgsql.OperatorIn {
+		if dataType, err := InferExpressionType(expression.ROperand); err != nil {
+			return err
+		} else if dataType == pgsql.JSONBArray {
+			// Typed collection membership must read the original property JSON,
+			// before scalar hinting can replace it with extracted text.
+			return nil
+		}
+	}
+	if err := rewriteCollectArrayConcatenation(expression); err != nil {
+		return err
+	}
+	if rewritten, err := rewriteTypedOrdering(expression); err != nil {
+		return err
+	} else if rewritten {
+		return nil
+	}
+
+	if dynamic, err := requiresDynamicArithmetic(expression); err != nil {
+		return err
+	} else if dynamic {
+		// Preserve JSON type information until the runtime arithmetic helper reads it.
+		return nil
+	}
+
+	if rewritten, err := rewriteArithmeticComparison(expression); err != nil {
+		return err
+	} else if rewritten {
 		return nil
 	}
 

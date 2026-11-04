@@ -39,7 +39,13 @@
       },
       "expected": {
         "row_count": 1,
-        "result_kind": "path_set"
+        "result_kind": "path_set",
+        "path_rows": [
+          {
+            "nodes": ["n1", "n2", "n3"],
+            "relationship_kinds": ["EdgeKind1", "EdgeKind2"]
+          }
+        ]
       },
       "observes": {
         "paths": true,
@@ -58,4 +64,3 @@
     }
   ]
 }
-

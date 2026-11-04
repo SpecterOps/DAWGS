@@ -1,168 +1,51 @@
 # DAWGS
 
-Database Abstraction Wrapper for Graph Schemas
+**Database Abstraction Wrapper for Graph Schemas**
 
 ![A Corgi Treat](logo_small.png)
 
-DAWGS provides tools and query helpers for running property graphs on vanilla PostgreSQL without extra database
-plugins. It exposes a backend abstraction for graph queries, with current backend support for PostgreSQL and Neo4j.
-The query interface is built around openCypher, including a PostgreSQL SQL translator for environments that do not
-support Cypher natively.
+DAWGS is a Go library for working with property graphs through a shared database
+interface. Run graph queries on vanilla PostgreSQL without database plugins, or
+use Neo4j's native graph engine. DAWGS provides openCypher parsing, a PostgreSQL
+SQL translator, and Go APIs for graph queries, traversal, and batch updates.
 
-## Quick Start
+## Supported backends
 
-Build the repository:
+| Backend | Query execution | Requirements |
+| --- | --- | --- |
+| PostgreSQL | Translates supported openCypher queries to SQL. | PostgreSQL 16 or newer; 18 recommended. No graph extension required. |
+| Neo4j | Executes Cypher through the native driver. | Neo4j using the Go v5 driver. |
 
-```bash
-make build
-```
+Cypher support varies by backend. See [syntax support](cypher/Cypher%20Syntax%20Support.md)
+and [query compatibility](docs/query-semantics.md) for supported forms and limitations.
 
-Run unit tests:
+## Get started
 
-```bash
-make test
-```
-
-Run integration tests when a backend is available:
-
-Export the `CONNECTION_STRING` environment variable for the PostgreSQL or Neo4j driver.
-
-```bash
-export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
-make test_integration
-```
-
-```bash
-export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
-make test_bdd_integration
-```
-
-The BDD run also writes a Cucumber results file to `.coverage/opencypher-tck-report.json` and an HTML summary to `.coverage/opencypher-tck-report.html`. The HTML report shows total, passed, and failed scenario counts.
-
-Use this module from another Go project:
+Install from your Go project:
 
 ```bash
 go get github.com/specterops/dawgs
 ```
 
-`make quality_backend` captures PostgreSQL and Neo4j integration results for backend equivalence comparison. It requires
-`PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING`. `make quality_bench` writes benchmark markdown and JSON captures
-for later baseline comparison. Benchmark drift comparison can be performed by `make quality` through `tools/metrics` when
-`BENCHMARK_REPORT` and `BENCHMARK_BASELINE` are provided.
+Use the Go toolchain specified in [go.mod](go.mod). The driver packages are
+[`drivers/pg`](drivers/pg) and [`drivers/neo4j`](drivers/neo4j).
+See the [PostgreSQL driver guide](docs/postgresql-driver.md) for pool setup and runtime configuration.
 
-Run the package benchmark suite with:
-
-```bash
-make test_bench
-```
-
-The PostgreSQL driver has a bounded, driver-wide Cypher compilation cache for both text Cypher and programmatic graph
-queries. Its default capacity is 256 entries; callers that need a different capacity can use
-`pg.NewDriverWithOptions`. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
-newly started compilations across every PostgreSQL driver in the process. See
-[PostgreSQL translation](docs/postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
-
-The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
-storage maintenance on the `node` and `edge` tables in the following order:
-
-1. Drops INVALID btree indexes on `node` and `edge` partitions whose names end in `_ccnew[N]` or `_ccold[N]`. These are
-   left behind when a `REINDEX CONCURRENTLY` is interrupted. Drops use `DROP INDEX CONCURRENTLY IF EXISTS`.
-2. Runs `VACUUM (ANALYZE) node, edge`, which covers every partition.
-3. Rebuilds every valid btree index on `node` and `edge` partitions with `REINDEX INDEX CONCURRENTLY`, smallest first,
-   so that an early cancellation still completes as many rebuilds as possible. GIN indexes are not rebuilt; `VACUUM`
-   already merges their pending lists.
-
-Concurrent drops and rebuilds take `SHARE UPDATE EXCLUSIVE` locks, which do not block reads or writes. A failure on one
-statement does not stop the remaining work; every failure is returned together as a joined error. Context cancellation
-stops the pass before the next statement and is included in the returned error. A cancelled rebuild may leave an
-INVALID `_ccnew` index behind, which the next pass drops in step 1. The pass applies no thresholds and has no time
-limit; callers are responsible for scheduling it, for example behind a cooldown.
-
-Use `cmd/benchdiff` to compare benchmarks between two committed refs without changing the active worktree:
+To build and run unit tests from a checkout:
 
 ```bash
-go run ./cmd/benchdiff -base main -target HEAD -kind unit
+make build
+make test
 ```
 
-For integration benchmark comparisons, provide the same `CONNECTION_STRING` used by integration tests:
+Integration tests use a disposable PostgreSQL or Neo4j database selected by
+`CONNECTION_STRING`. See [testing](docs/testing.md) for setup and commands.
 
-```bash
-export CONNECTION_STRING="postgresql://dawgs:weneedbetterpasswords@localhost:65432/dawgs"
-go run ./cmd/benchdiff -base main -target HEAD -kind all -driver pg -fail-regression 10%
-```
+## Guides
 
-The harness writes raw outputs and a Markdown report under `.bench/runs/` by default. The report begins with comparison
-findings, includes the raw `benchstat` output for each benchmark suite, and ends with a table of all captured benchmark
-numbers.
-
-The integration benchmark runner includes committed `base`, `adcs_fanout`, and `traversal_shapes` datasets by default.
-The traversal shape suite checks expected result counts for chain, fanout, bounded cycle, disconnected,
-edge-kind-selective, and multi-path shortest-path scenarios before recording timings.
-
-`make plan_corpus` captures plan diagnostics for the shared Cypher integration corpus. It accepts either
-`CONNECTION_STRING` for one backend or `PG_CONNECTION_STRING` and `NEO4J_CONNECTION_STRING` for both backends, then
-writes JSONL captures and markdown/JSON summaries under `.coverage/`.
-
-`go run ./cmd/graphbench` captures runtime diagnostics for the scale corpus under `benchmark/testdata/scale`. The
-current modes are `postgres_sql`, `local_traversal`, and `neo4j`; AGE is reference-design input only and is not a direct
-comparison mode yet. The command can emit JSONL records plus Markdown and JSON summaries, and can compare current timings
-against a previous JSONL baseline.
-
-`go run ./cmd/retriever` dumps and loads live Dawgs graph databases as
-manifest-based collections of compressed JSONL fragments. It supports
-PostgreSQL and Neo4j, uncompressed, gzip, and zstd fragments, bounded keyset
-scans, resumable dump checkpoints, checksum validation before load, optional
-deterministic property scrubbing, optional write-only Parquet sidecars for
-analytical readers, and a read-throughput benchmark mode. It can also package
-dumps as single unencrypted TAR or HPKE/ML-KEM encrypted TAR archives. Archive
-file creation refuses existing output paths. See
-[cmd/retriever/README.md](cmd/retriever/README.md) for dump, Parquet sidecar,
-archive, load, scrubbed dump, metrics verification, and benchmark
-examples.
-The same import/export functionality is available to library consumers from
-`github.com/specterops/dawgs/retriever`; callers provide an already-open
-`graph.Database`, and archive helpers support both path-based and stream-based
-APIs. The package exposes CLI-matching default option constructors, structured
-progress callbacks, manifest/metrics helpers, HPKE key envelope reader/writer
-helpers, and typed errors for validation, compatibility, checksum, metrics, and
-count mismatches.
-
-PostgreSQL translates exact string property equality with a JSON string type guard and `properties ->>` extraction, so
-indexes created on expressions such as `properties ->> 'objectid'` and `properties ->> 'name'` can be used for selective
-anchors without matching JSON booleans or numbers. The PostgreSQL edge schema uses four baseline B-tree indexes per
-partition: the primary key, a unique `(start_id, kind_id, end_id, graph_id) INCLUDE (id)` index that also covers outbound
-traversal, an `(end_id, kind_id) INCLUDE (id, start_id)` inbound traversal index, and a narrow `(kind_id)` index for typed
-counts and deletes. Avoiding heap reads during traversal requires topology-only reads and all-visible heap pages;
-Cypher relationship counts that validate endpoint existence may still fetch edge rows for endpoint IDs.
-
-Schema assertion replaces the historical edge uniqueness constraints and removes the superseded covering indexes on
-existing partitions. This first upgrade takes table locks and rebuilds the affected indexes; schedule it for a suitable
-maintenance window on large databases. Subsequent assertions preserve the replacement indexes. See
-[indexing notes](docs/postgresql_translation.md#indexing-notes) for the layout and regression coverage.
-
-PostgreSQL property index regression coverage is hard-failing under the `manual_integration` tag. The synthetic plan
-test translates Cypher to PgSQL, disables sequential scans for the `EXPLAIN`, and requires explicit node property
-indexes to appear in the JSON plan:
-
-For local development against a checkout, use a Go module replacement in the consuming project:
-
-```go
-replace github.com/specterops/dawgs => /path/to/dawgs
-```
-
-## Documentation
-
-- [Development workflow](docs/development.md): build, test, integration, metrics, quality, and corpus-capture commands.
-- [Cypher library](cypher/README.md): parser generation and Cypher package overview.
-- [PostgreSQL translation](docs/postgresql_translation.md): PostgreSQL translator behavior, optimizer lowerings, indexing notes, and validation expectations.
-- [Plan corpus capture](cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
-- [Graph benchmark capture](cmd/graphbench/README.md): runtime diagnostics for scale scenarios.
-- [Cypher syntax support](cypher/Cypher%20Syntax%20Support.md): supported Cypher behavior and semantic notes.
-
-## Repository Map
-
-- `cypher/`: parser, Cypher AST, walkers, and backend translation models.
-- `drivers/`: database driver implementations.
-- `integration/`: backend-equivalent integration suites and fixtures.
-- `cmd/`: command-line tools for capture, export, and diagnostics.
-- `tools/`: developer tools such as `dawgrun` and metrics reporting.
+- [PostgreSQL driver](docs/postgresql-driver.md): connections, caches, schema upgrades, and storage.
+- [Query semantics](docs/query-semantics.md): backend behavior and compatibility.
+- [Import and export](cmd/retriever/README.md): dump, load, scrub, and archive graphs.
+- [Development](docs/development.md): formatting, tests, and contributor workflows.
+- [Benchmarking](docs/benchmarking.md): performance captures and traversal qualification.
+- [All documentation](docs/README.md): library utilities, architecture, and detailed references.

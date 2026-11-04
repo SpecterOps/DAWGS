@@ -172,6 +172,20 @@ func TestPropertiesKey(t *testing.T) {
 }
 
 func TestPropertiesHash(t *testing.T) {
+	t.Run("structural boundaries and value types", func(t *testing.T) {
+		for _, pair := range [][2]map[string]any{
+			{{"a": 1, "b": 2}, {"a1b": 2}},
+			{{"a": int64(1)}, {"a": float64(1)}},
+			{{"a": "1"}, {"a": int64(1)}},
+			{{"a": nil}, {"anul": "l"}},
+		} {
+			h1, h2 := xxhash.New(), xxhash.New()
+			require.NoError(t, graph.AsProperties(pair[0]).HashInto(h1, nil))
+			require.NoError(t, graph.AsProperties(pair[1]).HashInto(h2, nil))
+			require.NotEqual(t, h1.Sum64(), h2.Sum64())
+		}
+	})
+
 	t.Run("Hash is deterministic", func(t *testing.T) {
 		props := graph.NewProperties().SetAll(map[string]any{
 			"foo": "bar",

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -16,7 +17,7 @@ import (
 
 const (
 	translationCacheCapacity  = 256
-	translationCacheKeyFormat = 3
+	translationCacheKeyFormat = 4
 	maxCachedCypherBytes      = 64 * 1024
 	translationCachePolicy    = "compiler-v4:optimized"
 )
@@ -25,6 +26,8 @@ type translationCacheKey struct {
 	format           uint8
 	queryDigest      [sha256.Size]byte
 	querySize        int
+	builder          bool
+	builderDigest    [sha256.Size]byte
 	graphID          int32
 	parameterTypes   string
 	policy           string
@@ -32,6 +35,7 @@ type translationCacheKey struct {
 }
 
 type translationCacheBuildResult struct {
+	hasMissingKinds   bool
 	parameters        map[string]any
 	parameterSources  map[string]string
 	literalParameters map[string]string
@@ -56,9 +60,9 @@ func (s *translationCacheCall) finish(reusable bool) {
 	})
 }
 
-// TranslationCacheStats contains aggregate counters only. It intentionally
+// CompilationCacheStats contains aggregate counters only. It intentionally
 // exposes no source text, SQL, parameter names, values, or connection data.
-type TranslationCacheStats struct {
+type CompilationCacheStats struct {
 	Hits                    int64
 	Misses                  int64
 	Coalesced               int64
@@ -243,7 +247,7 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 		s.lock.Unlock()
 
 		sql, result, err, panicked := callTranslationBuild(build)
-		entry, cacheable := cacheableTranslation(sql, result, parameters, err)
+		entry, cacheable := cacheableCompilation(sql, result, parameters, err)
 
 		s.lock.Lock()
 		currentGeneration := s.schemaGeneration.Load()
@@ -264,7 +268,8 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 		s.lock.Unlock()
 
 		if panicked != nil {
-			panic(panicked)
+			s.buildFailures.Add(1)
+			return "", nil, panicked
 		}
 		if err != nil {
 			s.buildFailures.Add(1)
@@ -283,9 +288,22 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 	}
 }
 
-func callTranslationBuild(build func() (string, translationCacheBuildResult, error)) (sql string, result translationCacheBuildResult, err error, panicked any) {
+// containedPanicError converts a compiler panic into an ordinary error carrying
+// the panic value and its stack. Containment reduces crash loudness without
+// losing the failure's diagnosability.
+func containedPanicError(recovered any) error {
+	return fmt.Errorf("cypher translation panicked: %v\n%s", recovered, debug.Stack())
+}
+
+// callTranslationBuild isolates the build function from its callers. A panic
+// escaping the compiler is a producer bug; it is recovered and reported as an
+// ordinary build error so the failure is diagnosable without crashing the
+// calling process.
+func callTranslationBuild(build func() (string, translationCacheBuildResult, error)) (sql string, result translationCacheBuildResult, err error, panicked error) {
 	defer func() {
-		panicked = recover()
+		if recovered := recover(); recovered != nil {
+			panicked = containedPanicError(recovered)
+		}
 	}()
 
 	sql, result, err = build()
@@ -295,7 +313,8 @@ func callTranslationBuild(build func() (string, translationCacheBuildResult, err
 func (s *translationCache) buildUncached(build func() (string, translationCacheBuildResult, error)) (string, map[string]any, error) {
 	sql, result, err, panicked := callTranslationBuild(build)
 	if panicked != nil {
-		panic(panicked)
+		s.buildFailures.Add(1)
+		return "", nil, panicked
 	}
 	if err != nil {
 		s.buildFailures.Add(1)
@@ -317,8 +336,8 @@ func cloneTranslationCacheKey(key translationCacheKey) translationCacheKey {
 	return key
 }
 
-func cacheableTranslation(sql string, result translationCacheBuildResult, parameters map[string]any, err error) (translationCacheEntry, bool) {
-	if err != nil {
+func cacheableCompilation(sql string, result translationCacheBuildResult, parameters map[string]any, err error) (translationCacheEntry, bool) {
+	if err != nil || result.hasMissingKinds {
 		return translationCacheEntry{}, false
 	}
 	if len(result.parameters) != (len(result.parameterSources) + len(result.literalParameters)) {
@@ -401,7 +420,7 @@ func (s *translationCache) Close() {
 	}
 }
 
-func (s *translationCache) Stats() TranslationCacheStats {
+func (s *translationCache) Stats() CompilationCacheStats {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -410,7 +429,7 @@ func (s *translationCache) Stats() TranslationCacheStats {
 		size = s.entries.Stats().Size()
 	}
 
-	return TranslationCacheStats{
+	return CompilationCacheStats{
 		Hits:                    s.hits.Load(),
 		Misses:                  s.misses.Load(),
 		Coalesced:               s.coalesced.Load(),

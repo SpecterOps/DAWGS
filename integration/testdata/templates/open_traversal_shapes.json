@@ -1,0 +1,4866 @@
+{
+  "node_kinds": [
+    "OpenAudit"
+  ],
+  "families": [
+    {
+      "name": "complete open traversal",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kinds": [
+              "OpenNode",
+              "OpenStart"
+            ],
+            "properties": {
+              "i": 0
+            }
+          },
+          {
+            "id": "n1",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 1
+            }
+          },
+          {
+            "id": "n2",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 2
+            }
+          },
+          {
+            "id": "n3",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 3
+            }
+          },
+          {
+            "id": "n4",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 4
+            }
+          },
+          {
+            "id": "n5",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 5
+            }
+          },
+          {
+            "id": "n6",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 6
+            }
+          },
+          {
+            "id": "n7",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 7
+            }
+          },
+          {
+            "id": "n8",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 8
+            }
+          },
+          {
+            "id": "n9",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 9
+            }
+          },
+          {
+            "id": "n10",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 10
+            }
+          },
+          {
+            "id": "n11",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 11
+            }
+          },
+          {
+            "id": "n12",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 12
+            }
+          },
+          {
+            "id": "n13",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 13
+            }
+          },
+          {
+            "id": "n14",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 14
+            }
+          },
+          {
+            "id": "n15",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 15
+            }
+          },
+          {
+            "id": "n16",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 16
+            }
+          },
+          {
+            "id": "n17",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 17
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "OpenNode"
+            ],
+            "properties": {
+              "i": 99
+            }
+          },
+          {
+            "id": "unrelated",
+            "kinds": [
+              "OpenStart",
+              "OpenNode"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "n0",
+            "end_id": "n1",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n1",
+            "end_id": "n2",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n2",
+            "end_id": "n3",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n3",
+            "end_id": "n4",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n4",
+            "end_id": "n5",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n5",
+            "end_id": "n6",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n6",
+            "end_id": "n7",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n7",
+            "end_id": "n8",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n8",
+            "end_id": "n9",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n9",
+            "end_id": "n10",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n10",
+            "end_id": "n11",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n11",
+            "end_id": "n12",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n12",
+            "end_id": "n13",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n13",
+            "end_id": "n14",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n14",
+            "end_id": "n15",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n15",
+            "end_id": "n16",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "n16",
+            "end_id": "n17",
+            "kind": "OpenStep",
+            "properties": {}
+          },
+          {
+            "start_id": "decoy",
+            "end_id": "n0",
+            "kind": "OpenStep",
+            "properties": {
+              "decoy": true
+            }
+          },
+          {
+            "start_id": "n0",
+            "end_id": "decoy",
+            "kind": "WrongStep",
+            "properties": {
+              "decoy": true
+            }
+          },
+          {
+            "start_id": "unrelated",
+            "end_id": "decoy",
+            "kind": "OpenStep",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "ordinary/*/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*/15/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*/16/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*/17/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1../15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1../15/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1../16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1../16/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1../17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1../17/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*0../15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*0..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*0../15/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*0..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*0../16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*0..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*0../16/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*0..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*0../17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*0..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*0../17/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*0..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..15/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..15/15/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..15/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*1..15/16/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*1..15/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*1..15/17/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*1..17/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..17/15/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..17/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..17/16/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..17/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*1..17/17/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*16../15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*16../15/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*16../16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*16../16/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*16../17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*16../17/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16..]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*16/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*16/15/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*16/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*16/16/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "ordinary/*16/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "ordinary/*16/17/p",
+          "vars": {
+            "query": "MATCH p = (a:OpenStart)-[:OpenStep*16]->(b:OpenNode) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "shortestPath/*/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*/15/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*/16/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*/17/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1../15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1../15/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1../16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1../16/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1../17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1../17/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*0../15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*0../15/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*0../16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*0../16/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*0../17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*0../17/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..15/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..15/15/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..15/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "shortestPath/*1..15/16/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "shortestPath/*1..15/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "shortestPath/*1..15/17/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "shortestPath/*1..17/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..17/15/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..17/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..17/16/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..17/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "shortestPath/*1..17/17/p",
+          "vars": {
+            "query": "MATCH p = shortestPath((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*/15/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*/16/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*/17/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1../15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1../15/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1../16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1../16/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1../17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1../17/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*0../15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*0../15/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*0../16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*0../16/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*0../17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*0../17/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*0..]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..15/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..15/15/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..15/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..15/16/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..15/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": []
+            },
+            "row_count": 0
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..15/17/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..15]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [],
+            "path_lengths": [],
+            "row_count": 0
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..17/15/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                15
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..17/15/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n15"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ],
+            "path_lengths": [
+              15
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..17/16/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                16
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..17/16/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n16"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ],
+            "path_lengths": [
+              16
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..17/17/length(p) AS hops",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            },
+            "row_count": 1
+          }
+        },
+        {
+          "name": "allShortestPaths/*1..17/17/p",
+          "vars": {
+            "query": "MATCH p = allShortestPaths((a:OpenStart)-[:OpenStep*1..17]->(b:OpenNode)) WHERE id(a) = $start_id AND id(b) = $end_id RETURN p"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ],
+            "path_lengths": [
+              17
+            ],
+            "row_count": 1
+          }
+        },
+        {
+          "name": "SET b.selected = true",
+          "vars": {
+            "query": "MATCH (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id SET b.selected = true"
+          },
+          "node_params": {
+            "start_id": "n0"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OpenNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "OpenNode",
+                      "OpenStart"
+                    ],
+                    "props": {
+                      "i": 0
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 1,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 2,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 3,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 4,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n5",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 5,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n6",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 6,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n7",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 7,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n8",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 8,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n9",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 9,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n10",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 10,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n11",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 11,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n12",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 12,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n13",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 13,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n14",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 14,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n15",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 15,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n16",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 16,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n17",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 17,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 99
+                    }
+                  },
+                  {
+                    "id": "unrelated",
+                    "kinds": [
+                      "OpenStart",
+                      "OpenNode"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OpenAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    0
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n2",
+                    "end": "n3",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n3",
+                    "end": "n4",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n4",
+                    "end": "n5",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n5",
+                    "end": "n6",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n6",
+                    "end": "n7",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n7",
+                    "end": "n8",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n8",
+                    "end": "n9",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n9",
+                    "end": "n10",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n10",
+                    "end": "n11",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n11",
+                    "end": "n12",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n12",
+                    "end": "n13",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n13",
+                    "end": "n14",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n14",
+                    "end": "n15",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n15",
+                    "end": "n16",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n16",
+                    "end": "n17",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "n0",
+                    "kind": "OpenStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "WrongStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "unrelated",
+                    "end": "decoy",
+                    "kind": "OpenStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET b.selected = true RETURN count(b) AS targets",
+          "vars": {
+            "query": "MATCH (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id SET b.selected = true RETURN count(b) AS targets"
+          },
+          "node_params": {
+            "start_id": "n0"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "targets": [
+                17
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OpenNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "OpenNode",
+                      "OpenStart"
+                    ],
+                    "props": {
+                      "i": 0
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 1,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 2,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 3,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 4,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n5",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 5,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n6",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 6,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n7",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 7,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n8",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 8,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n9",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 9,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n10",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 10,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n11",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 11,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n12",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 12,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n13",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 13,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n14",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 14,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n15",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 15,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n16",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 16,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "n17",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 17,
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 99
+                    }
+                  },
+                  {
+                    "id": "unrelated",
+                    "kinds": [
+                      "OpenStart",
+                      "OpenNode"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OpenAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    0
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n2",
+                    "end": "n3",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n3",
+                    "end": "n4",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n4",
+                    "end": "n5",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n5",
+                    "end": "n6",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n6",
+                    "end": "n7",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n7",
+                    "end": "n8",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n8",
+                    "end": "n9",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n9",
+                    "end": "n10",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n10",
+                    "end": "n11",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n11",
+                    "end": "n12",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n12",
+                    "end": "n13",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n13",
+                    "end": "n14",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n14",
+                    "end": "n15",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n15",
+                    "end": "n16",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n16",
+                    "end": "n17",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "n0",
+                    "kind": "OpenStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "WrongStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "unrelated",
+                    "end": "decoy",
+                    "kind": "OpenStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE (:OpenAudit)",
+          "vars": {
+            "query": "MATCH (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id CREATE (:OpenAudit)"
+          },
+          "node_params": {
+            "start_id": "n0"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OpenNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "OpenNode",
+                      "OpenStart"
+                    ],
+                    "props": {
+                      "i": 0
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 1
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 2
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 3
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 4
+                    }
+                  },
+                  {
+                    "id": "n5",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 5
+                    }
+                  },
+                  {
+                    "id": "n6",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 6
+                    }
+                  },
+                  {
+                    "id": "n7",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 7
+                    }
+                  },
+                  {
+                    "id": "n8",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 8
+                    }
+                  },
+                  {
+                    "id": "n9",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 9
+                    }
+                  },
+                  {
+                    "id": "n10",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 10
+                    }
+                  },
+                  {
+                    "id": "n11",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 11
+                    }
+                  },
+                  {
+                    "id": "n12",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 12
+                    }
+                  },
+                  {
+                    "id": "n13",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 13
+                    }
+                  },
+                  {
+                    "id": "n14",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 14
+                    }
+                  },
+                  {
+                    "id": "n15",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 15
+                    }
+                  },
+                  {
+                    "id": "n16",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 16
+                    }
+                  },
+                  {
+                    "id": "n17",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 17
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 99
+                    }
+                  },
+                  {
+                    "id": "unrelated",
+                    "kinds": [
+                      "OpenStart",
+                      "OpenNode"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OpenAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    17
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n2",
+                    "end": "n3",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n3",
+                    "end": "n4",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n4",
+                    "end": "n5",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n5",
+                    "end": "n6",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n6",
+                    "end": "n7",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n7",
+                    "end": "n8",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n8",
+                    "end": "n9",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n9",
+                    "end": "n10",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n10",
+                    "end": "n11",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n11",
+                    "end": "n12",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n12",
+                    "end": "n13",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n13",
+                    "end": "n14",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n14",
+                    "end": "n15",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n15",
+                    "end": "n16",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n16",
+                    "end": "n17",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "n0",
+                    "kind": "OpenStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "WrongStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "unrelated",
+                    "end": "decoy",
+                    "kind": "OpenStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE (:OpenAudit) RETURN count(b) AS targets",
+          "vars": {
+            "query": "MATCH (a:OpenStart)-[:OpenStep*]->(b:OpenNode) WHERE id(a) = $start_id CREATE (:OpenAudit) RETURN count(b) AS targets"
+          },
+          "node_params": {
+            "start_id": "n0"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "targets": [
+                17
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OpenNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "n0",
+                    "kinds": [
+                      "OpenNode",
+                      "OpenStart"
+                    ],
+                    "props": {
+                      "i": 0
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 1
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 2
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 3
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 4
+                    }
+                  },
+                  {
+                    "id": "n5",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 5
+                    }
+                  },
+                  {
+                    "id": "n6",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 6
+                    }
+                  },
+                  {
+                    "id": "n7",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 7
+                    }
+                  },
+                  {
+                    "id": "n8",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 8
+                    }
+                  },
+                  {
+                    "id": "n9",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 9
+                    }
+                  },
+                  {
+                    "id": "n10",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 10
+                    }
+                  },
+                  {
+                    "id": "n11",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 11
+                    }
+                  },
+                  {
+                    "id": "n12",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 12
+                    }
+                  },
+                  {
+                    "id": "n13",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 13
+                    }
+                  },
+                  {
+                    "id": "n14",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 14
+                    }
+                  },
+                  {
+                    "id": "n15",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 15
+                    }
+                  },
+                  {
+                    "id": "n16",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 16
+                    }
+                  },
+                  {
+                    "id": "n17",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 17
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "OpenNode"
+                    ],
+                    "props": {
+                      "i": 99
+                    }
+                  },
+                  {
+                    "id": "unrelated",
+                    "kinds": [
+                      "OpenStart",
+                      "OpenNode"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:OpenAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    17
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "n0",
+                    "end": "n1",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n1",
+                    "end": "n2",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n2",
+                    "end": "n3",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n3",
+                    "end": "n4",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n4",
+                    "end": "n5",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n5",
+                    "end": "n6",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n6",
+                    "end": "n7",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n7",
+                    "end": "n8",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n8",
+                    "end": "n9",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n9",
+                    "end": "n10",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n10",
+                    "end": "n11",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n11",
+                    "end": "n12",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n12",
+                    "end": "n13",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n13",
+                    "end": "n14",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n14",
+                    "end": "n15",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n15",
+                    "end": "n16",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "n16",
+                    "end": "n17",
+                    "kind": "OpenStep",
+                    "props": {}
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "n0",
+                    "kind": "OpenStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "n0",
+                    "end": "decoy",
+                    "kind": "WrongStep",
+                    "props": {
+                      "decoy": true
+                    }
+                  },
+                  {
+                    "start": "unrelated",
+                    "end": "decoy",
+                    "kind": "OpenStep",
+                    "props": {}
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "shortestPath bound endpoints",
+          "vars": {
+            "query": "MATCH (a:OpenStart), (b:OpenNode) WHERE id(a)=$start_id AND id(b)=$end_id MATCH p=shortestPath((a)-[:OpenStep*]->(b)) RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath bound endpoints duplicate rows",
+          "vars": {
+            "query": "UNWIND [1, 1] AS input MATCH (a:OpenStart), (b:OpenNode) WHERE id(a)=$start_id AND id(b)=$end_id MATCH p=shortestPath((a)-[:OpenStep*]->(b)) RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                17,
+                17
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound endpoints",
+          "vars": {
+            "query": "MATCH (a:OpenStart), (b:OpenNode) WHERE id(a)=$start_id AND id(b)=$end_id MATCH p=allShortestPaths((a)-[:OpenStep*]->(b)) RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                17
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound endpoints duplicate rows",
+          "vars": {
+            "query": "UNWIND [1, 1] AS input MATCH (a:OpenStart), (b:OpenNode) WHERE id(a)=$start_id AND id(b)=$end_id MATCH p=allShortestPaths((a)-[:OpenStep*]->(b)) RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n17"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                17,
+                17
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath bound zero duplicate rows",
+          "vars": {
+            "query": "UNWIND [1, 1] AS input MATCH (a:OpenStart), (b:OpenNode) WHERE id(a)=$start_id AND id(b)=$end_id MATCH p=shortestPath((a)-[:OpenStep*0..]->(b)) RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                0,
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths bound zero duplicate rows",
+          "vars": {
+            "query": "UNWIND [1, 1] AS input MATCH (a:OpenStart), (b:OpenNode) WHERE id(a)=$start_id AND id(b)=$end_id MATCH p=allShortestPaths((a)-[:OpenStep*0..]->(b)) RETURN length(p) AS hops"
+          },
+          "node_params": {
+            "start_id": "n0",
+            "end_id": "n0"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                0,
+                0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "branch witnesses and endpoint pairs",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "BranchNode",
+              "BranchStart"
+            ],
+            "properties": {
+              "name": "a"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "BranchNode",
+              "BranchTerminal"
+            ],
+            "properties": {
+              "name": "b"
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "BranchNode",
+              "BranchTerminal"
+            ],
+            "properties": {
+              "name": "c"
+            }
+          },
+          {
+            "id": "d",
+            "kinds": [
+              "BranchNode",
+              "BranchTerminal"
+            ],
+            "properties": {
+              "name": "d"
+            }
+          },
+          {
+            "id": "e",
+            "kinds": [
+              "BranchNode",
+              "BranchTerminal"
+            ],
+            "properties": {
+              "name": "e"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "BranchStep",
+            "properties": {}
+          },
+          {
+            "start_id": "a",
+            "end_id": "c",
+            "kind": "BranchStep",
+            "properties": {}
+          },
+          {
+            "start_id": "b",
+            "end_id": "d",
+            "kind": "BranchStep",
+            "properties": {}
+          },
+          {
+            "start_id": "c",
+            "end_id": "d",
+            "kind": "BranchStep",
+            "properties": {}
+          },
+          {
+            "start_id": "d",
+            "end_id": "e",
+            "kind": "BranchStep",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "shortestPathoutd",
+          "vars": {
+            "query": "MATCH p=shortestPath((a:BranchStart)-[:BranchStep*]->(b:BranchNode)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "d"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPathoute",
+          "vars": {
+            "query": "MATCH p=shortestPath((a:BranchStart)-[:BranchStep*]->(b:BranchNode)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "e"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPathind",
+          "vars": {
+            "query": "MATCH p=shortestPath((b:BranchNode)<-[:BranchStep*]-(a:BranchStart)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "d"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPathine",
+          "vars": {
+            "query": "MATCH p=shortestPath((b:BranchNode)<-[:BranchStep*]-(a:BranchStart)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "e"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "hops": [
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "shortestPath all endpoints",
+          "vars": {
+            "query": "MATCH p=shortestPath((a:BranchStart)-[:BranchStep*]->(b:BranchTerminal)) WHERE id(a) <> id(b) RETURN length(p) AS hops ORDER BY hops"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                1,
+                1,
+                2,
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPathsoutd",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((a:BranchStart)-[:BranchStep*]->(b:BranchNode)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "d"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                2,
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPathsoute",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((a:BranchStart)-[:BranchStep*]->(b:BranchNode)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "e"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                3,
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPathsind",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((b:BranchNode)<-[:BranchStep*]-(a:BranchStart)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "d"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                2,
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPathsine",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((b:BranchNode)<-[:BranchStep*]-(a:BranchStart)) WHERE id(a)=$start_id AND id(b)=$end_id RETURN length(p) AS hops ORDER BY hops"
+          },
+          "node_params": {
+            "start_id": "a",
+            "end_id": "e"
+          },
+          "assert": {
+            "row_count": 2,
+            "ordered_column_values": {
+              "hops": [
+                3,
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "allShortestPaths all endpoints",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((a:BranchStart)-[:BranchStep*]->(b:BranchTerminal)) WHERE id(a) <> id(b) RETURN length(p) AS hops ORDER BY hops"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "hops": [
+                1,
+                1,
+                2,
+                2,
+                3,
+                3
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "finite relationship unique cyclic trails",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "CycleNode",
+              "CycleStart"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "CycleNode"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "CycleNode"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "b",
+            "kind": "CycleStep",
+            "properties": {}
+          },
+          {
+            "start_id": "b",
+            "end_id": "c",
+            "kind": "CycleStep",
+            "properties": {}
+          },
+          {
+            "start_id": "c",
+            "end_id": "a",
+            "kind": "CycleStep",
+            "properties": {}
+          },
+          {
+            "start_id": "b",
+            "end_id": "b",
+            "kind": "CycleStep",
+            "properties": {}
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "open cycles",
+          "vars": {
+            "query": "MATCH p=(a:CycleStart)-[:CycleStep*]->(b) RETURN p"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "a",
+                "b"
+              ],
+              [
+                "a",
+                "b",
+                "c"
+              ],
+              [
+                "a",
+                "b",
+                "c",
+                "a"
+              ],
+              [
+                "a",
+                "b",
+                "b"
+              ],
+              [
+                "a",
+                "b",
+                "b",
+                "c"
+              ],
+              [
+                "a",
+                "b",
+                "b",
+                "c",
+                "a"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              3,
+              2,
+              3,
+              4
+            ]
+          }
+        },
+        {
+          "name": "zero hop cycles",
+          "vars": {
+            "query": "MATCH p=(a:CycleStart)-[:CycleStep*0..]->(b) RETURN p"
+          },
+          "assert": {
+            "path_node_ids": [
+              [
+                "a"
+              ],
+              [
+                "a",
+                "b"
+              ],
+              [
+                "a",
+                "b",
+                "c"
+              ],
+              [
+                "a",
+                "b",
+                "c",
+                "a"
+              ],
+              [
+                "a",
+                "b",
+                "b"
+              ],
+              [
+                "a",
+                "b",
+                "b",
+                "c"
+              ],
+              [
+                "a",
+                "b",
+                "b",
+                "c",
+                "a"
+              ]
+            ],
+            "path_lengths": [
+              0,
+              1,
+              2,
+              3,
+              2,
+              3,
+              4
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

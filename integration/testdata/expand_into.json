@@ -1,0 +1,39 @@
+{
+  "graph": {
+    "nodes": [
+      {"id": "pair-source", "kinds": ["ExpandIntoSource"], "properties": {"name": "source"}},
+      {"id": "pair-target", "kinds": ["ExpandIntoTarget"], "properties": {"name": "target"}},
+      {"id": "pair-missing", "kinds": ["ExpandIntoSource"], "properties": {"name": "missing"}},
+      {"id": "pair-loop", "kinds": ["ExpandIntoSource", "ExpandIntoTarget"], "properties": {"name": "loop"}},
+      {"id": "low-source", "kinds": ["ExpandIntoSource"], "properties": {"name": "low-source"}},
+      {"id": "high-target", "kinds": ["ExpandIntoTarget"], "properties": {"name": "high-target"}},
+      {"id": "high-source", "kinds": ["ExpandIntoSource"], "properties": {"name": "high-source"}},
+      {"id": "low-target", "kinds": ["ExpandIntoTarget"], "properties": {"name": "low-target"}},
+      {"id": "source-decoy-1", "kinds": ["ExpandIntoSource"], "properties": {"name": "source-decoy-1"}},
+      {"id": "source-decoy-2", "kinds": ["ExpandIntoSource"], "properties": {"name": "source-decoy-2"}},
+      {"id": "source-decoy-3", "kinds": ["ExpandIntoSource"], "properties": {"name": "source-decoy-3"}},
+      {"id": "source-decoy-4", "kinds": ["ExpandIntoSource"], "properties": {"name": "source-decoy-4"}},
+      {"id": "target-decoy-1", "kinds": ["ExpandIntoTarget"], "properties": {"name": "target-decoy-1"}},
+      {"id": "target-decoy-2", "kinds": ["ExpandIntoTarget"], "properties": {"name": "target-decoy-2"}},
+      {"id": "target-decoy-3", "kinds": ["ExpandIntoTarget"], "properties": {"name": "target-decoy-3"}},
+      {"id": "target-decoy-4", "kinds": ["ExpandIntoTarget"], "properties": {"name": "target-decoy-4"}}
+    ],
+    "edges": [
+      {"start_id": "pair-source", "end_id": "pair-target", "kind": "ExpandIntoKindA", "properties": {"slot": "a"}},
+      {"start_id": "pair-source", "end_id": "pair-target", "kind": "ExpandIntoKindB", "properties": {"slot": "b"}},
+      {"start_id": "pair-loop", "end_id": "pair-loop", "kind": "ExpandIntoKindA", "properties": {"slot": "loop"}},
+      {"start_id": "pair-source", "end_id": "pair-loop", "kind": "ExpandIntoDecoy", "properties": {"slot": "decoy-out"}},
+      {"start_id": "pair-loop", "end_id": "pair-target", "kind": "ExpandIntoDecoy", "properties": {"slot": "decoy-in"}},
+      {"start_id": "low-source", "end_id": "high-target", "kind": "ExpandIntoKindA", "properties": {"slot": "low-source-match"}},
+      {"start_id": "source-decoy-1", "end_id": "high-target", "kind": "ExpandIntoKindA", "properties": {"slot": "high-target-1"}},
+      {"start_id": "source-decoy-2", "end_id": "high-target", "kind": "ExpandIntoKindA", "properties": {"slot": "high-target-2"}},
+      {"start_id": "source-decoy-3", "end_id": "high-target", "kind": "ExpandIntoKindA", "properties": {"slot": "high-target-3"}},
+      {"start_id": "source-decoy-4", "end_id": "high-target", "kind": "ExpandIntoKindA", "properties": {"slot": "high-target-4"}},
+      {"start_id": "high-source", "end_id": "low-target", "kind": "ExpandIntoKindA", "properties": {"slot": "low-target-match"}},
+      {"start_id": "high-source", "end_id": "target-decoy-1", "kind": "ExpandIntoKindA", "properties": {"slot": "high-source-1"}},
+      {"start_id": "high-source", "end_id": "target-decoy-2", "kind": "ExpandIntoKindA", "properties": {"slot": "high-source-2"}},
+      {"start_id": "high-source", "end_id": "target-decoy-3", "kind": "ExpandIntoKindA", "properties": {"slot": "high-source-3"}},
+      {"start_id": "high-source", "end_id": "target-decoy-4", "kind": "ExpandIntoKindA", "properties": {"slot": "high-source-4"}}
+    ]
+  }
+}

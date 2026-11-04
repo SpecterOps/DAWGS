@@ -1,0 +1,323 @@
+{
+  "families": [
+    {
+      "name": "empty list aliases and supported element types",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "empty-seed-a",
+            "kinds": [
+              "EmptyAliasSeed"
+            ],
+            "properties": {
+              "name": "a",
+              "value": 1
+            }
+          },
+          {
+            "id": "empty-seed-b",
+            "kinds": [
+              "EmptyAliasSeed"
+            ],
+            "properties": {
+              "name": "b",
+              "value": 2
+            }
+          },
+          {
+            "id": "empty-decoy",
+            "kinds": [
+              "EmptyAliasDecoy"
+            ],
+            "properties": {
+              "name": "decoy",
+              "value": 3
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "empty alias values",
+          "vars": {
+            "query": "WITH [] AS xs RETURN xs"
+          },
+          "assert": {
+            "row_count": 1,
+            "row_values": [
+              [
+                []
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty alias cardinality",
+          "vars": {
+            "query": "WITH [] AS xs RETURN size(xs)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty alias unwind",
+          "vars": {
+            "query": "WITH [] AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "parenthesized empty alias",
+          "vars": {
+            "query": "WITH ([]) AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "chained empty alias",
+          "vars": {
+            "query": "WITH [] AS xs WITH xs AS ys UNWIND ys AS x RETURN x"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          }
+        },
+        {
+          "name": "chained list and scalar values",
+          "vars": {
+            "query": "WITH [] AS xs WITH xs AS ys, 7 AS marker RETURN size(ys), marker"
+          },
+          "assert": {
+            "row_values": [
+              [
+                0,
+                7
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty alias count",
+          "vars": {
+            "query": "WITH [] AS xs UNWIND xs AS x RETURN count(x)"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "integer list control",
+          "vars": {
+            "query": "WITH [1, 2] AS xs UNWIND xs AS x RETURN x + 1"
+          },
+          "assert": {
+            "row_values": [
+              [
+                2
+              ],
+              [
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "name": "floating list control",
+          "vars": {
+            "query": "WITH [1.25, 2.5] AS xs UNWIND xs AS x RETURN x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1.25
+              ],
+              [
+                2.5
+              ]
+            ]
+          }
+        },
+        {
+          "name": "text list control",
+          "vars": {
+            "query": "WITH ['alpha', 'beta'] AS xs WITH xs AS ys UNWIND ys AS x RETURN x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "alpha"
+              ],
+              [
+                "beta"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty alias creates no rows",
+          "vars": {
+            "query": "WITH [] AS xs UNWIND xs AS x CREATE (n:EmptyAliasCreated {value: x}) RETURN n"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:EmptyAliasCreated) RETURN count(n)",
+              "assert": {
+                "exact_int": 0
+              }
+            },
+            {
+              "cypher": "MATCH (n) WHERE n:EmptyAliasSeed OR n:EmptyAliasDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "empty-seed-a",
+                    "kinds": [
+                      "EmptyAliasSeed"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "id": "empty-seed-b",
+                    "kinds": [
+                      "EmptyAliasSeed"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "value": 2
+                    }
+                  },
+                  {
+                    "id": "empty-decoy",
+                    "kinds": [
+                      "EmptyAliasDecoy"
+                    ],
+                    "props": {
+                      "name": "decoy",
+                      "value": 3
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty alias updates no rows",
+          "vars": {
+            "query": "WITH [] AS xs UNWIND xs AS x MATCH (n:EmptyAliasSeed) SET n.value = 9 RETURN n"
+          },
+          "assert": {
+            "row_count": 0,
+            "row_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n:EmptyAliasSeed OR n:EmptyAliasDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "empty-seed-a",
+                    "kinds": [
+                      "EmptyAliasSeed"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "id": "empty-seed-b",
+                    "kinds": [
+                      "EmptyAliasSeed"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "value": 2
+                    }
+                  },
+                  {
+                    "id": "empty-decoy",
+                    "kinds": [
+                      "EmptyAliasDecoy"
+                    ],
+                    "props": {
+                      "name": "decoy",
+                      "value": 3
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "chained empty alias deletes no rows",
+          "vars": {
+            "query": "WITH [] AS xs WITH xs AS ys UNWIND ys AS x MATCH (n:EmptyAliasSeed) DELETE n"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n:EmptyAliasSeed OR n:EmptyAliasDecoy RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "empty-seed-a",
+                    "kinds": [
+                      "EmptyAliasSeed"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "id": "empty-seed-b",
+                    "kinds": [
+                      "EmptyAliasSeed"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "value": 2
+                    }
+                  },
+                  {
+                    "id": "empty-decoy",
+                    "kinds": [
+                      "EmptyAliasDecoy"
+                    ],
+                    "props": {
+                      "name": "decoy",
+                      "value": 3
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

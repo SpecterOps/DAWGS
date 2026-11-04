@@ -134,6 +134,10 @@ Negation in query filters is supported with the `not` operator:
 
 * `match (n:User) where not(n.eligible) return n`
 
+Repeated `not` operators preserve Cypher parity: `not not n.eligible` matches the positive predicate and an odd
+number of `not` operators negates exactly once. Parenthesized forms such as `not (not n.eligible)` retain their
+explicit structure.
+
 ### Conjunction and Disjunction
 
 Conjunction `and` and disjunction `or` operators are both supported:
@@ -171,6 +175,11 @@ A string property may be filtered by suffix matching:
 Query filters may also include pattern lookups. For example, searching for users with no active login sessions:
 
 * `match (n:User) where not((n)<-[:HasSession]-(:Computer)) return n`
+
+Pattern predicates are not supported inside the optimized aggregate traversal count shape
+(`match ... with s, count(t) as c return ... order by ... limit ...`). Such queries fail compilation with
+`Error: unsupported aggregate traversal count predicate: pattern predicates in MATCH WHERE are not supported`
+instead of executing a partial lowering.
 
 ## Supported Subquery Expressions
 
@@ -231,6 +240,33 @@ Returns the current datetime with timezone information.
 ```
 match (s) where s.created_at < datetime() return s
 ```
+
+### Temporal Construction and Components
+
+Temporal constructions accept at most one text argument for an explicit instant
+(`datetime('2020-01-01')`, `localdatetime('2020-01-01T00:00:00')`, `date('2020-01-01')`,
+`localtime('12:00:00')`) and lower to PostgreSQL casts. Such constructed values
+support comparison and arithmetic, for example:
+
+```
+match (s) where s.created_at < datetime('2019-06-01T18:40:32.142+0100') return s
+match (s) where s.created_at < datetime() - duration('P3D') return s
+```
+
+Component access on a constructed temporal value (`.year`, `.epochmillis`, and
+similar) is rejected with an explicit translation error such as
+`unsupported temporal type component year on cast type date`. Only the
+current-instant functions without arguments support component access, and only
+for `.epochseconds` and `.epochmillis`:
+
+```
+return datetime().epochseconds as v
+return datetime().epochmillis as v
+match (u) where u.pwdlastset < (datetime().epochseconds - (365 * 86400)) return u
+```
+
+Any other component on a current-instant function (for example
+`datetime().year`) is likewise rejected with an explicit translation error.
 
 ### `type`
 
@@ -394,7 +430,23 @@ Queries that contain similar constructs will result in the following translation
 
 ### Quantifier Expressions
 
-Quantifier Expressions are currently unsupported but planned.
+Quantifier expressions (`all`, `any`, `none`, `single`) are supported as predicates in `WHERE` clauses, including
+collections from property arrays, `labels()`, `collect()` results, path relationship checks, and scalar-list literals:
+
+```
+match (n:User) where any(x in n.serviceprincipalnames where x contains 'mssql') return n
+match (n) where all(x in [1, 2] where x < 3) return n
+```
+
+Quantifiers in projection expressions (`RETURN`/`WITH` items) are not supported and fail compilation with a normal
+translation error instead of executing a partial translation:
+
+```
+return all(x in [1] where x = 1) as value
+```
+
+Queries that contain similar constructs will result in the following translation error:
+`Error: aggregate grouping expression has unsupported type pgsql.Select`.
 
 ## Unsupported Constructs
 
@@ -433,6 +485,15 @@ a JSON string type guard. This keeps strings distinct from JSON booleans and num
 expression indexes such as `properties ->> 'objectid'` or `properties ->> 'name'` to accelerate exact string anchors.
 Boolean and numeric literals continue to use strict JSON scalar equality; use boolean or numeric literals, such as
 `n.enabled = true` or `n.count = 1`, when typed JSON scalar equality is required.
+
+### Floating-Point Literal Fidelity
+
+Floating-point literals keep their floating-point spelling in both the Cypher and SQL emitters: an integral value such
+as `3.0` never degrades to the integer `3`. PostgreSQL therefore evaluates `return 3.0 / 2.0` as numeric division
+returning `1.5`, and `toString(1.0)` returns `"1.0"`. Integer literals keep integer semantics: `return 3 / 2` remains
+integer division returning `1`. Exponent spellings such as `1e3` canonicalize to decimal float form (`1000.0`) when a
+query is re-emitted, including the Neo4j query rewrite.
+
 
 ### Index Utilization
 
@@ -484,3 +545,18 @@ return 1
 The reference `n` is being projected by the multipart `with` statement but this projection removes the resultset from
 the original query, allowing for ambiguity to slip into future operations against `n.name` where some values of
 `n.name` may be `null`.
+
+#### Null Predicates
+
+`IS NULL` and `IS NOT NULL` apply to values of any type, including literal `null` itself:
+
+```
+return null is null as value; // true
+return 1 is null as value;    // false
+```
+
+Property-lookup operands keep Cypher's stored-null semantics: a property that is missing or stored as JSON `null`
+satisfies `IS NULL`, and both are excluded by `IS NOT NULL`. Literal, parameter, function and entity operands lower to
+PostgreSQL's own null predicates, so a matched node is never `null` and an `OPTIONAL MATCH` null extension is. Null
+predicates in `WHERE` are ordinary filters: a literal-false predicate such as `where 1 is null` returns no rows rather
+than being dropped from the query.

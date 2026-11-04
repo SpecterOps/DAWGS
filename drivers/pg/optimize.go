@@ -65,6 +65,7 @@ func (s graphIndex) identifier() string {
 	return pgx.Identifier{s.schema, s.name}.Sanitize()
 }
 
+// optimizeStorage vacuums and analyzes the partitioned node and edge parents using a simple-protocol statement.
 func optimizeStorage(ctx context.Context, conn optimizeStorageConn) error {
 	var errs []error
 

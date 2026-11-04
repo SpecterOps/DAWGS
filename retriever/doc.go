@@ -4,6 +4,11 @@
 // The primary database operations accept an already-open graph.Database. The
 // package also exposes the collection manifest and JSONL record structs for
 // callers that need to inspect or transform collection contents directly.
+// Load preserves JSON integer property tokens as int64, uses float64 for decimal
+// and exponent tokens, and rejects integer range errors and float overflow during
+// preflight, including inside nested containers.
+// Collection fragment checksum, preflight and load reads use clean relative
+// slash-separated paths beneath the collection root, including symlink resolution.
 //
 // Default option constructors mirror the CLI defaults. Callers can attach a
 // ProgressFunc to receive structured operation, phase, archive, periodic scan,

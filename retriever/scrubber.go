@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	scrubRulesVersion     = "retriever-scrub-v2"
+	scrubRulesVersion     = "retriever-scrub-v3"
 	maxScrubPropertyPlans = 4096
 )
 
@@ -28,6 +28,7 @@ const (
 	actionPseudonymize   PropertyAction = "pseudonymize"
 	actionRedact         PropertyAction = "redact"
 	actionShiftTimestamp PropertyAction = "shift_timestamp"
+	actionScrubNested    PropertyAction = "scrub_nested"
 )
 
 type PropertyPlan struct {
@@ -109,6 +110,7 @@ type scrubActionCounts struct {
 	pseudonymize int
 	redact       int
 	shift        int
+	nested       int
 }
 
 var (
@@ -310,6 +312,18 @@ func (s *scrubber) planProperty(key string, value any) PropertyPlan {
 		return plan
 	}
 
+	// Map fields have their own keys and must receive the full classifier.
+	// Explicit preserve overrides protect the subtree; parent redaction still
+	// removes every value, even when a child key would otherwise be preserved.
+	if _, isMap := value.(map[string]any); isMap {
+		if keyPlan.freeText || s.shouldRedact(keyPlan.normalized, value) {
+			plan.Action = actionRedact
+		} else {
+			plan.Action = actionScrubNested
+		}
+		return plan
+	}
+
 	if keyPlan.timestamp {
 		plan.Action = actionShiftTimestamp
 
@@ -360,6 +374,10 @@ func (s *scrubber) planProperty(key string, value any) PropertyPlan {
 		plan.Shape = s.classifyValue(value)
 
 		return plan
+	}
+
+	if _, isArray := value.([]any); isArray {
+		plan.Action = actionScrubNested
 	}
 
 	return plan
@@ -424,6 +442,30 @@ func (s *scrubber) scrubWithPlan(key string, value any, plan PropertyPlan) any {
 		return s.shiftTimestamp(value)
 	case actionPseudonymize:
 		return s.pseudonymizeValue(key, value, plan.Shape)
+	case actionScrubNested:
+		return s.scrubNestedValue(key, value)
+	default:
+		return value
+	}
+}
+
+func (s *scrubber) scrubNestedValue(key string, value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		if typed == nil {
+			return typed
+		}
+		values, _ := s.scrubPropertiesWithCounts(typed)
+		return values
+	case []any:
+		if typed == nil {
+			return typed
+		}
+		values := make([]any, len(typed))
+		for idx, item := range typed {
+			values[idx], _ = s.scrubProperty(key, item)
+		}
+		return values
 	default:
 		return value
 	}
@@ -563,6 +605,9 @@ func (s *scrubber) shiftTimestamp(value any) any {
 	shift := time.Duration(s.config.TimestampShiftDays) * 24 * time.Hour
 
 	switch typed := value.(type) {
+	case map[string]any:
+		return s.scrubNestedValue("", typed)
+
 	case time.Time:
 		return typed.Add(shift).UTC().Format(time.RFC3339Nano)
 
@@ -636,12 +681,7 @@ func (s *scrubber) pseudonymizeValue(key string, value any, shape string) any {
 		return values
 
 	case map[string]any:
-		values := make(map[string]any, len(typed))
-		for nestedKey, nestedValue := range typed {
-			values[nestedKey] = s.pseudonymizeValue(nestedKey, nestedValue, s.classifyValue(nestedValue))
-		}
-
-		return values
+		return s.scrubNestedValue(key, typed)
 
 	default:
 		return value
@@ -711,6 +751,8 @@ func (s *scrubActionCounts) add(action PropertyAction) {
 		s.redact++
 	case actionShiftTimestamp:
 		s.shift++
+	case actionScrubNested:
+		s.nested++
 	}
 }
 
@@ -719,6 +761,7 @@ func (s *scrubActionCounts) addCounts(other scrubActionCounts) {
 	s.pseudonymize += other.pseudonymize
 	s.redact += other.redact
 	s.shift += other.shift
+	s.nested += other.nested
 }
 
 func (s scrubActionCounts) mapValue() map[string]int {
@@ -728,6 +771,7 @@ func (s scrubActionCounts) mapValue() map[string]int {
 		actionPseudonymize:   s.pseudonymize,
 		actionRedact:         s.redact,
 		actionShiftTimestamp: s.shift,
+		actionScrubNested:    s.nested,
 	} {
 		if count > 0 {
 			result[string(action)] = count

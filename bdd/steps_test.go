@@ -30,11 +30,6 @@ import (
 	"github.com/specterops/dawgs/integration"
 )
 
-var (
-	bddDawgsFailed   bool
-	bddReportInvalid bool
-)
-
 func InitializeTestSuite(ctxtestsuite *godog.TestSuiteContext, ctx context.Context, c *dbContext) {
 	err := c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		if err := tx.Nodes().Delete(); err != nil {
@@ -87,34 +82,26 @@ func TestFeatures(t *testing.T) {
 			InitializeScenario(ctx, dbCtx)
 		},
 		Options: &godog.Options{
-			Format:   "pretty,cucumber:" + bddJSONReportPath,
-			Paths:    []string{"features"},
-			TestingT: t,
+			Format: "pretty,cucumber:" + bddJSONReportPath,
+			Paths:  []string{"features"},
+			Strict: true,
 		},
 	}
 
-	// delete staled reports
-	_ = os.Remove(bddJSONReportPath)
-	suite.Run()
+	if err := os.Remove(bddJSONReportPath); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("failed to remove stale BDD report: %v", err)
+	}
+	// Do not pass TestingT: report-only compatibility failures are evaluated
+	// separately from the enforced scenarios below.
+	status := suite.Run()
 	report, err := writeBDDHTMLReport(bddJSONReportPath, bddHTMLReportPath)
 	if err != nil {
-		bddReportInvalid = true
 		t.Errorf("failed to write BDD HTML report: %v", err)
 		return
 	}
-	if len(report.Folders) == 0 {
-		bddReportInvalid = true
-		t.Errorf("BDD report is empty")
-		return
+	t.Logf("BDD gate: %d enforced, %d failed; compatibility reporting: %d scenarios, %d failed",
+		report.Enforced, report.EnforcedFailed, report.Total-report.Enforced, report.Failed-report.EnforcedFailed)
+	if err := checkBDDGate(report, status); err != nil {
+		t.Error(err)
 	}
-	bddDawgsFailed = hasFolderFailure(report, "dawgs")
-}
-
-func TestMain(m *testing.M) {
-	m.Run()
-	// Only DAWGS feature failures and invalid reports should fail the BDD command.
-	if bddDawgsFailed || bddReportInvalid {
-		os.Exit(1)
-	}
-	os.Exit(0)
 }

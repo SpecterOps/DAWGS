@@ -10,11 +10,13 @@ type. The goal is to remove per-type receiver-name churn and reduce cognitive
 load while reading method bodies.
 
 ```go
+// Start begins serving requests.
 func (s *Server) Start() error {
 	go s.loop()
 	return nil
 }
 
+// Validate reports whether the configuration is supported.
 func (s Config) Validate() error {
 	if s.Firewall.Backend != "nftables" {
 		return fmt.Errorf("unsupported firewall backend %q", s.Firewall.Backend)
@@ -243,6 +245,29 @@ case <-s.joiner.StopC:
 Avoid splitting tightly coupled statements when the second line is the immediate
 effect of the first.
 
+## Documentation Comments
+
+Every function and method declaration and every struct or interface definition
+must have a semantically relevant Go doc comment, whether it is exported or
+unexported. Document every struct field and interface member individually,
+including embedded fields and embedded interface elements. Follow Go doc form
+by starting each comment with the declared identifier when applicable.
+
+Comments must explain the declaration's purpose, meaning, behavior, or contract.
+Merely restating the identifier without adding useful information does not
+satisfy this requirement.
+
+```go
+// RecordStore retrieves and persists records.
+type RecordStore interface {
+	// Find returns the record identified by key.
+	Find(ctx context.Context, key string) (Record, error)
+
+	// Save persists record and returns any write failure.
+	Save(ctx context.Context, record Record) error
+}
+```
+
 ## Function Ordering
 
 Prefer ordering functions in the same file so dependencies appear before the
@@ -256,12 +281,22 @@ Write struct type definitions across multiple lines, with one field per line.
 Align naturally with `gofmt`; do not compress structs onto one line.
 
 ```go
+// FirewallConfig controls how the firewall backend manages bans.
 type FirewallConfig struct {
-	Backend           string `toml:"backend"`
-	Table             string `toml:"table"`
-	BanSet            string `toml:"ban_set"`
-	Family            string `toml:"family"`
-	DryRunSummaryOnly bool   `toml:"dry_run_summary_only"`
+	// Backend selects the firewall implementation.
+	Backend string `toml:"backend"`
+
+	// Table identifies the firewall table managed by the backend.
+	Table string `toml:"table"`
+
+	// BanSet identifies the set containing banned addresses.
+	BanSet string `toml:"ban_set"`
+
+	// Family selects the address family managed by the backend.
+	Family string `toml:"family"`
+
+	// DryRunSummaryOnly limits dry-run output to a summary.
+	DryRunSummaryOnly bool `toml:"dry_run_summary_only"`
 }
 ```
 
@@ -320,13 +355,41 @@ defer fin.Close()
 ```
 
 Use package-level grouped `const` and `var` declarations for related values.
+Every package-level (global) `var` and `const` entity must have a semantically
+relevant Go doc comment, whether it is exported or unexported. Document each
+member of a grouped declaration individually. Comments on function-local `var`
+declarations are optional and left to the author's discretion.
 
 ```go
-const (
-	ErrNotFound = errors.New("not found")
+// ErrNotFound indicates that the requested record does not exist.
+var ErrNotFound = errors.New("not found")
 
-	fileWatchKey        KeyFormat = "file_watch.%s"
-	hostRecordKey       KeyFormat = "hosts.%s"
+const (
+	// fileWatchKey formats a file watch key.
+	fileWatchKey KeyFormat = "file_watch.%s"
+
+	// hostRecordKey formats a host record key.
+	hostRecordKey KeyFormat = "hosts.%s"
+
+	// hostRecordKeyPrefix identifies the host record key namespace.
 	hostRecordKeyPrefix KeyFormat = "hosts."
+)
+```
+
+In grouped `var` and `const` declarations, treat each leading comment and the
+member definition it documents as one unit. Separate that unit from the next
+comment and member definition with exactly one blank line. The final member
+definition may instead be followed directly by the closing `)`.
+
+```go
+var (
+	// expansionRootFilter identifies the recursive traversal root filter.
+	expansionRootFilter = pgsql.Identifier("traversal_root_filter")
+
+	// expansionTerminalFilter identifies the recursive traversal terminal filter.
+	expansionTerminalFilter = pgsql.Identifier("traversal_terminal_filter")
+
+	// expansionPairFilter identifies the recursive traversal pair filter.
+	expansionPairFilter = pgsql.Identifier("traversal_pair_filter")
 )
 ```
