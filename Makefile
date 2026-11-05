@@ -16,7 +16,8 @@ COVERPKG := $(shell $(GO_CMD) list ./... | grep -v '/cypher/parser$$' | tr '\n' 
 
 # Metric configuration
 METRICS_DIR ?= .coverage
-COVERAGE_PROFILE ?= $(METRICS_DIR)/unit.out
+UNIT_COVERAGE_PROFILE ?= $(METRICS_DIR)/unit.out
+INTEGRATION_COVERAGE_PROFILE ?= $(METRICS_DIR)/integration.out
 COVERAGE_FUNC_REPORT ?= $(METRICS_DIR)/coverage.txt
 CYCLO_REPORT ?= $(METRICS_DIR)/cyclomatic.txt
 CRAP_TEXT_REPORT ?= $(METRICS_DIR)/crap.txt
@@ -88,15 +89,15 @@ format:
 # Test targets
 test: $(METRICS_DIR)
 	@echo "Running tests..."
-	@$(GO_CMD) test -race -covermode=atomic -coverprofile=$(COVERAGE_PROFILE) -coverpkg=$(COVERPKG) -count=1 -parallel=10 $(MAIN_PACKAGES)
-	@$(GO_CMD) tool cover -func=$(COVERAGE_PROFILE) > $(COVERAGE_FUNC_REPORT)
+	@$(GO_CMD) test -race -covermode=atomic -coverprofile=$(UNIT_COVERAGE_PROFILE) -coverpkg=$(COVERPKG) -count=1 -parallel=10 $(MAIN_PACKAGES)
+	@$(GO_CMD) tool cover -func=$(UNIT_COVERAGE_PROFILE) > $(COVERAGE_FUNC_REPORT)
 	@echo "Coverage report written to $(COVERAGE_FUNC_REPORT)"
 
 test_all: test test_integration test_bdd_integration
 
-test_integration:
+test_integration: $(METRICS_DIR)
 	@echo "Running all integration tests..."
-	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -coverpkg=$(COVERPKG) -coverprofile=$(INTEGRATION_COVERAGE_PROFILE) -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 test_bdd_integration: $(METRICS_DIR)
 	@echo "Running all BDD integration tests..."
 	@$(GO_CMD) test -v -tags 'bdd_integration' -count=1 ./bdd
@@ -149,29 +150,29 @@ complexity_check: $(METRICS_DIR)
 
 crap: test
 	@echo "Calculating CRAP metrics..."
-	@$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -text $(CRAP_TEXT_REPORT) -json $(CRAP_JSON_REPORT) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT)
+	@$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(UNIT_COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -text $(CRAP_TEXT_REPORT) -json $(CRAP_JSON_REPORT) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT)
 	@echo "CRAP and quality reports written to $(CRAP_TEXT_REPORT), $(CRAP_JSON_REPORT), $(QUALITY_TEXT_REPORT), $(QUALITY_JSON_REPORT), and $(METRICS_HTML_REPORT)"
 
 crap_check: test
 	@echo "Checking CRAP metrics..."
 	@if [ "$(METRICS_ENFORCE)" = "1" ]; then \
-		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -text $(CRAP_TEXT_REPORT) -json $(CRAP_JSON_REPORT) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -fail-over $(CRAP_OVER) -fail-quality; \
+		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(UNIT_COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -text $(CRAP_TEXT_REPORT) -json $(CRAP_JSON_REPORT) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -fail-over $(CRAP_OVER) -fail-quality; \
 	else \
-		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -text $(CRAP_TEXT_REPORT) -json $(CRAP_JSON_REPORT) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT); \
+		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(UNIT_COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -text $(CRAP_TEXT_REPORT) -json $(CRAP_JSON_REPORT) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT); \
 		echo "METRICS_ENFORCE=0; CRAP threshold $(CRAP_OVER) is report-only."; \
 	fi
 
 quality: test
 	@echo "Calculating quality metrics..."
-	@$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false
+	@$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(UNIT_COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false
 	@echo "Quality reports written to $(QUALITY_TEXT_REPORT), $(QUALITY_JSON_REPORT), and $(METRICS_HTML_REPORT)"
 
 quality_check: test
 	@echo "Checking quality metrics..."
 	@if [ "$(METRICS_ENFORCE)" = "1" ]; then \
-		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false -fail-quality; \
+		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(UNIT_COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false -fail-quality; \
 	else \
-		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false; \
+		$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(UNIT_COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false; \
 		echo "METRICS_ENFORCE=0; quality watch signals are report-only."; \
 	fi
 
@@ -187,7 +188,7 @@ quality_backend: test
 	CONNECTION_STRING="$(NEO4J_CONNECTION_STRING)" $(GO_CMD) test -json -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES) > $(BACKEND_NEO4J_REPORT); \
 	neo4j_status=$$?; \
 	set -e; \
-	$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) -backend-result pg=$(BACKEND_PG_REPORT) -backend-result neo4j=$(BACKEND_NEO4J_REPORT) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false; \
+	$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(UNIT_COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) -backend-result pg=$(BACKEND_PG_REPORT) -backend-result neo4j=$(BACKEND_NEO4J_REPORT) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false; \
 	if [ $$pg_status -ne 0 ]; then exit $$pg_status; fi; \
 	if [ $$neo4j_status -ne 0 ]; then exit $$neo4j_status; fi
 

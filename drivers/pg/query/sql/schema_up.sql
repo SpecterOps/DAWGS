@@ -1493,9 +1493,15 @@ begin
 
       -- Check to see if the root front is satisfied
       if exists(select 1 from next_front r where r.satisfied) then
-        -- Return all satisfied paths from the next front
+        -- Return every shortest path at this depth before retiring the
+        -- satisfied roots and continuing the search for unresolved roots.
         return query select * from next_front r where r.satisfied;
-        exit;
+
+        delete from next_front unresolved
+        where exists(select 1
+                     from next_front resolved
+                     where resolved.root_id = unresolved.root_id
+                       and resolved.satisfied);
       end if;
 
       -- Swap the next_front table into the forward_front
@@ -1549,9 +1555,15 @@ begin
 
       -- Check to see if the root front is satisfied
       if exists(select 1 from next_front r where r.satisfied) then
-        -- Return all satisfied paths from the next front
+        -- Return every shortest path at this depth before retiring the
+        -- satisfied roots and continuing the search for unresolved roots.
         return query select * from next_front r where r.satisfied;
-        exit;
+
+        delete from next_front unresolved
+        where exists(select 1
+                     from next_front resolved
+                     where resolved.root_id = unresolved.root_id
+                       and resolved.satisfied);
       end if;
 
       -- Swap the next_front table into the forward_front
