@@ -85,15 +85,14 @@ func (c *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ err
 	if c.db == nil {
 		return ctx, nil
 	}
-	if err := c.anEmptyGraph(ctx); err != nil {
+	db := c.db
+	errEmptyGraph := c.anEmptyGraph(ctx)
+	c.db = nil
+	closeDbErr := db.Close(context.Background())
+	if err := errors.Join(errEmptyGraph, closeDbErr); err != nil {
 		return ctx, err
 	}
 
-	db := c.db
-	c.db = nil
-	if err := db.Close(context.Background()); err != nil {
-		return ctx, err
-	}
 	return ctx, nil
 }
 
