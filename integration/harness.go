@@ -71,7 +71,13 @@ type Session struct {
 	DB               graph.Database
 	PGPool           *pgxpool.Pool
 	Ctx              context.Context
+	cleanupMode      CleanupMode
 }
+
+var (
+	errConnectionStringMissing = errors.New("connection string is not set")
+	errDriverMismatch          = errors.New("connection string driver mismatch")
+)
 
 // DriverFromConnStr returns the dawgs driver name based on the connection string scheme.
 func DriverFromConnectionString(connStr string) (string, error) {
@@ -90,9 +96,7 @@ func DriverFromConnectionString(connStr string) (string, error) {
 	}
 }
 
-func Open(t *testing.T, opts Options) *Session {
-	t.Helper()
-
+func OpenSession(opts Options) (*Session, error) {
 	ctx := context.Background()
 	connEnv := opts.ConnectionStringEnvVar
 	if connEnv == "" {
@@ -101,22 +105,16 @@ func Open(t *testing.T, opts Options) *Session {
 
 	connStr := os.Getenv(connEnv)
 	if connStr == "" {
-		if opts.SkipIfNoConnection {
-			t.Skipf("%s env var is not set", connEnv)
-		}
-		t.Fatalf("%s env var is not set", connEnv)
+		return nil, fmt.Errorf("%w: %s env var is not set", errConnectionStringMissing, connEnv)
 	}
 
 	driver, err := DriverFromConnectionString(connStr)
 	if err != nil {
-		t.Fatalf("failed to detect driver: %v", err)
+		return nil, fmt.Errorf("failed to detect driver: %w", err)
 	}
 
 	if opts.RequireDriver != "" && driver != opts.RequireDriver {
-		if opts.SkipIfDriverMismatch {
-			t.Skipf("%s is not a %s connection string", connEnv, opts.RequireDriver)
-		}
-		t.Fatalf("%s is not a %s connection string", connEnv, opts.RequireDriver)
+		return nil, fmt.Errorf("%w: %s is not a %s connection string", errDriverMismatch, connEnv, opts.RequireDriver)
 	}
 
 	cfg := dawgs.Config{
@@ -128,16 +126,17 @@ func Open(t *testing.T, opts Options) *Session {
 		ConnectionString: connStr,
 		Driver:           driver,
 		Ctx:              ctx,
+		cleanupMode:      opts.CleanupMode,
 	}
 
 	if driver == pg.DriverName {
 		poolCfg, err := pgxpool.ParseConfig(connStr)
 		if err != nil {
-			t.Fatalf("failed to parse pool configuration: %v", err)
+			return nil, fmt.Errorf("failed to parse pool configuration: %w", err)
 		}
 		pool, err := pg.NewPool(poolCfg)
 		if err != nil {
-			t.Fatalf("failed to create PG pool: %v", err)
+			return nil, fmt.Errorf("failed to create PG pool: %w", err)
 		}
 		cfg.Pool = pool
 		session.PGPool = pool
@@ -145,38 +144,88 @@ func Open(t *testing.T, opts Options) *Session {
 
 	db, err := dawgs.Open(ctx, driver, cfg)
 	if err != nil {
-		t.Fatalf("failed to open database: %v", err)
+		if session.PGPool != nil {
+			session.PGPool.Close()
+		}
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 	session.DB = db
 
 	schema := opts.Schema
 	if schema == nil {
-		schema = buildSchema(t, opts)
+		schema, err = buildSchema(opts)
+		if err != nil {
+			_ = db.Close(ctx)
+			return nil, fmt.Errorf("failed to build schema: %w", err)
+		}
 	}
 	if schema != nil {
 		if err := db.AssertSchema(ctx, *schema); err != nil {
-			t.Fatalf("failed to assert schema: %v", err)
+			_ = db.Close(ctx)
+			return nil, fmt.Errorf("failed to assert schema: %w", err)
 		}
 	}
 
-	t.Cleanup(func() {
-		if opts.CleanupMode != CloseOnly {
-			_ = db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-				return tx.Nodes().Delete()
-			})
+	return session, nil
+}
+
+func Open(t *testing.T, opts Options) *Session {
+	t.Helper()
+
+	session, err := OpenSession(opts)
+	if err != nil {
+		if errors.Is(err, errConnectionStringMissing) && opts.SkipIfNoConnection {
+			t.Skipf("%v", err)
 		}
-		db.Close(ctx)
+		if errors.Is(err, errDriverMismatch) && opts.SkipIfDriverMismatch {
+			t.Skipf("%v", err)
+		}
+		t.Fatalf("failed to open integration database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		if err := session.Close(); err != nil {
+			t.Errorf("failed to clean up integration database: %v", err)
+		}
 	})
 
 	return session
 }
 
+// ResetGraph removes all nodes and cascading edges from the session database.
+func (s *Session) ResetGraph() error {
+	return s.DB.WriteTransaction(s.Ctx, func(tx graph.Transaction) error {
+		return tx.Nodes().Delete()
+	})
+}
+
+// RegisterGraphCleanup resets the graph at the end of the supplied test scope.
+// It is intended for subtests sharing a session opened by their parent test.
+func (s *Session) RegisterGraphCleanup(t testing.TB) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := s.ResetGraph(); err != nil {
+			t.Errorf("failed to clear graph: %v", err)
+		}
+	})
+}
+
+// Close applies the configured cleanup mode and closes the database connection.
+func (s *Session) Close() error {
+	var cleanupErr error
+	if s.cleanupMode != CloseOnly {
+		cleanupErr = s.ResetGraph()
+	}
+	if err := s.DB.Close(s.Ctx); err != nil && cleanupErr == nil {
+		cleanupErr = err
+	}
+	return cleanupErr
+}
+
 func (s *Session) ClearGraph(t *testing.T) {
 	t.Helper()
 
-	if err := s.DB.WriteTransaction(s.Ctx, func(tx graph.Transaction) error {
-		return tx.Nodes().Delete()
-	}); err != nil {
+	if err := s.ResetGraph(); err != nil {
 		t.Fatalf("failed to clear graph: %v", err)
 	}
 }
@@ -243,15 +292,16 @@ func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction)
 	return err
 }
 
-func buildSchema(t *testing.T, opts Options) *graph.Schema {
-	t.Helper()
-
-	nodeKinds, edgeKinds := collectKinds(t, opts.Datasets, opts.datasetPath())
+func buildSchema(opts Options) (*graph.Schema, error) {
+	nodeKinds, edgeKinds, err := collectKinds(opts.Datasets, opts.datasetPath())
+	if err != nil {
+		return nil, err
+	}
 	nodeKinds = nodeKinds.Add(opts.ExtraNodeKinds...)
 	edgeKinds = edgeKinds.Add(opts.ExtraEdgeKinds...)
 
 	if len(nodeKinds) == 0 && len(edgeKinds) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	graphName := opts.GraphName
@@ -266,25 +316,23 @@ func buildSchema(t *testing.T, opts Options) *graph.Schema {
 			Edges: edgeKinds,
 		}},
 		DefaultGraph: graph.Graph{Name: graphName},
-	}
+	}, nil
 }
 
 // collectKinds parses the given datasets and returns the union of all node and edge kinds.
-func collectKinds(t *testing.T, datasets []string, datasetPath func(name string) string) (graph.Kinds, graph.Kinds) {
-	t.Helper()
-
+func collectKinds(datasets []string, datasetPath func(name string) string) (graph.Kinds, graph.Kinds, error) {
 	var nodeKinds, edgeKinds graph.Kinds
 
 	for _, name := range datasets {
 		f, err := os.Open(datasetPath(name))
 		if err != nil {
-			t.Fatalf("failed to open dataset %q for kind scanning: %v", name, err)
+			return nil, nil, fmt.Errorf("failed to open dataset %q for kind scanning: %w", name, err)
 		}
 
 		doc, err := opengraph.ParseDocument(f)
 		f.Close()
 		if err != nil {
-			t.Fatalf("failed to parse dataset %q: %v", name, err)
+			return nil, nil, fmt.Errorf("failed to parse dataset %q: %w", name, err)
 		}
 
 		nk, ek := doc.Graph.Kinds()
@@ -292,7 +340,7 @@ func collectKinds(t *testing.T, datasets []string, datasetPath func(name string)
 		edgeKinds = edgeKinds.Add(ek...)
 	}
 
-	return nodeKinds, edgeKinds
+	return nodeKinds, edgeKinds, nil
 }
 
 func (s *Options) datasetPath() func(name string) string {

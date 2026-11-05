@@ -70,6 +70,7 @@ func TestWipeGraph(t *testing.T) {
 	}
 
 	t.Run("truncates all partitions and atomically retains the recreated node", func(t *testing.T) {
+		session.RegisterGraphCleanup(t)
 		session.ClearGraph(t)
 		seed(t)
 
@@ -101,6 +102,7 @@ func TestWipeGraph(t *testing.T) {
 	})
 
 	t.Run("rolls back the truncate when the retain delegate fails", func(t *testing.T) {
+		session.RegisterGraphCleanup(t)
 		session.ClearGraph(t)
 		seed(t)
 
@@ -118,6 +120,7 @@ func TestWipeGraph(t *testing.T) {
 	})
 
 	t.Run("truncates without a retain delegate", func(t *testing.T) {
+		session.RegisterGraphCleanup(t)
 		session.ClearGraph(t)
 		seed(t)
 
