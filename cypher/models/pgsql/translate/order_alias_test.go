@@ -2,6 +2,7 @@ package translate
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
@@ -9,6 +10,37 @@ import (
 	"github.com/specterops/dawgs/cypher/models/pgsql/format"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDomainObjectIDOrderByLimit(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		for _, tc := range []struct {
+			query string
+			order string
+		}{
+			{`MATCH (n:Domain) RETURN n LIMIT 10`, ``},
+			{`MATCH (n:Domain) RETURN n ORDER BY n.objectid LIMIT 10`, ` order by ((s0.n0).properties -> E'objectid') limit 10`},
+			{`MATCH (n:Domain) RETURN n ORDER BY n.objectid ASC LIMIT 10`, ` order by ((s0.n0).properties -> E'objectid') limit 10`},
+			{`MATCH (n:Domain) RETURN n ORDER BY n.objectid DESC LIMIT 10`, ` order by ((s0.n0).properties -> E'objectid') desc limit 10`},
+		} {
+			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
+				require.NoError(t, err)
+				translated, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				require.NoError(t, err)
+				formatted, err := Translated(translated)
+				require.NoError(t, err)
+				t.Log(formatted.Statement)
+				if tc.order == "" {
+					require.NotContains(t, formatted.Statement, "order by")
+				} else {
+					require.Contains(t, formatted.Statement, tc.order)
+				}
+				require.Contains(t, formatted.Statement, "select s0.n0 as n from s0")
+				require.Equal(t, 1, strings.Count(formatted.Statement, "limit 10"), "LIMIT must not truncate the input before sorting")
+			})
+		}
+	}
+}
 
 func TestTailOrderAliasExpressions(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {

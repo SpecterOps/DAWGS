@@ -1342,6 +1342,38 @@
       }
     },
     {
+      "name": "Domain object ID unordered limit",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Domain) return n limit 10",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Domain object ID ascending node limit",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Domain) return n order by n.objectid asc limit 10",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Domain object ID descending node limit",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Domain) return n order by n.objectid desc limit 10",
+        "fitness": 3
+      }
+    },
+    {
+      "name": "Domain object ID scalar control",
+      "type": "string_match",
+      "details": {
+        "query": "match (n:Domain) return n.objectid order by n.objectid asc limit 10",
+        "fitness": 3
+      }
+    },
+    {
       "name": "Order alias identity 1",
       "type": "string_match",
       "details": {
@@ -2067,6 +2099,38 @@
       "details": {
         "query": "match (n:Base {name: 'a'}) set n:Other:`new label` remove n:`has space` return count(*)",
         "fitness": 6
+      }
+    },
+    {
+      "name": "Multi relationship expansion depth 2 SET with RETURN",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) where s.name = 'root' set t.selected = true return t",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Multi relationship expansion depth 2 SET without RETURN",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) where s.name = 'root' set t.selected = true",
+        "fitness": 6
+      }
+    },
+    {
+      "name": "Multi relationship expansion depth 3 SET with RETURN",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) where s.name = 'root' set t.selected = true return t",
+        "fitness": 5
+      }
+    },
+    {
+      "name": "Multi relationship expansion depth 3 SET without RETURN",
+      "type": "string_match",
+      "details": {
+        "query": "match (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) where s.name = 'root' set t.selected = true",
+        "fitness": 5
       }
     }
   ]

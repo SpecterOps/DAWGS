@@ -14,6 +14,21 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
+-- case: match (n:NodeKind1) return n limit 10
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0 limit 10;
+
+-- case: match (n:NodeKind1) return n order by n.objectid limit 10
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0 order by ((s0.n0).properties -> E'objectid') limit 10;
+
+-- case: match (n:NodeKind1) return n order by n.objectid asc limit 10
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0 order by ((s0.n0).properties -> E'objectid') limit 10;
+
+-- case: match (n:NodeKind1) return n order by n.objectid desc limit 10
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select s0.n0 as n from s0 order by ((s0.n0).properties -> E'objectid') desc limit 10;
+
+-- case: match (n:NodeKind1) return n.objectid order by n.objectid limit 10
+with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s0.n0).properties -> E'objectid') as "n.objectid" from s0 order by ((s0.n0).properties -> E'objectid') limit 10;
+
 -- case: match (n:NodeKind1) return n.k as x order by x + 0
 -- pgsql_params:{"__strlit0":"null","__strlit1":"+"}
 with s0 as (select (n0.id, n0.kind_ids, n0.properties)::nodecomposite as n0 from node n0 where n0.kind_ids operator (pg_catalog.@>) array [1]::int2[]) select ((s0.n0).properties -> E'k') as x from s0 order by cypher_arithmetic(nullif(((((s0.n0).properties -> E'k')))::jsonb, (@__strlit0::text)::jsonb)::jsonb, to_jsonb((0)::int8)::jsonb, @__strlit1::text)::jsonb;

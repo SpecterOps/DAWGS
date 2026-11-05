@@ -1,0 +1,1903 @@
+{
+  "study_id": "path-batch-materialization-v1",
+  "date": "2026-11-05",
+  "disposition": "diagnostic only; test-only candidate; production unchanged",
+  "source_base_commit": "74727f205b9c875031ff3e810a9a4658b187d24f",
+  "source_state": "modified working tree; no clean-source/binary-bound qualification capture",
+  "source_hash_scope": "Documentation-time hashes for locating this implementation. These are not hashes captured at benchmark execution time; source evolved during the study.",
+  "source_snapshot_sha256": {
+    "integration/pgsql_path_batch_candidate_test.go": "34bc9be7ade66d538196d364414050c2d2b3adfd0ced4eb0ef694734a652d48d",
+    "integration/pgsql_path_batch_corpus_test.go": "7e292fec9f0a64399f8099e3023c95f76136c5fa93cfe053cea4041e09717f3e",
+    "integration/pgsql_path_batch_pages_test.go": "cd892895cd3d6fb9f435107fbdd262b55c41885c4e79b5bf77a8606bf012a738",
+    "integration/pgsql_path_batch_fixtures_test.go": "029cea703fab3e8a453a17621df591b92f25cfd83b0e55070b0136ba457bfe59",
+    "integration/pgsql_path_batch_benchmark_test.go": "3a073839ee1beeeeb8cd62a35e6acb8aabb1ed4e25a4fddb1a73450d61de2b80",
+    "integration/neo4j_path_batch_reference_test.go": "bd138e55c5ee85824b763abece143717db16f72b5b0d637a0dc48e6343f0798c",
+    "drivers/pg/query/sql/schema_up.sql": "5ef72afbd56f31654db1afe3819298896892df2d310c4a09e8f181c2814f9a58",
+    "cmd/graphbench/waterfall.go": "d19b920b9928e9844600e36e765717859bb4d9c95a85d7d583b024a4506261bd",
+    "go.mod": "ab9e9cf9ca817703d1beb8ce9630b57b00ba5a20fd1d093da8fa736410fb474a",
+    "go.sum": "1cc3b3c046c735d0075e5edf2a78b55dc072244800956980c78732aa0c865e78"
+  },
+  "environment": {
+    "block_size": "8192",
+    "captured_utc": "2026-11-05T19:37:12.473249993Z",
+    "go_version": "go1.27.3-X:nodwarf5",
+    "gomaxprocs": 20,
+    "hash_mem_multiplier": "2",
+    "jit": "on",
+    "memory_note": "Client streaming/discard run; 1ms sampled process heap, not exact peak. PostgreSQL maximum visible node memory is partial; helper internals and whole-backend peak are unavailable.",
+    "plan_cache_mode": "auto",
+    "postgres_version": "PostgreSQL 18.6 on x86_64-pc-linux-gnu, compiled by x86_64-pc-linux-gnu-gcc (Gentoo 16.2.1_p20260926 p1) 16.2.1 20260926, 64-bit",
+    "timing_rounds_after_warmup": 5,
+    "warmup_rounds": 6,
+    "work_mem": "4MB"
+  },
+  "neo4j_version": "4.4.44 Community",
+  "method": {
+    "warmup_cycles": 6,
+    "measured_cycles": 5,
+    "latency_aggregation": "separate medians of first decoded row and full consumption",
+    "timing_includes": "Raw call, Next, driver decoding, graph.Path mapping, full drain/close for total",
+    "memory_replays_per_arm": 1,
+    "memory_sampling_interval_micros": 1000,
+    "explain_replays_per_arm_per_work_mem": 1,
+    "confidence_intervals": null,
+    "host_aa_calibration": false,
+    "frozen_holdout": false,
+    "cancellation_concurrency_snapshot_qualification": false
+  },
+  "coverage": {
+    "corpus_query_identities": 2450,
+    "direct_path_query_identities": 302,
+    "covered_query_identities_in_at_least_one_mode": 293,
+    "path_column_checks": 575,
+    "path_result_occurrences": 1004,
+    "by_mode": {
+      "enabled": {
+        "single_column_checks": 202,
+        "single_column_path_occurrences": 401,
+        "multi_column_queries": 45,
+        "isolated_path_column_checks": 49,
+        "isolated_path_occurrences": 53,
+        "page_checks": 27,
+        "page_path_occurrences": 41,
+        "covered_query_identities": 274
+      },
+      "disabled": {
+        "single_column_checks": 218,
+        "single_column_path_occurrences": 413,
+        "multi_column_queries": 45,
+        "isolated_path_column_checks": 49,
+        "isolated_path_occurrences": 53,
+        "page_checks": 30,
+        "page_path_occurrences": 43,
+        "covered_query_identities": 293
+      }
+    },
+    "aggregation_note": "Single-column eligibility is supplemented by 45 multi-column queries and 30 limited query identities. Excluded page records are never counted. Mode records and path occurrences are not unique logical queries/paths.",
+    "outside_candidate": [
+      {
+        "source": "integration/testdata/cases/create_inline.json",
+        "name": "create a named path and return it",
+        "reasons": [
+          "mutation"
+        ]
+      },
+      {
+        "source": "integration/testdata/cases/multipart_inline.json",
+        "name": "with barrier keeps optimized expansion path semantics",
+        "reasons": [
+          "final result is not a directly assembled path"
+        ]
+      },
+      {
+        "source": "integration/testdata/cases/optimizer_inline.json",
+        "name": "inbound traversal reversal returns valid path for traversal before WITH barrier",
+        "reasons": [
+          "final result is not a directly assembled path"
+        ]
+      },
+      {
+        "source": "integration/testdata/cases/pattern_binding_inline.json",
+        "name": "filter a bound expansion path using head relationship and tail nodes",
+        "reasons": [
+          "final result is not a directly assembled path"
+        ]
+      },
+      {
+        "source": "integration/testdata/cases/shortest_bound.json",
+        "name": "bound pair shortest same endpoint keeps error contract",
+        "reasons": [
+          "expected query error"
+        ]
+      },
+      {
+        "source": "integration/testdata/cases/shortest_paths.json",
+        "name": "shortest path to self errors",
+        "reasons": [
+          "expected query error"
+        ]
+      },
+      {
+        "source": "integration/testdata/templates/create_shapes.json",
+        "name": "create parameter property maps/path relationship parameter properties are materialized",
+        "reasons": [
+          "mutation"
+        ]
+      },
+      {
+        "source": "integration/testdata/templates/lowering_regression_shapes.json",
+        "name": "greedy projection and zero-depth shortest path retain full values/WITH star observes the full path before a scalar final projection",
+        "reasons": [
+          "final result is not a directly assembled path"
+        ]
+      },
+      {
+        "source": "integration/testdata/templates/pattern_shapes.json",
+        "name": "shortest path relationship predicate functions/post-filtered shortest path is not replaced by longer path",
+        "reasons": [
+          "final result is not a directly assembled path"
+        ]
+      }
+    ]
+  },
+  "artifact_sha256": {
+    ".coverage/path-batch-study/environment.json": "b66adef3e25a5fcf9e0d360e819dd71aaebbceff3d8a9e85c51d2cc513e316c9",
+    ".coverage/path-batch-study/results.json": "f6ebd0a4d4973184dfe6ce771d2ba8d0a67441a6df421ada48935a947e0b4840",
+    ".coverage/path-batch-study/neo4j-results.json": "c8e8f93dc239c4771759beed7fa4043e24fc762847389a9fa85637c1404fb8cc",
+    ".coverage/path-batch-study/corpus-inventory.json": "c7c5ae7a5b8401663e42e1327f7c34de46563d1f33945b93df35c2e1b33244e6",
+    ".coverage/path-batch-study/corpus-pages.json": "0fa30b06cffdae2f878680d67f49a5272566148de7f60b8972cff5e1db79d443",
+    ".coverage/path-batch-performance.log": "7059f7ee06b812dcc0e1d63f40c698e10dfea99768fb857638c04b9a46ff17a1",
+    ".coverage/path-batch-neo4j.log": "30b266dc2a7e4d186e51c703ff1201a05d01a4fee7186f4782a480c4f9d1468d",
+    ".coverage/path-batch-correctness-race.log": "647e4a34576440116bf0a07d66f2f59dfa895d11f0c3c511bc635669e389b4c6",
+    ".coverage/path-batch-pages-race.log": "5a3bb3d5125822fd3a66e743c77e4fe5519cb5cb94c9dc5cc377d1344da74a9f",
+    ".coverage/path-batch-sampler-race.log": "da1f94a8bbc741d5895e029708970a9536740345755c5c6b5b14541f096ff583",
+    ".coverage/path-batch-driver-build.log": "cf37fa4ec07b89d56c5ac08a5f4704a25fc778de2b996bb0b0a34868ce8650de"
+  },
+  "measurements": [
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 0.597842,
+        "total_ms": 25.375488,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 8110824,
+        "client_sampled_extra_heap_bytes": 3518808,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        23.933547,
+        26.360483
+      ],
+      "measured_first_row_ms_range": [
+        0.467835,
+        0.637767
+      ],
+      "plan": {
+        "execution_ms": 23.384,
+        "planning_ms": 0.346,
+        "planning_used_kb": 294,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          584
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 22.913,
+        "planning_ms": 0.365,
+        "planning_used_kb": 294,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 49152,
+        "temp_written_bytes": 90112,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          584
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "batch_full",
+      "median": {
+        "first_decoded_row_ms": 5.996952,
+        "total_ms": 25.024988,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 8104952,
+        "client_sampled_extra_heap_bytes": 3488016,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        22.459255,
+        25.892633
+      ],
+      "measured_first_row_ms_range": [
+        5.685991,
+        6.929227
+      ],
+      "plan": {
+        "execution_ms": 7.202,
+        "planning_ms": 0.762,
+        "planning_used_kb": 824,
+        "max_visible_executor_node_kb": 500,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 7.832,
+        "planning_ms": 0.499,
+        "planning_used_kb": 824,
+        "max_visible_executor_node_kb": 121,
+        "max_disk_sort_kb": 568,
+        "max_hash_batches": 8,
+        "temp_read_bytes": 6979584,
+        "temp_written_bytes": 6389760,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 0.682497,
+        "total_ms": 0.683189,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 26936,
+        "client_sampled_extra_heap_bytes": 26936,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        0.56595,
+        0.766412
+      ],
+      "measured_first_row_ms_range": [
+        0.565495,
+        0.765343
+      ],
+      "plan": {
+        "execution_ms": 0.201,
+        "planning_ms": 0.474,
+        "planning_used_kb": 297,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          73
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 0.19,
+        "planning_ms": 0.292,
+        "planning_used_kb": 297,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          73
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "batch_outer_limit1",
+      "median": {
+        "first_decoded_row_ms": 3.835344,
+        "total_ms": 3.836716,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 24280,
+        "client_sampled_extra_heap_bytes": 24280,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        3.745621,
+        6.1153
+      ],
+      "measured_first_row_ms_range": [
+        3.744565,
+        6.113952
+      ],
+      "plan": {
+        "execution_ms": 4.783,
+        "planning_ms": 0.525,
+        "planning_used_kb": 825,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 6.072,
+        "planning_ms": 0.698,
+        "planning_used_kb": 825,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 568,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 2809856,
+        "temp_written_bytes": 3514368,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "batch_page_limit1",
+      "median": {
+        "first_decoded_row_ms": 0.50469,
+        "total_ms": 0.504941,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 24632,
+        "client_sampled_extra_heap_bytes": 24632,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        0.449741,
+        0.671917
+      ],
+      "measured_first_row_ms_range": [
+        0.449511,
+        0.671225
+      ],
+      "plan": {
+        "execution_ms": 0.353,
+        "planning_ms": 0.763,
+        "planning_used_kb": 877,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          73
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 0.312,
+        "planning_ms": 0.728,
+        "planning_used_kb": 877,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          73
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 3.04813,
+        "total_ms": 176.441907,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 8212816,
+        "client_sampled_extra_heap_bytes": 4904992,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        174.918089,
+        179.080304
+      ],
+      "measured_first_row_ms_range": [
+        2.872564,
+        3.312895
+      ],
+      "plan": {
+        "execution_ms": 165.028,
+        "planning_ms": 0.293,
+        "planning_used_kb": 298,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 167.881,
+        "planning_ms": 0.348,
+        "planning_used_kb": 298,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 49152,
+        "temp_written_bytes": 155648,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "batch_full",
+      "median": {
+        "first_decoded_row_ms": 8.445621,
+        "total_ms": 21.962377,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 8215376,
+        "client_sampled_extra_heap_bytes": 5329048,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        21.68881,
+        22.926828
+      ],
+      "measured_first_row_ms_range": [
+        8.135959,
+        8.54775
+      ],
+      "plan": {
+        "execution_ms": 9.827,
+        "planning_ms": 0.464,
+        "planning_used_kb": 828,
+        "max_visible_executor_node_kb": 851,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 14.016,
+        "planning_ms": 0.489,
+        "planning_used_kb": 828,
+        "max_visible_executor_node_kb": 123,
+        "max_disk_sort_kb": 752,
+        "max_hash_batches": 8,
+        "temp_read_bytes": 9715712,
+        "temp_written_bytes": 9797632,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 1.807871,
+        "total_ms": 1.808971,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 27640,
+        "client_sampled_extra_heap_bytes": 27640,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        1.680636,
+        1.930654
+      ],
+      "measured_first_row_ms_range": [
+        1.679905,
+        1.929512
+      ],
+      "plan": {
+        "execution_ms": 1.354,
+        "planning_ms": 0.282,
+        "planning_used_kb": 301,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 1.463,
+        "planning_ms": 0.321,
+        "planning_used_kb": 301,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 65536,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "batch_outer_limit1",
+      "median": {
+        "first_decoded_row_ms": 8.004655,
+        "total_ms": 8.006067,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 24440,
+        "client_sampled_extra_heap_bytes": 24440,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        7.670771,
+        8.383913
+      ],
+      "measured_first_row_ms_range": [
+        7.669142,
+        8.382605
+      ],
+      "plan": {
+        "execution_ms": 10.481,
+        "planning_ms": 0.48,
+        "planning_used_kb": 830,
+        "max_visible_executor_node_kb": 851,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 13.87,
+        "planning_ms": 0.531,
+        "planning_used_kb": 829,
+        "max_visible_executor_node_kb": 123,
+        "max_disk_sort_kb": 752,
+        "max_hash_batches": 8,
+        "temp_read_bytes": 6692864,
+        "temp_written_bytes": 8110080,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "batch_page_limit1",
+      "median": {
+        "first_decoded_row_ms": 1.545242,
+        "total_ms": 1.545959,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 24520,
+        "client_sampled_extra_heap_bytes": 24520,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        1.39322,
+        1.567184
+      ],
+      "measured_first_row_ms_range": [
+        1.391665,
+        1.566369
+      ],
+      "plan": {
+        "execution_ms": 1.966,
+        "planning_ms": 0.718,
+        "planning_used_kb": 881,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 1.213,
+        "planning_ms": 0.706,
+        "planning_used_kb": 881,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 65536,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 0.95587,
+        "total_ms": 156.953305,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 43765840,
+        "client_sampled_extra_heap_bytes": 4584928,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        148.211044,
+        167.688046
+      ],
+      "measured_first_row_ms_range": [
+        0.9396,
+        2.029448
+      ],
+      "plan": {
+        "execution_ms": 117.122,
+        "planning_ms": 0.282,
+        "planning_used_kb": 294,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          584
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 118.696,
+        "planning_ms": 0.306,
+        "planning_used_kb": 294,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 49152,
+        "temp_written_bytes": 90112,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          584
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "batch_full",
+      "median": {
+        "first_decoded_row_ms": 16.666356,
+        "total_ms": 59.111827,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 43704152,
+        "client_sampled_extra_heap_bytes": 4783336,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        49.891412,
+        67.266218
+      ],
+      "measured_first_row_ms_range": [
+        13.636087,
+        22.920497
+      ],
+      "plan": {
+        "execution_ms": 17.473,
+        "planning_ms": 0.533,
+        "planning_used_kb": 824,
+        "max_visible_executor_node_kb": 4628,
+        "max_disk_sort_kb": 4688,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 4800512,
+        "temp_written_bytes": 4808704,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 31.691,
+        "planning_ms": 0.498,
+        "planning_used_kb": 823,
+        "max_visible_executor_node_kb": 352,
+        "max_disk_sort_kb": 4712,
+        "max_hash_batches": 16,
+        "temp_read_bytes": 76562432,
+        "temp_written_bytes": 71475200,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 2.147544,
+        "total_ms": 2.150005,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 117472,
+        "client_sampled_extra_heap_bytes": 117472,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        0.62037,
+        2.594081
+      ],
+      "measured_first_row_ms_range": [
+        0.617016,
+        2.590811
+      ],
+      "plan": {
+        "execution_ms": 0.464,
+        "planning_ms": 0.359,
+        "planning_used_kb": 297,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          73
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 0.442,
+        "planning_ms": 0.338,
+        "planning_used_kb": 297,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          73
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "batch_outer_limit1",
+      "median": {
+        "first_decoded_row_ms": 9.902605,
+        "total_ms": 9.905102,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 120144,
+        "client_sampled_extra_heap_bytes": 120144,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        9.256844,
+        12.450679
+      ],
+      "measured_first_row_ms_range": [
+        9.254606,
+        12.447664
+      ],
+      "plan": {
+        "execution_ms": 10.082,
+        "planning_ms": 0.49,
+        "planning_used_kb": 825,
+        "max_visible_executor_node_kb": 176,
+        "max_disk_sort_kb": 4688,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 2670592,
+        "temp_written_bytes": 4808704,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 15.74,
+        "planning_ms": 0.475,
+        "planning_used_kb": 824,
+        "max_visible_executor_node_kb": 121,
+        "max_disk_sort_kb": 4712,
+        "max_hash_batches": 2,
+        "temp_read_bytes": 33202176,
+        "temp_written_bytes": 38928384,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 13,
+        "hydrated_edge_rows": 72,
+        "recursive_frontier_rows": [
+          584
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "batch_page_limit1",
+      "median": {
+        "first_decoded_row_ms": 1.162345,
+        "total_ms": 1.164049,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 120160,
+        "client_sampled_extra_heap_bytes": 120160,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        0.462351,
+        1.240808
+      ],
+      "measured_first_row_ms_range": [
+        0.460689,
+        1.239034
+      ],
+      "plan": {
+        "execution_ms": 0.289,
+        "planning_ms": 0.441,
+        "planning_used_kb": 877,
+        "max_visible_executor_node_kb": 38,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          73
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 0.282,
+        "planning_ms": 0.464,
+        "planning_used_kb": 877,
+        "max_visible_executor_node_kb": 38,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          73
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 1.956655,
+        "total_ms": 156.055462,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 43541976,
+        "client_sampled_extra_heap_bytes": 12148640,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        143.56991,
+        168.113817
+      ],
+      "measured_first_row_ms_range": [
+        1.889374,
+        3.75654
+      ],
+      "plan": {
+        "execution_ms": 120.989,
+        "planning_ms": 0.347,
+        "planning_used_kb": 298,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 127.853,
+        "planning_ms": 0.306,
+        "planning_used_kb": 298,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 49152,
+        "temp_written_bytes": 155648,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "batch_full",
+      "median": {
+        "first_decoded_row_ms": 24.754901,
+        "total_ms": 57.207251,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 43425136,
+        "client_sampled_extra_heap_bytes": 12772480,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        56.25674,
+        59.410385
+      ],
+      "measured_first_row_ms_range": [
+        23.053023,
+        25.42241
+      ],
+      "plan": {
+        "execution_ms": 30.563,
+        "planning_ms": 0.513,
+        "planning_used_kb": 827,
+        "max_visible_executor_node_kb": 7042,
+        "max_disk_sort_kb": 6944,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 7110656,
+        "temp_written_bytes": 7118848,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 46.889,
+        "planning_ms": 0.485,
+        "planning_used_kb": 828,
+        "max_visible_executor_node_kb": 271,
+        "max_disk_sort_kb": 6984,
+        "max_hash_batches": 16,
+        "temp_read_bytes": 101203968,
+        "temp_written_bytes": 100360192,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 3.787044,
+        "total_ms": 3.789577,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 117840,
+        "client_sampled_extra_heap_bytes": 117840,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        1.802147,
+        4.474295
+      ],
+      "measured_first_row_ms_range": [
+        1.80046,
+        4.470281
+      ],
+      "plan": {
+        "execution_ms": 1.298,
+        "planning_ms": 0.269,
+        "planning_used_kb": 301,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 1.416,
+        "planning_ms": 0.259,
+        "planning_used_kb": 301,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 65536,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "batch_outer_limit1",
+      "median": {
+        "first_decoded_row_ms": 26.362101,
+        "total_ms": 26.364952,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 114928,
+        "client_sampled_extra_heap_bytes": 114928,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        23.154472,
+        29.395503
+      ],
+      "measured_first_row_ms_range": [
+        23.15205,
+        29.392731
+      ],
+      "plan": {
+        "execution_ms": 30.102,
+        "planning_ms": 0.573,
+        "planning_used_kb": 829,
+        "max_visible_executor_node_kb": 7042,
+        "max_disk_sort_kb": 6944,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 4046848,
+        "temp_written_bytes": 7118848,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 38.608,
+        "planning_ms": 0.498,
+        "planning_used_kb": 829,
+        "max_visible_executor_node_kb": 253,
+        "max_disk_sort_kb": 6984,
+        "max_hash_batches": 16,
+        "temp_read_bytes": 73383936,
+        "temp_written_bytes": 86171648,
+        "materialized_path_rows": 512,
+        "hydrated_node_rows": 1537,
+        "hydrated_edge_rows": 1536,
+        "recursive_frontier_rows": [
+          1536
+        ]
+      }
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "batch_page_limit1",
+      "median": {
+        "first_decoded_row_ms": 3.380524,
+        "total_ms": 3.382932,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 98456,
+        "client_sampled_extra_heap_bytes": 98456,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        1.546356,
+        4.441956
+      ],
+      "measured_first_row_ms_range": [
+        1.544983,
+        4.44003
+      ],
+      "plan": {
+        "execution_ms": 1.134,
+        "planning_ms": 0.469,
+        "planning_used_kb": 882,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 1.313,
+        "planning_ms": 0.472,
+        "planning_used_kb": 882,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 65536,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          1025
+        ]
+      }
+    },
+    {
+      "fixture": "shared_scale",
+      "property_bytes_per_entity": 0,
+      "available_paths": 4096,
+      "fixture_nodes": 25,
+      "fixture_edges": 272,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 2.326497,
+        "total_ms": 1184.74404,
+        "rows": 4096
+      },
+      "memory": {
+        "client_total_alloc_bytes": 65014792,
+        "client_sampled_extra_heap_bytes": 3808416,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        1084.599174,
+        1239.387039
+      ],
+      "measured_first_row_ms_range": [
+        2.037752,
+        3.262227
+      ],
+      "plan": {
+        "execution_ms": 1065.303,
+        "planning_ms": 0.339,
+        "planning_used_kb": 294,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          4368
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 1072.477,
+        "planning_ms": 0.402,
+        "planning_used_kb": 294,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 335872,
+        "temp_written_bytes": 688128,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          4368
+        ]
+      }
+    },
+    {
+      "fixture": "shared_scale",
+      "property_bytes_per_entity": 0,
+      "available_paths": 4096,
+      "fixture_nodes": 25,
+      "fixture_edges": 272,
+      "query": "batch_full",
+      "median": {
+        "first_decoded_row_ms": 56.939748,
+        "total_ms": 192.4514,
+        "rows": 4096
+      },
+      "memory": {
+        "client_total_alloc_bytes": 64955640,
+        "client_sampled_extra_heap_bytes": 4045408,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        179.133588,
+        201.953267
+      ],
+      "measured_first_row_ms_range": [
+        49.014599,
+        61.07201
+      ],
+      "plan": {
+        "execution_ms": 56.297,
+        "planning_ms": 0.553,
+        "planning_used_kb": 823,
+        "max_visible_executor_node_kb": 3968,
+        "max_disk_sort_kb": 4368,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 4472832,
+        "temp_written_bytes": 4481024,
+        "materialized_path_rows": 4096,
+        "hydrated_node_rows": 25,
+        "hydrated_edge_rows": 272,
+        "recursive_frontier_rows": [
+          4368
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 79.887,
+        "planning_ms": 0.583,
+        "planning_used_kb": 823,
+        "max_visible_executor_node_kb": 277,
+        "max_disk_sort_kb": 4408,
+        "max_hash_batches": 16,
+        "temp_read_bytes": 63733760,
+        "temp_written_bytes": 59203584,
+        "materialized_path_rows": 4096,
+        "hydrated_node_rows": 25,
+        "hydrated_edge_rows": 272,
+        "recursive_frontier_rows": [
+          4368
+        ]
+      }
+    },
+    {
+      "fixture": "shared_scale",
+      "property_bytes_per_entity": 0,
+      "available_paths": 4096,
+      "fixture_nodes": 25,
+      "fixture_edges": 272,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 2.529351,
+        "total_ms": 2.530824,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 21704,
+        "client_sampled_extra_heap_bytes": 21704,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        0.868118,
+        3.567524
+      ],
+      "measured_first_row_ms_range": [
+        0.867683,
+        3.565123
+      ],
+      "plan": {
+        "execution_ms": 0.957,
+        "planning_ms": 0.307,
+        "planning_used_kb": 297,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          273
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 0.706,
+        "planning_ms": 0.296,
+        "planning_used_kb": 297,
+        "max_visible_executor_node_kb": null,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 0,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": null,
+        "hydrated_node_rows": null,
+        "hydrated_edge_rows": null,
+        "recursive_frontier_rows": [
+          273
+        ]
+      }
+    },
+    {
+      "fixture": "shared_scale",
+      "property_bytes_per_entity": 0,
+      "available_paths": 4096,
+      "fixture_nodes": 25,
+      "fixture_edges": 272,
+      "query": "batch_outer_limit1",
+      "median": {
+        "first_decoded_row_ms": 39.397822,
+        "total_ms": 39.399697,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 24296,
+        "client_sampled_extra_heap_bytes": 24296,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        37.144447,
+        46.806469
+      ],
+      "measured_first_row_ms_range": [
+        37.142951,
+        46.804803
+      ],
+      "plan": {
+        "execution_ms": 44.739,
+        "planning_ms": 0.502,
+        "planning_used_kb": 824,
+        "max_visible_executor_node_kb": 95,
+        "max_disk_sort_kb": 4368,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 2719744,
+        "temp_written_bytes": 4481024,
+        "materialized_path_rows": 4096,
+        "hydrated_node_rows": 25,
+        "hydrated_edge_rows": 272,
+        "recursive_frontier_rows": [
+          4368
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 60.175,
+        "planning_ms": 0.537,
+        "planning_used_kb": 825,
+        "max_visible_executor_node_kb": 249,
+        "max_disk_sort_kb": 4408,
+        "max_hash_batches": 16,
+        "temp_read_bytes": 35340288,
+        "temp_written_bytes": 41590784,
+        "materialized_path_rows": 4096,
+        "hydrated_node_rows": 25,
+        "hydrated_edge_rows": 272,
+        "recursive_frontier_rows": [
+          4368
+        ]
+      }
+    },
+    {
+      "fixture": "shared_scale",
+      "property_bytes_per_entity": 0,
+      "available_paths": 4096,
+      "fixture_nodes": 25,
+      "fixture_edges": 272,
+      "query": "batch_page_limit1",
+      "median": {
+        "first_decoded_row_ms": 1.452709,
+        "total_ms": 1.45376,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 29816,
+        "client_sampled_extra_heap_bytes": 29816,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "postgres",
+      "measured_total_ms_range": [
+        1.147749,
+        1.60633
+      ],
+      "measured_first_row_ms_range": [
+        1.146892,
+        1.605333
+      ],
+      "plan": {
+        "execution_ms": 0.878,
+        "planning_ms": 0.861,
+        "planning_used_kb": 877,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          273
+        ]
+      },
+      "work_mem_64kb_plan": {
+        "execution_ms": 0.782,
+        "planning_ms": 0.698,
+        "planning_used_kb": 877,
+        "max_visible_executor_node_kb": 32,
+        "max_disk_sort_kb": 0,
+        "max_hash_batches": 1,
+        "temp_read_bytes": 0,
+        "temp_written_bytes": 0,
+        "materialized_path_rows": 1,
+        "hydrated_node_rows": 4,
+        "hydrated_edge_rows": 3,
+        "recursive_frontier_rows": [
+          273
+        ]
+      }
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 0.424478,
+        "total_ms": 5.015844,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 3600304,
+        "client_sampled_extra_heap_bytes": 1686792,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        3.805845,
+        5.135875
+      ],
+      "measured_first_row_ms_range": [
+        0.306062,
+        0.676661
+      ]
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 0.359434,
+        "total_ms": 0.366425,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 12032,
+        "client_sampled_extra_heap_bytes": 12032,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        0.138645,
+        0.505474
+      ],
+      "measured_first_row_ms_range": [
+        0.134183,
+        0.499168
+      ]
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 0.781453,
+        "total_ms": 7.257212,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 3647080,
+        "client_sampled_extra_heap_bytes": 3647080,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        6.711587,
+        7.918472
+      ],
+      "measured_first_row_ms_range": [
+        0.708316,
+        0.905052
+      ]
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 0,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 0.393534,
+        "total_ms": 0.395879,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 11888,
+        "client_sampled_extra_heap_bytes": 11888,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        0.185297,
+        0.677613
+      ],
+      "measured_first_row_ms_range": [
+        0.183072,
+        0.674104
+      ]
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 0.513122,
+        "total_ms": 11.606811,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 11023256,
+        "client_sampled_extra_heap_bytes": 2389680,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        10.673178,
+        13.655184
+      ],
+      "measured_first_row_ms_range": [
+        0.290855,
+        0.673976
+      ]
+    },
+    {
+      "fixture": "shared",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 13,
+      "fixture_edges": 72,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 0.495393,
+        "total_ms": 0.498206,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 26272,
+        "client_sampled_extra_heap_bytes": 26272,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        0.254099,
+        0.713084
+      ],
+      "measured_first_row_ms_range": [
+        0.248872,
+        0.709001
+      ]
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 0.879615,
+        "total_ms": 11.044835,
+        "rows": 512
+      },
+      "memory": {
+        "client_total_alloc_bytes": 11068072,
+        "client_sampled_extra_heap_bytes": 11068072,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        8.564593,
+        13.600522
+      ],
+      "measured_first_row_ms_range": [
+        0.57576,
+        1.529484
+      ]
+    },
+    {
+      "fixture": "low_overlap",
+      "property_bytes_per_entity": 2048,
+      "available_paths": 512,
+      "fixture_nodes": 1537,
+      "fixture_edges": 1536,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 0.430028,
+        "total_ms": 0.435272,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 25888,
+        "client_sampled_extra_heap_bytes": 25888,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        0.230804,
+        0.785795
+      ],
+      "measured_first_row_ms_range": [
+        0.228781,
+        0.782589
+      ]
+    },
+    {
+      "fixture": "shared_scale",
+      "property_bytes_per_entity": 0,
+      "available_paths": 4096,
+      "fixture_nodes": 25,
+      "fixture_edges": 272,
+      "query": "current_full",
+      "median": {
+        "first_decoded_row_ms": 0.422558,
+        "total_ms": 36.652388,
+        "rows": 4096
+      },
+      "memory": {
+        "client_total_alloc_bytes": 28819664,
+        "client_sampled_extra_heap_bytes": 2762280,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        35.27203,
+        38.744251
+      ],
+      "measured_first_row_ms_range": [
+        0.225879,
+        0.759342
+      ]
+    },
+    {
+      "fixture": "shared_scale",
+      "property_bytes_per_entity": 0,
+      "available_paths": 4096,
+      "fixture_nodes": 25,
+      "fixture_edges": 272,
+      "query": "current_limit1",
+      "median": {
+        "first_decoded_row_ms": 0.276845,
+        "total_ms": 0.279732,
+        "rows": 1
+      },
+      "memory": {
+        "client_total_alloc_bytes": 11360,
+        "client_sampled_extra_heap_bytes": 11360,
+        "sampling_interval_micros": 1000
+      },
+      "backend": "neo4j",
+      "measured_total_ms_range": [
+        0.156511,
+        0.451525
+      ],
+      "measured_first_row_ms_range": [
+        0.154316,
+        0.44737
+      ]
+    }
+  ]
+}

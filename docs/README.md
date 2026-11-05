@@ -25,6 +25,7 @@
 - [Topology fixed-suffix first-use routing](experiments/topology_fixed_suffix_first_use_v1.md): separately versioned v5 selector and its promotion contract.
 - [Composite fixed-suffix lowering](experiments/fixed_suffix_composite_lowering_v1.md): query-atomic multi-region retry substrate.
 - [ASP A1 inline hydration disposition](experiments/asp_a1_inline_hydration_v1.md): parameterized attribution, A1 hydration result, and B2 negative disposition.
+- [Ordinary path materialization batching](experiments/path_batch_materialization_v1.md): complete-value regression results, bulk/first-row and memory measurements, and the bounded-hydration action queue.
 - [ASP N1 negative-exhaustion disposition](experiments/asp_n1_negative_exhaustion_v1.md): bounded no-path proof with exact A1 fallback and its production-selection boundary.
 - [Plan corpus capture](../cmd/plancorpus/README.md): shared integration corpus plan diagnostics.
 - [Graph benchmark capture](../cmd/graphbench/README.md): runtime diagnostics for scale scenarios.

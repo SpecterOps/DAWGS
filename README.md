@@ -40,6 +40,14 @@ make test
 
 Integration tests use a disposable PostgreSQL or Neo4j database selected by
 `CONNECTION_STRING`. See [testing](docs/testing.md) for setup and commands.
+The [multi-relationship expansion regression checks](docs/testing.md#multi-relationship-expansion)
+compare bounded traversals with exhaustive fixed patterns on both backends,
+including path multiplicity, mutation state, fan-out timings, and PostgreSQL plans.
+The [path materialization experiment](docs/testing.md#path-materialization-experiment)
+checks complete path values and measures batching, wide properties, memory,
+and time to first row, including `LIMIT 1`.
+Measured findings and implementation follow-ups are recorded in the
+[path materialization study](docs/experiments/path_batch_materialization_v1.md).
 
 ## Guides
 

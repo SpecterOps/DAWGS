@@ -109,6 +109,18 @@ endpoint-only forms keep the smaller edge-only reverse state. The guarded
 candidate uses the same materializer while its exact forward fallback retains
 the generic path helper.
 
+### Ordinary path materialization study
+
+The [2026-11-05 batching study](experiments/path_batch_materialization_v1.md)
+compares complete path values and measures shared-prefix/convergent and
+low-overlap graphs, wide properties, streaming first-row latency, `LIMIT 1`,
+client heap/allocation, and PostgreSQL spill. It retains a
+[compact measurement record](experiments/path_batch_materialization_v1_results.json)
+and an action queue for bounded hydration, early selection, telemetry, and
+qualification. [Testing](testing.md#path-materialization-experiment) contains
+the opt-in commands. This is diagnostic feasibility evidence; production
+selection and the qualification requirements below remain unchanged.
+
 ## Experimental traversal policies and qualification
 
 Production selection remains on the stepwise incumbent because query shape and

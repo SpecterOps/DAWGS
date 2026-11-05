@@ -26,6 +26,7 @@ for qualification requirements.
 
 | Record | Disposition |
 | --- | --- |
+| [Ordinary path materialization batching](path_batch_materialization_v1.md) | Diagnostic only; test-only batching improves selected bulk reads, with first-row and spill costs. Bounded hydration and production qualification remain open. |
 | [Guarded suffix keyset continuation](guarded_suffix_keyset_continuation_v1.md) | Rejected and retired. |
 | [Suffix reverse retry](suffix_reverse_retry_v1.md) | Terminally rejected by the clean P1 capture. |
 | [SP-I2 successor power study](sp_i2_successor_power_study_v3.md) | Rejected before implementation. |

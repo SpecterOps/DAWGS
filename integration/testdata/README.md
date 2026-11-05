@@ -23,6 +23,15 @@ postconditions check copied values, unchanged fixture records and exact creation
 counts.
 PostgreSQL executes the corpus in both optimizer modes.
 
+`multi_relationship_expansion_shapes.json` checks Okta and AD relationship
+alternatives at bounds `1..2` and `1..3`, exact paths and multiplicity, incoming
+syntax, carried duplicate roots, endpoint filters, missing terminals, cycles,
+self-loops, and single-type controls. SET variants with and without RETURN
+check complete node and relationship records, including wrong-kind, reversed,
+and beyond-bound decoys. PostgreSQL runs all 42 shared variants in both compiler
+modes. Separate live tests compare exhaustive fixed-sequence path multisets,
+log count/path fan-out timings, and check PostgreSQL recursive frontier sizes.
+
 List indexing and slicing are explicitly unsupported by the shared DAWGS parser and PostgreSQL
 text compiler. Parser negative fixtures and a templated unit matrix cover read,
 SET, CREATE and DELETE contexts. Driver-scoped live tests check PostgreSQL
@@ -429,6 +438,13 @@ zero-hop and duplicate-input CREATE correlation. SET and CREATE cases compare
 complete original node/relationship records plus exact created labels and names,
 including writes without RETURN. PostgreSQL executes all variants in both compiler
 modes; the shared corpus has identical assertions on both backends.
+
+`order_by_shapes.json` checks the reported `MATCH (n:Domain) RETURN n ORDER BY
+n.objectid LIMIT 10` query against twelve domains with shuffled object IDs.
+Exact ordered node IDs cover default/explicit ascending order, descending order
+and pagination; scalar controls expose the ordered object IDs directly. The
+unordered control checks only row count. Both backends use the same expectations,
+and PostgreSQL runs every variant in both compiler modes.
 
 `order_alias_shapes.json` checks nested RETURN aliases in arithmetic, casts and
 supported functions, alias/input collisions, quoted identifiers, multiple sort

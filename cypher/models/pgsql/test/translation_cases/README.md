@@ -114,6 +114,12 @@ SET and CREATE without RETURN. Shortest/all-shortest fixtures check that the
 harness receives the normalized maximum; compiler tests compare complete SQL and
 parameters for the exact shorthand and explicit range in both optimizer modes.
 
+`multi_relationship_expansion.sql` covers two relationship alternatives at bounds
+`1..2` and `1..3`, both directions, root and terminal predicates, carried roots,
+and SET with and without RETURN. Unit regressions assert type filtering in both
+the first hop and recursive lookup, finite depth, and relationship uniqueness
+in both compiler modes using Okta and AD type names.
+
 `null_predicates.sql` covers literal and entity `IS NULL`/`IS NOT NULL`
 projections and WHERE predicates, WITH/UNWIND-bound null values and the
 unchanged property-lookup null rewrites that distinguish missing keys from
@@ -199,7 +205,9 @@ and CREATE without RETURN. Input-dependent seed predicates also filter completed
 paths, including zero-hop states and duplicate-input CREATE. Traversal frames skip the enclosing part's future
 output while keeping the scope stack available for boundary unwinding.
 
-`order_aliases.sql` covers nested ORDER BY aliases, input/output name collisions,
+`order_aliases.sql` covers whole-node and scalar property ordering before LIMIT,
+including default/explicit ascending order and descending order, as well as
+nested ORDER BY aliases, input/output name collisions,
 cast and aggregate consumers, DISTINCT sort-key staging and pagination, including
 hidden-key/user-alias collisions and a paginated SET continuation. Parser/analyzer
 mutation cases and the shared `order_alias_shapes` templates supply complementary

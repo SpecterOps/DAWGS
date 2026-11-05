@@ -978,6 +978,34 @@ For every accepted or rejected candidate, add
 Raw captures remain under `.coverage`; compact canonical reports may be
 committed when they contain no secrets or unstable physical identifiers.
 
+## 2026-11-05 follow-up: ordinary path materialization
+
+The [ordinary path batching study](experiments/path_batch_materialization_v1.md)
+adds diagnostic evidence about the late-hydration stage. On 4,096 shared paths,
+the test-only batch reduced total PostgreSQL time from 1,184.7 to 192.5 ms,
+while an outer `LIMIT 1` increased first-row latency from 2.53 to 39.40 ms.
+Selecting one compact input path before hydration measured 1.45 ms. Wide-property
+batches also spilled at default `work_mem`.
+
+Track the following work through the study's
+[H1–H6 action queue](experiments/path_batch_materialization_v1.md#action-queue):
+
+- H1–H2: bound buffered path rows and bytes, prove early limit placement, and
+  reduce remaining wide intermediates while retaining per-occurrence values.
+- H3: measure first decoded row from before PostgreSQL `Query`, retaining
+  preparation and decode stages for attribution.
+- H4: resolve remaining path-consumer/mutation coverage or preserve explicit
+  incumbent routing and existing error contracts.
+- H5: obtain clean performance/resource and snapshot/cancellation/pool-reuse
+  evidence under the existing qualification gates.
+- H6: reproduce the user's original slow/erroring query on representative data.
+
+All six tasks are open. The study has 575 complete-value comparisons across
+compiler modes, covering 293/302 direct-path query identities in at least one
+mode, with explicit exclusions. It has no clean-source promotion, A/A,
+holdout, or complete server-memory evidence. This dated follow-up leaves the
+historical priority order and production selectors unchanged.
+
 ## Definition of done
 
 This priority plan is complete when:
