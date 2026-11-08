@@ -129,7 +129,13 @@ func (s *Sieve[K, V]) Get(key K) (V, bool) {
 	if entry, exists := s.store[key]; exists {
 		s.stats.Hit()
 
-		entry.visited.Store(true)
+		// Only write the visited flag when it is unset: repeat hits on hot
+		// entries stay read-only, which avoids invalidating shared cache
+		// lines when many goroutines read the same entries.
+		if !entry.visited.Load() {
+			entry.visited.Store(true)
+		}
+
 		return entry.value, true
 	}
 

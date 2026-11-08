@@ -6,11 +6,21 @@ Reachability, collection helpers, traversal patterns, and graph import/export.
 
 ## Reachability and containers
 
-`algo.ReachabilityCache` retains complete reach sets for requested components in separate bounded inbound and outbound
-caches. A traversal reuses complete cached results and visits each remaining component at most once, using one local
-reach bitmap. Warming an ancestor does not prewarm intermediate components; querying a new component can require another
-traversal. Cache capacity limits entries per direction (minimum one), rather than bitmap bytes. Reach results include
-the origin and its strongly connected component; `DirectionBoth` computes weak connectivity without caching that result.
+`algo.ReachabilityCache` retains complete reach sets in separate bounded inbound and outbound caches. A single-direction
+traversal reuses complete cached results and publishes complete intermediate results, so warming an ancestor also
+prewarms components completed along the way. A
+traversal-local memo keeps those intermediate results available to later branches of the same traversal even when the
+shared cache evicts their entries first; the memo itself is capacity-bounded (by `NewReachabilityCache`, with a floor),
+and records evicted component IDs without retaining their bitmaps. If both caches lose a completed result, traversal
+switches to one visited-set walk and publishes the complete requested root. Each component is expanded at most twice
+per query; unfinished intermediate results are never published.
+Caches built by `NewReachabilityCache` shard each direction across sixteen second-chance sieves so concurrent traversals
+do not serialize on one lock, and concurrent traversals computing the same component/direction closure coordinate
+through an in-flight registry instead of duplicating work; a traversal only ever waits for a closure while it computes
+nothing itself, so waiting traversals cannot deadlock. Settled registrations release their result references immediately;
+existing followers retain independent ownership of the published results. Cache capacity limits entries per direction (minimum one),
+rather than bitmap bytes. Reach results include the origin and its strongly connected component; `DirectionBoth`
+computes weak connectivity without caching that result.
 
 `cardinality.ThreadSafeDuplex` and `cardinality.ThreadSafeSimplex` synchronize every operation of their wrapped provider.
 Binary operations (`Or`, `And`, `Xor`, `AndNot`) snapshot another thread-safe wrapper before locking the receiver, so
