@@ -654,7 +654,9 @@ func (s *ExpressionTreeTranslator) popOperandAsUserConstraint() error {
 // constrainExpression splits only a predicate's outer conjunction. Boolean expressions
 // inside parentheses, function calls and other value expressions remain intact.
 func (s *ExpressionTreeTranslator) constrainExpression(expression pgsql.Expression) error {
-	if conjunction, ok := expression.(*pgsql.BinaryExpression); ok && conjunction.Operator == pgsql.OperatorAnd {
+	normalizedExpression := expression
+
+	if conjunction, ok := normalizedExpression.(*pgsql.BinaryExpression); ok && conjunction.Operator == pgsql.OperatorAnd {
 		// Consume right to left, preserving the constraint ordering used by the tracker.
 		if err := s.constrainExpression(conjunction.ROperand); err != nil {
 			return err
@@ -662,15 +664,15 @@ func (s *ExpressionTreeTranslator) constrainExpression(expression pgsql.Expressi
 		return s.constrainExpression(conjunction.LOperand)
 	}
 
-	if identifierDeps, err := ExtractSyntaxNodeReferences(expression); err != nil {
+	if identifierDeps, err := ExtractSyntaxNodeReferences(normalizedExpression); err != nil {
 		return err
 	} else {
-		if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(expression); isPropertyLookup {
+		if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(normalizedExpression); isPropertyLookup {
 			// If this is a bare property lookup rewrite it with the intended type of boolean
-			expression = rewritePropertyLookupOperator(propertyLookup, pgsql.Boolean)
+			normalizedExpression = rewritePropertyLookupOperator(propertyLookup, pgsql.Boolean)
 		}
 
-		return s.AddUserConstraint(identifierDeps, expression)
+		return s.AddUserConstraint(identifierDeps, normalizedExpression)
 	}
 }
 
@@ -1156,11 +1158,13 @@ func cypherStringPredicateFunction(function pgsql.Identifier, lOperand, rOperand
 
 // lowerPropertyLookupArgument returns the property lookup wrapped by a lower(...) function call, if any.
 func lowerPropertyLookupArgument(operand pgsql.Expression) (pgsql.Expression, bool) {
-	if typeCast, isTypeCast := operand.(pgsql.TypeCast); isTypeCast {
-		operand = typeCast.Expression
+	normalizedOperand := operand
+
+	if typeCast, isTypeCast := normalizedOperand.(pgsql.TypeCast); isTypeCast {
+		normalizedOperand = typeCast.Expression
 	}
 
-	if functionCall, isFunctionCall := operand.(pgsql.FunctionCall); isFunctionCall && functionCall.Function == pgsql.FunctionToLower && len(functionCall.Parameters) == 1 {
+	if functionCall, isFunctionCall := normalizedOperand.(pgsql.FunctionCall); isFunctionCall && functionCall.Function == pgsql.FunctionToLower && len(functionCall.Parameters) == 1 {
 		if propertyLookup, isPropertyLookup := expressionToPropertyLookupBinaryExpression(functionCall.Parameters[0]); isPropertyLookup {
 			return propertyLookup, true
 		}

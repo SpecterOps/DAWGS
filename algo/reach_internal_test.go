@@ -285,16 +285,16 @@ type adjacencyOnlyDigraph struct {
 	inner container.DirectedGraph
 }
 
-func (a adjacencyOnlyDigraph) NumNodes() uint64 {
-	return a.inner.NumNodes()
+func (s adjacencyOnlyDigraph) NumNodes() uint64 {
+	return s.inner.NumNodes()
 }
 
-func (a adjacencyOnlyDigraph) EachNode(delegate func(node uint64) bool) {
-	a.inner.EachNode(delegate)
+func (s adjacencyOnlyDigraph) EachNode(delegate func(node uint64) bool) {
+	s.inner.EachNode(delegate)
 }
 
-func (a adjacencyOnlyDigraph) EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool) {
-	a.inner.EachAdjacentNode(node, direction, delegate)
+func (s adjacencyOnlyDigraph) EachAdjacentNode(node uint64, direction graph.Direction, delegate func(adjacent uint64) bool) {
+	s.inner.EachAdjacentNode(node, direction, delegate)
 }
 
 // TestReachabilityNonCSRDigraphAdjacency exercises the adjacency fallback for
@@ -384,8 +384,8 @@ type mutableDigraphBuilder struct {
 	container.MutableDirectedGraph
 }
 
-func (m mutableDigraphBuilder) Build() container.DirectedGraph {
-	return m
+func (s mutableDigraphBuilder) Build() container.DirectedGraph {
+	return s
 }
 
 func newDiamondCache(t *testing.T, adjacency map[uint64][]uint64, digraph container.DigraphBuilder) *ReachabilityCache {

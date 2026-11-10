@@ -75,10 +75,10 @@ func translateToPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not parse flags: %w", err)
 			}
 
-			fields = flagSet.Args()
-			query, err := parseQueryArray(fields)
+			positionalArgs := flagSet.Args()
+			query, err := parseQueryArray(positionalArgs)
 			if err != nil {
-				return fmt.Errorf("error trying to parse query '%s': %w", fields, err)
+				return fmt.Errorf("error trying to parse query '%s': %w", positionalArgs, err)
 			}
 
 			kindMapper := stubs.EmptyMapper()
@@ -155,12 +155,12 @@ func explainAsPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not parse flags: %w", err)
 			}
 
-			fields = flagSet.Args()
-			if len(fields) < 2 {
+			positionalArgs := flagSet.Args()
+			if len(positionalArgs) < 2 {
 				return fmt.Errorf("invalid usage, requires: <connection name> <query>")
 			}
 
-			connName := fields[0]
+			connName := positionalArgs[0]
 			conn, err := ctx.EnsureConnection(connName)
 			if err != nil {
 				return err
@@ -172,7 +172,7 @@ func explainAsPsqlCmd() CommandDesc {
 				return fmt.Errorf("could not load kind map for explain: %w", err)
 			}
 
-			query, err := parseQueryArray(fields[1:])
+			query, err := parseQueryArray(positionalArgs[1:])
 			if err != nil {
 				return fmt.Errorf("could not parse query: %w", err)
 			}
@@ -286,8 +286,8 @@ func queryCypherCmd() CommandDesc {
 				return fmt.Errorf("could not parse flags: %w", err)
 			}
 
-			fields = flagSet.Args()
-			if len(fields) < 2 {
+			positionalArgs := flagSet.Args()
+			if len(positionalArgs) < 2 {
 				return fmt.Errorf("invalid usage, requires: <connection name> <query>")
 			}
 
@@ -298,13 +298,13 @@ func queryCypherCmd() CommandDesc {
 				return fmt.Errorf("invalid output format %q; expected one of: %s, %s", outputFormat, queryCypherOutputFormatTable, queryCypherOutputFormatJSON)
 			}
 
-			connName := fields[0]
+			connName := positionalArgs[0]
 			conn, err := ctx.EnsureConnection(connName)
 			if err != nil {
 				return err
 			}
 
-			cypherQuery := strings.Join(fields[1:], " ")
+			cypherQuery := strings.Join(positionalArgs[1:], " ")
 
 			return conn.ReadTransaction(ctx, func(tx graph.Transaction) error {
 				result := tx.Query(cypherQuery, nil)

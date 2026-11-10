@@ -682,14 +682,16 @@ func buildProjectionForEdgeComposite(alias pgsql.Identifier, projected *BoundIde
 
 // buildProjectionForPathEdge projects the identifier carried by a single-edge path component.
 func buildProjectionForPathEdge(alias pgsql.Identifier, projected *BoundIdentifier, referenceFrame *Frame) ([]pgsql.SelectItem, error) {
+	effectiveReferenceFrame := referenceFrame
+
 	var expression pgsql.Expression
 
 	if projected.LastProjection != nil {
-		if referenceFrame == nil {
-			referenceFrame = projected.LastProjection
+		if effectiveReferenceFrame == nil {
+			effectiveReferenceFrame = projected.LastProjection
 		}
 
-		expression = pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, projected.Identifier}
+		expression = pgsql.CompoundIdentifier{effectiveReferenceFrame.Binding.Identifier, projected.Identifier}
 	} else {
 		expression = pgsql.CompoundIdentifier{projected.Identifier, pgsql.ColumnID}
 	}
@@ -1597,6 +1599,8 @@ func mergePathCompositeStageBindings(bindingSets ...[]*BoundIdentifier) []*Bound
 
 // stagePathCompositeBindings adds lateral sources that materialize selected paths once for downstream reuse.
 func (s *Translator) stagePathCompositeBindings(fromClauses []pgsql.FromClause, bindings []*BoundIdentifier) ([]pgsql.FromClause, error) {
+	accumulatedFromClauses := fromClauses
+
 	for _, binding := range bindings {
 		stageBinding, err := s.scope.DefineNew(pgsql.Scope)
 		if err != nil {
@@ -1617,7 +1621,7 @@ func (s *Translator) stagePathCompositeBindings(fromClauses []pgsql.FromClause, 
 			return nil, err
 		}
 
-		fromClauses = append(fromClauses, pgsql.FromClause{
+		accumulatedFromClauses = append(accumulatedFromClauses, pgsql.FromClause{
 			Source: pgsql.LateralSubquery{
 				Query: pgsql.Query{
 					Body: pgsql.Select{
@@ -1632,7 +1636,7 @@ func (s *Translator) stagePathCompositeBindings(fromClauses []pgsql.FromClause, 
 		binding.MaterializedBy(stageFrame)
 	}
 
-	return fromClauses, nil
+	return accumulatedFromClauses, nil
 }
 
 // buildTailProjection renders the final select, stages reused paths, and applies grouping, ordering, skip, and limit.

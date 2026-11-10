@@ -2193,7 +2193,9 @@ func selectedCorpusContainsSPI2Holdout(corpus ScaleCorpus) bool {
 // protocol tag or an exact case name; database capture then passes through the
 // freeze checks in main before any target is opened.
 func selectRunnableScaleCorpusWithSPI2Protection(corpus ScaleCorpus, selectors CorpusSelectors) (ScaleCorpus, SelectionManifest, error) {
-	if err := validateCorpusSelectors(corpus, selectors); err != nil {
+	selectedCorpus := corpus
+
+	if err := validateCorpusSelectors(selectedCorpus, selectors); err != nil {
 		return ScaleCorpus{}, SelectionManifest{}, err
 	}
 	// Preserve SP-I1's independently frozen selection identity when its exact
@@ -2211,7 +2213,7 @@ func selectRunnableScaleCorpusWithSPI2Protection(corpus ScaleCorpus, selectors C
 		}
 	}
 	if spI1ProtocolSelection {
-		return selectRunnableScaleCorpus(withoutSPI2V2FormalCases(corpus), selectors)
+		return selectRunnableScaleCorpus(withoutSPI2V2FormalCases(selectedCorpus), selectors)
 	}
 	spI2ProtocolSelection := slices.Contains(selectors.Tags, spI2TrainingTag) || slices.Contains(selectors.Tags, spI2HoldoutTag)
 	if !spI2ProtocolSelection {
@@ -2229,7 +2231,7 @@ func selectRunnableScaleCorpusWithSPI2Protection(corpus ScaleCorpus, selectors C
 		return ScaleCorpus{}, SelectionManifest{}, fmt.Errorf("SP-I2 V1 and V2 protocol selectors cannot be mixed")
 	}
 	if spI2ProtocolSelection {
-		corpus = withoutSPI2V2FormalCases(corpus)
+		selectedCorpus = withoutSPI2V2FormalCases(selectedCorpus)
 	}
 	includeProtected := slices.Contains(selectors.Tags, spI2HoldoutTag)
 	if !includeProtected && len(selectors.Cases) > 0 {
@@ -2247,24 +2249,24 @@ func selectRunnableScaleCorpusWithSPI2Protection(corpus ScaleCorpus, selectors C
 		}
 	}
 	if includeProtected {
-		return selectScaleCorpusValidated(corpus, selectors)
+		return selectScaleCorpusValidated(selectedCorpus, selectors)
 	}
 	includeV2Protected := spI2V2FormalHoldoutSelected(selectors)
 	if includeV2Protected {
-		return selectScaleCorpusValidated(corpus, selectors)
+		return selectScaleCorpusValidated(selectedCorpus, selectors)
 	}
 
 	cohort, err := canonicalSPI2Cohort()
 	if err != nil {
 		return ScaleCorpus{}, SelectionManifest{}, err
 	}
-	filtered := ScaleCorpus{Cases: make([]ScaleCase, 0, len(corpus.Cases))}
+	filtered := ScaleCorpus{Cases: make([]ScaleCase, 0, len(selectedCorpus.Cases))}
 	protected := ScaleCorpus{Cases: make([]ScaleCase, 0, len(cohort.holdoutKeys))}
 	formalV2, err := canonicalSPI2V2FormalCohort()
 	if err != nil {
 		return ScaleCorpus{}, SelectionManifest{}, err
 	}
-	for _, testCase := range corpus.Cases {
+	for _, testCase := range selectedCorpus.Cases {
 		key := performanceKey{
 			dataset: testCase.Dataset,
 			name:    testCase.Name,
@@ -2290,14 +2292,14 @@ func selectRunnableScaleCorpusWithSPI2Protection(corpus ScaleCorpus, selectors C
 	if err != nil {
 		return ScaleCorpus{}, SelectionManifest{}, err
 	}
-	manifest.FullDeclarationCount = len(corpus.DeclaredBackends())
+	manifest.FullDeclarationCount = len(selectedCorpus.DeclaredBackends())
 	manifest.OmittedDeclarationCount = manifest.FullDeclarationCount - manifest.SelectedDeclarationCount
 	if !spI2ProtocolSelection && manifest.ProtectedDeclarationCount > 0 {
 		spI1Cohort, err := canonicalSPI1Cohort()
 		if err != nil {
 			return ScaleCorpus{}, SelectionManifest{}, err
 		}
-		for _, testCase := range corpus.Cases {
+		for _, testCase := range selectedCorpus.Cases {
 			key := performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}
 			if _, isProtected := spI1Cohort.holdoutKeys[key]; isProtected {
 				protected.Cases = append(protected.Cases, testCase)

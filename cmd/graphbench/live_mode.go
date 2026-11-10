@@ -528,11 +528,13 @@ func redactDiagnostic(value string) string {
 
 // redactResolvedIDs replaces resolved physical node IDs and unmapped entity IDs with stable redaction markers.
 func redactResolvedIDs(value string, resolved map[string]graph.ID) string {
+	redactedDiagnostic := value
+
 	for _, id := range resolved {
-		value = regexp.MustCompile(`\b`+regexp.QuoteMeta(fmt.Sprint(id))+`\b`).ReplaceAllString(value, "<anchor-id>")
+		redactedDiagnostic = regexp.MustCompile(`\b`+regexp.QuoteMeta(fmt.Sprint(id))+`\b`).ReplaceAllString(redactedDiagnostic, "<anchor-id>")
 	}
-	value = regexp.MustCompile(`unmapped-(node|edge|relationship):[0-9]+`).ReplaceAllString(value, "unmapped-$1:<redacted-id>")
-	return value
+	redactedDiagnostic = regexp.MustCompile(`unmapped-(node|edge|relationship):[0-9]+`).ReplaceAllString(redactedDiagnostic, "unmapped-$1:<redacted-id>")
+	return redactedDiagnostic
 }
 
 // redactPlanJSON recursively replaces resolved graph IDs in a PostgreSQL JSON plan so live-run artifacts cannot disclose dataset identifiers.

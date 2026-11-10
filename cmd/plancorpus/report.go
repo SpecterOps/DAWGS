@@ -101,8 +101,10 @@ type PlanError struct {
 
 // buildSummary aggregates plan records by driver, operator, lowering, error, and estimated cost.
 func buildSummary(records []PlanRecord, topN int) PlanSummary {
-	if topN <= 0 {
-		topN = defaultTopPlans
+	topPlanLimit := topN
+
+	if topPlanLimit <= 0 {
+		topPlanLimit = defaultTopPlans
 	}
 
 	var (
@@ -189,8 +191,8 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 	sort.Slice(topPG, func(i, j int) bool {
 		return topPG[i].Cost > topPG[j].Cost
 	})
-	if len(topPG) > topN {
-		topPG = topPG[:topN]
+	if len(topPG) > topPlanLimit {
+		topPG = topPG[:topPlanLimit]
 	}
 
 	return PlanSummary{
@@ -238,20 +240,20 @@ func postgresEstimatedCost(planRoot string) float64 {
 
 // normalizePostgresOperator removes plan decoration so equivalent PostgreSQL operator lines share one name.
 func normalizePostgresOperator(operator string) string {
-	operator = strings.TrimSpace(operator)
-	if operator == "" {
+	normalizedOperator := strings.TrimSpace(operator)
+	if normalizedOperator == "" {
 		return ""
 	}
-	if idx := strings.Index(operator, ":"); idx >= 0 {
-		return operator[:idx]
+	if idx := strings.Index(normalizedOperator, ":"); idx >= 0 {
+		return normalizedOperator[:idx]
 	}
-	if idx := strings.Index(operator, " on "); idx >= 0 {
-		return operator[:idx]
+	if idx := strings.Index(normalizedOperator, " on "); idx >= 0 {
+		return normalizedOperator[:idx]
 	}
-	if idx := strings.Index(operator, " using "); idx >= 0 {
-		return operator[:idx]
+	if idx := strings.Index(normalizedOperator, " using "); idx >= 0 {
+		return normalizedOperator[:idx]
 	}
-	return operator
+	return normalizedOperator
 }
 
 // sortedDriverSummaries returns driver summaries ordered by driver name.
@@ -398,7 +400,7 @@ func writeMarkdownSummary(w io.Writer, summary PlanSummary) error {
 
 // markdownCell escapes table delimiters and line breaks for a Markdown cell.
 func markdownCell(value string) string {
-	value = strings.ReplaceAll(value, "\n", " ")
-	value = strings.ReplaceAll(value, "|", "\\|")
-	return value
+	escapedCell := strings.ReplaceAll(value, "\n", " ")
+	escapedCell = strings.ReplaceAll(escapedCell, "|", "\\|")
+	return escapedCell
 }

@@ -121,16 +121,18 @@ func NewShortestPathScaleV2Fixture(config ShortestPathScaleV2Config) *opengraph.
 	payload := strings.Repeat("x", config.PropertyPayloadSize)
 	fixture := &opengraph.Graph{}
 	addNode := func(id string, properties map[string]any) {
-		if properties == nil {
-			properties = map[string]any{}
+		nodeProperties := properties
+
+		if nodeProperties == nil {
+			nodeProperties = map[string]any{}
 		}
 		if payload != "" {
-			properties["payload"] = payload
+			nodeProperties["payload"] = payload
 		}
 		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
 			ID:         id,
 			Kinds:      []string{"ShortestNode"},
-			Properties: properties,
+			Properties: nodeProperties,
 		})
 	}
 	addEdge := func(start, end, kind, key string) {

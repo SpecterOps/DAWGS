@@ -45,12 +45,12 @@ type Edge struct {
 }
 
 // Kinds returns the unique node and edge kinds found in the graph.
-func (g Graph) Kinds() (nodeKinds, edgeKinds graph.Kinds) {
-	for _, node := range g.Nodes {
+func (s Graph) Kinds() (nodeKinds, edgeKinds graph.Kinds) {
+	for _, node := range s.Nodes {
 		nodeKinds = nodeKinds.Add(graph.StringsToKinds(node.Kinds)...)
 	}
 
-	for _, edge := range g.Edges {
+	for _, edge := range s.Edges {
 		edgeKinds = edgeKinds.Add(graph.StringKind(edge.Kind))
 	}
 

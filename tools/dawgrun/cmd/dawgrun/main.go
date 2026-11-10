@@ -143,15 +143,15 @@ type handler struct {
 	appConfigBaseDir string
 }
 
-func (h *handler) Prompt() string {
+func (s *handler) Prompt() string {
 	return "dawgrun > "
 }
 
-func (h *handler) Tab(buffer string) string {
+func (s *handler) Tab(buffer string) string {
 	return ""
 }
 
-func (h *handler) Complete(buffer string) repl.Completion {
+func (s *handler) Complete(buffer string) repl.Completion {
 	prefix, ok := commandCompletionPrefix(buffer)
 	if !ok {
 		return repl.Completion{}
@@ -204,7 +204,7 @@ func commandCompletionPrefix(buffer string) (string, bool) {
 	return fields[0], true
 }
 
-func (h *handler) Eval(line string) string {
+func (s *handler) Eval(line string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -217,7 +217,7 @@ func (h *handler) Eval(line string) string {
 		return "Woof!"
 	}
 
-	output, err := runCommand(ctx, h.r, h.cmdScope, h.appConfigBaseDir, fields)
+	output, err := runCommand(ctx, s.r, s.cmdScope, s.appConfigBaseDir, fields)
 	if err != nil {
 		return err.Error()
 	}

@@ -75,21 +75,21 @@ type PerfGateOptions struct {
 
 // RatioInterval describes a point estimate and confidence bounds for a latency ratio.
 type RatioInterval struct {
-	// Estimate supplies the estimate input to the RatioInterval contract.
+	// Estimate is the point estimate of the dimensionless candidate-to-baseline latency ratio.
 	Estimate float64 `json:"estimate"`
-	// Lower supplies the lower input to the RatioInterval contract.
+	// Lower is the lower confidence bound on the dimensionless candidate-to-baseline latency ratio.
 	Lower float64 `json:"lower"`
-	// Upper supplies the upper input to the RatioInterval contract.
+	// Upper is the upper confidence bound on the dimensionless candidate-to-baseline latency ratio.
 	Upper float64 `json:"upper"`
 }
 
 // DurationInterval describes a duration estimate and its confidence bounds.
 type DurationInterval struct {
-	// Estimate supplies the estimate input to the DurationInterval contract.
+	// Estimate is the point estimate of the signed duration in nanoseconds.
 	Estimate time.Duration `json:"estimate"`
-	// Lower supplies the lower input to the DurationInterval contract.
+	// Lower is the lower confidence bound on the signed duration in nanoseconds.
 	Lower time.Duration `json:"lower"`
-	// Upper supplies the upper input to the DurationInterval contract.
+	// Upper is the upper confidence bound on the signed duration in nanoseconds.
 	Upper time.Duration `json:"upper"`
 }
 

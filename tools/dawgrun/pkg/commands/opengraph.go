@@ -33,12 +33,12 @@ func saveOpenGraphCmd() CommandDesc {
 				return fmt.Errorf("could not parse flags: %w", err)
 			}
 
-			fields = flagSet.Args()
-			if len(fields) != 1 {
+			positionalArgs := flagSet.Args()
+			if len(positionalArgs) != 1 {
 				return fmt.Errorf("invalid usage: save-opengraph [flags] <connection>")
 			}
 
-			connName := fields[0]
+			connName := positionalArgs[0]
 			conn, err := ctx.EnsureConnection(connName)
 			if err != nil {
 				return err

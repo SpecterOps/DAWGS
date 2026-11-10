@@ -99,12 +99,14 @@ func TestScanEntityBatchesResumesAfterCommittedCursor(t *testing.T) {
 		HasStartAfterID:  true,
 		AlreadyProcessed: 2,
 		Read: func(afterID graph.ID, _ bool, limit int, visit func(scanTestEntity) error) error {
+			remainingLimit := limit
+
 			for _, entity := range entities {
-				if entity.id > afterID && limit > 0 {
+				if entity.id > afterID && remainingLimit > 0 {
 					if err := visit(entity); err != nil {
 						return err
 					}
-					limit--
+					remainingLimit--
 				}
 			}
 			return nil

@@ -34,43 +34,43 @@ func newKindCache() *kindCache {
 	return c
 }
 
-func (c *kindCache) pending() bool { return c.requested.Load() != c.acknowledged.Load() }
-func (c *kindCache) invalidate()   { c.requested.Add(1) }
+func (s *kindCache) pending() bool { return s.requested.Load() != s.acknowledged.Load() }
+func (s *kindCache) invalidate()   { s.requested.Add(1) }
 
-func (c *kindCache) lockRefresh(ctx context.Context) error {
+func (s *kindCache) lockRefresh(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	select {
-	case c.refresh <- struct{}{}:
+	case s.refresh <- struct{}{}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (c *kindCache) tryLockRefresh() bool {
+func (s *kindCache) tryLockRefresh() bool {
 	select {
-	case c.refresh <- struct{}{}:
+	case s.refresh <- struct{}{}:
 		return true
 	default:
 		return false
 	}
 }
 
-func (c *kindCache) unlockRefresh() { <-c.refresh }
+func (s *kindCache) unlockRefresh() { <-s.refresh }
 
 // merge publishes only changes learned by a successfully completed operation.
 // An old catalog view must never resurrect a mapping removed by a reload.
-func (c *kindCache) merge(changes map[graph.Kind]int16, epoch uint64) bool {
+func (s *kindCache) merge(changes map[graph.Kind]int16, epoch uint64) bool {
 	if len(changes) == 0 {
 		return true
 	}
-	c.publication.Lock()
-	defer c.publication.Unlock()
-	current := c.current.Load()
+	s.publication.Lock()
+	defer s.publication.Unlock()
+	current := s.current.Load()
 	if current.epoch != epoch {
-		c.invalidate()
+		s.invalidate()
 		return false
 	}
 	changed := false
@@ -86,35 +86,35 @@ func (c *kindCache) merge(changes map[graph.Kind]int16, epoch uint64) bool {
 	next := &kindSnapshot{kinds: maps.Clone(current.kinds), ids: maps.Clone(current.ids), epoch: current.epoch, loaded: current.loaded}
 	for kind, id := range changes {
 		if previous, ok := next.kinds[kind]; ok && previous != id {
-			c.invalidate()
+			s.invalidate()
 			return false
 		}
 		if previous, ok := next.ids[id]; ok && previous != kind {
-			c.invalidate()
+			s.invalidate()
 			return false
 		}
 		next.kinds[kind], next.ids[id] = id, kind
 	}
-	c.current.Store(next)
+	s.current.Store(next)
 	return true
 }
 
 // fence prevents in-flight private views and fetches from publishing across an
 // explicit reset. The maps remain usable if the ensuing database read fails.
-func (c *kindCache) fence() {
-	c.publication.Lock()
-	defer c.publication.Unlock()
-	old := c.current.Load()
-	c.current.Store(&kindSnapshot{kinds: old.kinds, ids: old.ids, epoch: old.epoch + 1, loaded: old.loaded})
-	c.invalidate()
+func (s *kindCache) fence() {
+	s.publication.Lock()
+	defer s.publication.Unlock()
+	old := s.current.Load()
+	s.current.Store(&kindSnapshot{kinds: old.kinds, ids: old.ids, epoch: old.epoch + 1, loaded: old.loaded})
+	s.invalidate()
 }
 
 // replace does no database I/O. A commit or invalidation racing a fetch leaves
 // the request pending, rather than overwriting more recent metadata.
-func (c *kindCache) replace(base *kindSnapshot, generation uint64, kinds map[graph.Kind]int16, force bool, invalidateTranslations func()) bool {
-	c.publication.Lock()
-	defer c.publication.Unlock()
-	if c.current.Load() != base || c.requested.Load() != generation {
+func (s *kindCache) replace(base *kindSnapshot, generation uint64, kinds map[graph.Kind]int16, force bool, invalidateTranslations func()) bool {
+	s.publication.Lock()
+	defer s.publication.Unlock()
+	if s.current.Load() != base || s.requested.Load() != generation {
 		return false
 	}
 	destructive := false
@@ -132,12 +132,12 @@ func (c *kindCache) replace(base *kindSnapshot, generation uint64, kinds map[gra
 	for kind, id := range kinds {
 		ids[id] = kind
 	}
-	c.current.Store(&kindSnapshot{kinds: kinds, ids: ids, epoch: epoch, loaded: true})
+	s.current.Store(&kindSnapshot{kinds: kinds, ids: ids, epoch: epoch, loaded: true})
 	// Publish the new catalog before advancing translation generations, so a
 	// compiler retry in the new generation cannot read the replaced catalog.
 	if destructive || force {
 		invalidateTranslations()
 	}
-	c.acknowledged.Store(generation)
+	s.acknowledged.Store(generation)
 	return true
 }

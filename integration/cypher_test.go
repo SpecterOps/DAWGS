@@ -622,7 +622,7 @@ func assertRowCount(n int) resultAssertion {
 }
 
 // assertAtLeastInt64 requires the first scalar result to be an integer no smaller than min.
-func assertAtLeastInt64(min int64) resultAssertion {
+func assertAtLeastInt64(minDepth int64) resultAssertion {
 	return func(t *testing.T, result queryResult, _ assertionContext) {
 		t.Helper()
 		if len(result.rows) == 0 {
@@ -633,8 +633,8 @@ func assertAtLeastInt64(min int64) resultAssertion {
 			value := firstScalarValue(t, result)
 			t.Fatalf("expected integer, got %T: %v", value, value)
 		}
-		if val < min {
-			t.Fatalf("got %d, want >= %d", val, min)
+		if val < minDepth {
+			t.Fatalf("got %d, want >= %d", val, minDepth)
 		}
 	}
 }
@@ -1479,19 +1479,19 @@ func asFloat64(value any) (float64, bool) {
 func assertStringMultiset(t *testing.T, got, expected []string, label string) {
 	t.Helper()
 
-	got = append([]string(nil), got...)
-	expected = append([]string(nil), expected...)
+	sortedActual := append([]string(nil), got...)
+	sortedExpected := append([]string(nil), expected...)
 
-	sort.Strings(got)
-	sort.Strings(expected)
+	sort.Strings(sortedActual)
+	sort.Strings(sortedExpected)
 
-	if len(got) != len(expected) {
-		t.Fatalf("%s count: got %d, want %d\n  got:  %v\n  want: %v", label, len(got), len(expected), got, expected)
+	if len(sortedActual) != len(sortedExpected) {
+		t.Fatalf("%s count: got %d, want %d\n  got:  %v\n  want: %v", label, len(sortedActual), len(sortedExpected), sortedActual, sortedExpected)
 	}
 
-	for idx := range got {
-		if got[idx] != expected[idx] {
-			t.Fatalf("%s mismatch at index %d:\n  got:  %v\n  want: %v", label, idx, got, expected)
+	for idx := range sortedActual {
+		if sortedActual[idx] != sortedExpected[idx] {
+			t.Fatalf("%s mismatch at index %d:\n  got:  %v\n  want: %v", label, idx, sortedActual, sortedExpected)
 		}
 	}
 }

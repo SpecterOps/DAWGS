@@ -354,7 +354,7 @@ func newPostgresSQLRunnerWithExistingGraph(ctx context.Context, datasetDir, conn
 		return nil, fmt.Errorf("identify PostgreSQL benchmark connection: %w", err)
 	}
 	var postgresEnvironment PostgresEnvironment
-	if err := pool.QueryRow(ctx, `select version(), current_database(), current_setting('plan_cache_mode'), current_setting('transaction_isolation'), current_setting('work_mem'), current_setting('temp_file_limit'), (select count(*) from graph), pg_postmaster_start_time(), (select oid::int8 from pg_database where datname = current_database()), current_setting('autovacuum')`).Scan(
+	if err := pool.QueryRow(ctx, capturePostgresEnvironmentQuery).Scan(
 		&postgresEnvironment.Version,
 		&postgresEnvironment.Database,
 		&postgresEnvironment.PlanCacheMode,
@@ -462,7 +462,7 @@ func (s *postgresSQLRunner) Run(ctx context.Context, warmupIterations, iteration
 		if _, err := s.pool.Exec(ctx, activePartitions); err != nil {
 			return nil, fmt.Errorf("vacuum and analyze %s fixture: %w", datasetName, err)
 		}
-		if err := s.pool.QueryRow(ctx, `select pg_total_relation_size(format('node_%s', $1::int4)::regclass), pg_total_relation_size(format('edge_%s', $1::int4)::regclass), coalesce((select string_agg(relname || ':' || coalesce(last_analyze::text, 'never'), ',' order by relname) from pg_stat_all_tables where relname in (format('node_%s', $1::int4), format('edge_%s', $1::int4))), '')`, s.graphID).Scan(
+		if err := s.pool.QueryRow(ctx, capturePostgresRelationSizesQuery, s.graphID).Scan(
 			&fixture.NodeRelationBytes, &fixture.EdgeRelationBytes, &s.environment.AnalyzeState,
 		); err != nil {
 			return nil, fmt.Errorf("capture %s fixture relation sizes: %w", datasetName, err)
@@ -693,7 +693,7 @@ func (s *postgresSQLRunner) resolveExistingGraphAnchors(ctx context.Context, man
 
 		if anchor.Kind != "" {
 			var matches bool
-			if err := s.pool.QueryRow(ctx, `select exists(select 1 from node n join kind k on k.id = any(n.kind_ids) where n.graph_id = $1 and n.id = $2 and k.name = $3)`, s.graphID, ids[0], anchor.Kind).Scan(&matches); err != nil {
+			if err := s.pool.QueryRow(ctx, matchPostgresAnchorKindQuery, s.graphID, ids[0], anchor.Kind).Scan(&matches); err != nil {
 				return nil, err
 			}
 
@@ -720,7 +720,7 @@ func (s *postgresSQLRunner) existingGraphCounts(ctx context.Context) (int64, int
 
 // captureExistingGraphEnvironment records live graph relation sizes and normalized schema and index fingerprints.
 func (s *postgresSQLRunner) captureExistingGraphEnvironment(ctx context.Context) error {
-	if err := s.pool.QueryRow(ctx, `select pg_total_relation_size(format('node_%s', $1::int4)::regclass), pg_total_relation_size(format('edge_%s', $1::int4)::regclass)`, s.graphID).Scan(&s.environment.NodeRelationBytes, &s.environment.EdgeRelationBytes); err != nil {
+	if err := s.pool.QueryRow(ctx, capturePostgresStorageQuery, s.graphID).Scan(&s.environment.NodeRelationBytes, &s.environment.EdgeRelationBytes); err != nil {
 		return err
 	}
 	return s.pool.QueryRow(ctx, `select

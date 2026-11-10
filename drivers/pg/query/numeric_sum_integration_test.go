@@ -48,9 +48,14 @@ func TestCypherSumSchema(t *testing.T) {
 	require.Equal(t, "9007199254740995", distinct)
 	require.NoError(t, pool.QueryRow(ctx, "select cypher_sum(value)::text from (values (null::jsonb), ('null'::jsonb)) as v(value)").Scan(&distinct))
 	require.Equal(t, "0", distinct)
-	for _, tc := range []struct{ values, code string }{
-		{`["123"]`, "22023"}, {"[true]", "22023"}, {"[[1]]", "22023"}, {"[{}]", "22023"},
-		{"[9223372036854775807, 1]", "22003"}, {"[-9223372036854775808, -1]", "22003"},
+	for _, tc := range []struct {
+		// values is the JSON array supplied to the numeric aggregate.
+		values string
+		// code is the database error code required for the rejected input.
+		code string
+	}{
+		{values: `["123"]`, code: "22023"}, {values: "[true]", code: "22023"}, {values: "[[1]]", code: "22023"}, {values: "[{}]", code: "22023"},
+		{values: "[9223372036854775807, 1]", code: "22003"}, {values: "[-9223372036854775808, -1]", code: "22003"},
 	} {
 		_, err := pool.Exec(ctx, "select cypher_sum(value) from jsonb_array_elements($1::jsonb) as v(value)", tc.values)
 		require.ErrorContains(t, err, "SQLSTATE "+tc.code)

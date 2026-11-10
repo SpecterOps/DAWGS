@@ -8,20 +8,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func unsupportedImportCreateCases() []struct{ source, message string } {
-	return []struct{ source, message string }{
-		{"MATCH (a), (b) CREATE UNIQUE (a)-[:RejectedEdge]->(b)", "CREATE UNIQUE is not supported"},
-		{"CREATE UNIQUE (:PGV2IntegrationNode {name: 'rejected'})", "CREATE UNIQUE is not supported"},
-		{"MATCH (a), (b) SET a.name = 'changed' CREATE UNIQUE (a)-[:RejectedEdge]->(b) RETURN a", "CREATE UNIQUE is not supported"},
-		{"CREATE (:PGV2IntegrationNode {name: 'before'}) WITH 1 AS x CREATE UNIQUE (:PGV2IntegrationNode {name: 'after'})", "CREATE UNIQUE is not supported"},
-		{"MATCH (a), (b) CREATE UNIQUE (a)-[:RejectedEdge]->(b) WITH a RETURN a", "CREATE UNIQUE is not supported"},
-		{"LOAD CSV FROM 'file:///missing.csv' AS row MATCH (n) RETURN count(*) AS c", "LOAD CSV is not supported"},
-		{"LOAD CSV WITH HEADERS FROM 'file:///missing.csv' AS row FIELDTERMINATOR ';' RETURN row", "LOAD CSV is not supported"},
-		{"LOAD CSV FROM $url AS row WITH row RETURN row", "LOAD CSV is not supported"},
-		{"LOAD CSV FROM $url AS row CREATE (:PGV2IntegrationNode {name: 'rejected'})", "LOAD CSV is not supported"},
-		{"LOAD CSV FROM $url AS row MATCH (n) SET n.name = 'changed'", "LOAD CSV is not supported"},
-		{"LOAD CSV FROM $url AS row MATCH (n) DETACH DELETE n", "LOAD CSV is not supported"},
-		{"CREATE (:PGV2IntegrationNode {name: 'before'}) WITH 1 AS x LOAD CSV FROM $url AS row RETURN x", "LOAD CSV is not supported"},
+func unsupportedImportCreateCases() []struct {
+	// source is the query text supplied to the parser or rewriter.
+	source string
+	// message is the diagnostic substring expected for the rejected query.
+	message string
+} {
+	return []struct {
+		// source is the query text supplied to the parser or rewriter.
+		source string
+		// message is the diagnostic substring expected for the rejected query.
+		message string
+	}{
+		{source: "MATCH (a), (b) CREATE UNIQUE (a)-[:RejectedEdge]->(b)", message: "CREATE UNIQUE is not supported"},
+		{source: "CREATE UNIQUE (:PGV2IntegrationNode {name: 'rejected'})", message: "CREATE UNIQUE is not supported"},
+		{source: "MATCH (a), (b) SET a.name = 'changed' CREATE UNIQUE (a)-[:RejectedEdge]->(b) RETURN a", message: "CREATE UNIQUE is not supported"},
+		{source: "CREATE (:PGV2IntegrationNode {name: 'before'}) WITH 1 AS x CREATE UNIQUE (:PGV2IntegrationNode {name: 'after'})", message: "CREATE UNIQUE is not supported"},
+		{source: "MATCH (a), (b) CREATE UNIQUE (a)-[:RejectedEdge]->(b) WITH a RETURN a", message: "CREATE UNIQUE is not supported"},
+		{source: "LOAD CSV FROM 'file:///missing.csv' AS row MATCH (n) RETURN count(*) AS c", message: "LOAD CSV is not supported"},
+		{source: "LOAD CSV WITH HEADERS FROM 'file:///missing.csv' AS row FIELDTERMINATOR ';' RETURN row", message: "LOAD CSV is not supported"},
+		{source: "LOAD CSV FROM $url AS row WITH row RETURN row", message: "LOAD CSV is not supported"},
+		{source: "LOAD CSV FROM $url AS row CREATE (:PGV2IntegrationNode {name: 'rejected'})", message: "LOAD CSV is not supported"},
+		{source: "LOAD CSV FROM $url AS row MATCH (n) SET n.name = 'changed'", message: "LOAD CSV is not supported"},
+		{source: "LOAD CSV FROM $url AS row MATCH (n) DETACH DELETE n", message: "LOAD CSV is not supported"},
+		{source: "CREATE (:PGV2IntegrationNode {name: 'before'}) WITH 1 AS x LOAD CSV FROM $url AS row RETURN x", message: "LOAD CSV is not supported"},
 	}
 }
 

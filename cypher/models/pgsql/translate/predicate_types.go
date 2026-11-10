@@ -55,13 +55,13 @@ func rewriteTypedOrdering(expression *pgsql.BinaryExpression) (bool, error) {
 // string-type condition. Direct properties retain bare ->> extraction so LIKE
 // predicates remain eligible for existing text indexes.
 func stringPredicateOperand(operand pgsql.Expression) (pgsql.Expression, pgsql.Expression, error) {
-	operand = unwrapParenthetical(operand)
-	if property, ok := expressionToPropertyLookupBinaryExpression(operand); ok {
-		copy := *property
-		copy.Operator = pgsql.OperatorJSONTextField
-		return &copy, jsonbStringTypeCheck(property), nil
+	normalizedOperand := unwrapParenthetical(operand)
+	if property, ok := expressionToPropertyLookupBinaryExpression(normalizedOperand); ok {
+		textLookup := *property
+		textLookup.Operator = pgsql.OperatorJSONTextField
+		return &textLookup, jsonbStringTypeCheck(property), nil
 	}
-	dataType, err := InferExpressionType(operand)
+	dataType, err := InferExpressionType(normalizedOperand)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -69,19 +69,19 @@ func stringPredicateOperand(operand pgsql.Expression) (pgsql.Expression, pgsql.E
 		if dataType != pgsql.JSONB {
 			// UNWIND columns can lack a scope hint. Their concrete SQL type
 			// still lets to_jsonb retain the value's runtime type.
-			operand, err = arithmeticJSONOperand(operand)
+			normalizedOperand, err = arithmeticJSONOperand(normalizedOperand)
 			if err != nil {
 				return nil, nil, err
 			}
 		}
-		return pgsql.NewBinaryExpression(operand, "#>>", pgsql.ArrayLiteral{CastType: pgsql.TextArray}),
-			pgsql.NewBinaryExpression(jsonbTypeof(operand), pgsql.OperatorEquals, pgsql.NewLiteral("string", pgsql.Text)), nil
+		return pgsql.NewBinaryExpression(normalizedOperand, "#>>", pgsql.ArrayLiteral{CastType: pgsql.TextArray}),
+			pgsql.NewBinaryExpression(jsonbTypeof(normalizedOperand), pgsql.OperatorEquals, pgsql.NewLiteral("string", pgsql.Text)), nil
 	}
 	if dataType.IsKnown() && dataType != pgsql.Text {
 		// Non-string operands, including null, yield null rather than their text form.
 		return pgsql.NewTypeCast(pgsql.NullLiteral(), pgsql.Text), nil, nil
 	}
-	return operand, nil, nil
+	return normalizedOperand, nil, nil
 }
 
 // nullableStringPredicate retains null for every non-string value, even when the

@@ -22,7 +22,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	sql "github.com/specterops/dawgs/drivers/pg/query"
 	"github.com/specterops/dawgs/graph"

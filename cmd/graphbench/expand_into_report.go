@@ -544,20 +544,20 @@ func expandIntoPlanModes(plans map[string]map[string][]string) []ExpandIntoPlanM
 
 // expandIntoPlanOperator removes EXPLAIN decorations while retaining the physical operator family.
 func expandIntoPlanOperator(line string) string {
-	line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "->"))
-	if line == "" || strings.HasPrefix(line, "Filter:") || strings.HasPrefix(line, "Index Cond:") || strings.HasPrefix(line, "Join Filter:") {
+	normalizedPlanLine := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "->"))
+	if normalizedPlanLine == "" || strings.HasPrefix(normalizedPlanLine, "Filter:") || strings.HasPrefix(normalizedPlanLine, "Index Cond:") || strings.HasPrefix(normalizedPlanLine, "Join Filter:") {
 		return ""
 	}
-	if index := strings.Index(line, "  ("); index >= 0 {
-		line = line[:index]
+	if index := strings.Index(normalizedPlanLine, "  ("); index >= 0 {
+		normalizedPlanLine = normalizedPlanLine[:index]
 	}
-	if index := strings.Index(line, " on "); index >= 0 {
-		line = line[:index]
+	if index := strings.Index(normalizedPlanLine, " on "); index >= 0 {
+		normalizedPlanLine = normalizedPlanLine[:index]
 	}
-	if index := strings.Index(line, " using "); index >= 0 {
-		line = line[:index]
+	if index := strings.Index(normalizedPlanLine, " using "); index >= 0 {
+		normalizedPlanLine = normalizedPlanLine[:index]
 	}
-	return strings.TrimSpace(line)
+	return strings.TrimSpace(normalizedPlanLine)
 }
 
 // createExpandIntoStudyReport reads, validates, fingerprints, and writes a three-arm study artifact.

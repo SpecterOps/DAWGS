@@ -568,12 +568,12 @@ func normalizeNeo4jOperator(operator string) string {
 
 // neo4jOperatorBase supports benchmark evidence processing for neo4j operator base.
 func neo4jOperatorBase(operator string) string {
-	operator = strings.TrimSpace(operator)
-	for strings.HasSuffix(operator, "@neo4j") {
-		operator = strings.TrimSpace(strings.TrimSuffix(operator, "@neo4j"))
+	normalizedOperator := strings.TrimSpace(operator)
+	for strings.HasSuffix(normalizedOperator, "@neo4j") {
+		normalizedOperator = strings.TrimSpace(strings.TrimSuffix(normalizedOperator, "@neo4j"))
 	}
 
-	return operator
+	return normalizedOperator
 }
 
 // cypherWithoutTerminator trims surrounding whitespace and one trailing Cypher semicolon.

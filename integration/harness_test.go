@@ -202,7 +202,10 @@ func TestSessionRollbackPreservesFailures(t *testing.T) {
 		{name: "driver failure", driverErr: failure},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tx := &struct{ graph.Transaction }{}
+			tx := &struct {
+				// Transaction provides the delegated transaction operations.
+				graph.Transaction
+			}{}
 			db := &rollbackHarnessDatabase{transaction: tx, err: tc.driverErr}
 			session := &Session{DB: db, Ctx: context.Background()}
 			called := false

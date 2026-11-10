@@ -80,8 +80,8 @@ func endpointResolutionInput(symbol string, node *cypher.NodePattern, where *cyp
 
 // endpointResolutionCandidateForTerm evaluates planner state needed for endpoint resolution candidate for term.
 func endpointResolutionCandidateForTerm(expression cypher.Expression, symbol string) (endpointResolutionCandidate, bool) {
-	expression = unwrapCypherParenthetical(expression)
-	comparison, ok := expression.(*cypher.Comparison)
+	unwrappedExpression := unwrapCypherParenthetical(expression)
+	comparison, ok := unwrappedExpression.(*cypher.Comparison)
 	if !ok || comparison == nil || len(comparison.Partials) != 1 || comparison.Partials[0] == nil {
 		return endpointResolutionCandidate{}, false
 	}
@@ -186,11 +186,11 @@ func constantListCardinality(expression cypher.Expression) (int, bool) {
 // and parameterized sets. Parameter contents remain runtime evidence and must
 // pass the same 32/33 bounded-resolution sentinel as a literal set.
 func explicitSetCardinality(expression cypher.Expression) (values int, parameterized, recognized bool) {
-	expression = unwrapCypherParenthetical(expression)
-	if _, ok := expression.(*cypher.Parameter); ok {
+	unwrappedExpression := unwrapCypherParenthetical(expression)
+	if _, ok := unwrappedExpression.(*cypher.Parameter); ok {
 		return 0, true, true
 	}
-	values, recognized = constantListCardinality(expression)
+	values, recognized = constantListCardinality(unwrappedExpression)
 	return values, false, recognized
 }
 
@@ -384,12 +384,12 @@ func classifyTraversalPredicate(
 	nodeSymbols map[string]struct{},
 	relationshipSymbols map[string]struct{},
 ) traversalPredicateClassification {
-	expression = unwrapCypherParenthetical(expression)
-	if quantifier, ok := expression.(*cypher.Quantifier); ok {
+	unwrappedExpression := unwrapCypherParenthetical(expression)
+	if quantifier, ok := unwrappedExpression.(*cypher.Quantifier); ok {
 		return classifyTraversalQuantifier(quantifier, pathSymbol)
 	}
 
-	dependencies := sortedDependencies(expression)
+	dependencies := sortedDependencies(unwrappedExpression)
 	if pathSymbol != "" && stringSliceContains(dependencies, pathSymbol) {
 		return traversalPredicateClassification{
 			class:      TraversalPredicateClassWholePath,
@@ -759,12 +759,14 @@ func statementUpdatingClauseCount(query *cypher.RegularQuery) int {
 
 // unwrapCypherParenthetical evaluates planner state needed for unwrap cypher parenthetical.
 func unwrapCypherParenthetical(expression cypher.Expression) cypher.Expression {
+	currentExpression := expression
+
 	for {
-		parenthetical, ok := expression.(*cypher.Parenthetical)
+		parenthetical, ok := currentExpression.(*cypher.Parenthetical)
 		if !ok || parenthetical == nil {
-			return expression
+			return currentExpression
 		}
-		expression = parenthetical.Expression
+		currentExpression = parenthetical.Expression
 	}
 }
 

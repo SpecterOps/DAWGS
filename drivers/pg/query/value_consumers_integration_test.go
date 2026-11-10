@@ -54,15 +54,20 @@ func TestCypherValueConsumersSchema(t *testing.T) {
 		require.Equal(t, !tc.null, got.Valid)
 		require.Equal(t, tc.want, got.Int64)
 	}
-	for _, tc := range []struct{ sql, value string }{
-		{"select cypher_text($1::jsonb,'toString')", "[]"},
-		{"select cypher_text($1::jsonb,'toString')", "{}"},
-		{"select cypher_text($1::jsonb,'toLower')", "123"},
-		{"select cypher_text($1::jsonb,'split')", "true"},
-		{"select cypher_size($1::jsonb)", "123"},
-		{"select cypher_size($1::jsonb)", "{}"},
-		{"select cypher_list($1::jsonb)", "{}"},
-		{"select cypher_list($1::jsonb)", "123"},
+	for _, tc := range []struct {
+		// sql is the SQL statement or identifier spelling exercised by the case.
+		sql string
+		// value is the input value supplied to the statement or setting.
+		value string
+	}{
+		{sql: "select cypher_text($1::jsonb,'toString')", value: "[]"},
+		{sql: "select cypher_text($1::jsonb,'toString')", value: "{}"},
+		{sql: "select cypher_text($1::jsonb,'toLower')", value: "123"},
+		{sql: "select cypher_text($1::jsonb,'split')", value: "true"},
+		{sql: "select cypher_size($1::jsonb)", value: "123"},
+		{sql: "select cypher_size($1::jsonb)", value: "{}"},
+		{sql: "select cypher_list($1::jsonb)", value: "{}"},
+		{sql: "select cypher_list($1::jsonb)", value: "123"},
 	} {
 		_, err := pool.Exec(ctx, tc.sql, tc.value)
 		require.ErrorContains(t, err, "SQLSTATE 22023")

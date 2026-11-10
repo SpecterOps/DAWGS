@@ -21,10 +21,12 @@ type TraversalDepth struct {
 	err          error
 }
 
+// traversalDepthBound returns an independently addressable bound for a pattern range.
 func traversalDepthBound(value int64) *int64 {
 	return &value
 }
 
+// newTraversalDepth retains bounds and records negative or reversed-range errors for the query builder.
 func newTraversalDepth(start, end *int64) TraversalDepth {
 	if start != nil && *start < 0 {
 		return TraversalDepth{
@@ -49,6 +51,7 @@ func newTraversalDepth(start, end *int64) TraversalDepth {
 	}
 }
 
+// rangePattern returns an independent range node, using omitted bounds when no range was set.
 func (s TraversalDepth) rangePattern() *cypher.PatternRange {
 	if s.patternRange == nil {
 		return &cypher.PatternRange{}
@@ -57,22 +60,27 @@ func (s TraversalDepth) rangePattern() *cypher.PatternRange {
 	return cypher.Copy(s.patternRange)
 }
 
+// AnyDepth leaves both variable-length traversal bounds unspecified.
 func AnyDepth() TraversalDepth {
 	return newTraversalDepth(nil, nil)
 }
 
-func MinDepth(min int64) TraversalDepth {
-	return newTraversalDepth(traversalDepthBound(min), nil)
+// MinDepth sets an inclusive lower traversal bound and records an error for negative input.
+func MinDepth(minDepth int64) TraversalDepth {
+	return newTraversalDepth(traversalDepthBound(minDepth), nil)
 }
 
-func MaxDepth(max int64) TraversalDepth {
-	return newTraversalDepth(nil, traversalDepthBound(max))
+// MaxDepth sets an inclusive upper traversal bound and records an error for negative input.
+func MaxDepth(maxDepth int64) TraversalDepth {
+	return newTraversalDepth(nil, traversalDepthBound(maxDepth))
 }
 
-func DepthRange(min, max int64) TraversalDepth {
-	return newTraversalDepth(traversalDepthBound(min), traversalDepthBound(max))
+// DepthRange sets inclusive traversal bounds and records negative or reversed-range errors.
+func DepthRange(minDepth, maxDepth int64) TraversalDepth {
+	return newTraversalDepth(traversalDepthBound(minDepth), traversalDepthBound(maxDepth))
 }
 
+// ExactDepth sets equal lower and upper traversal bounds and records an error for negative input.
 func ExactDepth(depth int64) TraversalDepth {
 	depthBound := traversalDepthBound(depth)
 	return newTraversalDepth(depthBound, depthBound)

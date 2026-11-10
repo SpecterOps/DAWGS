@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/graph"
@@ -38,14 +38,14 @@ func TestKindCacheDirectMutationsAdoptBeforeBinding(t *testing.T) {
 			jsonb, err := pgsql.PropertiesToJSONB(properties)
 			require.NoError(t, err)
 			if relationship {
-				mock.ExpectQuery(createEdgeStatement).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgx.NamedArgs{
+				mock.ExpectQuery(createEdgeStatement).WithArgs(pgx.NamedArgs{
 					"graph_id": int32(1), "start_id": graph.ID(10), "end_id": graph.ID(20), "kind_id": int16(2), "properties": jsonb,
 				}).WillReturnRows(pgxmock.NewRows([]string{"edge"}).AddRow(&edgeComposite{ID: 3, StartID: 10, EndID: 20, KindID: 2}))
 				edge, err := tx.CreateRelationshipByIDs(10, 20, kind, properties)
 				require.NoError(t, err)
 				require.Equal(t, kind, edge.Kind)
 			} else {
-				mock.ExpectQuery(createNodeStatement).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgx.NamedArgs{
+				mock.ExpectQuery(createNodeStatement).WithArgs(pgx.NamedArgs{
 					"graph_id": int32(1), "kind_ids": []int16{2}, "properties": jsonb,
 				}).WillReturnRows(pgxmock.NewRows([]string{"node"}).AddRow(&nodeComposite{ID: 3, KindIDs: []int16{2}}))
 				node, err := tx.CreateNode(properties, kind)

@@ -269,11 +269,11 @@ func TestPostgreSQLShadowOrientationAttestsEmptyIncumbent(t *testing.T) {
 		}
 		read.Close()
 
-		clear := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
-		for clear.Next() {
+		clearResult := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
+		for clearResult.Next() {
 		}
-		err := clear.Error()
-		clear.Close()
+		err := clearResult.Error()
+		clearResult.Close()
 		return err
 	}); err != nil {
 		t.Fatalf("execute empty shadow orientation query: %v\nSQL: %s", err, sqlQuery.Statement)
@@ -423,11 +423,11 @@ func executeGuardedOrientationWithReceipt(t *testing.T, session *Session, rootKe
 		}
 		read.Close()
 
-		clear := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
-		for clear.Next() {
+		clearResult := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
+		for clearResult.Next() {
 		}
-		err := clear.Error()
-		clear.Close()
+		err := clearResult.Error()
+		clearResult.Close()
 		return err
 	}); err != nil {
 		t.Fatalf("execute guarded orientation query: %v\nSQL: %s", err, sqlQuery.Statement)

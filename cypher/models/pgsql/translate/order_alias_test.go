@@ -44,15 +44,20 @@ func TestDomainObjectIDOrderByLimit(t *testing.T) {
 
 func TestTailOrderAliasExpressions(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
-		for _, tc := range []struct{ query, order string }{
-			{`MATCH (n:User) RETURN n.k AS x ORDER BY x + 0`, `properties`},
-			{`UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY x`, `i0.i0`},
-			{`UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY ((x))`, `i0.i0`},
-			{`UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY i0 + 0`, `10 - i0`},
-			{`UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY -i0`, `(10 - i0)`},
-			{`UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY toString(i0)`, `(10 - i0)`},
-			{`MATCH (n:User) RETURN sum(n.k) AS x ORDER BY x + 0`, `sum(`},
-			{`MATCH (n:User) RETURN n.k AS s0 ORDER BY coalesce(s0, 0)`, `properties`},
+		for _, tc := range []struct {
+			// query is the Cypher statement exercised by this case.
+			query string
+			// order is the SQL substring expected in the ordering expression.
+			order string
+		}{
+			{query: `MATCH (n:User) RETURN n.k AS x ORDER BY x + 0`, order: `properties`},
+			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY x`, order: `i0.i0`},
+			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY ((x))`, order: `i0.i0`},
+			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY i0 + 0`, order: `10 - i0`},
+			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY -i0`, order: `(10 - i0)`},
+			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY toString(i0)`, order: `(10 - i0)`},
+			{query: `MATCH (n:User) RETURN sum(n.k) AS x ORDER BY x + 0`, order: `sum(`},
+			{query: `MATCH (n:User) RETURN n.k AS s0 ORDER BY coalesce(s0, 0)`, order: `properties`},
 		} {
 			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
 				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)

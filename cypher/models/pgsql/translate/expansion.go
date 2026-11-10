@@ -1649,17 +1649,18 @@ func shortestPathSearchCTE(functionName pgsql.Identifier, expansionModel *Expans
 
 // shortestPathSearchCTEFrom builds the search CTE, substituting validated singleton endpoint identifiers when present.
 func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Expansion, harnessParameters []pgsql.Expression, validatedEndpoints, searchAlias pgsql.Identifier) pgsql.CommonTableExpression {
+	effectiveHarnessParameters := harnessParameters
 
 	if expansionModel.UsesSingletonEndpointPair() {
-		harnessParameters = append([]pgsql.Expression(nil), harnessParameters...)
-		rootArrayIndex, terminalArrayIndex := bidirectionalHarnessEndpointArrayParameterIndexes(functionName, len(harnessParameters))
-		harnessParameters[rootArrayIndex] = pgsql.ArrayLiteral{
+		effectiveHarnessParameters = append([]pgsql.Expression(nil), effectiveHarnessParameters...)
+		rootArrayIndex, terminalArrayIndex := bidirectionalHarnessEndpointArrayParameterIndexes(functionName, len(effectiveHarnessParameters))
+		effectiveHarnessParameters[rootArrayIndex] = pgsql.ArrayLiteral{
 			Values: []pgsql.Expression{
 				pgsql.CompoundIdentifier{validatedEndpoints, expansionRootID},
 			},
 			CastType: pgsql.Int8Array,
 		}
-		harnessParameters[terminalArrayIndex] = pgsql.ArrayLiteral{
+		effectiveHarnessParameters[terminalArrayIndex] = pgsql.ArrayLiteral{
 			Values: []pgsql.Expression{
 				pgsql.CompoundIdentifier{validatedEndpoints, expansionTerminalID},
 			},
@@ -1676,7 +1677,7 @@ func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Ex
 				From: []pgsql.FromClause{{
 					Source: pgsql.FunctionCall{
 						Function:   functionName,
-						Parameters: harnessParameters,
+						Parameters: effectiveHarnessParameters,
 					},
 				}},
 			},
@@ -2006,6 +2007,8 @@ func (s *ExpansionBuilder) applyShortestPathSelfEndpointGuard(projectionQuery *p
 
 // buildShortestPathsHarnessCall assembles the seeded search, harness invocation, and final shortest-path projection.
 func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgsql.Identifier) (pgsql.Query, error) {
+	effectiveHarnessFunctionName := harnessFunctionName
+
 	var (
 		expansionModel  = s.traversalStep.Expansion
 		projectionQuery pgsql.Select
@@ -2091,13 +2094,13 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 				pgsql.ArrayLiteral{Values: []pgsql.Expression{pgsql.CompoundIdentifier{pairsAlias, expansionTerminalID}}, CastType: pgsql.Int8Array})
 		}
 		if !expansionModel.Options.MaxDepth.Set {
-			harnessFunctionName = pgsql.Identifier(harnessFunctionName.String() + "_v2")
+			effectiveHarnessFunctionName = pgsql.Identifier(effectiveHarnessFunctionName.String() + "_v2")
 			harnessParameters = append(harnessParameters, pgsql.NewLiteral(false, pgsql.Boolean))
 		}
-		search := shortestPathSearchCTE(harnessFunctionName, expansionModel, harnessParameters)
+		search := shortestPathSearchCTE(effectiveHarnessFunctionName, expansionModel, harnessParameters)
 		if boundPairs {
 			body := search.Query.Body.(pgsql.Select)
-			body.Projection = pgsql.Projection{pgsql.CompoundIdentifier{harnessFunctionName, pgsql.WildcardIdentifier}}
+			body.Projection = pgsql.Projection{pgsql.CompoundIdentifier{effectiveHarnessFunctionName, pgsql.WildcardIdentifier}}
 			body.From = append([]pgsql.FromClause{{Source: pgsql.TableReference{Name: pairsAlias.AsCompoundIdentifier()}}}, body.From...)
 			search.Query.Body = body
 		}
@@ -2176,9 +2179,9 @@ func shortestDistanceIDProjection(projection pgsql.Projection, traversalStep *Tr
 		default:
 			continue
 		}
-		copy := *aliased
-		copy.Expression = replacement
-		result[idx] = &copy
+		expressionCopy := *aliased
+		expressionCopy.Expression = replacement
+		result[idx] = &expressionCopy
 	}
 	return result
 }
@@ -5227,9 +5230,9 @@ func (s *Translator) liftSingletonIDAnchor(expression pgsql.Expression) (pgsql.E
 		typedExpression.CastType = pgsql.Int8
 		return typedExpression, nil
 	case *pgsql.Parameter:
-		copy := *typedExpression
-		copy.CastType = pgsql.Int8
-		return &copy, nil
+		expressionCopy := *typedExpression
+		expressionCopy.CastType = pgsql.Int8
+		return &expressionCopy, nil
 	case pgsql.TypeCast:
 		return s.liftSingletonIDAnchor(typedExpression.Expression)
 	default:

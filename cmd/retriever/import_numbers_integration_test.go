@@ -42,16 +42,16 @@ func TestImportExactNumbers(t *testing.T) {
 	require.NoError(t, db.AssertSchema(ctx, graph.Schema{Graphs: []graph.Graph{target}, DefaultGraph: target}))
 	// Retriever loads require an empty target. Reset the selected test graph,
 	// including fixtures from earlier packages when Neo4j ignores graph names.
-	clear := func() {
+	clearGraph := func() {
 		require.NoError(t, db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			tx = tx.WithGraph(graph.Graph{Name: target.Name})
-			if err := tx.Relationships().Delete(); err != nil {
+			scopedTx := tx.WithGraph(graph.Graph{Name: target.Name})
+			if err := scopedTx.Relationships().Delete(); err != nil {
 				return err
 			}
-			return tx.Nodes().Delete()
+			return scopedTx.Nodes().Delete()
 		}))
 	}
-	t.Cleanup(clear)
+	t.Cleanup(clearGraph)
 
 	// Keep the input tokens independent of the import decoder and its normalization.
 	const properties = `{"large":9007199254740993,"negative":-9007199254740993,
@@ -71,7 +71,7 @@ func TestImportExactNumbers(t *testing.T) {
 `, compactProperties.String())
 	for _, format := range []string{"document", "none", "gzip", "zstd"} {
 		t.Run(format, func(t *testing.T) {
-			clear()
+			clearGraph()
 			if format == "document" {
 				input := fmt.Sprintf(`{"graph":{"nodes":[%s],"edges":[%s]}}`,
 					strings.ReplaceAll(strings.TrimSpace(nodes), "\n", ","), strings.TrimSpace(edges))

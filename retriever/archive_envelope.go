@@ -180,20 +180,20 @@ func WriteCollectionArchiveFile(options ArchiveFileOptions) error {
 }
 
 func preflightArchiveOutputPath(archivePath string) error {
-	archivePath = strings.TrimSpace(archivePath)
-	if archivePath == "" {
+	trimmedArchivePath := strings.TrimSpace(archivePath)
+	if trimmedArchivePath == "" {
 		return fmt.Errorf("archive output path is required")
 	}
 
-	if err := requirePathDoesNotExist(archivePath); err != nil {
+	if err := requirePathDoesNotExist(trimmedArchivePath); err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(trimmedArchivePath), 0o755); err != nil {
 		return fmt.Errorf("create archive parent directory: %w", err)
 	}
 
-	tempFile, err := os.CreateTemp(filepath.Dir(archivePath), filepath.Base(archivePath)+".preflight-*.tmp")
+	tempFile, err := os.CreateTemp(filepath.Dir(trimmedArchivePath), filepath.Base(trimmedArchivePath)+".preflight-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create archive preflight temp file: %w", err)
 	}
@@ -210,7 +210,7 @@ func preflightArchiveOutputPath(archivePath string) error {
 		return fmt.Errorf("remove archive preflight temp file: %w", removeErr)
 	}
 
-	return requirePathDoesNotExist(archivePath)
+	return requirePathDoesNotExist(trimmedArchivePath)
 }
 
 func PreflightArchiveOutputPath(archivePath string) error {
@@ -349,21 +349,21 @@ func UnpackEncryptedCollectionArchiveWithOptions(reader io.Reader, outputDir str
 }
 
 func createUnpackStagingDirectory(outputDir string, force bool) (string, error) {
-	outputDir = strings.TrimSpace(outputDir)
-	if outputDir == "" {
+	trimmedOutputDir := strings.TrimSpace(outputDir)
+	if trimmedOutputDir == "" {
 		return "", fmt.Errorf("output directory is required; pass -out")
 	}
 
-	if err := preflightUnpackOutputDirectory(outputDir, force); err != nil {
+	if err := preflightUnpackOutputDirectory(trimmedOutputDir, force); err != nil {
 		return "", err
 	}
 
-	parentDir := filepath.Dir(outputDir)
+	parentDir := filepath.Dir(trimmedOutputDir)
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		return "", fmt.Errorf("create unpack parent directory: %w", err)
 	}
 
-	stagingDir, err := os.MkdirTemp(parentDir, "."+filepath.Base(outputDir)+".unpack-*.tmp")
+	stagingDir, err := os.MkdirTemp(parentDir, "."+filepath.Base(trimmedOutputDir)+".unpack-*.tmp")
 	if err != nil {
 		return "", fmt.Errorf("create unpack staging directory: %w", err)
 	}
@@ -511,22 +511,24 @@ func newEncryptedArchiveWriter(writer io.Writer, recipient hpke.PublicKey) (*enc
 }
 
 func (s *encryptedArchiveWriter) Write(p []byte) (int, error) {
+	remainingPlaintext := p
+
 	if s.closed {
 		return 0, fmt.Errorf("encrypted archive writer is closed")
 	}
 
 	written := 0
-	for len(p) > 0 {
-		chunkSize := len(p)
+	for len(remainingPlaintext) > 0 {
+		chunkSize := len(remainingPlaintext)
 		if chunkSize > encryptedArchiveChunkSize {
 			chunkSize = encryptedArchiveChunkSize
 		}
 
-		if err := s.writeFrame(encryptedArchiveFrameData, p[:chunkSize]); err != nil {
+		if err := s.writeFrame(encryptedArchiveFrameData, remainingPlaintext[:chunkSize]); err != nil {
 			return written, err
 		}
 
-		p = p[chunkSize:]
+		remainingPlaintext = remainingPlaintext[chunkSize:]
 		written += chunkSize
 	}
 

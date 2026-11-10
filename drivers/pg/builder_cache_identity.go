@@ -44,10 +44,12 @@ func (s *builderIdentityEncoder) flush() {
 }
 
 func (s *builderIdentityEncoder) write(value string) {
-	for len(value) > 0 {
-		written := copy(s.buffer[s.used:], value)
+	remainingValue := value
+
+	for len(remainingValue) > 0 {
+		written := copy(s.buffer[s.used:], remainingValue)
 		s.used += written
-		value = value[written:]
+		remainingValue = remainingValue[written:]
 		if s.used == len(s.buffer) {
 			s.flush()
 		}

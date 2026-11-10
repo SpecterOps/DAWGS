@@ -84,9 +84,9 @@ func TestCorpusRecordExpectations(t *testing.T) {
 			if entry.IsDir() || filepath.Ext(path) != ".json" {
 				return nil
 			}
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return err
+			raw, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
 			}
 			var doc any
 			if err := json.Unmarshal(raw, &doc); err != nil {

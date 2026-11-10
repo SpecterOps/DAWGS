@@ -189,9 +189,9 @@ func updateIdentityKey(fields ...string) string {
 
 func identityPropertiesKey(properties *Properties, fields []string) (string, error) {
 	key := strings.Builder{}
-	fields = slices.Clone(fields)
-	slices.Sort(fields)
-	for _, field := range fields {
+	sortedFields := slices.Clone(fields)
+	slices.Sort(sortedFields)
+	for _, field := range sortedFields {
 		if properties == nil || !properties.Exists(field) || properties.Get(field).IsNil() {
 			return "", fmt.Errorf("identity property %s: %w", field, ErrPropertyNotFound)
 		}

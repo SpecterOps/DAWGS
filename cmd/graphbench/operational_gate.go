@@ -32,14 +32,19 @@ const (
 	// OperationalScenarioCandidateMatrix exercises an admitted candidate under
 	// one pool-size, concurrency, and PostgreSQL plan-cache-mode cell.
 	OperationalScenarioCandidateMatrix OperationalEvidenceScenario = "candidate_matrix"
+
 	// OperationalScenarioLowWorkMem proves admitted execution under constrained work_mem.
 	OperationalScenarioLowWorkMem OperationalEvidenceScenario = "low_work_mem"
+
 	// OperationalScenarioCancellation proves bounded cancellation and same-session recovery.
 	OperationalScenarioCancellation OperationalEvidenceScenario = "cancellation_replay"
+
 	// OperationalScenarioConcurrentWriter proves Repeatable Read stability across a concurrent commit.
 	OperationalScenarioConcurrentWriter OperationalEvidenceScenario = "repeatable_read_concurrent_writer"
+
 	// OperationalScenarioSessionIsolation proves invocation-local state does not cross sessions.
 	OperationalScenarioSessionIsolation OperationalEvidenceScenario = "session_isolation"
+
 	// OperationalScenarioForcedOverflow proves the candidate's exact overflow fallback receipt chain.
 	OperationalScenarioForcedOverflow OperationalEvidenceScenario = "forced_overflow_fallback"
 )
@@ -209,16 +214,22 @@ type OperationalGateReport struct {
 // buildOperationalGateReport validates operational evidence without relying
 // on filenames, CLI arguments, or human interpretation of integration logs.
 func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements OperationalGateRequirements, records []OperationalEvidenceRecord) OperationalGateReport {
-	input, inputSHA256, inputErr := canonicalOperationalGateInput(identity, requirements, records)
+	var (
+		canonicalIdentity     = identity
+		canonicalRequirements = requirements
+		canonicalRecords      = records
+	)
+
+	input, inputSHA256, inputErr := canonicalOperationalGateInput(canonicalIdentity, canonicalRequirements, canonicalRecords)
 	if inputErr == nil {
-		identity = input.PromotionIdentity
-		requirements = input.Requirements
-		records = input.Records
+		canonicalIdentity = input.PromotionIdentity
+		canonicalRequirements = input.Requirements
+		canonicalRecords = input.Records
 	}
 	report := OperationalGateReport{
 		Version:           operationalGateVersion,
-		PromotionIdentity: cloneOperationalPromotionIdentity(identity),
-		Requirements:      cloneOperationalRequirements(requirements),
+		PromotionIdentity: cloneOperationalPromotionIdentity(canonicalIdentity),
+		Requirements:      cloneOperationalRequirements(canonicalRequirements),
 		Input:             input,
 		InputSHA256:       inputSHA256,
 		Passed:            true,
@@ -226,9 +237,9 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 	if inputErr != nil {
 		report.Reasons = append(report.Reasons, "operational input cannot be canonically embedded: "+inputErr.Error())
 	}
-	report.Reasons = append(report.Reasons, validateOperationalIdentity(identity)...)
-	report.Reasons = append(report.Reasons, validateOperationalRequirements(identity, requirements)...)
-	if len(records) == 0 {
+	report.Reasons = append(report.Reasons, validateOperationalIdentity(canonicalIdentity)...)
+	report.Reasons = append(report.Reasons, validateOperationalRequirements(canonicalIdentity, canonicalRequirements)...)
+	if len(canonicalRecords) == 0 {
 		report.Reasons = append(report.Reasons, "operational evidence is empty")
 	}
 
@@ -242,7 +253,7 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 	operationalTranslationTarget := ""
 	var databaseIdentity *PostgresEnvironment
 
-	for _, record := range records {
+	for _, record := range canonicalRecords {
 		decision := OperationalGateRecord{
 			ID:          record.ID,
 			Scenario:    record.Scenario,
@@ -269,7 +280,7 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 		} else {
 			seenIDs[record.ID] = struct{}{}
 		}
-		decision.Reasons = append(decision.Reasons, validateOperationalRecordBinding(identity, requirements, record)...)
+		decision.Reasons = append(decision.Reasons, validateOperationalRecordBinding(canonicalIdentity, canonicalRequirements, record)...)
 		workload, workloadErr := operationalWorkloadBinding(record.Result)
 		if workloadErr != nil {
 			decision.Reasons = append(decision.Reasons, "operational workload binding: "+workloadErr.Error())
@@ -295,8 +306,8 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 		}
 		if record.Result.PostgresEnvironment != nil {
 			if databaseIdentity == nil {
-				copy := *record.Result.PostgresEnvironment
-				databaseIdentity = &copy
+				environmentCopy := *record.Result.PostgresEnvironment
+				databaseIdentity = &environmentCopy
 			} else if !sameOperationalDatabase(databaseIdentity, record.Result.PostgresEnvironment) {
 				decision.Reasons = append(decision.Reasons, "PostgreSQL database identity differs across operational records")
 			}
@@ -304,13 +315,13 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 
 		switch record.Scenario {
 		case OperationalScenarioCandidateMatrix:
-			decision.Reasons = append(decision.Reasons, validateOperationalMatrixCell(record, requirements)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalMatrixCell(record, canonicalRequirements)...)
 			decision.Reasons = append(decision.Reasons, validateOperationalConcurrencyBlock(record)...)
 			poolSize := 0
 			if record.Result.Environment != nil {
 				poolSize = record.Result.Environment.PoolSize
 			}
-			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, identity, requirements, poolSize == 1)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, canonicalIdentity, canonicalRequirements, poolSize == 1)...)
 			cell := OperationalMatrixCell{PoolSize: decision.PoolSize, Concurrency: decision.Concurrency, PlanCacheMode: decision.PlanCacheMode}
 			seenMatrix[cell]++
 			if seenMatrix[cell] > 1 {
@@ -321,37 +332,37 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 			if seenScenarios[record.Scenario] > 1 {
 				decision.Reasons = append(decision.Reasons, "operational scenario is duplicated")
 			}
-			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, identity, requirements, true)...)
-			if decision.WorkMemBytes <= 0 || decision.WorkMemBytes > requirements.LowWorkMemMaximumBytes {
-				decision.Reasons = append(decision.Reasons, fmt.Sprintf("work_mem exceeds constrained ceiling %d bytes", requirements.LowWorkMemMaximumBytes))
+			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, canonicalIdentity, canonicalRequirements, true)...)
+			if decision.WorkMemBytes <= 0 || decision.WorkMemBytes > canonicalRequirements.LowWorkMemMaximumBytes {
+				decision.Reasons = append(decision.Reasons, fmt.Sprintf("work_mem exceeds constrained ceiling %d bytes", canonicalRequirements.LowWorkMemMaximumBytes))
 			}
 		case OperationalScenarioCancellation:
 			seenScenarios[record.Scenario]++
 			if seenScenarios[record.Scenario] > 1 {
 				decision.Reasons = append(decision.Reasons, "operational scenario is duplicated")
 			}
-			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, identity, requirements, true)...)
-			decision.Reasons = append(decision.Reasons, validateOperationalCancellation(record.Cancellation, record.Result, requirements)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, canonicalIdentity, canonicalRequirements, true)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalCancellation(record.Cancellation, record.Result, canonicalRequirements)...)
 		case OperationalScenarioConcurrentWriter:
 			seenScenarios[record.Scenario]++
 			if seenScenarios[record.Scenario] > 1 {
 				decision.Reasons = append(decision.Reasons, "operational scenario is duplicated")
 			}
-			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, identity, requirements, true)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, canonicalIdentity, canonicalRequirements, true)...)
 			decision.Reasons = append(decision.Reasons, validateOperationalSnapshot(record.Snapshot)...)
 		case OperationalScenarioSessionIsolation:
 			seenScenarios[record.Scenario]++
 			if seenScenarios[record.Scenario] > 1 {
 				decision.Reasons = append(decision.Reasons, "operational scenario is duplicated")
 			}
-			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, identity, requirements, true)...)
-			decision.Reasons = append(decision.Reasons, validateOperationalSessionIsolation(record.SessionIsolation, record.Result, requirements)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, canonicalIdentity, canonicalRequirements, true)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalSessionIsolation(record.SessionIsolation, record.Result, canonicalRequirements)...)
 		case OperationalScenarioForcedOverflow:
 			seenScenarios[record.Scenario]++
 			if seenScenarios[record.Scenario] > 1 {
 				decision.Reasons = append(decision.Reasons, "operational scenario is duplicated")
 			}
-			decision.Reasons = append(decision.Reasons, validateOperationalFallbackResult(record.Result, identity, requirements)...)
+			decision.Reasons = append(decision.Reasons, validateOperationalFallbackResult(record.Result, canonicalIdentity, canonicalRequirements)...)
 		default:
 			decision.Reasons = append(decision.Reasons, fmt.Sprintf("unsupported operational scenario %q", record.Scenario))
 		}
@@ -371,13 +382,13 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 		}
 		report.Records = append(report.Records, decision)
 	}
-	if len(records) != len(defaultOperationalPoolSizes)*len(defaultOperationalConcurrency)*len(defaultOperationalPlanCacheModes)+5 {
+	if len(canonicalRecords) != len(defaultOperationalPoolSizes)*len(defaultOperationalConcurrency)*len(defaultOperationalPlanCacheModes)+5 {
 		report.Reasons = append(report.Reasons, "operational evidence must contain exactly 32 records")
 	}
 
-	for _, poolSize := range requirements.PoolSizes {
-		for _, concurrency := range requirements.ConcurrencyLevels {
-			for _, mode := range requirements.PlanCacheModes {
+	for _, poolSize := range canonicalRequirements.PoolSizes {
+		for _, concurrency := range canonicalRequirements.ConcurrencyLevels {
+			for _, mode := range canonicalRequirements.PlanCacheModes {
 				cell := OperationalMatrixCell{PoolSize: poolSize, Concurrency: concurrency, PlanCacheMode: normalizedPlanCacheMode(mode)}
 				report.Coverage.RequiredMatrixCells++
 				if _, found := validMatrix[cell]; found {

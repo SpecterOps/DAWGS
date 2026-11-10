@@ -12,12 +12,17 @@ import (
 )
 
 func TestKindNameCodec(t *testing.T) {
-	for _, tc := range []struct{ raw, token string }{
-		{"Base", "Base"}, {"MiXeD", "MiXeD"}, {"MATCH", "MATCH"},
-		{"has space", "`has space`"}, {"   ", "`   `"}, {"a-b.!", "`a-b.!`"},
-		{"1leading", "`1leading`"}, {"日本語", "日本語"}, {"e\u0301", "e\u0301"},
-		{"has`tick", "`has``tick`"}, {"a``b", "`a````b`"}, {"`Base`", "```Base```"},
-		{"x`) MATCH (n) //", "`x``) MATCH (n) //`"}, {"", "``"},
+	for _, tc := range []struct {
+		// raw is the decoded kind name without Cypher quoting.
+		raw string
+		// token is the Cypher spelling, including any backtick quoting.
+		token string
+	}{
+		{raw: "Base", token: "Base"}, {raw: "MiXeD", token: "MiXeD"}, {raw: "MATCH", token: "MATCH"},
+		{raw: "has space", token: "`has space`"}, {raw: "   ", token: "`   `"}, {raw: "a-b.!", token: "`a-b.!`"},
+		{raw: "1leading", token: "`1leading`"}, {raw: "日本語", token: "日本語"}, {raw: "e\u0301", token: "e\u0301"},
+		{raw: "has`tick", token: "`has``tick`"}, {raw: "a``b", token: "`a````b`"}, {raw: "`Base`", token: "```Base```"},
+		{raw: "x`) MATCH (n) //", token: "`x``) MATCH (n) //`"}, {raw: "", token: "``"},
 	} {
 		t.Run(tc.token, func(t *testing.T) {
 			require.Equal(t, tc.token, cypher.EscapeKindName(tc.raw))

@@ -11,8 +11,11 @@ BENCH_BASE ?= main
 BENCH_TARGET ?= HEAD
 BENCH_KIND ?= all
 
-# Main packages to test/build
-MAIN_PACKAGES := $(shell $(GO_CMD) list ./...)
+# Generated parser code is compiled as a dependency, but excluded from style tools
+# and explicit test/coverage package selections.
+GENERATED_GO_DIR := ./cypher/parser
+GENERATED_GO_PACKAGE := $(shell $(GO_CMD) list -m)/$(patsubst ./%,%,$(GENERATED_GO_DIR))
+MAIN_PACKAGES := $(filter-out $(GENERATED_GO_PACKAGE),$(shell $(GO_CMD) list ./...))
 COVERPKG := $(shell $(GO_CMD) list ./... | grep -v '/cypher/parser$$' | tr '\n' ',' | sed 's/,$$//')
 
 # Metric configuration
@@ -111,17 +114,17 @@ tidy:
 # Code quality
 lint:
 	@echo "Running linter..."
-	@$(GO_CMD) vet -unreachable=false ./...
-	@$(GO_CMD) list ./... | grep -v '/cypher/parser$$' | xargs $(GO_CMD) vet -unreachable
+	@$(GO_CMD) vet -unreachable=false $(MAIN_PACKAGES)
+	@$(GO_CMD) vet -unreachable $(MAIN_PACKAGES)
 
 format:
 	@echo "Formatting code..."
-	@find ./ \( -path './.git' -o -path './.coverage' \) -prune -o -name '*.go' -print0 | xargs -P 12 -0 -I '{}' $(GOIMPORTS_CMD) -w '{}'
+	@find ./ \( -path './.git' -o -path './.coverage' -o -path '$(GENERATED_GO_DIR)' \) -prune -o -name '*.go' -print0 | xargs -P 12 -0 -I '{}' $(GOIMPORTS_CMD) -w '{}'
 
 # Test targets
 test: $(METRICS_DIR)
 	@echo "Running tests..."
-	@$(GO_CMD) test -race -covermode=atomic -coverprofile=$(COVERAGE_PROFILE) -coverpkg=$(COVERPKG) -count=1 -parallel=10 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -vet=off -race -covermode=atomic -coverprofile=$(COVERAGE_PROFILE) -coverpkg=$(COVERPKG) -count=1 -parallel=10 $(MAIN_PACKAGES)
 	@$(GO_CMD) tool cover -func=$(COVERAGE_PROFILE) > $(COVERAGE_FUNC_REPORT)
 	@echo "Coverage report written to $(COVERAGE_FUNC_REPORT)"
 
@@ -129,13 +132,13 @@ test_all: test test_integration test_bdd_integration
 
 test_integration:
 	@echo "Running all integration tests..."
-	@$(GO_CMD) test -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -vet=off -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 test_bdd_integration: $(METRICS_DIR)
 	@echo "Running all BDD integration tests..."
-	@$(GO_CMD) test -v -tags 'bdd_integration' -count=1 ./bdd
+	@$(GO_CMD) test -vet=off -v -tags 'bdd_integration' -count=1 ./bdd
 test_bench:
 	@echo "Running benchmarks..."
-	@$(GO_CMD) test -run '^$$' -bench '$(BENCH)' -benchmem -count=$(BENCH_COUNT) -benchtime=$(BENCH_TIME) $(MAIN_PACKAGES)
+	@$(GO_CMD) test -vet=off -run '^$$' -bench '$(BENCH)' -benchmem -count=$(BENCH_COUNT) -benchtime=$(BENCH_TIME) $(MAIN_PACKAGES)
 
 bench_diff:
 	@echo "Running benchmark diff..."
@@ -143,15 +146,15 @@ bench_diff:
 
 test_neo4j:
 	@echo "Running Neo4j integration tests..."
-	@$(GO_CMD) test -tags integration -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -vet=off -tags integration -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 
 test_pg:
 	@echo "Running PostgreSQL integration tests..."
-	@$(GO_CMD) test -tags manual_integration -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
+	@$(GO_CMD) test -vet=off -tags manual_integration -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES)
 
 test_update:
 	@echo "Updating test cases..."
-	@CYSQL_UPDATE_CASES=true $(GO_CMD) test -parallel=10 $(MAIN_PACKAGES)
+	@CYSQL_UPDATE_CASES=true $(GO_CMD) test -vet=off -parallel=10 $(MAIN_PACKAGES)
 
 	@cp -fv cypher/analyzer/updated_cases/* cypher/test/cases
 	@rm -rf cypher/analyzer/updated_cases/
@@ -302,9 +305,9 @@ quality_backend: test
 		exit 1; \
 	fi
 	@set +e; \
-	CONNECTION_STRING="$(PG_CONNECTION_STRING)" $(GO_CMD) test -json -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES) > $(BACKEND_PG_REPORT); \
+	CONNECTION_STRING="$(PG_CONNECTION_STRING)" $(GO_CMD) test -vet=off -json -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES) > $(BACKEND_PG_REPORT); \
 	pg_status=$$?; \
-	CONNECTION_STRING="$(NEO4J_CONNECTION_STRING)" $(GO_CMD) test -json -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES) > $(BACKEND_NEO4J_REPORT); \
+	CONNECTION_STRING="$(NEO4J_CONNECTION_STRING)" $(GO_CMD) test -vet=off -json -tags 'manual_integration integration' -race -cover -count=1 -p=1 -parallel=1 $(MAIN_PACKAGES) > $(BACKEND_NEO4J_REPORT); \
 	neo4j_status=$$?; \
 	set -e; \
 	$(GO_CMD) tool dawgs-metrics -source-root . -coverprofile $(COVERAGE_PROFILE) -ignore '$(METRICS_IGNORE)' -top $(CRAP_TOP) -over $(CRAP_OVER) -cyclo-over $(CYCLO_OVER) -backend-result pg=$(BACKEND_PG_REPORT) -backend-result neo4j=$(BACKEND_NEO4J_REPORT) $(QUALITY_INPUTS) -quality-text $(QUALITY_TEXT_REPORT) -quality-json $(QUALITY_JSON_REPORT) -html $(METRICS_HTML_REPORT) -stdout=false; \

@@ -920,9 +920,9 @@ func directWriteIncidentCount(targets int) int64 {
 
 // directWriteNodeUpdate builds an identity-property node upsert while preserving objectID in the replacement properties.
 func directWriteNodeUpdate(objectID string, kind graph.Kind, properties *graph.Properties) graph.NodeUpdate {
-	properties = properties.Clone().Set(directWriteObjectID, objectID)
+	identityProperties := properties.Clone().Set(directWriteObjectID, objectID)
 	return graph.NodeUpdate{
-		Node:               graph.PrepareNode(properties, kind),
+		Node:               graph.PrepareNode(identityProperties, kind),
 		IdentityProperties: []string{directWriteObjectID},
 	}
 }

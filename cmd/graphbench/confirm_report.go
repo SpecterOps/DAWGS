@@ -298,7 +298,7 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 				return ConfirmationReport{}, floorErr
 			}
 		}
-		comparable, reasons := confirmationComparable(left, right, key)
+		isComparable, reasons := confirmationComparable(left, right, key)
 		entry := ConfirmationCase{
 			Dataset:                   key.dataset,
 			Name:                      key.name,
@@ -309,7 +309,7 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 			MatchedRounds:             len(leftRounds),
 			LeftSamples:               sampleCount(leftRounds),
 			RightSamples:              sampleCount(rightRounds),
-			Comparable:                comparable,
+			Comparable:                isComparable,
 			Comparability:             reasons,
 			RightRuntimeReceiptChains: caseRuntimeReceiptChains(right, key),
 			P50:                       classifyConfirmationMetric(p50Ratio, p50Change, p50NoiseRatio, p50NoiseAbsolute),
@@ -322,7 +322,7 @@ func buildConfirmationReport(left, right []CaseResult, aa *AAResolutionReport, o
 		if splits[key] == "diagnostic" {
 			entry.Disposition = "qualification_diagnostic"
 		}
-		if !comparable {
+		if !isComparable {
 			entry.Disposition = "fingerprint_mismatch"
 		}
 		if entry.TimingGated && (!entry.Comparable || entry.P95.Classification != "cleared_non_inferior") {

@@ -276,12 +276,14 @@ func (s *Translator) buildUpdate(identifierMutation *Update, sourceFrame *Frame,
 // appendUpdateOperation folds operations from left to right. Parentheses keep
 // PostgreSQL operator precedence from reordering concatenation and subtraction.
 func appendUpdateOperation(previous pgsql.Expression, binding, column pgsql.Identifier, operator pgsql.Operator, value pgsql.Expression) pgsql.Expression {
-	if previous == nil {
-		previous = pgsql.CompoundIdentifier{binding, column}
+	updatedExpression := previous
+
+	if updatedExpression == nil {
+		updatedExpression = pgsql.CompoundIdentifier{binding, column}
 	} else {
 		// Keep consecutive assignments/removals in one JSON object or array.
 		// A change of operator creates a boundary that must remain ordered.
-		if binary, ok := previous.(*pgsql.BinaryExpression); ok && binary.Operator == operator {
+		if binary, ok := updatedExpression.(*pgsql.BinaryExpression); ok && binary.Operator == operator {
 			switch right := binary.ROperand.(type) {
 			case pgsql.FunctionCall:
 				if next, ok := value.(pgsql.FunctionCall); ok && right.Function == next.Function {
@@ -297,7 +299,7 @@ func appendUpdateOperation(previous pgsql.Expression, binding, column pgsql.Iden
 				}
 			}
 		}
-		previous = pgsql.NewParenthetical(previous)
+		updatedExpression = pgsql.NewParenthetical(updatedExpression)
 	}
-	return pgsql.NewBinaryExpression(previous, operator, value)
+	return pgsql.NewBinaryExpression(updatedExpression, operator, value)
 }

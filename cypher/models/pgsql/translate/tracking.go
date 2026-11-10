@@ -14,9 +14,11 @@ import (
 type IdentifierGenerator map[pgsql.DataType]int
 
 func (s IdentifierGenerator) NewIdentifier(dataType pgsql.DataType) (pgsql.Identifier, error) {
+	identifierDataType := dataType
+
 	var prefixStr string
 
-	switch dataType {
+	switch identifierDataType {
 	case pgsql.ExpansionPattern:
 		prefixStr = "ex"
 	case pgsql.ExpansionPath:
@@ -28,7 +30,7 @@ func (s IdentifierGenerator) NewIdentifier(dataType pgsql.DataType) (pgsql.Ident
 	case pgsql.EdgeComposite:
 		prefixStr = "e"
 	case pgsql.PathEdge:
-		dataType = pgsql.EdgeComposite
+		identifierDataType = pgsql.EdgeComposite
 		prefixStr = "e"
 	case pgsql.Scope:
 		prefixStr = "s"
@@ -36,17 +38,17 @@ func (s IdentifierGenerator) NewIdentifier(dataType pgsql.DataType) (pgsql.Ident
 		prefixStr = "pi"
 	default:
 		// Make this data type the unknown generic
-		dataType = pgsql.UnknownDataType
+		identifierDataType = pgsql.UnknownDataType
 		prefixStr = "i"
 	}
 
 	var (
-		nextID    = s[dataType]
+		nextID    = s[identifierDataType]
 		nextIDStr = strconv.Itoa(nextID)
 	)
 
 	// Increment the ID
-	s[dataType] = nextID + 1
+	s[identifierDataType] = nextID + 1
 
 	return pgsql.Identifier(prefixStr + nextIDStr), nil
 }

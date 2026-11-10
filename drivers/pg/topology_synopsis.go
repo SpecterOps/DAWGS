@@ -69,73 +69,44 @@ func (s *Driver) RefreshTraversalTopologySynopsis(ctx context.Context, target gr
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var graphID int32
-	var sourceEpoch, nodeCount, edgeCount, nextEpoch int64
-	if err := tx.QueryRow(ctx, `select graph.id::int4, graph_traversal_epoch.epoch::bigint from graph join graph_traversal_epoch on graph_traversal_epoch.graph_id = graph.id where graph.name = $1 for update of graph_traversal_epoch`, target.Name).Scan(&graphID, &sourceEpoch); err != nil {
+	var (
+		graphID                                      int32
+		sourceEpoch, nodeCount, edgeCount, nextEpoch int64
+	)
+	if err := tx.QueryRow(ctx, lockTopologySynopsisGraphQuery, target.Name).Scan(&graphID, &sourceEpoch); err != nil {
 		if err == pgx.ErrNoRows {
 			return TraversalTopologySynopsis{}, fmt.Errorf("topology synopsis graph %q does not exist", target.Name)
 		}
 		return TraversalTopologySynopsis{}, fmt.Errorf("read topology synopsis graph: %w", err)
 	}
-	if err := tx.QueryRow(ctx, `select count(*)::bigint, (select count(*)::bigint from edge where graph_id = $1) from node where graph_id = $1`, graphID).Scan(&nodeCount, &edgeCount); err != nil {
+	if err := tx.QueryRow(ctx, countTopologySynopsisGraphQuery, graphID).Scan(&nodeCount, &edgeCount); err != nil {
 		return TraversalTopologySynopsis{}, fmt.Errorf("count topology synopsis graph: %w", err)
 	}
-	if err := tx.QueryRow(ctx, `select coalesce(epoch, 0)::bigint + 1 from graph_traversal_synopsis_generation where graph_id = $1`, graphID).Scan(&nextEpoch); err == pgx.ErrNoRows {
+	if err := tx.QueryRow(ctx, nextTopologySynopsisEpochQuery, graphID).Scan(&nextEpoch); err == pgx.ErrNoRows {
 		nextEpoch = 1
 	} else if err != nil {
 		return TraversalTopologySynopsis{}, fmt.Errorf("read topology synopsis generation: %w", err)
 	}
-	for _, statement := range []string{
-		`delete from graph_traversal_synopsis_degree where graph_id = $1`,
-		`delete from graph_traversal_synopsis_edge_count where graph_id = $1`,
-		`delete from graph_traversal_synopsis_node_count where graph_id = $1`,
-		`insert into graph_traversal_synopsis_node_count (graph_id, epoch, kind_id, node_count)
-select $1::int4, $2::bigint, kind_id, count(*)::bigint
-from node cross join lateral unnest(kind_ids) as kinds(kind_id)
-where graph_id = $1::int4 group by kind_id`,
-		`insert into graph_traversal_synopsis_edge_count (graph_id, epoch, direction, kind_id, edge_count, distinct_start_count, distinct_end_count)
-select $1::int4, $2::bigint, direction, kind_id, edge_count, distinct_start_count, distinct_end_count
-from (
-  select 'outbound'::text as direction, kind_id, count(*)::bigint as edge_count, count(distinct start_id)::bigint as distinct_start_count, count(distinct end_id)::bigint as distinct_end_count from edge where graph_id = $1::int4 group by kind_id
-  union all
-  select 'inbound'::text, kind_id, count(*)::bigint, count(distinct end_id)::bigint, count(distinct start_id)::bigint from edge where graph_id = $1::int4 group by kind_id
-) counts`,
-		`insert into graph_traversal_synopsis_degree (graph_id, epoch, direction, kind_id, bucket, node_count)
-with degree as (
-  select 'outbound'::text as direction, kind_id, start_id as node_id, count(*)::bigint as degree from edge where graph_id = $1::int4 group by kind_id, start_id
-  union all
-  select 'inbound'::text, kind_id, end_id, count(*)::bigint from edge where graph_id = $1::int4 group by kind_id, end_id
-)
-select $1::int4, $2::bigint, direction, kind_id,
-       case when degree = 1 then 'one' when degree <= 4 then 'two_to_four' when degree <= 16 then 'five_to_sixteen' else 'seventeen_plus' end,
-       count(*)::bigint
-from degree group by direction, kind_id, case when degree = 1 then 'one' when degree <= 4 then 'two_to_four' when degree <= 16 then 'five_to_sixteen' else 'seventeen_plus' end`,
+	for _, operation := range []topologySynopsisOperation{
+		{query: deleteTopologySynopsisDegreesQuery},
+		{query: deleteTopologySynopsisEdgeCountsQuery},
+		{query: deleteTopologySynopsisNodeCountsQuery},
+		{query: insertTopologySynopsisNodeCountsQuery, withEpoch: true},
+		{query: insertTopologySynopsisEdgeCountsQuery, withEpoch: true},
+		{query: insertTopologySynopsisDegreesQuery, withEpoch: true},
 	} {
 		args := []any{graphID}
-		if statement[0:6] == "insert" {
+		if operation.withEpoch {
 			args = append(args, nextEpoch)
 		}
-		if _, err := tx.Exec(ctx, statement, args...); err != nil {
+
+		if _, err := tx.Exec(ctx, operation.query, args...); err != nil {
 			return TraversalTopologySynopsis{}, fmt.Errorf("publish topology synopsis detail: %w", err)
 		}
 	}
-	const publish = `
-insert into graph_traversal_synopsis_generation
-  (graph_id, epoch, source_mutation_epoch, estimator_version, schema_version, status, node_count, edge_count, refresh_started_at, refresh_completed_at, refresh_mode)
-select $1, $2, $3, 'topology-fixed-suffix-counts-v1', 'topology-synopsis-schema-v2', 'ready', $4, $5, clock_timestamp(), clock_timestamp(), 'full'
-where (select epoch from graph_traversal_epoch where graph_id = $1) = $3
-on conflict (graph_id) do update
-set epoch = excluded.epoch, source_mutation_epoch = excluded.source_mutation_epoch,
-    estimator_version = excluded.estimator_version, schema_version = excluded.schema_version,
-    status = excluded.status, node_count = excluded.node_count, edge_count = excluded.edge_count,
-    built_at = clock_timestamp(), refresh_started_at = excluded.refresh_started_at,
-    refresh_completed_at = excluded.refresh_completed_at, refresh_mode = excluded.refresh_mode
-where (select epoch from graph_traversal_epoch where graph_id = $1) = $3
-returning graph_id::int4, epoch, source_mutation_epoch,
-          (select epoch from graph_traversal_epoch where graph_id = $1),
-          estimator_version, schema_version, status, node_count, edge_count`
+
 	var synopsis TraversalTopologySynopsis
-	if err := tx.QueryRow(ctx, publish, graphID, nextEpoch, sourceEpoch, nodeCount, edgeCount).Scan(
+	if err := tx.QueryRow(ctx, publishTopologySynopsisQuery, graphID, nextEpoch, sourceEpoch, nodeCount, edgeCount).Scan(
 		&synopsis.GraphID, &synopsis.Epoch, &synopsis.SourceMutationEpoch, &synopsis.CurrentMutationEpoch,
 		&synopsis.EstimatorVersion, &synopsis.SchemaVersion, &synopsis.Status, &synopsis.NodeCount, &synopsis.EdgeCount,
 	); err != nil {
@@ -153,14 +124,7 @@ returning graph_id::int4, epoch, source_mutation_epoch,
 // traversalTopologySynopsis reads the current published synopsis visible to this transaction.
 func (s *transaction) traversalTopologySynopsis(graphID int32) (TraversalTopologySynopsis, error) {
 	var synopsis TraversalTopologySynopsis
-	const statement = `
-select epoch.graph_id::int4, coalesce(synopsis.epoch, 0), coalesce(synopsis.source_mutation_epoch, 0),
-       epoch.epoch, coalesce(synopsis.estimator_version, ''), coalesce(synopsis.schema_version, ''), coalesce(synopsis.status, ''),
-       coalesce(synopsis.node_count, 0), coalesce(synopsis.edge_count, 0)
-from graph_traversal_epoch epoch
-left join graph_traversal_synopsis_generation synopsis on synopsis.graph_id = epoch.graph_id
-where epoch.graph_id = $1`
-	err := s.driver().QueryRow(s.ctx, statement, graphID).Scan(
+	err := s.driver().QueryRow(s.ctx, readTopologySynopsisQuery, graphID).Scan(
 		&synopsis.GraphID, &synopsis.Epoch, &synopsis.SourceMutationEpoch,
 		&synopsis.CurrentMutationEpoch, &synopsis.EstimatorVersion, &synopsis.SchemaVersion, &synopsis.Status,
 		&synopsis.NodeCount, &synopsis.EdgeCount,

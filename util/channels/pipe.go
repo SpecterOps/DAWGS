@@ -6,7 +6,9 @@ import (
 	"github.com/gammazero/deque"
 )
 
-// BufferedPipe is a generic, channel and deque buffered pipe implementation.
+// BufferedPipe connects a send channel to a receive channel through an unbounded queue.
+// The caller closes the send channel to flush queued values; cancellation stops
+// forwarding immediately. The pipe owns and closes the receive channel.
 func BufferedPipe[T any](ctx context.Context) (chan<- T, <-chan T) {
 	var (
 		// Create two channels for the read and write goroutines

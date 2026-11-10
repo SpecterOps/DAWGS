@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
@@ -87,7 +87,7 @@ func TestKindMapperTargetedMisses(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, ids)
 	require.Nil(t, mapper.kinds)
-	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgx.NamedArgs{"names": []string{"Found", "Missing"}}).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(2), "Found"))
+	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgx.NamedArgs{"names": []string{"Found", "Missing"}}).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(2), "Found"))
 	_, err = mapper.MapKinds(tx.ctx, graph.Kinds{known, found, missing, found, missing, known})
 	var absent *pgsql.MissingKindsError
 	require.ErrorAs(t, err, &absent)
@@ -96,7 +96,7 @@ func TestKindMapperTargetedMisses(t *testing.T) {
 	require.False(t, mapper.hasUncommittedKinds)
 	require.True(t, mapper.bypassTranslations(), "transaction-visible lookups must remain private in both translation layers")
 	require.Same(t, before, manager.kindCache.current.Load(), "transaction-visible reads stay private")
-	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgx.NamedArgs{"names": []string{"Missing"}}).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}))
+	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgx.NamedArgs{"names": []string{"Missing"}}).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}))
 	_, err = mapper.MapKind(tx.ctx, missing)
 	require.Error(t, err, "negative resolutions are not retained")
 	mapper.publish()
@@ -131,7 +131,7 @@ func TestKindMapperCommitFailureDoesNotPublish(t *testing.T) {
 	tx := &transaction{ctx: context.Background(), tx: mock, schemaManager: manager}
 	tx.kindMapper = &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
 	failure := errors.New("commit failed")
-	mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int16(7)))
+	mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int16(7)))
 	_, err = tx.kindMapper.AssertKinds(tx.ctx, graph.Kinds{graph.StringKind("Private")})
 	require.NoError(t, err)
 	// Refresh cannot accidentally publish the transaction's private catalog view.
@@ -171,7 +171,7 @@ func TestKindReloadFailureRetainsSnapshotAndRequest(t *testing.T) {
 	manager.kindCache.invalidate()
 	before := manager.kindCache.current.Load()
 	failure := errors.New("catalog unavailable")
-	mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(failure)
+	mock.ExpectQuery("select id, name").WillReturnError(failure)
 	installed, err := tx.reloadKinds(false)
 	require.False(t, installed)
 	require.ErrorIs(t, err, failure)
@@ -185,7 +185,10 @@ var benchmarkKinds graph.Kinds
 var benchmarkKindID int16
 var benchmarkKindIDs map[int16]graph.Kind
 
-type benchmarkKindTransaction struct{ pgx.Tx }
+type benchmarkKindTransaction struct {
+	// Tx provides the delegated transaction operations.
+	pgx.Tx
+}
 
 func (benchmarkKindTransaction) Commit(context.Context) error { return nil }
 
@@ -321,7 +324,7 @@ func TestKindMapperStableSnapshotDoesNotAdoptDestructiveReload(t *testing.T) {
 	mapper.hasUncommittedKinds = true
 	before := mapper.snapshot
 	manager.kindCache.fence()
-	mock.ExpectQuery("select id, name from kind").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+	mock.ExpectQuery("select id, name from kind").
 		WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(1), known.String()).AddRow(int16(3), private.String()))
 	require.NoError(t, mapper.adopt())
 	require.Equal(t, before.epoch, mapper.snapshot.epoch)

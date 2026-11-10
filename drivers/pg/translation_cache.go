@@ -115,32 +115,35 @@ func newTranslationCache(capacity int) *translationCache {
 }
 
 func newTranslationCacheWithPolicy(capacity int, policy string) *translationCache {
-	if capacity < 0 {
-		capacity = 0
+	boundedCapacity := capacity
+	cachePolicy := policy
+
+	if boundedCapacity < 0 {
+		boundedCapacity = 0
 	}
-	if policy == "" {
-		policy = translationCachePolicy
+	if cachePolicy == "" {
+		cachePolicy = translationCachePolicy
 	}
 
 	cacheInstance := &translationCache{
-		capacity: capacity,
-		policy:   policy,
+		capacity: boundedCapacity,
+		policy:   cachePolicy,
 		pending:  map[translationCacheKey]*translationCacheCall{},
 	}
-	if capacity > 0 {
-		cacheInstance.entries = cache.NewSieve[translationCacheKey, translationCacheEntry](capacity)
+	if boundedCapacity > 0 {
+		cacheInstance.entries = cache.NewSieve[translationCacheKey, translationCacheEntry](boundedCapacity)
 	}
 
 	return cacheInstance
 }
 
 func (s *translationCache) Key(query string, graphID int32, parameters map[string]any) translationCacheKey {
-	query = strings.TrimSpace(query)
+	trimmedQuery := strings.TrimSpace(query)
 
 	return translationCacheKey{
 		format:           translationCacheKeyFormat,
-		queryDigest:      sha256.Sum256([]byte(query)),
-		querySize:        len(query),
+		queryDigest:      sha256.Sum256([]byte(trimmedQuery)),
+		querySize:        len(trimmedQuery),
 		graphID:          graphID,
 		parameterTypes:   parameterTypeShape(parameters),
 		policy:           s.policy,
@@ -185,8 +188,10 @@ func (s *translationCache) GetOrBuild(key translationCacheKey, parameters map[st
 }
 
 func (s *translationCache) GetOrBuildContext(ctx context.Context, key translationCacheKey, parameters map[string]any, build func() (string, translationCacheBuildResult, error)) (string, map[string]any, error) {
-	if ctx == nil {
-		ctx = context.Background()
+	effectiveContext := ctx
+
+	if effectiveContext == nil {
+		effectiveContext = context.Background()
 	}
 	if key.querySize > maxCachedCypherBytes || s.capacity == 0 {
 		s.bypasses.Add(1)
@@ -194,7 +199,7 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 	}
 
 	for {
-		if err := ctx.Err(); err != nil {
+		if err := effectiveContext.Err(); err != nil {
 			return "", nil, err
 		}
 
@@ -234,8 +239,8 @@ func (s *translationCache) GetOrBuildContext(ctx context.Context, key translatio
 				}
 				continue
 
-			case <-ctx.Done():
-				return "", nil, ctx.Err()
+			case <-effectiveContext.Done():
+				return "", nil, effectiveContext.Err()
 			}
 		}
 

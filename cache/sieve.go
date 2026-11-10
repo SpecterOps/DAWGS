@@ -13,9 +13,13 @@ import (
 // during the most recent clock‑hand sweep via the atomic `visited`
 // flag and stores a pointer to its position in the eviction queue.
 type entry[K comparable, V any] struct {
-	key     K
-	value   V
+	// key identifies this entry in the store map.
+	key K
+	// value is the cached payload protected by the owning cache lock.
+	value V
+	// visited records lookup activity for the second-chance eviction sweep.
 	visited atomic.Bool
+	// element locates this entry in the insertion-order eviction queue.
 	element *list.Element
 }
 
@@ -33,11 +37,16 @@ type entry[K comparable, V any] struct {
 // Statistics about cache usage are collected in the embedded `stats`
 // field.
 type Sieve[K comparable, V any] struct {
+	// rwLock protects the store, queue, and eviction hand.
 	rwLock sync.RWMutex
-	store  map[K]*entry[K, V]
-	queue  *list.List
-	hand   *list.Element
-	stats  Stats
+	// store maps keys to entries shared with the eviction queue.
+	store map[K]*entry[K, V]
+	// queue orders entries from most recently inserted to oldest.
+	queue *list.List
+	// hand marks the next entry considered by the eviction sweep.
+	hand *list.Element
+	// stats exposes atomic counters and the cache capacity.
+	stats Stats
 }
 
 // NewSieve creates a new Sieve cache with the supplied capacity.
@@ -46,15 +55,17 @@ type Sieve[K comparable, V any] struct {
 // used to prevent function calls from panicking. The returned value
 // implements the `Cache[K,V]` interface.
 func NewSieve[K comparable, V any](capacity int) Cache[K, V] {
+	boundedCapacity := capacity
+
 	// Do not panic on an invalid capacity but ensure that the cache remains functional
-	if capacity <= 0 {
-		capacity = 1
+	if boundedCapacity <= 0 {
+		boundedCapacity = 1
 	}
 
 	return &Sieve[K, V]{
-		store: make(map[K]*entry[K, V], capacity),
+		store: make(map[K]*entry[K, V], boundedCapacity),
 		queue: list.New(),
-		stats: NewStats(capacity),
+		stats: NewStats(boundedCapacity),
 	}
 }
 

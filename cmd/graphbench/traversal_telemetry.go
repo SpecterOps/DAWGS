@@ -28,32 +28,42 @@ const (
 
 	// TraversalTelemetryLevelSummary records only the production execution identity and outcome.
 	TraversalTelemetryLevelSummary TraversalTelemetryLevel = "summary"
+
 	// TraversalTelemetryLevelDiagnostic adds counters from a separate untimed replay.
 	TraversalTelemetryLevelDiagnostic TraversalTelemetryLevel = "diagnostic"
 
 	// TraversalTelemetryCounterStatusComplete records a replay with every declared family populated by invocation-local counters.
 	TraversalTelemetryCounterStatusComplete TraversalTelemetryCounterStatus = "complete"
+
 	// TraversalTelemetryCounterStatusPlanPartial records honest SQL-visible EXPLAIN evidence that is insufficient for qualification.
 	TraversalTelemetryCounterStatusPlanPartial TraversalTelemetryCounterStatus = "plan_derived_partial"
+
 	// TraversalTelemetryCounterStatusHiddenUnavailable records a function-backed executor whose internal work counters were unavailable.
 	TraversalTelemetryCounterStatusHiddenUnavailable TraversalTelemetryCounterStatus = "hidden_counters_unavailable"
 
 	// TraversalTelemetryFamilyOrdinary identifies ordinary DFS or recursive-CTE traversal work.
 	TraversalTelemetryFamilyOrdinary TraversalTelemetryFamily = "ordinary"
+
 	// TraversalTelemetryFamilyOrientation identifies runtime orientation-policy work.
 	TraversalTelemetryFamilyOrientation TraversalTelemetryFamily = "orientation"
+
 	// TraversalTelemetryFamilySuffixGuard identifies bounded reverse-first
 	// fixed-suffix admission and its exact fallback boundary.
 	TraversalTelemetryFamilySuffixGuard TraversalTelemetryFamily = "suffix_guard"
+
 	// TraversalTelemetryFamilySuffixComponent identifies the direct, one-arm
 	// fixed-suffix reverse component used by the routing preflight.
 	TraversalTelemetryFamilySuffixComponent TraversalTelemetryFamily = "suffix_component"
+
 	// TraversalTelemetryFamilySP identifies singleton shortest-path work.
 	TraversalTelemetryFamilySP TraversalTelemetryFamily = "shortest_path"
+
 	// TraversalTelemetryFamilyASP identifies all-shortest-path work.
 	TraversalTelemetryFamilyASP TraversalTelemetryFamily = "all_shortest_paths"
+
 	// TraversalTelemetryFamilyHydration identifies post-discovery path hydration work.
 	TraversalTelemetryFamilyHydration TraversalTelemetryFamily = "hydration"
+
 	// TraversalTelemetryFamilyWorkspace identifies measured session and pool workspace high-water marks.
 	TraversalTelemetryFamilyWorkspace TraversalTelemetryFamily = "workspace"
 )

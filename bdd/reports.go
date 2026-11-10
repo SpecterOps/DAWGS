@@ -16,6 +16,7 @@
 package bdd
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -27,90 +28,134 @@ import (
 )
 
 const (
-	bddReportDir      = "../.coverage"
+	// bddReportDir is the shared output directory for compatibility artifacts.
+	bddReportDir = "../.coverage"
+	// bddJSONReportPath is the Cucumber JSON output consumed by aggregation.
 	bddJSONReportPath = bddReportDir + "/opencypher-tck-results.json"
+	// bddHTMLReportPath is the standalone compatibility summary output.
 	bddHTMLReportPath = bddReportDir + "/opencypher-tck-report.html"
 )
 
+// cucumberFeature decodes one feature and its scenarios from the Cucumber JSON report.
 type cucumberFeature struct {
-	URI      string             `json:"uri"`
-	Name     string             `json:"name"`
+	// URI locates the feature for folder grouping.
+	URI string `json:"uri"`
+	// Name is the feature title supplied by Cucumber.
+	Name string `json:"name"`
+	// Elements contains the scenarios executed for this feature.
 	Elements []cucumberScenario `json:"elements"`
 }
 
+// cucumberScenario decodes scenario tags and ordered step outcomes.
 type cucumberScenario struct {
-	Name  string         `json:"name"`
-	Tags  []cucumberTag  `json:"tags"`
+	// Name is the scenario title displayed in the report.
+	Name string `json:"name"`
+	// Tags determines whether the scenario is enforced or report-only.
+	Tags []cucumberTag `json:"tags"`
+	// Steps contains the executed step outcomes in scenario order.
 	Steps []cucumberStep `json:"steps"`
 }
 
+// cucumberTag identifies a Cucumber scenario tag.
 type cucumberTag struct {
+	// Name includes the tag's leading @ marker.
 	Name string `json:"name"`
 }
 
+// cucumberStep associates an executed step with its result.
 type cucumberStep struct {
-	Name   string         `json:"name"`
+	// Name is the step text supplied by Cucumber.
+	Name string `json:"name"`
+	// Result contains the execution status and optional failure detail.
 	Result cucumberResult `json:"result"`
 }
 
+// cucumberResult decodes the status and failure text of a step.
 type cucumberResult struct {
+	// Status is the Cucumber execution outcome; only passed counts as successful.
 	Status string `json:"status"`
-	Error  string `json:"error_message"`
+	// Error contains failure detail when supplied by the runner.
+	Error string `json:"error_message"`
 }
 
+// scenarioFailure identifies a failed scenario for gate diagnostics.
 type scenarioFailure struct {
+	// Feature identifies the feature containing the failed scenario.
 	Feature string
-	Name    string
-	Error   string
+	// Name identifies the failed scenario within the feature.
+	Name string
+	// Error contains the first failing step's detail or status.
+	Error string
 }
 
+// scenarioResult holds the rendered status and enforcement decision for one scenario.
 type scenarioResult struct {
-	Name     string
-	Status   string
-	Error    string
+	// Name is the displayed scenario title.
+	Name string
+	// Status is passed only when every step succeeded.
+	Status string
+	// Error contains the first failing step's detail, or is empty on success.
+	Error string
+	// Enforced is false for scenarios tagged @report-only.
 	Enforced bool
 }
 
+// featureResult aggregates scenario counts and details within a feature.
 type featureResult struct {
-	Name      string
-	Total     int
-	Passed    int
-	Failed    int
+	// Name is the feature path relative to its report folder.
+	Name string
+	// Total counts all scenarios, including report-only scenarios.
+	Total int
+	// Passed counts scenarios whose steps all passed.
+	Passed int
+	// Failed counts scenarios with a missing or unsuccessful step.
+	Failed int
+	// Scenarios contains scenario details in input order.
 	Scenarios []scenarioResult
 }
 
+// folderResult groups feature reports under their top-level feature folder.
 type folderResult struct {
-	Name     string
-	Total    int
-	Passed   int
-	Failed   int
+	// Name is the grouping folder or unclassified for unknown locations.
+	Name string
+	// Total counts all scenarios across the folder's features.
+	Total int
+	// Passed counts successful scenarios across the folder.
+	Passed int
+	// Failed counts unsuccessful scenarios across the folder.
+	Failed int
+	// Features contains feature summaries sorted by name.
 	Features []featureResult
 }
 
+// bddReport contains compatibility totals and the subset that controls the enforcement gate.
 type bddReport struct {
-	GeneratedAt    string
-	Total          int
-	Passed         int
-	Failed         int
-	Enforced       int
+	// GeneratedAt is the UTC report generation time formatted as RFC3339.
+	GeneratedAt string
+	// Total counts all scenarios, including report-only scenarios.
+	Total int
+	// Passed counts all successful scenarios.
+	Passed int
+	// Failed counts all unsuccessful scenarios.
+	Failed int
+	// Enforced counts scenarios without the @report-only tag.
+	Enforced int
+	// EnforcedFailed counts failures among enforced scenarios.
 	EnforcedFailed int
-	Folders        []folderResult
+	// Folders contains folder summaries sorted by name.
+	Folders []folderResult
 }
 
-var bddReportTemplate = template.Must(template.New("bdd-report").Parse(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cypher Technology Compatibility Kit Report</title>
-<style>body{font:16px system-ui,sans-serif;margin:2rem;color:#202124}table{border-collapse:collapse;width:100%;max-width:1000px}th,td{border:1px solid #dadce0;padding:.6rem;text-align:left}th{background:#f1f3f4}.pass{color:#137333}.fail{color:#c5221f}details{margin-top:.75rem}code{white-space:pre-wrap}</style>
-</head><body><h1>Cypher Technology Compatibility Kit Report</h1><p>Generated {{.GeneratedAt}}</p>
-<p><strong>Total:</strong> {{.Total}} &nbsp; <span class="pass"><strong>Passed:</strong> {{.Passed}}</span> &nbsp; <span class="fail"><strong>Failed:</strong> {{.Failed}}</span></p>
-<p><strong>Enforced gate:</strong> {{.Enforced}} scenarios, {{.EnforcedFailed}} failed. Scenarios tagged <code>@report-only</code> are compatibility reports and do not fail the gate.</p>
-{{range .Folders}}<details><summary><strong>{{.Name}}</strong> — {{.Total}} scenarios, <span class="pass">{{.Passed}} passed</span>, <span class="fail">{{.Failed}} failed</span></summary>
-{{range .Features}}<details><summary>{{.Name}} — {{.Total}} scenarios, <span class="pass">{{.Passed}} passed</span>, <span class="fail">{{.Failed}} failed</span></summary><ul>
-{{range .Scenarios}}<li class="{{if eq .Status "passed"}}pass{{else}}fail{{end}}"><strong>{{.Status}}</strong> — {{.Name}} ({{if .Enforced}}enforced{{else}}report-only{{end}}){{if .Error}}<br><code>{{.Error}}</code>{{end}}</li>
-{{end}}</ul></details>
-{{end}}</details>
-{{end}}</body></html>`))
+// bddReportAssets contains the standalone compatibility report template.
+//
+//go:embed templates/bdd-report.html
+var bddReportAssets embed.FS
 
+// bddReportTemplate is parsed at initialization so an invalid embedded report fails early.
+var bddReportTemplate = template.Must(template.New("bdd-report.html").ParseFS(bddReportAssets, "templates/bdd-report.html"))
+
+// writeBDDHTMLReport decodes Cucumber results and writes an escaped standalone report.
+// A close failure is returned when rendering itself succeeded.
 func writeBDDHTMLReport(inputPath, outputPath string) (report bddReport, err error) {
 	data, err := os.ReadFile(inputPath)
 	if err != nil {
@@ -140,6 +185,7 @@ func writeBDDHTMLReport(inputPath, outputPath string) (report bddReport, err err
 	return report, nil
 }
 
+// aggregateBDDReport counts all scenario outcomes while tracking enforced failures separately.
 func aggregateBDDReport(features []cucumberFeature) bddReport {
 	byFolder := map[string]*folderResult{}
 	report := bddReport{}
@@ -199,6 +245,7 @@ func aggregateBDDReport(features []cucumberFeature) bddReport {
 	return report
 }
 
+// checkBDDGate rejects empty reports, enforced failures, and runner failures not explained by report-only scenarios.
 func checkBDDGate(report bddReport, suiteStatus int) error {
 	if suiteStatus != 0 && suiteStatus != 1 {
 		return fmt.Errorf("BDD runner failed with status %d", suiteStatus)
@@ -215,6 +262,7 @@ func checkBDDGate(report bddReport, suiteStatus int) error {
 	return nil
 }
 
+// topLevelFolderFromURI extracts the first folder below a features path segment.
 func topLevelFolderFromURI(uri string) (string, bool) {
 	parts := strings.Split(filepath.ToSlash(uri), "/")
 	for i, part := range parts {
@@ -225,6 +273,7 @@ func topLevelFolderFromURI(uri string) (string, bool) {
 	return "", false
 }
 
+// featureNameFromURI displays the feature path below its grouping folder, falling back to the basename.
 func featureNameFromURI(uri, folder string) string {
 	parts := strings.Split(filepath.ToSlash(uri), "/")
 	for i, part := range parts {
@@ -236,6 +285,7 @@ func featureNameFromURI(uri, folder string) string {
 	return filepath.Base(uri)
 }
 
+// firstScenarioFailure returns the first unsuccessful step detail or status, treating an empty scenario as a failure.
 func firstScenarioFailure(scenario cucumberScenario) string {
 	if len(scenario.Steps) == 0 {
 		return "scenario has no steps"

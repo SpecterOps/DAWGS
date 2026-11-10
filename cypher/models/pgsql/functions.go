@@ -54,8 +54,10 @@ const (
 
 	// FunctionJSONBBuildObject identifies PostgreSQL's JSONB object constructor.
 	FunctionJSONBBuildObject Identifier = "jsonb_build_object"
+
 	// FunctionJSONBBuildArray constructs an array without reinterpreting element types.
 	FunctionJSONBBuildArray Identifier = "jsonb_build_array"
+
 	// FunctionJSONBArrayElements expands JSON arrays while preserving element types.
 	FunctionJSONBArrayElements Identifier = "jsonb_array_elements"
 
@@ -208,7 +210,7 @@ const (
 	FunctionCypherLikeEscape   Identifier = "cypher_like_escape"
 )
 
-// IsAggregateFunction supports benchmark evidence processing for is aggregate function.
+// IsAggregateFunction reports whether function is one of the aggregate functions recognized by the SQL model.
 func IsAggregateFunction(function Identifier) bool {
 	switch function {
 	case FunctionCount, FunctionArrayAggregate, FunctionMin, FunctionMax, FunctionCypherMin, FunctionCypherMax, FunctionCypherSum, FunctionSum, FunctionAvg:

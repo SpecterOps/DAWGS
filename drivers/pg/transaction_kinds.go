@@ -33,7 +33,10 @@ type transactionKindMapper struct {
 }
 
 // metadataTransaction bypasses automatic refresh and topology invalidation.
-type metadataTransaction struct{ *transaction }
+type metadataTransaction struct {
+	// transaction provides the delegated transaction operations.
+	*transaction
+}
 
 func (s metadataTransaction) Raw(statement string, parameters map[string]any) graph.Result {
 	return s.transaction.raw(statement, parameters)

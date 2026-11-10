@@ -27,7 +27,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.6
 	github.com/parquet-go/parquet-go v0.32.0
-	github.com/pashagolub/pgxmock/v5 v5.1.0
+	github.com/pashagolub/pgxmock/v6 v6.0.0-beta2
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/specterops/go-repl v1.0.1
 	github.com/stretchr/testify v1.12.1

@@ -8,10 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestNormalizeNumbers checks integer precision, floating-point ranges, and nested JSON conversion.
 func TestNormalizeNumbers(t *testing.T) {
 	for _, test := range []struct {
+		// input is the JSON-compatible value before numeric normalization.
 		input any
-		want  any
+		// want is the normalized value, including the expected concrete numeric types.
+		want any
 	}{
 		{json.Number("0"), int64(0)},
 		{json.Number("-0"), int64(0)},
@@ -37,6 +40,7 @@ func TestNormalizeNumbers(t *testing.T) {
 	}
 }
 
+// TestNormalizeNumbersRejectsUnsupportedRanges checks range errors retain their nested property and index context.
 func TestNormalizeNumbersRejectsUnsupportedRanges(t *testing.T) {
 	for _, value := range []string{"9223372036854775808", "-9223372036854775809", "1e309", "-1e309"} {
 		_, err := NormalizeNumbers(map[string]any{"outer": []any{map[string]any{"inner": json.Number(value)}}})

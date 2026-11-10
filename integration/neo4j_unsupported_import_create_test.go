@@ -13,10 +13,15 @@ import (
 
 func TestNeo4jNativeUnsupportedImportAndCreate(t *testing.T) {
 	session := Open(t, Options{RequireDriver: neo4j.DriverName, SkipIfNoConnection: true, SkipIfDriverMismatch: true})
-	for _, tc := range []struct{ source, code string }{
-		{"CREATE UNIQUE (:Created {value: $value})", "Neo.ClientError.Statement.SyntaxError"},
-		{"LOAD CSV FROM $url AS row RETURN count(*)", "Neo.ClientError.Statement.ExternalResourceFailed"},
-		{"LOAD CSV WITH HEADERS FROM $url AS row CREATE (:Created {value: row.value})", "Neo.ClientError.Statement.ExternalResourceFailed"},
+	for _, tc := range []struct {
+		// source is the query text supplied to the parser or rewriter.
+		source string
+		// code is the database error code required for the rejected input.
+		code string
+	}{
+		{source: "CREATE UNIQUE (:Created {value: $value})", code: "Neo.ClientError.Statement.SyntaxError"},
+		{source: "LOAD CSV FROM $url AS row RETURN count(*)", code: "Neo.ClientError.Statement.ExternalResourceFailed"},
+		{source: "LOAD CSV WITH HEADERS FROM $url AS row CREATE (:Created {value: row.value})", code: "Neo.ClientError.Statement.ExternalResourceFailed"},
 	} {
 		t.Run(tc.source, func(t *testing.T) {
 			err := session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {

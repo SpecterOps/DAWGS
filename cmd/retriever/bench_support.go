@@ -27,14 +27,14 @@ func countGraphEntities(ctx context.Context, db graph.Database, targetGraph grap
 func countGraphEntitySnapshot(ctx context.Context, db graph.Database, targetGraph graph.Graph) (graphEntitySnapshot, error) {
 	var entitySnapshot graphEntitySnapshot
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
+		scopedTx := tx.WithGraph(targetGraph)
 
 		var err error
-		if entitySnapshot.NodeCount, err = tx.Nodes().Count(); err != nil {
+		if entitySnapshot.NodeCount, err = scopedTx.Nodes().Count(); err != nil {
 			return fmt.Errorf("count nodes: %w", err)
 		}
 
-		if entitySnapshot.EdgeCount, err = tx.Relationships().Count(); err != nil {
+		if entitySnapshot.EdgeCount, err = scopedTx.Relationships().Count(); err != nil {
 			return fmt.Errorf("count relationships: %w", err)
 		}
 
@@ -67,14 +67,16 @@ func retrieverBatchLimit(remaining int64, batchSize int) int {
 }
 
 func retrieverNextProgressAt(processed int64, planned int64, nextProgressAt int64) int64 {
-	if nextProgressAt <= processed {
-		nextProgressAt += ((processed-nextProgressAt)/retrieverProgressEntityInterval + 1) * retrieverProgressEntityInterval
+	nextCheckpoint := nextProgressAt
+
+	if nextCheckpoint <= processed {
+		nextCheckpoint += ((processed-nextCheckpoint)/retrieverProgressEntityInterval + 1) * retrieverProgressEntityInterval
 	}
-	if nextProgressAt >= planned {
+	if nextCheckpoint >= planned {
 		return 0
 	}
 
-	return nextProgressAt
+	return nextCheckpoint
 }
 
 func perSecond(count int64, elapsed time.Duration) float64 {

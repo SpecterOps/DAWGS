@@ -313,9 +313,9 @@ func validateDumpCheckpointFiles(outputDir string, value dumpCheckpoint) error {
 		if entry.IsDir() {
 			return nil
 		}
-		relativePath, err := filepath.Rel(outputDir, filePath)
-		if err != nil {
-			return err
+		relativePath, pathErr := filepath.Rel(outputDir, filePath)
+		if pathErr != nil {
+			return pathErr
 		}
 		relativePath = filepath.ToSlash(relativePath)
 		if _, found := expected[relativePath]; !found {

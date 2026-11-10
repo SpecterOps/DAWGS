@@ -23,6 +23,9 @@ func TestIdentifierSetOrAndRemoveNilSafe(t *testing.T) {
 func TestValidateConstraintKindPredicatesPropagatesWalkErrors(t *testing.T) {
 	// Unsupported constraint roots fail the shared model walk before Build reaches
 	// kind-predicate validation; the validator still propagates the walk error.
-	err := validateConstraintKindPredicates([]cypher.SyntaxNode{struct{ Unsupported bool }{}})
+	err := validateConstraintKindPredicates([]cypher.SyntaxNode{struct {
+		// Unsupported marks a value that is deliberately outside the Cypher syntax model.
+		Unsupported bool
+	}{}})
 	require.ErrorContains(t, err, "unable to negotiate cypher model type")
 }

@@ -139,7 +139,9 @@ func (s *Translator) buildCreateSourceFrame(idAlias pgsql.Identifier, sequenceTa
 }
 
 func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame, carried *pgsql.IdentifierSet, createdBinding *BoundIdentifier, idAlias pgsql.Identifier) (*Frame, error) {
-	projection, err := buildCarryProjection(s.scope, carried, sourceFrame)
+	carriedBindings := carried
+
+	projection, err := buildCarryProjection(s.scope, carriedBindings, sourceFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -156,9 +158,9 @@ func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame,
 
 	// Join the source and insert CTEs by the preallocated ID so row cardinality
 	// from the incoming pipeline is preserved after RETURNING materializes the composite.
-	carried = carried.Copy().Add(createdBinding.Identifier)
-	projectFrame.Visible = carried.Copy()
-	projectFrame.Exported = carried.Copy()
+	carriedBindings = carriedBindings.Copy().Add(createdBinding.Identifier)
+	projectFrame.Visible = carriedBindings.Copy()
+	projectFrame.Exported = carriedBindings.Copy()
 
 	s.addCTE(projectFrame, pgsql.Select{
 		Projection: projection,
@@ -173,7 +175,7 @@ func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame,
 		),
 	})
 
-	for _, identifier := range carried.Slice() {
+	for _, identifier := range carriedBindings.Slice() {
 		if binding, bound := s.scope.Lookup(identifier); bound {
 			binding.MaterializedBy(projectFrame)
 		}
@@ -326,9 +328,9 @@ func (s *Translator) buildPropertiesObject(properties TranslatedProperties) (pgs
 		value := properties.Map[key]
 		if lookup, ok := expressionToPropertyLookupBinaryExpression(unwrapParenthetical(value)); ok {
 			// CREATE consumes the stored JSON value, including its scalar type.
-			copy := *lookup
-			copy.Operator = pgsql.OperatorJSONField
-			value = &copy
+			jsonLookup := *lookup
+			jsonLookup.Operator = pgsql.OperatorJSONField
+			value = &jsonLookup
 		}
 		if err := RewriteFrameBindings(s.scope, value); err != nil {
 			return nil, err

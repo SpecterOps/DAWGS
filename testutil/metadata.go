@@ -26,12 +26,14 @@ type BaselineMetadata struct {
 
 // ResolveBaselineMetadata returns metadata for dawgsVersion, deriving the current build identity when it is empty.
 func ResolveBaselineMetadata(dawgsVersion string) BaselineMetadata {
-	if dawgsVersion == "" {
-		dawgsVersion = currentDAWGSVersion()
+	effectiveDAWGSVersion := dawgsVersion
+
+	if effectiveDAWGSVersion == "" {
+		effectiveDAWGSVersion = currentDAWGSVersion()
 	}
 
 	return BaselineMetadata{
-		DAWGSVersion: dawgsVersion,
+		DAWGSVersion: effectiveDAWGSVersion,
 	}
 }
 

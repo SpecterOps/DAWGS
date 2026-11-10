@@ -11,12 +11,17 @@ import (
 func TestResultAliasTranslation(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		t.Run(string(mode), func(t *testing.T) {
-			for _, tc := range []struct{ token, sql string }{
-				{"objectId", `"objectId"`},
-				{"`object id`", `"object id"`},
-				{"`object``id`", "\"object`id\""},
-				{"`object\"id`", `"object""id"`},
-				{"`select`", `"select"`},
+			for _, tc := range []struct {
+				// token is the Cypher spelling, including any backtick quoting.
+				token string
+				// sql is the SQL statement or identifier spelling exercised by the case.
+				sql string
+			}{
+				{token: "objectId", sql: `"objectId"`},
+				{token: "`object id`", sql: `"object id"`},
+				{token: "`object``id`", sql: "\"object`id\""},
+				{token: "`object\"id`", sql: `"object""id"`},
+				{token: "`select`", sql: `"select"`},
 			} {
 				for _, query := range []string{
 					"RETURN 7 AS " + tc.token,

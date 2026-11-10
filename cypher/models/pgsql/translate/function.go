@@ -125,16 +125,18 @@ func appendIfReferencedGroupByExpression(groupByExpressions []pgsql.Expression, 
 
 // appendNonAggregateGroupByExpressions adds non-aggregate projection expressions required by PostgreSQL grouping rules.
 func appendNonAggregateGroupByExpressions(groupByExpressions []pgsql.Expression, expressions ...pgsql.Expression) ([]pgsql.Expression, error) {
+	accumulatedGroupByExpressions := groupByExpressions
+
 	for _, expression := range expressions {
 		nextGroupByExpressions, err := NonAggregateGroupByExpressions(expression)
 		if err != nil {
 			return nil, err
 		}
 
-		groupByExpressions = append(groupByExpressions, nextGroupByExpressions...)
+		accumulatedGroupByExpressions = append(accumulatedGroupByExpressions, nextGroupByExpressions...)
 	}
 
-	return groupByExpressions, nil
+	return accumulatedGroupByExpressions, nil
 }
 
 func NonAggregateGroupByExpressions(expression pgsql.Expression) ([]pgsql.Expression, error) {
@@ -626,20 +628,20 @@ func (s *Translator) translatePathLengthFunction(functionInvocation *cypher.Func
 
 // prepareCollectExpression prepares a value and result type for PostgreSQL array aggregation.
 func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression, functionName string) (pgsql.Expression, pgsql.DataType, error) {
-	collectedExpression = concreteEmptyArray(collectedExpression)
-	if literal, ok := unwrapParenthetical(collectedExpression).(pgsql.Literal); ok && literal.Null {
+	normalizedCollectedExpression := concreteEmptyArray(collectedExpression)
+	if literal, ok := unwrapParenthetical(normalizedCollectedExpression).(pgsql.Literal); ok && literal.Null {
 		return pgsql.NewTypeCast(literal, pgsql.JSONB), pgsql.JSONBArray, nil
 	}
-	if isPropertyLookup(unwrapParenthetical(collectedExpression)) {
-		value, err := arithmeticJSONOperand(collectedExpression)
+	if isPropertyLookup(unwrapParenthetical(normalizedCollectedExpression)) {
+		value, err := arithmeticJSONOperand(normalizedCollectedExpression)
 		return value, pgsql.JSONBArray, err
 	}
 
-	dataType, err := InferExpressionType(collectedExpression)
+	dataType, err := InferExpressionType(normalizedCollectedExpression)
 	if err != nil {
 		return nil, pgsql.UnsetDataType, err
 	}
-	if identifier, ok := unwrapParenthetical(collectedExpression).(pgsql.Identifier); ok {
+	if identifier, ok := unwrapParenthetical(normalizedCollectedExpression).(pgsql.Identifier); ok {
 		if binding, bound := scope.Lookup(identifier); !bound {
 			return nil, pgsql.UnsetDataType, fmt.Errorf("binding not found for %s function argument %s", functionName, identifier)
 		} else {
@@ -651,23 +653,23 @@ func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression
 		// A list is one collected value. PostgreSQL multidimensional arrays
 		// cannot represent ragged or empty nested lists.
 		return pgsql.FunctionCall{Function: pgsql.FunctionToJSONB,
-			Parameters: []pgsql.Expression{collectedExpression}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
+			Parameters: []pgsql.Expression{normalizedCollectedExpression}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
 	}
 	if dataType == pgsql.JSONB {
 		// WITH aliases may carry JSON null rather than SQL NULL.
 		return pgsql.FunctionCall{Function: pgsql.FunctionNullIf,
-			Parameters: []pgsql.Expression{collectedExpression, jsonNullLiteral()}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
+			Parameters: []pgsql.Expression{normalizedCollectedExpression, jsonNullLiteral()}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
 	}
 	if arrayType, err := dataType.ToArrayType(); err == nil {
-		return collectedExpression, arrayType, nil
+		return normalizedCollectedExpression, arrayType, nil
 	}
 	if dataType.IsKnown() {
 		// Boolean and null values have no native array type in the SQL model.
-		value, err := arithmeticJSONOperand(collectedExpression)
+		value, err := arithmeticJSONOperand(normalizedCollectedExpression)
 		return value, pgsql.JSONBArray, err
 	}
 
-	return collectedExpression, pgsql.AnyArray, nil
+	return normalizedCollectedExpression, pgsql.AnyArray, nil
 }
 
 // prepareCollectIDExpression extracts a scalar entity ID before collection and records the ID-only alias.

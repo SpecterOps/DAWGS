@@ -45,15 +45,21 @@ const (
 //go:embed translation_cases/*
 var testCaseFiles embed.FS
 
-// Case is a translation test case
+// TranslationTestCase pairs a Cypher query and dynamic parameters with the expected PostgreSQL translation.
 type TranslationTestCase struct {
-	Name         string
-	Cypher       string
-	PgSQL        string
+	// Name identifies the fixture within its source file.
+	Name string
+	// Cypher is the source query supplied to the frontend.
+	Cypher string
+	// PgSQL is the expected rendered PostgreSQL statement.
+	PgSQL string
+	// CypherParams contains dynamic caller parameters keyed by Cypher symbol.
 	CypherParams map[string]any
-	PgSQLParams  map[string]any
+	// PgSQLParams contains the expected dynamic SQL parameter bindings.
+	PgSQLParams map[string]any
 }
 
+// Reset clears the fixture fields so the parser can accumulate the next case.
 func (s *TranslationTestCase) Reset() {
 	s.Name = ""
 	s.Cypher = ""
@@ -62,6 +68,7 @@ func (s *TranslationTestCase) Reset() {
 	s.PgSQLParams = nil
 }
 
+// Copy duplicates the fixture record while retaining its parameter map references.
 func (s *TranslationTestCase) Copy() *TranslationTestCase {
 	return &TranslationTestCase{
 		Name:         s.Name,
@@ -83,25 +90,24 @@ func writeStrings(output io.Writer, strs ...string) error {
 	return nil
 }
 
-// licenseHeader is the exact header required at the start of every generated fixture file.
-var licenseHeader = `-- Copyright %d Specter Ops, Inc.
---
--- Licensed under the Apache License, Version 2.0
--- you may not use this file except in compliance with the License.
--- You may obtain a copy of the License at
---
---     http://www.apache.org/licenses/LICENSE-2.0
---
--- Unless required by applicable law or agreed to in writing, software
--- distributed under the License is distributed on an "AS IS" BASIS,
--- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--- See the License for the specific language governing permissions and
--- limitations under the License.
---
--- SPDX-License-Identifier: Apache-2.0
+// fixtureAssets contains the exact license preamble emitted by the fixture writer.
+//
+//go:embed assets/license_header.sql
+var fixtureAssets embed.FS
 
-`
+// licenseHeader preserves the fixture preamble bytes and its printf year placeholder.
+var licenseHeader = loadLicenseHeader()
 
+// loadLicenseHeader loads the embedded preamble at initialization and fails if it is missing.
+func loadLicenseHeader() string {
+	if header, err := fixtureAssets.ReadFile("assets/license_header.sql"); err != nil {
+		panic(err)
+	} else {
+		return string(header)
+	}
+}
+
+// WriteTo parses and translates the query, then writes its source, parameters, and SQL fixture text.
 func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMapper) error {
 	if regularQuery, err := frontend.ParseCypher(frontend.NewContext(), s.Cypher); err != nil {
 		return err

@@ -576,14 +576,14 @@ func restoreDumpGraphFragments(inputDir string, codec CompressionCodec, checkpoi
 func countGraphEntitySnapshot(ctx context.Context, db graph.Database, targetGraph graph.Graph) (graphEntitySnapshot, error) {
 	var entitySnapshot graphEntitySnapshot
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
+		scopedTx := tx.WithGraph(targetGraph)
 
 		var err error
-		if entitySnapshot.NodeCount, err = tx.Nodes().Count(); err != nil {
+		if entitySnapshot.NodeCount, err = scopedTx.Nodes().Count(); err != nil {
 			return fmt.Errorf("count nodes: %w", err)
 		}
 
-		if entitySnapshot.EdgeCount, err = tx.Relationships().Count(); err != nil {
+		if entitySnapshot.EdgeCount, err = scopedTx.Relationships().Count(); err != nil {
 			return fmt.Errorf("count relationships: %w", err)
 		}
 

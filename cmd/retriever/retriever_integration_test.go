@@ -93,7 +93,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	)
 	var seededNodeIDs, seededEdgeIDs []graph.ID
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{
+		scopedTx := tx.WithGraph(graph.Graph{
 			Name: graphName,
 		})
 
@@ -104,7 +104,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 				kind = systemKind
 			}
 
-			node, err := tx.CreateNode(graph.AsProperties(map[string]any{
+			node, err := scopedTx.CreateNode(graph.AsProperties(map[string]any{
 				"name": fmt.Sprintf("node-%d", index),
 				"role": fmt.Sprintf("role-%d", index%3),
 			}), kind)
@@ -116,7 +116,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 		}
 
 		for index := range edgeCount {
-			relationship, err := tx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
+			relationship, err := scopedTx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
 				"route": fmt.Sprintf("route-%d", index),
 			}))
 			if err != nil {
@@ -262,12 +262,12 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	var loadedNodes []*graph.Node
 	var loadedEdges []*graph.Relationship
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{Name: graphName})
+		scopedTx := tx.WithGraph(graph.Graph{Name: graphName})
 		var err error
-		if loadedNodes, err = ops.FetchNodes(tx.Nodes()); err != nil {
+		if loadedNodes, err = ops.FetchNodes(scopedTx.Nodes()); err != nil {
 			return err
 		}
-		loadedEdges, err = ops.FetchRelationships(tx.Relationships())
+		loadedEdges, err = ops.FetchRelationships(scopedTx.Relationships())
 		return err
 	}); err != nil {
 		t.Fatalf("read restored topology: %v", err)
@@ -336,10 +336,10 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	}
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{
+		scopedTx := tx.WithGraph(graph.Graph{
 			Name: graphName,
 		})
-		_, err := tx.CreateNode(graph.AsProperties(map[string]any{"name": "extra"}), userKind)
+		_, err := scopedTx.CreateNode(graph.AsProperties(map[string]any{"name": "extra"}), userKind)
 		return err
 	}); err != nil {
 		t.Fatalf("mutate loaded graph: %v", err)
@@ -405,9 +405,9 @@ func assertSkipAndLimit(t *testing.T, ctx context.Context, db graph.Database, ta
 	t.Helper()
 
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
+		scopedTx := tx.WithGraph(targetGraph)
 		var actualNodeIDs []graph.ID
-		if err := tx.Nodes().OrderBy(query.NodeID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
+		if err := scopedTx.Nodes().OrderBy(query.NodeID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
 			for id := range cursor.Chan() {
 				actualNodeIDs = append(actualNodeIDs, id)
 			}
@@ -420,7 +420,7 @@ func assertSkipAndLimit(t *testing.T, ctx context.Context, db graph.Database, ta
 		}
 
 		var actualEdgeIDs []graph.ID
-		if err := tx.Relationships().OrderBy(query.RelationshipID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
+		if err := scopedTx.Relationships().OrderBy(query.RelationshipID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
 			for id := range cursor.Chan() {
 				actualEdgeIDs = append(actualEdgeIDs, id)
 			}

@@ -634,14 +634,14 @@ func neo4jArgumentFloat(arguments map[string]string, key string) *float64 {
 
 // normalizeNeo4jOperator removes repeated backend suffixes and applies exactly one.
 func normalizeNeo4jOperator(operator string) string {
-	operator = strings.TrimSpace(operator)
-	for strings.HasSuffix(operator, "@neo4j") {
-		operator = strings.TrimSuffix(operator, "@neo4j")
+	normalizedOperator := strings.TrimSpace(operator)
+	for strings.HasSuffix(normalizedOperator, "@neo4j") {
+		normalizedOperator = strings.TrimSuffix(normalizedOperator, "@neo4j")
 	}
-	if operator == "" {
+	if normalizedOperator == "" {
 		return ""
 	}
-	return operator + "@neo4j"
+	return normalizedOperator + "@neo4j"
 }
 
 // stringifyArguments converts plan arguments to stable strings in a fresh map.

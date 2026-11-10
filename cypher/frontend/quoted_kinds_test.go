@@ -12,9 +12,14 @@ import (
 )
 
 func TestParsedKindNames(t *testing.T) {
-	for _, name := range []struct{ token, raw string }{
-		{"Base", "Base"}, {"`Base`", "Base"}, {"`has space`", "has space"},
-		{"`has``tick`", "has`tick"}, {"```Base```", "`Base`"}, {"``", ""},
+	for _, name := range []struct {
+		// token is the Cypher spelling, including any backtick quoting.
+		token string
+		// raw is the decoded kind name without Cypher quoting.
+		raw string
+	}{
+		{token: "Base", raw: "Base"}, {token: "`Base`", raw: "Base"}, {token: "`has space`", raw: "has space"},
+		{token: "`has``tick`", raw: "has`tick"}, {token: "```Base```", raw: "`Base`"}, {token: "``", raw: ""},
 	} {
 		for _, source := range []string{
 			"MATCH (n:%s) RETURN n", "MATCH ()-[r:%s]->() RETURN r",

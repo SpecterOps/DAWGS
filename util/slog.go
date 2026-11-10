@@ -6,8 +6,11 @@ import (
 	"time"
 )
 
+// slogMeasureID assigns process-local identifiers to function timing measurements.
 var slogMeasureID = &atomic.Int64{}
 
+// SLogSampleRepeated returns a sampler that logs elapsed and average milliseconds between calls.
+// Calls to the returned sampler must be serialized; its call arguments supply the log fields.
 func SLogSampleRepeated(functionName string, args ...any) func(args ...any) {
 	var (
 		measurementID = 1
@@ -34,6 +37,7 @@ func SLogSampleRepeated(functionName string, args ...any) func(args ...any) {
 	}
 }
 
+// SLogMeasureFunction logs entry and returns a completion logger sharing the measurement ID and initial fields.
 func SLogMeasureFunction(functionName string, args ...any) func(args ...any) {
 	var (
 		then          = time.Now()
@@ -51,6 +55,7 @@ func SLogMeasureFunction(functionName string, args ...any) func(args ...any) {
 	}
 }
 
+// SLogError logs msg with the text of a non-nil error and the supplied structured fields.
 func SLogError(msg string, err error, args ...any) {
 	allArgs := append([]any{slog.String("err", err.Error())}, args...)
 	slog.Error(msg, allArgs...)

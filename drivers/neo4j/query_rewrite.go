@@ -101,7 +101,7 @@ func queryMayNeedRewrite(query string) bool {
 }
 
 func queryMayContainTemporalFunctionCall(query string) bool {
-	query = strings.ToLower(query)
+	lowerQuery := strings.ToLower(query)
 
 	for _, functionName := range []string{
 		cypher.DateFunction,
@@ -110,7 +110,7 @@ func queryMayContainTemporalFunctionCall(query string) bool {
 		cypher.DateTimeFunction,
 		cypher.LocalDateTimeFunction,
 	} {
-		if containsFunctionCall(query, functionName) {
+		if containsFunctionCall(lowerQuery, functionName) {
 			return true
 		}
 	}

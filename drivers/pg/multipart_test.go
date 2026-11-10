@@ -9,7 +9,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,35 @@ var multipartSQLMatcher = pgxmock.QueryMatcherFunc(func(expected, actual string)
 	}
 	return nil
 })
+
+// multipartObservedTx inspects arguments before pgxmock expands named bindings
+// and consumes execution options, preserving coverage of the caller's protocol.
+type multipartObservedTx struct {
+	pgx.Tx
+	inspect func(string, []any)
+}
+
+func (s multipartObservedTx) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
+	s.inspect(sql, arguments)
+	return s.Tx.Exec(ctx, sql, arguments...)
+}
+
+func (s multipartObservedTx) Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error) {
+	s.inspect(sql, arguments)
+	return s.Tx.Query(ctx, sql, arguments...)
+}
+
+// multipartAnyBindings expands an expectation to the generated SQL's positional
+// parameters. Semantic values and map ownership are checked before rewriting.
+type multipartAnyBindings struct{}
+
+func (s multipartAnyBindings) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, arguments []any) (string, []any, error) {
+	rewrittenSQL, bindings, err := (pgx.NamedArgs{}).RewriteQuery(ctx, conn, sql, arguments)
+	for index := range bindings {
+		bindings[index] = pgxmock.AnyArg()
+	}
+	return rewrittenSQL, bindings, err
+}
 
 // multipartBindingMatcher checks semantic values without depending on generated
 // parameter names, and keeps the actual map to detect reuse by later stages.
@@ -149,10 +179,27 @@ func TestMultipartExecutesDistinctStageBindingsAndPreservesProtocol(t *testing.T
 				}
 				matchers = append(matchers, matcher)
 			}
-			for _, matcher := range matchers[:2] {
-				mock.ExpectExec("materialize").WithArgs(protocol.executed, matcher).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+			stage := 0
+			owner.tx = multipartObservedTx{Tx: owner.tx, inspect: func(sql string, arguments []any) {
+				if strings.HasPrefix(sql, "drop table ") {
+					return
+				}
+				require.Less(t, stage, len(matchers))
+				require.NotEmpty(t, arguments)
+				require.Equal(t, protocol.executed, arguments[0])
+				if stage == len(matchers)-1 {
+					require.Len(t, arguments, 3)
+					require.Equal(t, owner.queryResultsFormat, arguments[1])
+				} else {
+					require.Len(t, arguments, 2)
+				}
+				require.True(t, matchers[stage].Match(arguments[len(arguments)-1]))
+				stage++
+			}}
+			for range matchers[:2] {
+				mock.ExpectExec("materialize").WithArgs(multipartAnyBindings{}).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 			}
-			mock.ExpectQuery("final").WithArgs(protocol.executed, owner.queryResultsFormat, matchers[2]).WillReturnRows(
+			mock.ExpectQuery("final").WithArgs(multipartAnyBindings{}).WillReturnRows(
 				pgxmock.NewRows([]string{"first", "second", "phase", "value"}).AddRow("stage-alpha", "stage-beta", "stage-final", "current-caller-value"),
 			)
 			mock.ExpectExec("cleanup").WillReturnResult(pgxmock.NewResult("DROP TABLE", 0))
@@ -166,6 +213,7 @@ func TestMultipartExecutesDistinctStageBindingsAndPreservesProtocol(t *testing.T
 			require.Equal(t, []string{"stage-alpha", "stage-beta", "stage-final", "current-caller-value"}, []string{first, second, phase, caller})
 			require.False(t, result.Next())
 			require.NoError(t, result.Error())
+			require.Equal(t, len(matchers), stage)
 			for _, matcher := range matchers {
 				require.NotNil(t, matcher.observed)
 				require.Equal(t, matcher.snapshot, matcher.observed, "later stages must not mutate earlier bindings")
@@ -185,12 +233,12 @@ func TestMultipartExecutionFailuresPreventCommit(t *testing.T) {
 			query, err := frontend.ParseCypher(frontend.NewContext(), multipartBindingQuery)
 			require.NoError(t, err)
 			expected := errors.New("stage execution failed")
-			mock.ExpectExec("materialize").WithArgs(pgx.QueryExecModeExec, pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+			mock.ExpectExec("materialize").WithArgs(multipartAnyBindings{}).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 			if failingStage == "intermediate" {
-				mock.ExpectExec("materialize").WithArgs(pgx.QueryExecModeExec, pgxmock.AnyArg()).WillReturnError(expected)
+				mock.ExpectExec("materialize").WithArgs(multipartAnyBindings{}).WillReturnError(expected)
 			} else {
-				mock.ExpectExec("materialize").WithArgs(pgx.QueryExecModeExec, pgxmock.AnyArg()).WillReturnResult(pgxmock.NewResult("SELECT", 1))
-				mock.ExpectQuery("final").WithArgs(pgx.QueryExecModeExec, owner.queryResultsFormat, pgxmock.AnyArg()).WillReturnError(expected)
+				mock.ExpectExec("materialize").WithArgs(multipartAnyBindings{}).WillReturnResult(pgxmock.NewResult("SELECT", 1))
+				mock.ExpectQuery("final").WithArgs(multipartAnyBindings{}).WillReturnError(expected)
 			}
 			result := owner.queryMultipart(query, map[string]any{"value": "caller"}, 0, SQLGenerationProfile{})
 			require.False(t, result.Next())

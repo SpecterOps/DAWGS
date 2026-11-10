@@ -38,6 +38,9 @@ make build
 make test
 ```
 
+Formatting, vet, and explicit test/coverage package selections exclude the generated
+`cypher/parser` directory. Tests disable implicit vet; run `make lint` for authored-code vet checks.
+
 Integration tests use a disposable PostgreSQL or Neo4j database selected by
 `CONNECTION_STRING`. See [testing](docs/testing.md) for setup and commands.
 The [reachability cache](docs/library-and-tools.md#reachability-and-containers) publishes complete intermediates,

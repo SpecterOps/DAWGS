@@ -95,25 +95,25 @@ func Keygen(options KeygenOptions) error {
 }
 
 func generateArchiveKeyFiles(privatePath, publicPath string) error {
-	privatePath = strings.TrimSpace(privatePath)
-	publicPath = strings.TrimSpace(publicPath)
-	if privatePath == "" {
+	trimmedPrivatePath := strings.TrimSpace(privatePath)
+	trimmedPublicPath := strings.TrimSpace(publicPath)
+	if trimmedPrivatePath == "" {
 		return fmt.Errorf("private key path is required; pass -private")
 	}
 
-	if publicPath == "" {
+	if trimmedPublicPath == "" {
 		return fmt.Errorf("public key path is required; pass -public")
 	}
 
-	if sameCleanPath(privatePath, publicPath) {
+	if sameCleanPath(trimmedPrivatePath, trimmedPublicPath) {
 		return fmt.Errorf("private and public key paths must be different")
 	}
 
-	if err := requirePathDoesNotExist(privatePath); err != nil {
+	if err := requirePathDoesNotExist(trimmedPrivatePath); err != nil {
 		return err
 	}
 
-	if err := requirePathDoesNotExist(publicPath); err != nil {
+	if err := requirePathDoesNotExist(trimmedPublicPath); err != nil {
 		return err
 	}
 
@@ -122,12 +122,12 @@ func generateArchiveKeyFiles(privatePath, publicPath string) error {
 		return err
 	}
 
-	if err := writeExclusiveArchivePrivateKeyFile(privatePath, privateKey); err != nil {
+	if err := writeExclusiveArchivePrivateKeyFile(trimmedPrivatePath, privateKey); err != nil {
 		return err
 	}
 
-	if err := writeExclusiveArchivePublicKeyFile(publicPath, publicKey); err != nil {
-		_ = os.Remove(privatePath)
+	if err := writeExclusiveArchivePublicKeyFile(trimmedPublicPath, publicKey); err != nil {
+		_ = os.Remove(trimmedPrivatePath)
 		return err
 	}
 
@@ -196,12 +196,12 @@ func LoadArchivePublicKey(path string) (hpke.PublicKey, error) {
 }
 
 func loadArchivePublicKey(path string) (hpke.PublicKey, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
 		return nil, fmt.Errorf("public key path is required")
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(trimmedPath)
 	if err != nil {
 		return nil, fmt.Errorf("read public key: %w", err)
 	}
@@ -229,12 +229,12 @@ func LoadArchivePrivateKey(path string) (hpke.PrivateKey, error) {
 }
 
 func loadArchivePrivateKey(path string) (hpke.PrivateKey, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
 		return nil, fmt.Errorf("private key path is required")
 	}
 
-	file, err := os.Open(path)
+	file, err := os.Open(trimmedPath)
 	if err != nil {
 		return nil, fmt.Errorf("read private key: %w", err)
 	}

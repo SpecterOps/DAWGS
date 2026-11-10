@@ -69,9 +69,14 @@ func assertUnsupportedClause(t *testing.T, source, message string) {
 }
 
 func TestUnsupportedImportAndCreateErrorLocations(t *testing.T) {
-	for _, tc := range []struct{ source, message string }{
-		{"MATCH (a), (b)\n  CREATE UNIQUE (a)-[:R]->(b)", "line 2:2 CREATE UNIQUE is not supported"},
-		{"// comment\n  LOAD CSV FROM $url AS row RETURN row", "line 2:2 LOAD CSV is not supported"},
+	for _, tc := range []struct {
+		// source is the query text supplied to the parser or rewriter.
+		source string
+		// message is the diagnostic substring expected for the rejected query.
+		message string
+	}{
+		{source: "MATCH (a), (b)\n  CREATE UNIQUE (a)-[:R]->(b)", message: "line 2:2 CREATE UNIQUE is not supported"},
+		{source: "// comment\n  LOAD CSV FROM $url AS row RETURN row", message: "line 2:2 LOAD CSV is not supported"},
 	} {
 		t.Run(tc.source, func(t *testing.T) {
 			_, err := frontend.ParseCypher(frontend.NewContext(), tc.source)

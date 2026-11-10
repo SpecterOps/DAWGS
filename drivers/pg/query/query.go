@@ -68,7 +68,7 @@ func (s Query) SelectKinds() (map[graph.Kind]int16, error) {
 
 // SelectKindsByNames resolves only requested names and never registers them.
 func (s Query) SelectKindsByNames(names []string) (map[graph.Kind]int16, error) {
-	return s.selectKinds("select id, name from kind where name = ANY(@names::text[])", map[string]any{"names": names})
+	return s.selectKinds(selectKindsByNamesQuery, map[string]any{"names": names})
 }
 
 func (s Query) selectKinds(statement string, parameters map[string]any) (map[graph.Kind]int16, error) {

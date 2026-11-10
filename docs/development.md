@@ -13,10 +13,21 @@ make build
 make test
 ```
 
+`make format` and `make lint` exclude generated code in `cypher/parser`. Test targets
+also exclude that package from explicit test and coverage selections and use
+`-vet=off`; generated code is still compiled when required by authored packages.
+Run `make lint` separately for authored-code vet checks. Format only touched
+authored files with `gofmt -w` when a repository-wide formatting pass is unnecessary.
+
 `make test` runs unit tests with race detection and writes coverage artifacts under `.coverage/`:
 
 - `.coverage/unit.out`
 - `.coverage/coverage.txt`
+
+PostgreSQL unit tests use `pgxmock/v6 v6.0.0-beta2` to match the `pgx v5.12.0`
+interfaces, including `BatchResults.Tx()`. The mock consumes pgx execution options
+and expands named arguments before matching query parameters. Tests that inspect
+the original options or binding maps must observe them before that expansion.
 
 Run the integration suite when a backend is available:
 
@@ -73,9 +84,9 @@ path without changing `PATH`:
 make format GOIMPORTS_CMD=/absolute/path/to/goimports
 ```
 
-`make lint` runs the standard Go vet analyzers across the repository. The unreachable-code analyzer is rerun only for
-handwritten packages because ANTLR emits intentional terminal branches in `cypher/parser`; generated parser code still
-receives every other vet analyzer.
+`make lint` runs the standard Go vet analyzers on authored packages. Generated
+`cypher/parser` code is excluded from both passes, including the separate
+unreachable-code check.
 
 ## Quality And Metrics
 
@@ -201,3 +212,13 @@ Dormant `FUTURE-*` forms stay manifest-only until a reviewed caller is enabled.
 The unit suites reject dormant IDs from both shared plan inputs and scale cases;
 activating a form requires updating those gates together with its required
 semantic, plan, and scale coverage.
+
+## Embedded Report Assets
+
+The standalone BDD and metrics templates live in `bdd/templates/bdd-report.html`
+and `tools/metrics/internal/metrics/templates/metrics-report.html`. They are
+embedded and parsed during package initialization; edit those files to change
+report presentation. The translation fixture license preamble lives in
+`cypher/models/pgsql/test/assets/license_header.sql`; its bytes and printf year
+placeholder form part of the fixture output format. Asset edits require
+rebuilding their owning packages.

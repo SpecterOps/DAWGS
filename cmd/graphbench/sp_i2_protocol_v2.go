@@ -17,6 +17,7 @@ import (
 const (
 	spI2GenerationV1 = "sp-i2-distance-v1"
 	spI2GenerationV2 = "sp-i2-distance-v2"
+
 	// spI2V2TerminalStatus retires V2 after its frozen prospective study
 	// showed that normal measurement variation was too wide to distinguish
 	// the required improvements reliably. A successor must use a new protocol;

@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,7 +65,6 @@ func TestOptimizeStorage(t *testing.T) {
 		expectIndexStatement(conn, `DROP INDEX CONCURRENTLY IF EXISTS "public"."node_1_pkey_ccnew"`, dropErr)
 		expectIndexStatement(conn, `DROP INDEX CONCURRENTLY IF EXISTS "public"."edge_1_pkey_ccnew"`, nil)
 		conn.ExpectExec(optimizeStorageVacuumStatement).
-			WithArgs(pgx.QueryExecModeSimpleProtocol).
 			WillReturnError(vacuumErr)
 		expectGraphIndexes(conn, sqlSelectBtreeIndexes,
 			graphIndex{schema: "public", name: "node_1_pkey"},
@@ -263,7 +262,7 @@ func expectGraphIndexes(conn pgxmock.PgxConnIface, sql string, indexes ...graphI
 }
 
 func expectIndexStatement(conn pgxmock.PgxConnIface, stmt string, err error) {
-	expectation := conn.ExpectExec(stmt).WithArgs(pgx.QueryExecModeSimpleProtocol)
+	expectation := conn.ExpectExec(stmt)
 	if err != nil {
 		expectation.WillReturnError(err)
 	} else {
@@ -271,17 +270,28 @@ func expectIndexStatement(conn pgxmock.PgxConnIface, stmt string, err error) {
 	}
 }
 
-func newOptimizeStorageMockConn(t *testing.T) pgxmock.PgxConnIface {
+// optimizeStorageMockConn checks protocol options before pgxmock consumes them.
+type optimizeStorageMockConn struct {
+	pgxmock.PgxConnIface
+	t *testing.T
+}
+
+func (s *optimizeStorageMockConn) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
+	s.t.Helper()
+	require.Equal(s.t, []any{pgx.QueryExecModeSimpleProtocol}, arguments)
+	return s.PgxConnIface.Exec(ctx, sql, arguments...)
+}
+
+func newOptimizeStorageMockConn(t *testing.T) *optimizeStorageMockConn {
 	t.Helper()
 
 	conn, err := pgxmock.NewConn(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	require.NoError(t, err)
 
-	return conn
+	return &optimizeStorageMockConn{PgxConnIface: conn, t: t}
 }
 
 func expectOptimizeStorageVacuum(conn pgxmock.PgxConnIface, stmt string) {
 	conn.ExpectExec(stmt).
-		WithArgs(pgx.QueryExecModeSimpleProtocol).
 		WillReturnResult(pgxmock.NewResult("VACUUM", 0))
 }

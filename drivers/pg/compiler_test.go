@@ -236,9 +236,12 @@ func TestCompileRegularQuerySeparatesTextAndExclusiveKindASTs(t *testing.T) {
 	}
 }
 
-// An external Kind may derive its spelling from state hidden behind methods.
+// cacheIdentityExternalKind is an external Kind may derive its spelling from state hidden behind methods.
 // Such shapes compile normally but cannot reuse a structural cache identity.
-type cacheIdentityExternalKind struct{ name string }
+type cacheIdentityExternalKind struct {
+	// name is the external kind spelling used by the mapper.
+	name string
+}
 
 func (s cacheIdentityExternalKind) String() string { return s.name }
 func (s cacheIdentityExternalKind) Is(others ...graph.Kind) bool {

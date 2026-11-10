@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +21,7 @@ func TestTransactionKindMapperOwnership(t *testing.T) {
 	mapper := &transactionKindMapper{tx: tx}
 	tx.kindMapper = mapper
 	known, fresh := graph.StringKind("Known"), graph.StringKind("Fresh")
-	mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(1), "Known"))
+	mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(1), "Known"))
 	ids, err := mapper.MapKinds(ctx, graph.Kinds{known, known})
 	require.NoError(t, err)
 	require.Equal(t, []int16{1, 1}, ids)
@@ -36,10 +36,10 @@ func TestTransactionKindMapperOwnership(t *testing.T) {
 	require.Equal(t, known, kind)
 	_, err = mapper.MapKindID(ctx, 3)
 	require.ErrorContains(t, err, "unable to map kind id")
-	mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(1), "Known"))
+	mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(1), "Known"))
 	_, err = mapper.MapKind(ctx, fresh)
 	require.ErrorContains(t, err, "unable to map kinds")
-	mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int16(2)))
+	mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int16(2)))
 	ids, err = mapper.AssertKinds(ctx, graph.Kinds{fresh, known, fresh})
 	require.NoError(t, err)
 	require.Equal(t, []int16{2, 1, 2}, ids)
@@ -65,12 +65,12 @@ func TestTransactionKindMapperErrors(t *testing.T) {
 			if op == "retry" {
 				mapper.kinds = map[graph.Kind]int16{}
 				mapper.ids = map[int16]graph.Kind{}
-				mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id"}))
-				mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(failure)
+				mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id"}))
+				mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg()).WillReturnError(failure)
 			} else if op == "assert" {
-				mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(failure)
+				mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg()).WillReturnError(failure)
 			} else {
-				mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(failure)
+				mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg()).WillReturnError(failure)
 			}
 			switch op {
 			case "map":
@@ -97,7 +97,7 @@ func TestRawKindMappingUsesOwnedSnapshotWithoutNestedQuery(t *testing.T) {
 	tx, err := newTransactionWrapper(context.Background(), nil, manager, &Config{}, false)
 	require.NoError(t, err)
 	tx.tx = mock
-	mock.ExpectQuery("select kinds").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"kinds"}).AddRow([]int16{7}))
+	mock.ExpectQuery("select kinds").WillReturnRows(pgxmock.NewRows([]string{"kinds"}).AddRow([]int16{7}))
 	// Schema reconciliation owns the metadata lock while reading raw rows.
 	// The wrapper must already own its snapshot before this lock is acquired.
 	manager.lock.Lock()

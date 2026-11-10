@@ -16,11 +16,16 @@ func TestQuantifiersWithoutPatternReturnError(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		t.Run(string(mode), func(t *testing.T) {
 			for _, quantifier := range []string{"all", "any", "none", "single"} {
-				for _, shape := range []struct{ name, query string }{
-					{"standalone return", `RETURN ` + quantifier + `(x IN [1] WHERE x = 1) AS value`},
-					{"standalone return with property comparison", `RETURN ` + quantifier + `(x IN ['a', 'b'] WHERE x STARTS WITH 'a') AS value`},
-					{"with projection continuation", `MATCH (n:MemberOf) WITH ` + quantifier + `(x IN [1] WHERE x = 1) AS ok RETURN ok`},
-					{"unwind collection", `UNWIND [1, 2] AS xs RETURN ` + quantifier + `(x IN xs WHERE x > 0) AS value`},
+				for _, shape := range []struct {
+					// name identifies this test case in subtest and benchmark output.
+					name string
+					// query is the Cypher statement exercised by this case.
+					query string
+				}{
+					{name: "standalone return", query: `RETURN ` + quantifier + `(x IN [1] WHERE x = 1) AS value`},
+					{name: "standalone return with property comparison", query: `RETURN ` + quantifier + `(x IN ['a', 'b'] WHERE x STARTS WITH 'a') AS value`},
+					{name: "with projection continuation", query: `MATCH (n:MemberOf) WITH ` + quantifier + `(x IN [1] WHERE x = 1) AS ok RETURN ok`},
+					{name: "unwind collection", query: `UNWIND [1, 2] AS xs RETURN ` + quantifier + `(x IN xs WHERE x > 0) AS value`},
 				} {
 					t.Run(shape.name+" "+quantifier, func(t *testing.T) {
 						parsed, err := frontend.ParseCypher(frontend.NewContext(), shape.query)
@@ -46,13 +51,18 @@ func TestQuantifiersWithoutPatternReturnError(t *testing.T) {
 func TestQuantifierWhereContextsStillTranslate(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		t.Run(string(mode), func(t *testing.T) {
-			for _, tc := range []struct{ name, query string }{
-				{"scalar list match where", `MATCH (n:MemberOf) WHERE all(x IN [1, 2] WHERE x < 3) RETURN n`},
-				{"scalar list none where", `MATCH (n:MemberOf) WHERE none(x IN [1, 2] WHERE x = 5) RETURN count(n)`},
-				{"property array where", `MATCH (n:MemberOf) WHERE any(x IN n.tags WHERE x = 'a') RETURN n`},
-				{"labels collection where", `MATCH (n:MemberOf) WHERE any(l IN labels(n) WHERE l = 'MemberOf') RETURN n`},
-				{"with output where", `MATCH (n:MemberOf) WITH n WHERE all(x IN [1] WHERE x = 1) RETURN n`},
-				{"optional match where", `MATCH (n:MemberOf) OPTIONAL MATCH (n)-[:MemberOf]->(m) WHERE any(x IN [1] WHERE x = 1) RETURN n`},
+			for _, tc := range []struct {
+				// name identifies this test case in subtest and benchmark output.
+				name string
+				// query is the Cypher statement exercised by this case.
+				query string
+			}{
+				{name: "scalar list match where", query: `MATCH (n:MemberOf) WHERE all(x IN [1, 2] WHERE x < 3) RETURN n`},
+				{name: "scalar list none where", query: `MATCH (n:MemberOf) WHERE none(x IN [1, 2] WHERE x = 5) RETURN count(n)`},
+				{name: "property array where", query: `MATCH (n:MemberOf) WHERE any(x IN n.tags WHERE x = 'a') RETURN n`},
+				{name: "labels collection where", query: `MATCH (n:MemberOf) WHERE any(l IN labels(n) WHERE l = 'MemberOf') RETURN n`},
+				{name: "with output where", query: `MATCH (n:MemberOf) WITH n WHERE all(x IN [1] WHERE x = 1) RETURN n`},
+				{name: "optional match where", query: `MATCH (n:MemberOf) OPTIONAL MATCH (n)-[:MemberOf]->(m) WHERE any(x IN [1] WHERE x = 1) RETURN n`},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
@@ -74,9 +84,14 @@ func TestQuantifierWhereContextsStillTranslate(t *testing.T) {
 func TestQuantifierProjectionErrorsUnchangedWithPattern(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		t.Run(string(mode), func(t *testing.T) {
-			for _, tc := range []struct{ query, message string }{
-				{`MATCH (n:MemberOf) RETURN all(x IN [1] WHERE x = 1) AS value`, "aggregate grouping expression has unsupported type pgsql.Select"},
-				{`MATCH (n:MemberOf) RETURN all(x IN n.tags WHERE x = 'a') AS value`, "unknown quantifier loperand expression"},
+			for _, tc := range []struct {
+				// query is the Cypher statement exercised by this case.
+				query string
+				// message is the diagnostic substring expected for the rejected query.
+				message string
+			}{
+				{query: `MATCH (n:MemberOf) RETURN all(x IN [1] WHERE x = 1) AS value`, message: "aggregate grouping expression has unsupported type pgsql.Select"},
+				{query: `MATCH (n:MemberOf) RETURN all(x IN n.tags WHERE x = 'a') AS value`, message: "unknown quantifier loperand expression"},
 			} {
 				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
 				require.NoError(t, err)

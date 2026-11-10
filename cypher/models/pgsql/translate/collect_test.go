@@ -12,23 +12,28 @@ import (
 func TestTypedCollectTranslation(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		t.Run(string(mode), func(t *testing.T) {
-			for _, tc := range []struct{ query, fragment string }{
-				{"MATCH (n) RETURN collect(n.x)", "array_agg(nullif("},
-				{"MATCH ()-[r]->() RETURN collect(DISTINCT r.x)", "array_agg(distinct nullif("},
-				{"MATCH (n) WITH n.x AS x RETURN collect(x)", "array_agg(nullif("},
-				{"MATCH (n) WITH collect(n.x) AS xs UNWIND xs AS x RETURN x + 1", "cypher_arithmetic("},
-				{"MATCH (n) WITH collect(n.x) AS xs UNWIND xs AS x RETURN x AND true", ")::bool"},
-				{"MATCH (n) WITH collect(n.x) AS xs UNWIND xs AS x RETURN toUpper(x)", "cypher_text("},
-				{"MATCH (n) WITH collect(n.x) AS xs RETURN collect(xs)", "array_agg(to_jsonb("},
-				{"WITH [1, 2] AS xs RETURN collect(xs)", "array_agg(to_jsonb("},
-				{"RETURN collect(true)", "array_agg(to_jsonb("},
-				{"RETURN collect(null)", "array_agg((null)::jsonb)"},
-				{"RETURN collect([])", "array_agg(to_jsonb("},
-				{"MATCH (n) RETURN 2 IN collect(n.x)", " = any ("},
-				{"MATCH (n) WITH collect(n.x) AS xs RETURN 2 IN xs", " = any ("},
-				{"MATCH (n) WITH collect(n.x) AS xs MATCH (m) WHERE NOT m.x IN xs RETURN m", " = any ("},
-				{"MATCH (n) WITH collect(n.x) AS xs WITH xs + ['1'] AS ys UNWIND ys AS y RETURN y", "array [to_jsonb("},
-				{"MATCH (n) WITH [1, 2] AS ys, collect(n.x) AS xs RETURN ys + xs", "unnest("},
+			for _, tc := range []struct {
+				// query is the Cypher statement exercised by this case.
+				query string
+				// fragment is the SQL substring required in the translation.
+				fragment string
+			}{
+				{query: "MATCH (n) RETURN collect(n.x)", fragment: "array_agg(nullif("},
+				{query: "MATCH ()-[r]->() RETURN collect(DISTINCT r.x)", fragment: "array_agg(distinct nullif("},
+				{query: "MATCH (n) WITH n.x AS x RETURN collect(x)", fragment: "array_agg(nullif("},
+				{query: "MATCH (n) WITH collect(n.x) AS xs UNWIND xs AS x RETURN x + 1", fragment: "cypher_arithmetic("},
+				{query: "MATCH (n) WITH collect(n.x) AS xs UNWIND xs AS x RETURN x AND true", fragment: ")::bool"},
+				{query: "MATCH (n) WITH collect(n.x) AS xs UNWIND xs AS x RETURN toUpper(x)", fragment: "cypher_text("},
+				{query: "MATCH (n) WITH collect(n.x) AS xs RETURN collect(xs)", fragment: "array_agg(to_jsonb("},
+				{query: "WITH [1, 2] AS xs RETURN collect(xs)", fragment: "array_agg(to_jsonb("},
+				{query: "RETURN collect(true)", fragment: "array_agg(to_jsonb("},
+				{query: "RETURN collect(null)", fragment: "array_agg((null)::jsonb)"},
+				{query: "RETURN collect([])", fragment: "array_agg(to_jsonb("},
+				{query: "MATCH (n) RETURN 2 IN collect(n.x)", fragment: " = any ("},
+				{query: "MATCH (n) WITH collect(n.x) AS xs RETURN 2 IN xs", fragment: " = any ("},
+				{query: "MATCH (n) WITH collect(n.x) AS xs MATCH (m) WHERE NOT m.x IN xs RETURN m", fragment: " = any ("},
+				{query: "MATCH (n) WITH collect(n.x) AS xs WITH xs + ['1'] AS ys UNWIND ys AS y RETURN y", fragment: "array [to_jsonb("},
+				{query: "MATCH (n) WITH [1, 2] AS ys, collect(n.x) AS xs RETURN ys + xs", fragment: "unnest("},
 			} {
 				t.Run(tc.query, func(t *testing.T) {
 					parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
@@ -47,11 +52,16 @@ func TestTypedCollectTranslation(t *testing.T) {
 
 func TestPrepareCollectExpressionTypes(t *testing.T) {
 	scope := NewScope()
-	for _, tc := range []struct{ scalar, array pgsql.DataType }{
-		{pgsql.Int8, pgsql.Int8Array}, {pgsql.Text, pgsql.TextArray},
-		{pgsql.Boolean, pgsql.JSONBArray}, {pgsql.JSONB, pgsql.JSONBArray},
-		{pgsql.Int8Array, pgsql.JSONBArray}, {pgsql.NodeComposite, pgsql.NodeCompositeArray},
-		{pgsql.EdgeComposite, pgsql.EdgeCompositeArray}, {pgsql.UnknownDataType, pgsql.AnyArray},
+	for _, tc := range []struct {
+		// scalar is the element type supplied to collection type inference.
+		scalar pgsql.DataType
+		// array is the expected collection type for the scalar input.
+		array pgsql.DataType
+	}{
+		{scalar: pgsql.Int8, array: pgsql.Int8Array}, {scalar: pgsql.Text, array: pgsql.TextArray},
+		{scalar: pgsql.Boolean, array: pgsql.JSONBArray}, {scalar: pgsql.JSONB, array: pgsql.JSONBArray},
+		{scalar: pgsql.Int8Array, array: pgsql.JSONBArray}, {scalar: pgsql.NodeComposite, array: pgsql.NodeCompositeArray},
+		{scalar: pgsql.EdgeComposite, array: pgsql.EdgeCompositeArray}, {scalar: pgsql.UnknownDataType, array: pgsql.AnyArray},
 	} {
 		t.Run(string(tc.scalar), func(t *testing.T) {
 			binding, err := scope.DefineNew(tc.scalar)

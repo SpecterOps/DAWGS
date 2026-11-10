@@ -238,8 +238,8 @@ func scanDatabaseRelationshipsFrom(ctx context.Context, db graph.Database, targe
 
 func readDatabaseNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int, visit func(*graph.Node) error) error {
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
-		nodeQuery := tx.Nodes().OrderBy(query.NodeID()).Limit(batchSize)
+		scopedTx := tx.WithGraph(targetGraph)
+		nodeQuery := scopedTx.Nodes().OrderBy(query.NodeID()).Limit(batchSize)
 
 		if hasAfterID {
 			nodeQuery = nodeQuery.Filter(query.GreaterThan(query.NodeID(), afterID))
@@ -263,8 +263,8 @@ func readDatabaseNodes(ctx context.Context, db graph.Database, targetGraph graph
 
 func readDatabaseRelationships(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int, visit func(*graph.Relationship) error) error {
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
-		relationshipQuery := tx.Relationships().OrderBy(query.RelationshipID()).Limit(batchSize)
+		scopedTx := tx.WithGraph(targetGraph)
+		relationshipQuery := scopedTx.Relationships().OrderBy(query.RelationshipID()).Limit(batchSize)
 
 		if hasAfterID {
 			relationshipQuery = relationshipQuery.Filter(query.GreaterThan(query.RelationshipID(), afterID))

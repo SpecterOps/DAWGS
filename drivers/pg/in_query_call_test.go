@@ -8,8 +8,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func inQueryCallCases() []struct{ source, message string } {
-	var cases []struct{ source, message string }
+func inQueryCallCases() []struct {
+	// source is the query text supplied to the parser or rewriter.
+	source string
+	// message is the diagnostic substring expected for the rejected query.
+	message string
+} {
+	var cases []struct {
+		// source is the query text supplied to the parser or rewriter.
+		source string
+		// message is the diagnostic substring expected for the rejected query.
+		message string
+	}
 	for _, invocation := range []string{"test.doNothing()", "test.write($value)", "db.labels() YIELD label AS name WHERE name = 'x'"} {
 		for _, template := range []string{
 			"CALL %s RETURN 1 AS x",
@@ -22,7 +32,12 @@ func inQueryCallCases() []struct{ source, message string } {
 			"MATCH (n) SET n.name = 'changed' WITH n CALL %s RETURN n",
 			"MATCH (n) CALL %s WITH n RETURN n",
 		} {
-			cases = append(cases, struct{ source, message string }{fmt.Sprintf(template, invocation), "in-query CALL is not supported"})
+			cases = append(cases, struct {
+				// source is the query text supplied to the parser or rewriter.
+				source string
+				// message is the diagnostic substring expected for the rejected query.
+				message string
+			}{source: fmt.Sprintf(template, invocation), message: "in-query CALL is not supported"})
 		}
 	}
 	return cases

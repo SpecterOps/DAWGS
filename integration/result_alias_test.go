@@ -19,14 +19,19 @@ func TestResultAliasSpelling(t *testing.T) {
 	}
 	for _, optimized := range modes {
 		previous := pg.SetOptimizedTranslation(optimized)
-		for _, tc := range []struct{ token, key string }{
-			{"objectId", "objectId"},
-			{"`object id`", "object id"},
-			{"`object``id`", "object`id"},
-			{"`object\"id`", "object\"id"},
-			{"`select`", "select"},
-			{"`étiquette`", "étiquette"},
-			{"`*`", "*"},
+		for _, tc := range []struct {
+			// token is the Cypher spelling, including any backtick quoting.
+			token string
+			// key is the result-column name expected after alias decoding.
+			key string
+		}{
+			{token: "objectId", key: "objectId"},
+			{token: "`object id`", key: "object id"},
+			{token: "`object``id`", key: "object`id"},
+			{token: "`object\"id`", key: "object\"id"},
+			{token: "`select`", key: "select"},
+			{token: "`étiquette`", key: "étiquette"},
+			{token: "`*`", key: "*"},
 		} {
 			for _, query := range []string{
 				"RETURN 7 AS " + tc.token,

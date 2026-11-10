@@ -21,6 +21,7 @@ import (
 const (
 	// aaReportVersion identifies the serialized schema revision for A/A report.
 	aaReportVersion = 4
+
 	// aaPhysicalChronologyVersion identifies process-interval chronology proof.
 	aaPhysicalChronologyVersion = 1
 )

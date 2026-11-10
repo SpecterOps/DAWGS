@@ -46,9 +46,14 @@ func TestPredicateTypeTranslation(t *testing.T) {
 
 func TestUnwindStringPredicatesUseElementTypes(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
-		for _, tc := range []struct{ query, fragment string }{
-			{`UNWIND [123] AS x RETURN x STARTS WITH '1' AS value`, "(null)::text like"},
-			{`UNWIND ['123'] AS x RETURN x =~ '1.*' AS value`, "(i0)::text ~"},
+		for _, tc := range []struct {
+			// query is the Cypher statement exercised by this case.
+			query string
+			// fragment is the SQL substring required in the translation.
+			fragment string
+		}{
+			{query: `UNWIND [123] AS x RETURN x STARTS WITH '1' AS value`, fragment: "(null)::text like"},
+			{query: `UNWIND ['123'] AS x RETURN x =~ '1.*' AS value`, fragment: "(i0)::text ~"},
 		} {
 			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
 				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)

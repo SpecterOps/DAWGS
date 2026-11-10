@@ -2,23 +2,13 @@ package atomics
 
 import "sync/atomic"
 
+// Counter reports whether it found its bound reached instead of incrementing.
 type Counter func() bool
 
-// NewCounter returns a function that atomically counts to a given maximum upon call.
-//
-// When the resulting closure is called the function enters a for-loop that atomically loads the value
-// at address &counter. This value is then compared against the given maximum. If the value is greater than
-// or equal to the given maximum this function returns the current value and true to signify completion.
-//
-// If the value at address &counter at time of the atomic load is less than the given maximum this function
-// attempts to swap the value at address &counter with a value equal to the previous value +1. Upon successfully
-// setting a new value this function returns the new value and false to signify that the counter has not
-// yet reached the given maximum.
-//
-// The use of compare-and-swap ensures that if the value at address &counter has not yet changed, the function
-// atomically replaces it with the previous value +1. If the compare-and-swap fails and returns false then
-// another agent as modified the value at address &counter. In this case the function rewinds to the beginning
-// of the for-loop for another counter increment attempt.
+// NewCounter returns a concurrency-safe counter initially at zero.
+// Each successful increment, including the increment to maximum, returns false.
+// Once maximum increments have succeeded, every later call returns true without
+// incrementing. A zero maximum returns true on every call.
 func NewCounter[T uint32 | uint64](maximum T) Counter {
 	var counterFunc Counter
 

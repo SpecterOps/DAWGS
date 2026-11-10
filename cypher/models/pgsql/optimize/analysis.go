@@ -526,8 +526,10 @@ func wherePredicateCount(where *cypher.Where) int {
 }
 
 func mergeBindings(existing []Binding, next []Binding) []Binding {
+	mergedBindings := existing
+
 	seen := map[string]struct{}{}
-	for _, binding := range existing {
+	for _, binding := range mergedBindings {
 		seen[bindingKey(binding)] = struct{}{}
 	}
 
@@ -537,16 +539,18 @@ func mergeBindings(existing []Binding, next []Binding) []Binding {
 			continue
 		}
 
-		existing = append(existing, binding)
+		mergedBindings = append(mergedBindings, binding)
 		seen[key] = struct{}{}
 	}
 
-	return existing
+	return mergedBindings
 }
 
 func mergePathVariables(existing []PathVariable, next []PathVariable) []PathVariable {
+	mergedPathVariables := existing
+
 	seen := map[string]struct{}{}
-	for _, pathVariable := range existing {
+	for _, pathVariable := range mergedPathVariables {
 		seen[pathVariable.Symbol] = struct{}{}
 	}
 
@@ -555,11 +559,11 @@ func mergePathVariables(existing []PathVariable, next []PathVariable) []PathVari
 			continue
 		}
 
-		existing = append(existing, pathVariable)
+		mergedPathVariables = append(mergedPathVariables, pathVariable)
 		seen[pathVariable.Symbol] = struct{}{}
 	}
 
-	return existing
+	return mergedPathVariables
 }
 
 func bindingKey(binding Binding) string {

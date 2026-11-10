@@ -24,41 +24,41 @@ func requiresDynamicArithmetic(expression *pgsql.BinaryExpression) (bool, error)
 
 // arithmeticJSONOperand preserves stored JSON types instead of extracting text.
 func arithmeticJSONOperand(expression pgsql.Expression) (pgsql.Expression, error) {
-	expression = concreteEmptyArray(unwrapParenthetical(expression))
-	if literal, ok := expression.(pgsql.Literal); ok && literal.Null {
+	normalizedExpression := concreteEmptyArray(unwrapParenthetical(expression))
+	if literal, ok := normalizedExpression.(pgsql.Literal); ok && literal.Null {
 		return pgsql.NewTypeCast(literal, pgsql.JSONB), nil
 	}
-	if lookup, ok := expressionToPropertyLookupBinaryExpression(expression); ok {
-		copy := *lookup
-		copy.Operator = pgsql.OperatorJSONField
-		return nullifyJSONPropertyLookup(&copy), nil
+	if lookup, ok := expressionToPropertyLookupBinaryExpression(normalizedExpression); ok {
+		jsonLookup := *lookup
+		jsonLookup.Operator = pgsql.OperatorJSONField
+		return nullifyJSONPropertyLookup(&jsonLookup), nil
 	}
-	dataType, err := InferExpressionType(expression)
+	dataType, err := InferExpressionType(normalizedExpression)
 	if err != nil {
 		return nil, err
 	}
 	if dataType == pgsql.JSONB {
-		return expression, nil
+		return normalizedExpression, nil
 	}
 	if !dataType.IsKnown() {
-		switch expression.(type) {
+		switch normalizedExpression.(type) {
 		case pgsql.Parameter, *pgsql.Parameter:
 			// Untyped parameters represent null. A polymorphic to_jsonb call
 			// cannot infer their SQL type without this explicit null type.
-			return pgsql.NewTypeCast(expression, pgsql.JSONB), nil
+			return pgsql.NewTypeCast(normalizedExpression, pgsql.JSONB), nil
 		}
 	}
 	// A scope-bound scalar (for example an UNWIND column) can lack an AST
 	// hint while still having a concrete SQL type. Let PostgreSQL resolve that
 	// column type instead of emitting an invalid cast to unknown.
-	var value pgsql.Expression = expression
+	var value pgsql.Expression = normalizedExpression
 	if dataType.IsKnown() {
-		value = pgsql.NewTypeCast(expression, dataType)
+		value = pgsql.NewTypeCast(normalizedExpression, dataType)
 	}
 	if dataType.MatchesOneOf(pgsql.Float4, pgsql.Float8, pgsql.Numeric) {
 		// to_jsonb(float8) can spell 2.0 as 2. Keep a fractional digit so the
 		// next dynamic operation can distinguish float from integer division.
-		value = pgsql.NewBinaryExpression(pgsql.NewTypeCast(pgsql.NewTypeCast(expression, pgsql.Text), pgsql.Numeric), pgsql.OperatorAdd, pgsql.NewLiteral(0.0, pgsql.Numeric))
+		value = pgsql.NewBinaryExpression(pgsql.NewTypeCast(pgsql.NewTypeCast(normalizedExpression, pgsql.Text), pgsql.Numeric), pgsql.OperatorAdd, pgsql.NewLiteral(0.0, pgsql.Numeric))
 	}
 	return pgsql.FunctionCall{
 		Function:   pgsql.FunctionToJSONB,

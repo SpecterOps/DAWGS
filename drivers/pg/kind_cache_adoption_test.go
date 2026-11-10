@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func TestKindMapperReadCommittedAdoptsAcrossPrivateLookups(t *testing.T) {
 	mapper.hasUncommittedKinds = true
 
 	require.True(t, manager.kindCache.replace(manager.kindCache.current.Load(), manager.kindCache.requested.Load(), map[graph.Kind]int16{known: 4, learned: 5}, false, func() {}))
-	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgx.NamedArgs{"names": []string{"Private"}}).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(3), "Private"))
+	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgx.NamedArgs{"names": []string{"Private"}}).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(3), "Private"))
 	require.NoError(t, mapper.adopt())
 
 	require.Same(t, manager.kindCache.current.Load(), mapper.snapshot)
@@ -63,7 +63,7 @@ func TestKindMapperReadCommittedRevalidatesExistingRegistration(t *testing.T) {
 				rows.AddRow(int16(4), "Registered")
 			}
 			require.True(t, manager.kindCache.replace(manager.kindCache.current.Load(), manager.kindCache.requested.Load(), refreshed, false, func() {}))
-			mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgx.NamedArgs{"names": []string{"Registered"}}).WillReturnRows(rows)
+			mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgx.NamedArgs{"names": []string{"Registered"}}).WillReturnRows(rows)
 			require.NoError(t, mapper.adopt())
 			id, ok := mapper.kindID(registered)
 			require.Equal(t, !removed, ok)
@@ -92,7 +92,7 @@ func TestKindMapperReadCommittedRegistrationRevalidationFailure(t *testing.T) {
 	before := mapper.snapshot
 	require.True(t, manager.kindCache.replace(before, manager.kindCache.requested.Load(), map[graph.Kind]int16{known: 3}, false, func() {}))
 	failure := errors.New("registration lookup failed")
-	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgx.NamedArgs{"names": []string{"Private"}}).WillReturnError(failure)
+	mock.ExpectQuery(`select id, name from kind where name = ANY`).WithArgs(pgx.NamedArgs{"names": []string{"Private"}}).WillReturnError(failure)
 	require.ErrorIs(t, tx.serviceKinds(), failure)
 	require.Same(t, before, mapper.snapshot, "a failed validation cannot adopt the newer shared catalog")
 	require.EqualValues(t, 2, mapper.registeredKinds[private])
@@ -140,7 +140,7 @@ func TestKindMapperStableSnapshotDoesNotUseNewEpochFallback(t *testing.T) {
 			require.False(t, ok, "a new name for an old ID cannot match the older snapshot's rows")
 			_, err = mapper.MapKindID(context.Background(), 2)
 			require.ErrorContains(t, err, "unable to map kind id: 2")
-			mock.ExpectQuery("select id, name from kind").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+			mock.ExpectQuery("select id, name from kind").
 				WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(1), original.String()))
 			require.NoError(t, mapper.adopt())
 			id, ok := mapper.kindID(original)

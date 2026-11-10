@@ -355,11 +355,18 @@ func TestSelfReferentialPatternDoesNotPanic(t *testing.T) {
 }
 
 func TestExclusiveDisjunctionPreservesComparisonGrouping(t *testing.T) {
-	for _, tc := range []struct{ name, predicate, expected string }{
-		{"comparisons", "(true = false XOR false = false) AND true", "((true = false) != (false = false))"},
-		{"three operands", "true XOR false XOR true", "(true) != (((false) != (true)))"},
-		{"and operand", "(true AND false) XOR true", "((true and false)) != (true)"},
-		{"null operand", "null XOR true", "(null) != (true)"},
+	for _, tc := range []struct {
+		// name identifies this test case in subtest and benchmark output.
+		name string
+		// predicate is the Cypher Boolean expression translated by the case.
+		predicate string
+		// expected is the SQL substring required for the predicate grouping.
+		expected string
+	}{
+		{name: "comparisons", predicate: "(true = false XOR false = false) AND true", expected: "((true = false) != (false = false))"},
+		{name: "three operands", predicate: "true XOR false XOR true", expected: "(true) != (((false) != (true)))"},
+		{name: "and operand", predicate: "(true AND false) XOR true", expected: "((true and false)) != (true)"},
+		{name: "null operand", predicate: "null XOR true", expected: "(null) != (true)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			formatted := translatePredicateQuery(t, "MATCH (n:NodeKind1) WHERE "+tc.predicate+" RETURN n", nil)

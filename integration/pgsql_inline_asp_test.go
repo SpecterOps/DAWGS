@@ -591,11 +591,11 @@ func executeInlineASPTranslationWithReceipt(t *testing.T, session *Session, tran
 			return err
 		}
 		read.Close()
-		clear := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
-		for clear.Next() {
+		clearResult := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
+		for clearResult.Next() {
 		}
-		err := clear.Error()
-		clear.Close()
+		err := clearResult.Error()
+		clearResult.Close()
 		return err
 	}); err != nil {
 		t.Fatalf("execute translated query with receipt: %v\nSQL: %s", err, sqlQuery.Statement)
@@ -644,11 +644,11 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 			return err
 		}
 		read.Close()
-		clear := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
-		for clear.Next() {
+		clearResult := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
+		for clearResult.Next() {
 		}
-		err := clear.Error()
-		clear.Close()
+		err := clearResult.Error()
+		clearResult.Close()
 		return err
 	}, append(options, pg.OptionInitializeTraversalRuntimeAttestation())...); err != nil {
 		t.Fatalf("execute driver Cypher with receipt: %v", err)

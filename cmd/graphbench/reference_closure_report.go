@@ -176,8 +176,8 @@ func buildReferenceClosureReport(records []CaseResult, options ReferenceClosureO
 			return ReferenceClosureReport{}, fmt.Errorf("%s/%s lacks complete source, binary, and corpus identity", record.Dataset, record.Name)
 		}
 		if sourceIdentity == nil {
-			copy := *record.Environment
-			sourceIdentity = &copy
+			environmentCopy := *record.Environment
+			sourceIdentity = &environmentCopy
 		} else if record.Environment.SourceCommit != sourceIdentity.SourceCommit ||
 			record.Environment.DirtyDiffSHA256 != sourceIdentity.DirtyDiffSHA256 ||
 			record.Environment.BinarySHA256 != sourceIdentity.BinarySHA256 ||

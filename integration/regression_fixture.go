@@ -29,17 +29,19 @@ const defaultRegressionFanout = 32
 // FixtureNames returns deterministic fixture identifiers without committing
 // large handwritten lists to the corpus.
 func FixtureNames(prefix string, count int) []string {
-	if count < 0 {
-		count = 0
+	effectiveCount := count
+
+	if effectiveCount < 0 {
+		effectiveCount = 0
 	}
 
-	width := len(fmt.Sprintf("%d", max(count-1, 0)))
+	width := len(fmt.Sprintf("%d", max(effectiveCount-1, 0)))
 	if width < 2 {
 		width = 2
 	}
 
-	values := make([]string, count)
-	for idx := range count {
+	values := make([]string, effectiveCount)
+	for idx := range effectiveCount {
 		values[idx] = fmt.Sprintf("%s-%0*d", prefix, width, idx)
 	}
 
@@ -49,12 +51,14 @@ func FixtureNames(prefix string, count int) []string {
 // FixtureKinds returns deterministic synthetic kind names for list-cardinality
 // tests.
 func FixtureKinds(count int) []string {
-	if count < 0 {
-		count = 0
+	effectiveCount := count
+
+	if effectiveCount < 0 {
+		effectiveCount = 0
 	}
 
-	kinds := make([]string, count)
-	for idx := range count {
+	kinds := make([]string, effectiveCount)
+	for idx := range effectiveCount {
 		kinds[idx] = fmt.Sprintf("RegressionKind%02d", idx+1)
 	}
 
@@ -67,8 +71,10 @@ func FixtureKinds(count int) []string {
 // high-degree anchor. A non-positive fanout selects a small production-like
 // default.
 func NewReconciliationFixture(fanout int) *opengraph.Graph {
-	if fanout <= 0 {
-		fanout = defaultRegressionFanout
+	effectiveFanout := fanout
+
+	if effectiveFanout <= 0 {
+		effectiveFanout = defaultRegressionFanout
 	}
 
 	fixture := &opengraph.Graph{
@@ -128,7 +134,7 @@ func NewReconciliationFixture(fanout int) *opengraph.Graph {
 		},
 	}
 
-	for _, fixtureID := range FixtureNames("fanout", fanout) {
+	for _, fixtureID := range FixtureNames("fanout", effectiveFanout) {
 		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
 			ID:         fixtureID,
 			Kinds:      []string{"ADEntity", "Entity", "User"},

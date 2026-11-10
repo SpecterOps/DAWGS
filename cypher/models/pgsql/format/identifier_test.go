@@ -9,17 +9,22 @@ import (
 )
 
 func TestIdentifierSpelling(t *testing.T) {
-	for _, tc := range []struct{ input, want string }{
-		{"objectId", `"objectId"`},
-		{"object_id", "object_id"},
-		{"`a` + `b`", "\"`a` + `b`\""},
-		{"`object id`", `"object id"`},
-		{"`object``id`", "\"object`id\""},
-		{"`object\"id`", `"object""id"`},
-		{"`select`", `"select"`},
-		{"`*`", `"*"`},
-		{"*", "*"},
-		{"`étiquette`", `"étiquette"`},
+	for _, tc := range []struct {
+		// input is the identifier spelling supplied to the SQL formatter.
+		input string
+		// want is the expected formatted value or rewritten query fragment.
+		want string
+	}{
+		{input: "objectId", want: `"objectId"`},
+		{input: "object_id", want: "object_id"},
+		{input: "`a` + `b`", want: "\"`a` + `b`\""},
+		{input: "`object id`", want: `"object id"`},
+		{input: "`object``id`", want: "\"object`id\""},
+		{input: "`object\"id`", want: `"object""id"`},
+		{input: "`select`", want: `"select"`},
+		{input: "`*`", want: `"*"`},
+		{input: "*", want: "*"},
+		{input: "`étiquette`", want: `"étiquette"`},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			got, err := format.Expression(pgsql.Identifier(tc.input), format.NewOutputBuilder())

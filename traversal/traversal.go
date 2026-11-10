@@ -33,10 +33,15 @@ type PatternMatchDelegate = func(terminal *graph.PathSegment) error
 //
 // The return value of the Do(...) function may be passed directly to a Traversal via a Plan as the Plan.Driver field.
 type PatternContinuation interface {
+	// Outbound appends a required outbound step with no maximum depth.
 	Outbound(criteria ...graph.Criteria) PatternContinuation
-	OutboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation
+	// OutboundWithDepth appends outbound bounds; zero minimum is optional and zero maximum is unbounded.
+	OutboundWithDepth(minDepth, maxDepth int, criteria ...graph.Criteria) PatternContinuation
+	// Inbound appends a required inbound step with no maximum depth.
 	Inbound(criteria ...graph.Criteria) PatternContinuation
-	InboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation
+	// InboundWithDepth appends inbound bounds; zero minimum is optional and zero maximum is unbounded.
+	InboundWithDepth(minDepth, maxDepth int, criteria ...graph.Criteria) PatternContinuation
+	// Do installs the terminal-path delegate and returns the pattern traversal driver.
 	Do(delegate PatternMatchDelegate) Driver
 }
 
@@ -103,23 +108,47 @@ func (s *pattern) Do(delegate PatternMatchDelegate) Driver {
 	return s.Driver
 }
 
-// OutboundWithDepth specifies the next outbound expansion step for this pattern with depth parameters.
-func (s *pattern) OutboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation {
-	if min < 0 {
-		min = 1
+// expansionDepthRange holds the effective inclusive bounds for a pattern step.
+type expansionDepthRange struct {
+	// minimum is zero for an optional step and positive for a required expansion.
+	minimum int
+	// maximum is zero for unbounded expansion and positive for a finite bound.
+	maximum int
+}
+
+const (
+	// requiredExpansionDepth is the default minimum when a negative depth is supplied.
+	requiredExpansionDepth = 1
+
+	// unboundedExpansionDepth disables the maximum expansion depth.
+	unboundedExpansionDepth = 0
+)
+
+// normalizeExpansionDepths applies the legacy negative-depth defaults and emits their warnings.
+func normalizeExpansionDepths(minDepth, maxDepth int) expansionDepthRange {
+	effectiveMinDepth := minDepth
+	effectiveMaxDepth := maxDepth
+	if effectiveMinDepth < 0 {
+		effectiveMinDepth = requiredExpansionDepth
 		slog.Warn("Negative mindepth not allowed. Setting min depth for expansion to 1")
 	}
 
-	if max < 0 {
-		max = 0
+	if effectiveMaxDepth < 0 {
+		effectiveMaxDepth = unboundedExpansionDepth
 		slog.Warn("Negative maxdepth not allowed. Setting max depth for expansion to 0")
 	}
 
+	return expansionDepthRange{minimum: effectiveMinDepth, maximum: effectiveMaxDepth}
+}
+
+// OutboundWithDepth specifies the next outbound expansion step for this pattern with depth parameters.
+func (s *pattern) OutboundWithDepth(minDepth, maxDepth int, criteria ...graph.Criteria) PatternContinuation {
+	depths := normalizeExpansionDepths(minDepth, maxDepth)
 	s.expansions = append(s.expansions, expansion{
 		criteria:  criteria,
 		direction: graph.DirectionOutbound,
-		minDepth:  min,
-		maxDepth:  max,
+		minDepth:  depths.minimum,
+		maxDepth:  depths.maximum,
 	})
 
 	return s
@@ -128,26 +157,17 @@ func (s *pattern) OutboundWithDepth(min, max int, criteria ...graph.Criteria) Pa
 // Outbound specifies the next outbound expansion step for this pattern. By default, this expansion will use a minimum
 // depth of 1 to make the expansion required and a maximum depth of 0 to expand indefinitely.
 func (s *pattern) Outbound(criteria ...graph.Criteria) PatternContinuation {
-	return s.OutboundWithDepth(1, 0, criteria...)
+	return s.OutboundWithDepth(requiredExpansionDepth, unboundedExpansionDepth, criteria...)
 }
 
 // InboundWithDepth specifies the next inbound expansion step for this pattern with depth parameters.
-func (s *pattern) InboundWithDepth(min, max int, criteria ...graph.Criteria) PatternContinuation {
-	if min < 0 {
-		min = 1
-		slog.Warn("Negative mindepth not allowed. Setting min depth for expansion to 1")
-	}
-
-	if max < 0 {
-		max = 0
-		slog.Warn("Negative maxdepth not allowed. Setting max depth for expansion to 0")
-	}
-
+func (s *pattern) InboundWithDepth(minDepth, maxDepth int, criteria ...graph.Criteria) PatternContinuation {
+	depths := normalizeExpansionDepths(minDepth, maxDepth)
 	s.expansions = append(s.expansions, expansion{
 		criteria:  criteria,
 		direction: graph.DirectionInbound,
-		minDepth:  min,
-		maxDepth:  max,
+		minDepth:  depths.minimum,
+		maxDepth:  depths.maximum,
 	})
 
 	return s
@@ -156,7 +176,7 @@ func (s *pattern) InboundWithDepth(min, max int, criteria ...graph.Criteria) Pat
 // Inbound specifies the next inbound expansion step for this pattern. By default, this expansion will use a minimum
 // depth of 1 to make the expansion required and a maximum depth of 0 to expand indefinitely.
 func (s *pattern) Inbound(criteria ...graph.Criteria) PatternContinuation {
-	return s.InboundWithDepth(1, 0, criteria...)
+	return s.InboundWithDepth(requiredExpansionDepth, unboundedExpansionDepth, criteria...)
 }
 
 // NewPattern returns a new PatternContinuation for building a new pattern.

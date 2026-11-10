@@ -79,12 +79,12 @@ func TestConfirmationComparableRejectsFingerprintChangeWithinArm(t *testing.T) {
 	right := []CaseResult{confirmationRecord("changed", "candidate", "binary-b", 5*time.Millisecond)}
 	left[1].SQLFingerprint = "unstable-sql"
 
-	comparable, reasons := confirmationComparable(left, right, performanceKey{
+	isComparable, reasons := confirmationComparable(left, right, performanceKey{
 		dataset: left[0].Dataset,
 		name:    "changed",
 		backend: ModePostgresSQL,
 	})
-	require.False(t, comparable)
+	require.False(t, isComparable)
 	require.Contains(t, reasons, "SQL fingerprint changes within arm")
 }
 

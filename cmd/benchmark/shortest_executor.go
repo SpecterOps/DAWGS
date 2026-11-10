@@ -58,13 +58,13 @@ func benchmarkShortestPathExecutor(executor optimize.ShortestPathExecutor) bool 
 }
 
 func (s *shortestExecutorBenchmarkDatabase) ReadTransaction(ctx context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
-	options = append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+	transactionOptions := append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	return s.Database.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		if err := applyPostgreSQLShortestPathBenchmarkSettings(tx, s.planCacheMode, s.jitEnabled); err != nil {
 			return err
 		}
 		return delegate(&shortestExecutorBenchmarkTransaction{Transaction: tx, ctx: ctx, mapper: s.mapper, graphID: s.graph.ID, executor: s.executor})
-	}, options...)
+	}, transactionOptions...)
 }
 
 func (s *shortestExecutorBenchmarkDatabase) KindMapper() pg.KindMapper {
@@ -121,13 +121,13 @@ func newTraversalPolicyBenchmarkDatabase(database graph.Database, planCacheMode 
 }
 
 func (s *traversalPolicyBenchmarkDatabase) ReadTransaction(ctx context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
-	options = append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+	transactionOptions := append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	return s.Database.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		if err := applyPostgreSQLShortestPathBenchmarkSettings(tx, s.planCacheMode, s.jitEnabled); err != nil {
 			return err
 		}
 		return delegate(tx)
-	}, options...)
+	}, transactionOptions...)
 }
 
 // TranslationCacheStats preserves the PostgreSQL telemetry surface through the policy

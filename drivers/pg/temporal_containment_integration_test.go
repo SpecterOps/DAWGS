@@ -18,10 +18,17 @@ func TestPostgreSQLTemporalComponentsReturnTranslationError(t *testing.T) {
 	driver := newV2IntegrationDriver(t, 1, 4, nil)
 	setUpV2IntegrationGraph(t, driver)
 
-	for _, tc := range []struct{ name, query, message string }{
-		{"datetime literal epochmillis", `RETURN datetime('2020-01-01').epochmillis AS v`, "unsupported temporal type component epochmillis on cast type timestamp with time zone"},
-		{"date property year", `MATCH (n:PGV2IntegrationNode) RETURN date(n.name).year AS v`, "unsupported temporal type component year on cast type date"},
-		{"where datetime comparison", `MATCH (n:PGV2IntegrationNode) WHERE datetime('2020-01-01').epochmillis > 0 RETURN n`, "unsupported temporal type component epochmillis on cast type timestamp with time zone"},
+	for _, tc := range []struct {
+		// name identifies this test case in subtest and benchmark output.
+		name string
+		// query is the Cypher statement exercised by this case.
+		query string
+		// message is the diagnostic substring expected for the rejected query.
+		message string
+	}{
+		{name: "datetime literal epochmillis", query: `RETURN datetime('2020-01-01').epochmillis AS v`, message: "unsupported temporal type component epochmillis on cast type timestamp with time zone"},
+		{name: "date property year", query: `MATCH (n:PGV2IntegrationNode) RETURN date(n.name).year AS v`, message: "unsupported temporal type component year on cast type date"},
+		{name: "where datetime comparison", query: `MATCH (n:PGV2IntegrationNode) WHERE datetime('2020-01-01').epochmillis > 0 RETURN n`, message: "unsupported temporal type component epochmillis on cast type timestamp with time zone"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for attempt := range 2 {

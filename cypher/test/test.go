@@ -243,7 +243,7 @@ func testCase(test Case) func(t *testing.T) {
 	}
 }
 
-// updatedCasesDir returns the caller-provided fixture update directory or an isolated temporary directory.
+// updatedCasesDir creates and returns updated_cases beneath the current working directory.
 func updatedCasesDir() (string, error) {
 	if workingDir, err := os.Getwd(); err != nil {
 		return "", err
@@ -258,7 +258,7 @@ func updatedCasesDir() (string, error) {
 	}
 }
 
-// UpdatePositiveTestCasesFitness rewrites positive fixtures with their current PostgreSQL translations.
+// UpdatePositiveTestCasesFitness writes parser/analyzer fixtures with refreshed ExpectedFitness values into updated_cases.
 func UpdatePositiveTestCasesFitness() error {
 	if updatedCasesPath, err := updatedCasesDir(); err != nil {
 		return err

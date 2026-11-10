@@ -32,8 +32,10 @@ import (
 const (
 	// defaultConfidenceLevel is the default confidence used by qualification reports.
 	defaultConfidenceLevel = 0.975
+
 	// minimumTimingNoiseRatio is the smallest relative timing floor accepted for promotion decisions.
 	minimumTimingNoiseRatio = 0.05
+
 	// minimumTimingNoiseAbsolute is the smallest absolute timing floor accepted for promotion decisions.
 	minimumTimingNoiseAbsolute = 100 * time.Microsecond
 )
@@ -328,7 +330,8 @@ func aaTimingFloor(report *AAResolutionReport, key performanceKey, p95 bool, con
 	return 0, 0, fmt.Errorf("A/A report has no resolution evidence for %s/%s/%s", key.dataset, key.name, key.backend)
 }
 
-// validSHA256 reports whether a value is a canonical lowercase SHA-256 digest.
+// validSHA256 reports whether value encodes exactly 32 bytes as hexadecimal.
+// Both uppercase and lowercase digits are accepted; canonical-case checks belong to callers.
 func validSHA256(value string) bool {
 	if len(value) != sha256.Size*2 {
 		return false

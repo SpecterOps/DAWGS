@@ -51,14 +51,14 @@ type dbContext struct {
 }
 
 // resetBeforeScenario clears persistent graph data and scenario-local result state.
-func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-	c.db = nil
-	c.beforeExecution = graphSnapshot{}
-	c.actualResult = nil
-	c.rowCount = 0
-	c.actualRows = nil
+func (s *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
+	s.db = nil
+	s.beforeExecution = graphSnapshot{}
+	s.actualResult = nil
+	s.rowCount = 0
+	s.actualRows = nil
 
-	openSession := c.openSession
+	openSession := s.openSession
 	if openSession == nil {
 		openSession = integration.OpenSession
 	}
@@ -73,21 +73,21 @@ func (c *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) 
 		return ctx, fmt.Errorf("failed to establish database connection error: %w", err)
 	}
 
-	c.db = session.DB
+	s.db = session.DB
 
-	if err := c.anEmptyGraph(ctx); err != nil {
+	if err := s.anEmptyGraph(ctx); err != nil {
 		return ctx, fmt.Errorf("reset graph before scenario: %w", err)
 	}
 	return ctx, nil
 }
 
-func (c *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
-	if c.db == nil {
+func (s *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
+	if s.db == nil {
 		return ctx, nil
 	}
-	db := c.db
-	errEmptyGraph := c.anEmptyGraph(ctx)
-	c.db = nil
+	db := s.db
+	errEmptyGraph := s.anEmptyGraph(ctx)
+	s.db = nil
 	closeDbErr := db.Close(context.Background())
 	if err := errors.Join(errEmptyGraph, closeDbErr); err != nil {
 		return ctx, err
@@ -97,8 +97,8 @@ func (c *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ err
 }
 
 // anEmptyGraph removes all nodes and relationships from the graph.
-func (c *dbContext) anEmptyGraph(ctx context.Context) error {
-	err := c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+func (s *dbContext) anEmptyGraph(ctx context.Context) error {
+	err := s.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		if err := tx.Nodes().Delete(); err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ func (c *dbContext) anEmptyGraph(ctx context.Context) error {
 }
 
 // theBinarytreeGraph load tck datasets
-func (c *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
+func (s *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
 	fileName := fmt.Sprintf("testdata/binary-tree-%d.json", num)
 
 	file, err := os.Open(fileName)
@@ -121,7 +121,7 @@ func (c *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
 
 	defer file.Close()
 
-	_, err = opengraph.Load(ctx, c.db, file)
+	_, err = opengraph.Load(ctx, s.db, file)
 	if err != nil {
 		return fmt.Errorf("failed to write graph data error: %w\n", err)
 	}
@@ -129,15 +129,15 @@ func (c *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
 	return nil
 }
 
-func (c *dbContext) anyGraph(ctx context.Context) error {
-	randomIndex := rand.Intn(len(c.testData))
-	file, err := os.Open(c.testData[randomIndex])
+func (s *dbContext) anyGraph(ctx context.Context) error {
+	randomIndex := rand.Intn(len(s.testData))
+	file, err := os.Open(s.testData[randomIndex])
 	if err != nil {
 		return fmt.Errorf("open graph fixture: %w", err)
 	}
 	defer file.Close()
 
-	_, err = opengraph.Load(ctx, c.db, file)
+	_, err = opengraph.Load(ctx, s.db, file)
 	if err != nil {
 		return err
 	}
@@ -146,14 +146,14 @@ func (c *dbContext) anyGraph(ctx context.Context) error {
 }
 
 // executingQuery runs a read query and records its rows for later comparison.
-func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) error {
-	c.actualRows = nil
+func (s *dbContext) executingQuery(ctx context.Context, input *godog.DocString) error {
+	s.actualRows = nil
 
-	before, err := captureGraphState(ctx, c.db)
+	before, err := captureGraphState(ctx, s.db)
 	if err != nil {
 		return err
 	}
-	c.beforeExecution = before
+	s.beforeExecution = before
 
 	if strings.Contains(strings.ToLower(input.Content), "create") {
 		result, err := hasReturnClause(input.Content)
@@ -162,7 +162,7 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 		}
 		isMutationWithoutReturn := strings.Contains(strings.ToLower(input.Content), "create") &&
 			!result
-		err = c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+		err = s.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 			var rowCount int64
 			result := tx.Query(input.Content, nil)
 			defer result.Close()
@@ -188,11 +188,11 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 					}
 					row = append(row, formatted)
 				}
-				c.actualRows = append(c.actualRows, row)
+				s.actualRows = append(s.actualRows, row)
 			}
 
-			c.actualResult = result
-			c.rowCount = int(rowCount)
+			s.actualResult = result
+			s.rowCount = int(rowCount)
 
 			return nil
 		})
@@ -201,7 +201,7 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 		}
 	} else {
 
-		err = c.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
+		err = s.db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 			var rowCount int64
 			result := tx.Query(input.Content, nil)
 
@@ -219,11 +219,11 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 					}
 					row = append(row, formatted)
 				}
-				c.actualRows = append(c.actualRows, row)
+				s.actualRows = append(s.actualRows, row)
 			}
 
-			c.actualResult = result
-			c.rowCount = int(rowCount)
+			s.actualResult = result
+			s.rowCount = int(rowCount)
 			if err := result.Error(); err != nil {
 				return result.Error()
 			}
@@ -235,18 +235,18 @@ func (c *dbContext) executingQuery(ctx context.Context, input *godog.DocString) 
 		}
 	}
 
-	after, err := captureGraphState(ctx, c.db)
+	after, err := captureGraphState(ctx, s.db)
 	if err != nil {
 		return err
 	}
-	c.afterExecution = after
+	s.afterExecution = after
 
 	return nil
 }
 
 // havingExecuted runs a write query to seed the graph for a scenario.
-func (c *dbContext) havingExecuted(ctx context.Context, input *godog.DocString) error {
-	err := c.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
+func (s *dbContext) havingExecuted(ctx context.Context, input *godog.DocString) error {
+	err := s.db.WriteTransaction(ctx, func(tx graph.Transaction) error {
 		result := tx.Query(input.Content, nil)
 
 		defer result.Close()
@@ -264,7 +264,7 @@ func (c *dbContext) havingExecuted(ctx context.Context, input *godog.DocString) 
 
 // theResultShouldBeInAnyOrder compares recorded query rows with an expected table,
 // ignoring row order.
-func (c *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) error {
+func (s *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) error {
 	var expectedRows [][]string
 	if len(expectedTable.Rows) > 1 {
 		for _, value := range expectedTable.Rows[1:] {
@@ -276,8 +276,8 @@ func (c *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) erro
 		}
 	}
 
-	if c.rowCount != len(expectedRows) {
-		return fmt.Errorf("Invalid row count expected %d actual %d", len(expectedRows), c.rowCount)
+	if s.rowCount != len(expectedRows) {
+		return fmt.Errorf("Invalid row count expected %d actual %d", len(expectedRows), s.rowCount)
 	}
 
 	sortRows := func(rows [][]string) {
@@ -287,19 +287,19 @@ func (c *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) erro
 		})
 	}
 	sortRows(expectedRows)
-	sortRows(c.actualRows)
+	sortRows(s.actualRows)
 	for i := range expectedRows {
-		if !slices.Equal(expectedRows[i], c.actualRows[i]) {
-			return fmt.Errorf("Detected a drift expected %s, actual %s", strings.Join(expectedRows[i], ", "), strings.Join(c.actualRows[i], ", "))
+		if !slices.Equal(expectedRows[i], s.actualRows[i]) {
+			return fmt.Errorf("Detected a drift expected %s, actual %s", strings.Join(expectedRows[i], ", "), strings.Join(s.actualRows[i], ", "))
 		}
 	}
 
 	return nil
 }
 
-func (c *dbContext) theResultShouldBeEmpty() error {
+func (s *dbContext) theResultShouldBeEmpty() error {
 
-	if c.rowCount != 0 || len(c.actualRows) != 0 {
+	if s.rowCount != 0 || len(s.actualRows) != 0 {
 		return fmt.Errorf("The result set is not empty")
 	}
 	return nil
@@ -362,18 +362,18 @@ func formatGraphRelationship(relationship graph.Relationship) string {
 }
 
 // noSideEffects verifies that the query did not change graph node or relationship counts.
-func (c *dbContext) noSideEffects(ctx context.Context) error {
-	after, err := captureGraphState(ctx, c.db)
+func (s *dbContext) noSideEffects(ctx context.Context) error {
+	after, err := captureGraphState(ctx, s.db)
 	if err != nil {
 		return err
 	}
-	if !cmp.Equal(c.beforeExecution, after) {
+	if !cmp.Equal(s.beforeExecution, after) {
 		return errors.New("Graph state drift detected")
 	}
 	return nil
 }
 
-func (c *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
+func (s *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
 	actualRows := [][]string{}
 	if len(expectedTable.Rows) != 0 {
 		for _, row := range expectedTable.Rows {
@@ -385,8 +385,8 @@ func (c *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
 		}
 	}
 
-	nodeDelta := c.afterExecution.NodesCount - c.beforeExecution.NodesCount
-	relDelta := c.afterExecution.RelationshipsCount - c.beforeExecution.RelationshipsCount
+	nodeDelta := s.afterExecution.NodesCount - s.beforeExecution.NodesCount
+	relDelta := s.afterExecution.RelationshipsCount - s.beforeExecution.RelationshipsCount
 	var errs []error
 	for _, row := range actualRows {
 		if len(row) != 2 {

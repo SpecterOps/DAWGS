@@ -89,7 +89,7 @@ func NewDriver(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool) *Driver {
 
 // NewDriverWithOptions constructs a PostgreSQL driver with driver-wide options.
 func NewDriverWithOptions(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, options DriverOptions) *Driver {
-	options = normalizeDriverOptions(options)
+	normalizedOptions := normalizeDriverOptions(options)
 	runtime := poolRuntimeFor(pool)
 	var provider CypherTranslationCacheProvider
 	if runtime != nil {
@@ -98,7 +98,7 @@ func NewDriverWithOptions(graphQueryMemoryLimit size.Size, pool *pgxpool.Pool, o
 	return &Driver{
 		pool:          pool,
 		runtime:       runtime,
-		SchemaManager: newSchemaManagerWithOptionsAndProvider(pool, graphQueryMemoryLimit, options, provider),
+		SchemaManager: newSchemaManagerWithOptionsAndProvider(pool, graphQueryMemoryLimit, normalizedOptions, provider),
 	}
 }
 

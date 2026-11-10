@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
 )
@@ -135,7 +135,7 @@ func TestRawSuffixReverseRetryPublishesCompletedCandidate(t *testing.T) {
 	tx, mock := newSuffixRetryMockTransaction(t)
 	mock.ExpectExec("savepoint " + suffixReverseRetrySavepoint).WillReturnResult(pgxmock.NewResult("SAVEPOINT", 0))
 	mock.ExpectExec("select set_config('dawgs.suffix_reverse_retry_status', '', true)").WillReturnResult(pgxmock.NewResult("SELECT", 1))
-	mock.ExpectQuery("candidate").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(
+	mock.ExpectQuery("candidate").WillReturnRows(
 		pgxmock.NewRows([]string{"value"}).AddRow("candidate-row"),
 	)
 	mock.ExpectQuery("select current_setting('dawgs.suffix_reverse_retry_status', true)").WillReturnRows(
@@ -154,7 +154,7 @@ func TestRawSuffixReverseRetryRollsBackCandidateBeforeExactForward(t *testing.T)
 	tx, mock := newSuffixRetryMockTransaction(t)
 	mock.ExpectExec("savepoint " + suffixReverseRetrySavepoint).WillReturnResult(pgxmock.NewResult("SAVEPOINT", 0))
 	mock.ExpectExec("select set_config('dawgs.suffix_reverse_retry_status', '', true)").WillReturnResult(pgxmock.NewResult("SELECT", 1))
-	mock.ExpectQuery("candidate").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"value"}))
+	mock.ExpectQuery("candidate").WillReturnRows(pgxmock.NewRows([]string{"value"}))
 	mock.ExpectQuery("select current_setting('dawgs.suffix_reverse_retry_status', true)").WillReturnRows(
 		pgxmock.NewRows([]string{"current_setting"}).AddRow("forward_retry_state_overflow"),
 	)
@@ -163,7 +163,7 @@ func TestRawSuffixReverseRetryRollsBackCandidateBeforeExactForward(t *testing.T)
 	mock.ExpectExec("select public.record_requested_traversal_runtime_attestation_v1($1, false, $2)").
 		WithArgs("forward_retry_state_overflow", "EXPANSION-STEPWISE-FORWARD").
 		WillReturnResult(pgxmock.NewResult("SELECT", 1))
-	mock.ExpectQuery("fallback").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(
+	mock.ExpectQuery("fallback").WillReturnRows(
 		pgxmock.NewRows([]string{"value"}).AddRow("fallback-row"),
 	)
 	mock.ExpectExec("select public.record_requested_traversal_runtime_attestation_v1($1, true, $2)").

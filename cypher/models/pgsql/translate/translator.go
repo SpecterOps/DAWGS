@@ -134,10 +134,6 @@ type Translator struct {
 
 // NewTranslator initializes translation state for the supplied graph and copies the caller's parameter map.
 func NewTranslator(ctx context.Context, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32) *Translator {
-	if parameters == nil {
-		parameters = map[string]any{}
-	}
-
 	inputParameters := make(map[string]any, len(parameters))
 	for key, value := range parameters {
 		inputParameters[key] = value
@@ -1620,13 +1616,13 @@ func TranslateForTool(ctx context.Context, cypherQuery *cypher.RegularQuery, kin
 }
 
 func translateWithOptions(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options Options, toolOptions ToolOptions, borrowQuery bool) (Result, map[string]string, error) {
-	options, err := options.normalized()
+	normalizedOptions, err := options.normalized()
 	if err != nil {
 		return Result{}, nil, err
 	}
 
 	var optimizedPlan optimize.Plan
-	if options.OptimizerMode == OptimizerEnabled {
+	if normalizedOptions.OptimizerMode == OptimizerEnabled {
 		if borrowQuery {
 			optimizedPlan, err = optimize.OptimizeBorrowed(cypherQuery)
 		} else {
@@ -1983,19 +1979,26 @@ func applyExpansionSuffixRouteComponentPolicy(plan *optimize.Plan) error {
 // candidate. Exact forward fallback is deliberately absent from emitted SQL;
 // the PostgreSQL tool transaction executes it only after a complete overflow.
 func applyExpansionSuffixReverseRetryPolicy(plan *optimize.Plan, suffixRowLimit, stateLimit, outputRowLimit, outputBytesLimit int64) error {
-	if suffixRowLimit == 0 {
-		suffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
+	var (
+		effectiveSuffixRowLimit   = suffixRowLimit
+		effectiveStateLimit       = stateLimit
+		effectiveOutputRowLimit   = outputRowLimit
+		effectiveOutputBytesLimit = outputBytesLimit
+	)
+
+	if effectiveSuffixRowLimit == 0 {
+		effectiveSuffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
 	}
-	if stateLimit == 0 {
-		stateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
+	if effectiveStateLimit == 0 {
+		effectiveStateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
 	}
-	if outputRowLimit == 0 {
-		outputRowLimit = optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit
+	if effectiveOutputRowLimit == 0 {
+		effectiveOutputRowLimit = optimize.ExpansionSearchSuffixReverseRetryOutputRowLimit
 	}
-	if outputBytesLimit == 0 {
-		outputBytesLimit = optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit
+	if effectiveOutputBytesLimit == 0 {
+		effectiveOutputBytesLimit = optimize.ExpansionSearchSuffixReverseRetryOutputBytesLimit
 	}
-	if suffixRowLimit <= 0 || stateLimit <= 0 || outputRowLimit <= 0 || outputBytesLimit <= 0 {
+	if effectiveSuffixRowLimit <= 0 || effectiveStateLimit <= 0 || effectiveOutputRowLimit <= 0 || effectiveOutputBytesLimit <= 0 {
 		return fmt.Errorf("expansion suffix reverse retry requires positive suffix, state, output-row, and output-byte limits")
 	}
 
@@ -2018,15 +2021,15 @@ func applyExpansionSuffixReverseRetryPolicy(plan *optimize.Plan, suffixRowLimit,
 		decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
 		decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
 		decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryTransactionRetry
-		decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
+		decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: effectiveSuffixRowLimit}
 		decision.Admission = optimize.ExpansionSearchAdmission{
-			StateLimit:             stateLimit,
-			OutputRowLimit:         outputRowLimit,
-			OutputBytesLimit:       outputBytesLimit,
+			StateLimit:             effectiveStateLimit,
+			OutputRowLimit:         effectiveOutputRowLimit,
+			OutputBytesLimit:       effectiveOutputBytesLimit,
 			RequiresCompleteProbes: true,
 			FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
 		}
-		decision.StateLimit = stateLimit
+		decision.StateLimit = effectiveStateLimit
 		decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
 		decision.SelectionMode = "transaction_retry_tool"
 		decision.SelectorVersion = string(optimize.ExpansionSearchPolicySuffixReverseRetryV1)
@@ -2039,13 +2042,18 @@ func applyExpansionSuffixReverseRetryPolicy(plan *optimize.Plan, suffixRowLimit,
 // target for bounded reverse execution. No endpoint-only observation or
 // topology-scored orientation decision is admitted by this tool-only policy.
 func applyExpansionSuffixReverseGuardPolicy(plan *optimize.Plan, suffixRowLimit, stateLimit int64) error {
-	if suffixRowLimit == 0 {
-		suffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
+	var (
+		effectiveSuffixRowLimit = suffixRowLimit
+		effectiveStateLimit     = stateLimit
+	)
+
+	if effectiveSuffixRowLimit == 0 {
+		effectiveSuffixRowLimit = optimize.ExpansionSearchSuffixReverseGuardSuffixRowLimit
 	}
-	if stateLimit == 0 {
-		stateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
+	if effectiveStateLimit == 0 {
+		effectiveStateLimit = optimize.ExpansionSearchSuffixReverseGuardStateLimit
 	}
-	if suffixRowLimit <= 0 || stateLimit <= 0 {
+	if effectiveSuffixRowLimit <= 0 || effectiveStateLimit <= 0 {
 		return fmt.Errorf("expansion suffix reverse guard requires positive suffix-row and state limits")
 	}
 
@@ -2075,13 +2083,13 @@ func applyExpansionSuffixReverseGuardPolicy(plan *optimize.Plan, suffixRowLimit,
 		optimize.ExpansionSearchStepwiseForward,
 	}
 	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
-	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: suffixRowLimit}
+	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: effectiveSuffixRowLimit}
 	decision.Admission = optimize.ExpansionSearchAdmission{
-		StateLimit:             stateLimit,
+		StateLimit:             effectiveStateLimit,
 		RequiresCompleteProbes: true,
 		FallbackStrategy:       optimize.ExpansionSearchStepwiseForward,
 	}
-	decision.StateLimit = stateLimit
+	decision.StateLimit = effectiveStateLimit
 	decision.FallbackStrategy = optimize.ExpansionSearchStepwiseForward
 	decision.SelectionMode = "guarded_tool"
 	decision.SelectorVersion = optimize.ExpansionSearchSelectorFixedSuffixPathV1

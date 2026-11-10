@@ -1082,8 +1082,8 @@ func validateOrientationV2EvidenceIdentity(artifacts ...[]CaseResult) (orientati
 				return orientationSelectorV2Identity{}, fmt.Errorf("orientation-v2 artifacts mix source, diff, binary, or corpus identities")
 			}
 			if postgresEnvironment == nil {
-				copy := *record.PostgresEnvironment
-				postgresEnvironment = &copy
+				environmentCopy := *record.PostgresEnvironment
+				postgresEnvironment = &environmentCopy
 			} else if !sameOrientationV2PostgresEnvironment(postgresEnvironment, record.PostgresEnvironment) {
 				return orientationSelectorV2Identity{}, fmt.Errorf("orientation-v2 artifacts mix PostgreSQL environments")
 			}

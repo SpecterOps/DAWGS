@@ -441,11 +441,11 @@ func parseConfig(args []string, env func(string) string) (config, error) {
 	flags.DurationVar(&cfg.MaterialityAbsolute, "materiality-absolute", 100*time.Microsecond, "target median-saving lower bound")
 	flags.StringVar(&cfg.DestructiveLock, "destructive-lock", ".coverage/graphbench.lock", "local lock file guarding destructive fixture reloads")
 	flags.Func("aa-artifact", "JSONL artifact used to calculate baseline A/A measurement resolution (repeat for separately captured arms)", func(value string) error {
-		value = strings.TrimSpace(value)
-		if value == "" {
+		trimmedPath := strings.TrimSpace(value)
+		if trimmedPath == "" {
 			return fmt.Errorf("aa-artifact path must not be empty")
 		}
-		cfg.AAArtifacts = append(cfg.AAArtifacts, value)
+		cfg.AAArtifacts = append(cfg.AAArtifacts, trimmedPath)
 		return nil
 	})
 	flags.StringVar(&cfg.AAOutput, "aa-output", "", "A/A measurement-resolution JSON output path (default: stdout)")

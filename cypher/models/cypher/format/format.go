@@ -912,8 +912,8 @@ func (s Emitter) formatSet(output io.Writer, set *cypher.Set) error {
 	return nil
 }
 
-func (s Emitter) formatDelete(output io.Writer, delete *cypher.Delete) error {
-	if delete.Detach {
+func (s Emitter) formatDelete(output io.Writer, deleteClause *cypher.Delete) error {
+	if deleteClause.Detach {
 		if _, err := io.WriteString(output, "detach delete "); err != nil {
 			return err
 		}
@@ -921,7 +921,7 @@ func (s Emitter) formatDelete(output io.Writer, delete *cypher.Delete) error {
 		return err
 	}
 
-	for idx, expression := range delete.Expressions {
+	for idx, expression := range deleteClause.Expressions {
 		if idx > 0 {
 			if _, err := io.WriteString(output, ", "); err != nil {
 				return err

@@ -90,9 +90,14 @@ func TestDecodeJSONValueExactInteger(t *testing.T) {
 }
 
 func BenchmarkJSONNumberDecoding(b *testing.B) {
-	for _, source := range []struct{ name, json string }{
-		{"scalar", "4611686018427387905"},
-		{"properties", `{"large":4611686018427387905,"name":"node","values":[1,2,3],"fraction":1.25}`},
+	for _, source := range []struct {
+		// name identifies this test case in subtest and benchmark output.
+		name string
+		// json is the JSON document supplied to the decoder.
+		json string
+	}{
+		{name: "scalar", json: "4611686018427387905"},
+		{name: "properties", json: `{"large":4611686018427387905,"name":"node","values":[1,2,3],"fraction":1.25}`},
 	} {
 		for _, decoder := range []struct {
 			name      string

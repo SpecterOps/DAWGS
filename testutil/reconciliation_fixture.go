@@ -53,17 +53,19 @@ type GeneratedNodeListParam struct {
 
 // FixtureNames returns stable, zero-padded fixture IDs.
 func FixtureNames(prefix string, count int) []string {
-	if count < 0 {
-		count = 0
+	effectiveCount := count
+
+	if effectiveCount < 0 {
+		effectiveCount = 0
 	}
 
-	width := len(fmt.Sprintf("%d", max(count-1, 0)))
+	width := len(fmt.Sprintf("%d", max(effectiveCount-1, 0)))
 	if width < 2 {
 		width = 2
 	}
 
-	values := make([]string, count)
-	for idx := range count {
+	values := make([]string, effectiveCount)
+	for idx := range effectiveCount {
 		values[idx] = fmt.Sprintf("%s-%0*d", prefix, width, idx)
 	}
 	return values
@@ -79,8 +81,10 @@ func FixtureNames(prefix string, count int) []string {
 // root-to-survivor relationships are never incident to a target, including a
 // same-kind survivor for exact delete-set assertions.
 func NewDirectWriteScaleFixture(targets int) *opengraph.Graph {
-	if targets < 0 {
-		targets = 0
+	effectiveTargets := targets
+
+	if effectiveTargets < 0 {
+		effectiveTargets = 0
 	}
 
 	fixture := &opengraph.Graph{
@@ -112,7 +116,7 @@ func NewDirectWriteScaleFixture(targets int) *opengraph.Graph {
 		},
 	}
 
-	targetIDs := FixtureNames("write-target", targets)
+	targetIDs := FixtureNames("write-target", effectiveTargets)
 	for idx, targetID := range targetIDs {
 		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
 			ID:    targetID,
@@ -151,7 +155,7 @@ func NewDirectWriteScaleFixture(targets int) *opengraph.Graph {
 		)
 	}
 
-	if targets > 0 {
+	if effectiveTargets > 0 {
 		fixture.Edges = append(fixture.Edges, opengraph.Edge{
 			StartID:    targetIDs[0],
 			EndID:      targetIDs[0],
@@ -159,7 +163,7 @@ func NewDirectWriteScaleFixture(targets int) *opengraph.Graph {
 			Properties: map[string]any{"marker": "self"},
 		})
 	}
-	if targets > 1 {
+	if effectiveTargets > 1 {
 		for idx, targetID := range targetIDs {
 			fixture.Edges = append(fixture.Edges, opengraph.Edge{
 				StartID:    targetIDs[1],
@@ -177,8 +181,10 @@ func NewDirectWriteScaleFixture(targets int) *opengraph.Graph {
 // for the ingestion reconciliation forms. fanout controls the degree of the
 // REC-08 detach-delete target.
 func NewReconciliationScaleFixture(fanout int) *opengraph.Graph {
-	if fanout < 1 {
-		fanout = 128
+	effectiveFanout := fanout
+
+	if effectiveFanout < 1 {
+		effectiveFanout = 128
 	}
 
 	fixture := &opengraph.Graph{
@@ -316,7 +322,7 @@ func NewReconciliationScaleFixture(fanout int) *opengraph.Graph {
 		})
 	}
 
-	for idx := range fanout {
+	for idx := range effectiveFanout {
 		neighborID := fmt.Sprintf("detach-neighbor-%04d", idx)
 		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
 			ID:         neighborID,
@@ -348,8 +354,10 @@ func NewReconciliationScaleFixture(fanout int) *opengraph.Graph {
 // NewTrustPruningScaleFixture returns deterministic dense trust and pruning
 // shapes without changing the cardinalities of the reconciliation fixture.
 func NewTrustPruningScaleFixture(fanout int) *opengraph.Graph {
-	if fanout < 1 {
-		fanout = 128
+	effectiveFanout := fanout
+
+	if effectiveFanout < 1 {
+		effectiveFanout = 128
 	}
 
 	fixture := &opengraph.Graph{
@@ -499,7 +507,7 @@ func NewTrustPruningScaleFixture(fanout int) *opengraph.Graph {
 		},
 	}
 
-	for idx := range fanout {
+	for idx := range effectiveFanout {
 		var (
 			suffix                 = fmt.Sprintf("%04d", idx)
 			trustEarlyID           = "trust-early-" + suffix
@@ -649,8 +657,10 @@ func NewTrustPruningScaleFixture(fanout int) *opengraph.Graph {
 // NewHopScaleFixture returns deterministic one-hop fanout, kind-cardinality,
 // endpoint-list, predicate-selectivity, and two-sided set shapes.
 func NewHopScaleFixture(fanout int) *opengraph.Graph {
-	if fanout < 30 {
-		fanout = 128
+	effectiveFanout := fanout
+
+	if effectiveFanout < 30 {
+		effectiveFanout = 128
 	}
 
 	fixture := &opengraph.Graph{
@@ -678,7 +688,7 @@ func NewHopScaleFixture(fanout int) *opengraph.Graph {
 		},
 	}
 
-	for idx := range fanout {
+	for idx := range effectiveFanout {
 		var (
 			suffix     = fmt.Sprintf("%04d", idx)
 			peerID     = "hop-peer-" + suffix
@@ -762,7 +772,7 @@ func NewHopScaleFixture(fanout int) *opengraph.Graph {
 			Kinds:      []string{"HopIDEndpoint"},
 			Properties: map[string]any{"name": targetID},
 		})
-		if idx < fanout {
+		if idx < effectiveFanout {
 			fixture.Edges = append(fixture.Edges, opengraph.Edge{
 				StartID:    "hop-out-root",
 				EndID:      targetID,
@@ -830,8 +840,10 @@ func NewHopScaleFixture(fanout int) *opengraph.Graph {
 // NewScanLookupScaleFixture returns deterministic wide-scan, large lookup,
 // adjacency, ordering, and count shapes for the scan/lookup regression corpus.
 func NewScanLookupScaleFixture(fanout int) *opengraph.Graph {
-	if fanout < 9 {
-		fanout = 128
+	effectiveFanout := fanout
+
+	if effectiveFanout < 9 {
+		effectiveFanout = 128
 	}
 
 	fixture := &opengraph.Graph{
@@ -872,8 +884,8 @@ func NewScanLookupScaleFixture(fanout int) *opengraph.Graph {
 	}
 
 	escalationKinds := []string{"GenericAll", "GenericWrite", "Owns", "WriteOwner", "WriteDACL", "WritePublicInformation"}
-	victimIDs := FixtureNames("scan-victim", max(1_000, fanout))
-	for idx := range fanout {
+	victimIDs := FixtureNames("scan-victim", max(1_000, effectiveFanout))
+	for idx := range effectiveFanout {
 		suffix := fmt.Sprintf("%04d", idx)
 		scanEndID := "scan-end-" + suffix
 		scanEntityID := "scan-entity-" + suffix

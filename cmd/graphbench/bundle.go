@@ -110,25 +110,25 @@ func writeCaptureBundle(root string, corpus ScaleCorpus, records []CaseResult, e
 
 // writeCaptureBundleWithEvidence copies run artifacts, auxiliary evidence, and provenance into a checksummed portable bundle.
 func writeCaptureBundleWithEvidence(root string, corpus ScaleCorpus, records []CaseResult, environment RunEnvironment, evidenceInputs []CaptureBundleEvidenceInput) error {
-	root = filepath.Clean(root)
-	if root == "." || root == string(filepath.Separator) {
+	cleanRoot := filepath.Clean(root)
+	if cleanRoot == "." || cleanRoot == string(filepath.Separator) {
 		return fmt.Errorf("bundle directory must be a dedicated path")
 	}
-	if err := validateCaptureBundleDestination(root); err != nil {
+	if err := validateCaptureBundleDestination(cleanRoot); err != nil {
 		return err
 	}
-	currentFingerprint, err := calculateWorkingTreeSHA256(root)
+	currentFingerprint, err := calculateWorkingTreeSHA256(cleanRoot)
 	if err != nil {
 		return fmt.Errorf("fingerprint current source before bundle capture: %w", err)
 	}
 	if !isLowerHexSHA256(environment.DirtyDiffSHA256) || currentFingerprint != environment.DirtyDiffSHA256 {
 		return fmt.Errorf("current source fingerprint %s differs from run environment fingerprint %s", currentFingerprint, environment.DirtyDiffSHA256)
 	}
-	untracked, err := listUntrackedSources(root)
+	untracked, err := listUntrackedSources(cleanRoot)
 	if err != nil {
 		return err
 	}
-	for _, dir := range []string{root, filepath.Join(root, "artifacts"), filepath.Join(root, "bin"), filepath.Join(root, "source-untracked")} {
+	for _, dir := range []string{cleanRoot, filepath.Join(cleanRoot, "artifacts"), filepath.Join(cleanRoot, "bin"), filepath.Join(cleanRoot, "source-untracked")} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
@@ -138,13 +138,13 @@ func writeCaptureBundleWithEvidence(root string, corpus ScaleCorpus, records []C
 	if err != nil {
 		return fmt.Errorf("capture tracked source patch: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "source.patch"), patch, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(cleanRoot, "source.patch"), patch, 0o644); err != nil {
 		return err
 	}
 
 	untrackedManifest := make([]UntrackedSource, 0, len(untracked))
 	for _, source := range untracked {
-		destination := filepath.Join(root, "source-untracked", source)
+		destination := filepath.Join(cleanRoot, "source-untracked", source)
 		if err := copyRegularFile(source, destination, 0o644); err != nil {
 			return fmt.Errorf("copy untracked source %s: %w", source, err)
 		}
@@ -158,17 +158,17 @@ func writeCaptureBundleWithEvidence(root string, corpus ScaleCorpus, records []C
 			Copy:   filepath.ToSlash(filepath.Join("source-untracked", source)),
 		})
 	}
-	if err := writeIndentedJSON(filepath.Join(root, "source-untracked-manifest.json"), untrackedManifest); err != nil {
+	if err := writeIndentedJSON(filepath.Join(cleanRoot, "source-untracked-manifest.json"), untrackedManifest); err != nil {
 		return err
 	}
-	capturedFingerprint, err := capturedWorkingTreeSHA256(patch, untrackedManifest, root)
+	capturedFingerprint, err := capturedWorkingTreeSHA256(patch, untrackedManifest, cleanRoot)
 	if err != nil {
 		return fmt.Errorf("fingerprint captured source: %w", err)
 	}
 	if !isLowerHexSHA256(environment.DirtyDiffSHA256) || capturedFingerprint != environment.DirtyDiffSHA256 {
 		return fmt.Errorf("captured source fingerprint %s differs from run environment fingerprint %s", capturedFingerprint, environment.DirtyDiffSHA256)
 	}
-	currentFingerprint, err = calculateWorkingTreeSHA256(root)
+	currentFingerprint, err = calculateWorkingTreeSHA256(cleanRoot)
 	if err != nil {
 		return fmt.Errorf("fingerprint current source after bundle capture: %w", err)
 	}
@@ -181,13 +181,13 @@ func writeCaptureBundleWithEvidence(root string, corpus ScaleCorpus, records []C
 		return err
 	}
 	binaryName := "graphbench-" + environment.BinarySHA256
-	if err := copyRegularFile(executable, filepath.Join(root, "bin", binaryName), 0o755); err != nil {
+	if err := copyRegularFile(executable, filepath.Join(cleanRoot, "bin", binaryName), 0o755); err != nil {
 		return fmt.Errorf("copy executable: %w", err)
 	}
-	if err := copyRegularFile("go.mod", filepath.Join(root, "go.mod"), 0o644); err != nil {
+	if err := copyRegularFile("go.mod", filepath.Join(cleanRoot, "go.mod"), 0o644); err != nil {
 		return err
 	}
-	if err := copyRegularFile("go.sum", filepath.Join(root, "go.sum"), 0o644); err != nil {
+	if err := copyRegularFile("go.sum", filepath.Join(cleanRoot, "go.sum"), 0o644); err != nil {
 		return err
 	}
 	cases := append([]ScaleCase(nil), corpus.Cases...)
@@ -200,16 +200,16 @@ func writeCaptureBundleWithEvidence(root string, corpus ScaleCorpus, records []C
 		}
 		return cases[i].Name < cases[j].Name
 	})
-	if err := writeIndentedJSON(filepath.Join(root, "corpus-declaration.json"), CaptureCorpusDeclaration{
+	if err := writeIndentedJSON(filepath.Join(cleanRoot, "corpus-declaration.json"), CaptureCorpusDeclaration{
 		Version: 2,
 		Cases:   cases,
 	}); err != nil {
 		return err
 	}
-	if err := writeBundleJSONL(filepath.Join(root, "combined.jsonl"), records); err != nil {
+	if err := writeBundleJSONL(filepath.Join(cleanRoot, "combined.jsonl"), records); err != nil {
 		return err
 	}
-	evidence, err := copyCaptureBundleEvidence(root, evidenceInputs)
+	evidence, err := copyCaptureBundleEvidence(cleanRoot, evidenceInputs)
 	if err != nil {
 		return err
 	}
@@ -226,13 +226,13 @@ func writeCaptureBundleWithEvidence(root string, corpus ScaleCorpus, records []C
 		SourceClean:       environment.DirtyDiffSHA256 == cleanWorkingTreeSHA256(),
 		Evidence:          evidence,
 	}
-	if err := writeIndentedJSON(filepath.Join(root, "manifest.json"), manifest); err != nil {
+	if err := writeIndentedJSON(filepath.Join(cleanRoot, "manifest.json"), manifest); err != nil {
 		return err
 	}
-	if err := writeBundleChecksums(root); err != nil {
+	if err := writeBundleChecksums(cleanRoot); err != nil {
 		return err
 	}
-	verification, err := verifyCaptureBundle(root, false)
+	verification, err := verifyCaptureBundle(cleanRoot, false)
 	if err != nil {
 		return err
 	}
@@ -506,22 +506,22 @@ func verifyCaptureBundle(root string, requireCleanSource bool) (CaptureBundleVer
 		Version: 1,
 		Passed:  true,
 	}
-	root = filepath.Clean(root)
-	rootInfo, err := os.Stat(root)
+	cleanRoot := filepath.Clean(root)
+	rootInfo, err := os.Stat(cleanRoot)
 	if err != nil {
 		return report, fmt.Errorf("stat capture bundle: %w", err)
 	}
 	if !rootInfo.IsDir() {
-		return report, fmt.Errorf("capture bundle path is not a directory: %s", root)
+		return report, fmt.Errorf("capture bundle path is not a directory: %s", cleanRoot)
 	}
 
-	checksums, reasons, err := readBundleChecksums(root)
+	checksums, reasons, err := readBundleChecksums(cleanRoot)
 	if err != nil {
 		return report, err
 	}
 	report.Reasons = append(report.Reasons, reasons...)
 	for relative, expected := range checksums {
-		path, pathErr := resolveBundlePath(root, relative)
+		path, pathErr := resolveBundlePath(cleanRoot, relative)
 		if pathErr != nil {
 			report.Reasons = append(report.Reasons, pathErr.Error())
 			continue
@@ -547,22 +547,22 @@ func verifyCaptureBundle(root string, requireCleanSource bool) (CaptureBundleVer
 		report.CheckedFiles++
 	}
 
-	listedReasons, err := verifyBundleFileInventory(root, checksums)
+	listedReasons, err := verifyBundleFileInventory(cleanRoot, checksums)
 	if err != nil {
 		return report, err
 	}
 	report.Reasons = append(report.Reasons, listedReasons...)
 
-	manifest, reasons := verifyBundleManifest(root, checksums)
+	manifest, reasons := verifyBundleManifest(cleanRoot, checksums)
 	report.ManifestVersion = manifest.Version
 	report.SourceClean = manifest.SourceClean
 	report.Reasons = append(report.Reasons, reasons...)
-	report.Reasons = append(report.Reasons, verifyBundleCorpus(root, manifest)...)
+	report.Reasons = append(report.Reasons, verifyBundleCorpus(cleanRoot, manifest)...)
 	if requireCleanSource && !manifest.SourceClean {
 		report.Reasons = append(report.Reasons, "bundle source is not clean")
 	}
 
-	recordCount, reasons := verifyBundleRecords(root, manifest)
+	recordCount, reasons := verifyBundleRecords(cleanRoot, manifest)
 	report.RecordCount = recordCount
 	report.Reasons = append(report.Reasons, reasons...)
 	report.Passed = len(report.Reasons) == 0

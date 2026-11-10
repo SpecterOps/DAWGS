@@ -213,8 +213,8 @@ func selectionIdentity(records []CaseResult) (SelectionManifest, error) {
 			return SelectionManifest{}, fmt.Errorf("%s/%s has no selection manifest", record.Dataset, record.Name)
 		}
 		if selected == nil {
-			copy := *record.Environment.Selection
-			selected = &copy
+			selectionCopy := *record.Environment.Selection
+			selected = &selectionCopy
 			continue
 		}
 		current := record.Environment.Selection

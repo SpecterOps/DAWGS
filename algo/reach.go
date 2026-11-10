@@ -229,45 +229,45 @@ func newReachMemo(capacity int) reachMemo {
 	}
 }
 
-func (m *reachMemo) get(component uint64) (cardinality.Duplex[uint64], bool) {
-	reach, known := m.entries[component]
+func (s *reachMemo) get(component uint64) (cardinality.Duplex[uint64], bool) {
+	reach, known := s.entries[component]
 	return reach, known
 }
 
-func (m *reachMemo) put(component uint64, reach cardinality.Duplex[uint64]) {
+func (s *reachMemo) put(component uint64, reach cardinality.Duplex[uint64]) {
 	// Every call site puts only after a memo miss. Evicted results may be
 	// restored from the shared cache without expanding their subgraphs again.
-	if m.capacity > 0 && len(m.entries) >= m.capacity {
+	if s.capacity > 0 && len(s.entries) >= s.capacity {
 		// Evict the oldest still-present entry. Order slots whose key was
 		// already evicted (and possibly re-inserted later) are skipped.
-		for m.head < len(m.order) {
-			victim := m.order[m.head]
-			m.head++
+		for s.head < len(s.order) {
+			victim := s.order[s.head]
+			s.head++
 
-			if _, present := m.entries[victim]; present {
-				delete(m.entries, victim)
-				if m.evicted == nil {
-					m.evicted = cardinality.NewBitmap64()
+			if _, present := s.entries[victim]; present {
+				delete(s.entries, victim)
+				if s.evicted == nil {
+					s.evicted = cardinality.NewBitmap64()
 				}
-				m.evicted.Add(victim)
+				s.evicted.Add(victim)
 				break
 			}
 		}
 	}
 
-	m.entries[component] = reach
-	m.order = append(m.order, component)
+	s.entries[component] = reach
+	s.order = append(s.order, component)
 
 	// Compact the FIFO once consumed slots dominate it.
-	if m.head > len(m.order)/2 {
-		remaining := copy(m.order, m.order[m.head:])
-		m.order = m.order[:remaining]
-		m.head = 0
+	if s.head > len(s.order)/2 {
+		remaining := copy(s.order, s.order[s.head:])
+		s.order = s.order[:remaining]
+		s.head = 0
 	}
 }
 
-func (m *reachMemo) wasEvicted(component uint64) bool {
-	return m.evicted != nil && m.evicted.Contains(component)
+func (s *reachMemo) wasEvicted(component uint64) bool {
+	return s.evicted != nil && s.evicted.Contains(component)
 }
 
 // reachFlightKey identifies an in-progress closure computation. Direction is

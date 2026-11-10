@@ -26,9 +26,9 @@ func TestCoreIntegrationSuitesDoNotDriftByDriver(t *testing.T) {
 				return nil
 			}
 
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return err
+			raw, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
 			}
 
 			var doc any

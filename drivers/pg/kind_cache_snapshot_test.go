@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/pashagolub/pgxmock/v5"
+	"github.com/pashagolub/pgxmock/v6"
 	"github.com/specterops/dawgs/drivers/pg/model"
 	"github.com/specterops/dawgs/graph"
 	"github.com/stretchr/testify/require"
@@ -28,9 +28,9 @@ func TestKindCacheStableRefreshBeforeFirstQuery(t *testing.T) {
 			tx.tx = mock // BEGIN alone has not established PostgreSQL's snapshot.
 			require.True(t, cache.replace(cache.current.Load(), cache.requested.Load(), map[graph.Kind]int16{kind: 2}, false, manager.invalidateKindTranslations))
 			shared := cache.current.Load()
-			mock.ExpectQuery("select id, name from kind").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+			mock.ExpectQuery("select id, name from kind").
 				WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(2), kind.String()))
-			mock.ExpectQuery(`array \[2\]::int2\[\]`).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+			mock.ExpectQuery(`array \[2\]::int2\[\]`).
 				WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
 
 			result := tx.Query("MATCH (n:SnapshotKind) RETURN count(n)", nil)
@@ -62,7 +62,7 @@ func TestKindMapperStableCatalogReconciliationFailure(t *testing.T) {
 	before := mapper.snapshot
 	manager.kindCache.fence()
 	failure := errors.New("catalog unavailable")
-	mock.ExpectQuery("select id, name from kind").WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(failure)
+	mock.ExpectQuery("select id, name from kind").WillReturnError(failure)
 
 	require.ErrorIs(t, tx.serviceKinds(), failure)
 	require.Same(t, before, mapper.snapshot)

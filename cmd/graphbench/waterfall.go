@@ -235,6 +235,8 @@ func measureRawPGXOnSession(
 	captureWorkspace bool,
 	isolation ...pgx.TxIsoLevel,
 ) (BoundarySample, error) {
+	adjustedTotalStart := totalStart
+
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	transactionStart := time.Now()
@@ -322,7 +324,7 @@ func measureRawPGXOnSession(
 		// The observation query is intentionally outside the raw execution
 		// intervals; only cleanup remains part of the direct request boundary.
 		workspaceDuration := time.Since(workspaceStart)
-		totalStart = totalStart.Add(workspaceDuration)
+		adjustedTotalStart = adjustedTotalStart.Add(workspaceDuration)
 	}
 	rollbackStart := time.Now()
 	if err := tx.Rollback(ctx); err != nil && err != pgx.ErrTxClosed {
@@ -338,7 +340,7 @@ func measureRawPGXOnSession(
 		FirstRow:          firstRowDuration,
 		AllRowsDecode:     allRowsDuration,
 		DrainClose:        drainDuration,
-		Total:             time.Since(totalStart),
+		Total:             time.Since(adjustedTotalStart),
 		Rows:              rowCount,
 		WorkspaceBytes:    workspaceBytes,
 		ObservationSHA256: observationSHA256,
@@ -356,21 +358,7 @@ func measureRawPGXOnSession(
 // the component's performance-workspace budget.
 func measurePostgresTemporaryWorkspace(ctx context.Context, tx pgx.Tx) (int64, error) {
 	var workspace int64
-	if err := tx.QueryRow(ctx, `
-		select coalesce(sum(pg_total_relation_size(c.oid)), 0)::int8
-		from pg_class c
-		where c.relnamespace = pg_my_temp_schema()
-		  and c.relname <> 'traversal_runtime_attestation_v1'
-		  and c.relname not like '%telemetry%'
-		  and not exists (
-		    select 1
-		    from pg_index i
-		    join pg_class indexed on indexed.oid = i.indrelid
-		    where i.indexrelid = c.oid
-		      and indexed.relnamespace = pg_my_temp_schema()
-		      and (indexed.relname = 'traversal_runtime_attestation_v1' or indexed.relname like '%telemetry%')
-		  )
-	`).Scan(&workspace); err != nil {
+	if err := tx.QueryRow(ctx, measurePostgresWorkspaceQuery).Scan(&workspace); err != nil {
 		return 0, fmt.Errorf("measure temporary workspace high-water: %w", err)
 	}
 	return workspace, nil

@@ -133,8 +133,8 @@ func NewSchemaManagerWithOptions(pool *pgxpool.Pool, graphQueryMemoryLimit size.
 }
 
 func newSchemaManagerWithOptionsAndProvider(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, options DriverOptions, provider CypherTranslationCacheProvider) *SchemaManager {
-	options = normalizeDriverOptions(options)
-	compilationCache := newTranslationCache(options.TranslationCacheEntries)
+	normalizedOptions := normalizeDriverOptions(options)
+	compilationCache := newTranslationCache(normalizedOptions.TranslationCacheEntries)
 
 	return &SchemaManager{
 		pool:                     pool,

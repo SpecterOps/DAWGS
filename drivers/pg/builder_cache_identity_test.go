@@ -72,7 +72,10 @@ func TestBuilderIdentityBypassesUnsupportedAndBoundedWork(t *testing.T) {
 	cycle.Expression = cycle
 	for _, value := range []any{
 		func() {},
-		struct{ Hidden string }{"external state"},
+		struct {
+			// Hidden carries unsupported external state for cache identity rejection.
+			Hidden string
+		}{Hidden: "external state"},
 		map[int]string{1: "unsupported key"},
 		cycle,
 		strings.Repeat("x", maxCachedCypherBytes),

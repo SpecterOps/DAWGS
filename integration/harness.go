@@ -86,7 +86,7 @@ var (
 	errDriverMismatch          = errors.New("connection string driver mismatch")
 )
 
-// DriverFromConnStr returns the dawgs driver name based on the connection string scheme.
+// DriverFromConnectionString maps postgres/postgresql and neo4j/neo4j+s/neo4j+ssc URI schemes to their registered driver names.
 func DriverFromConnectionString(connStr string) (string, error) {
 	u, err := url.Parse(connStr)
 	if err != nil {

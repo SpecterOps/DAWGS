@@ -860,10 +860,10 @@ func spI2QualificationTestRecords(
 
 // cloneSPI2TestEnvironment returns an independent copy of spi2 test environment.
 func cloneSPI2TestEnvironment(environment RunEnvironment, arm string, order int) *RunEnvironment {
-	copy := environment
-	copy.Arm = arm
-	copy.ArmOrder = order
-	return &copy
+	environmentCopy := environment
+	environmentCopy.Arm = arm
+	environmentCopy.ArmOrder = order
+	return &environmentCopy
 }
 
 // spI2QualificationTestFreeze prepares or inspects test evidence for sp i2 qualification test freeze.

@@ -110,9 +110,9 @@ func TestValidateSPI2V2DevelopmentCaptureConfig(t *testing.T) {
 		func(cfg *config) { cfg.SPI2Freeze = "freeze.json" },
 	}
 	for _, mutate := range mutations {
-		copy := cfg
-		mutate(&copy)
-		require.Error(t, validateSPI2V2DevelopmentCaptureConfig(copy))
+		configCopy := cfg
+		mutate(&configCopy)
+		require.Error(t, validateSPI2V2DevelopmentCaptureConfig(configCopy))
 	}
 }
 
@@ -154,9 +154,9 @@ func TestValidateSPI2V2ReadinessCaptureConfig(t *testing.T) {
 		func(cfg *config) { cfg.SPI2V2DevelopmentTournament = true },
 	}
 	for _, mutate := range mutations {
-		copy := cfg
-		mutate(&copy)
-		require.Error(t, validateSPI2V2ReadinessCaptureConfig(copy))
+		configCopy := cfg
+		mutate(&configCopy)
+		require.Error(t, validateSPI2V2ReadinessCaptureConfig(configCopy))
 	}
 }
 
@@ -194,9 +194,9 @@ func TestValidateSPI2V2ComponentCheckCaptureConfig(t *testing.T) {
 		func(cfg *config) { cfg.SPI2V2DevelopmentTournament = true },
 		func(cfg *config) { cfg.SPI2V2ComponentAuthorization = "authorization.json" },
 	} {
-		copy := cfg
-		mutate(&copy)
-		require.Error(t, validateSPI2V2ComponentCheckCaptureConfig(copy))
+		configCopy := cfg
+		mutate(&configCopy)
+		require.Error(t, validateSPI2V2ComponentCheckCaptureConfig(configCopy))
 	}
 }
 

@@ -15,81 +15,81 @@ type mockGraphDB struct {
 	config                *graph.TransactionConfig
 }
 
-func (m *mockGraphDB) hasError(msg string) bool {
-	return m.errorMsg != nil && m.errorMsg.Error() == msg
+func (s *mockGraphDB) hasError(msg string) bool {
+	return s.errorMsg != nil && s.errorMsg.Error() == msg
 }
 
-func (m *mockGraphDB) SetBatchWriteSize(interval int) {}
+func (s *mockGraphDB) SetBatchWriteSize(interval int) {}
 
-func (m *mockGraphDB) SetWriteFlushSize(size int) {}
+func (s *mockGraphDB) SetWriteFlushSize(size int) {}
 
-func (m *mockGraphDB) SetDefaultGraph(ctx context.Context, graph graph.Graph) error {
-	if m.hasError("Failed setting default graph namespace") {
+func (s *mockGraphDB) SetDefaultGraph(ctx context.Context, graph graph.Graph) error {
+	if s.hasError("Failed setting default graph namespace") {
 		return fmt.Errorf("Failed setting default graph namespace")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) ReadTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
+func (s *mockGraphDB) ReadTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 
-	m.readTransactionCalled = true
-	if m.hasError("Read Transaction Failed") {
+	s.readTransactionCalled = true
+	if s.hasError("Read Transaction Failed") {
 		return fmt.Errorf("Read Transaction Failed")
 	}
 
-	return txDelegate(m.tx)
+	return txDelegate(s.tx)
 }
 
-func (m *mockGraphDB) WriteTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
-	if m.hasError("Write Transaction Failed") {
+func (s *mockGraphDB) WriteTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
+	if s.hasError("Write Transaction Failed") {
 		return fmt.Errorf("Write Transaction Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) AssertSchema(ctx context.Context, dbSchema graph.Schema) error {
-	if m.hasError("Schema Assertion Failed") {
+func (s *mockGraphDB) AssertSchema(ctx context.Context, dbSchema graph.Schema) error {
+	if s.hasError("Schema Assertion Failed") {
 		return fmt.Errorf("Schema Assertion Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
-	if m.hasError("Batch Transaction Failed") {
+func (s *mockGraphDB) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
+	if s.hasError("Batch Transaction Failed") {
 		return fmt.Errorf("Batch Transaction Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) Close(ctx context.Context) error {
-	if m.hasError("Closing DB Failed") {
+func (s *mockGraphDB) Close(ctx context.Context) error {
+	if s.hasError("Closing DB Failed") {
 		return fmt.Errorf("Closing DB Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) FetchKinds(ctx context.Context) (graph.Kinds, error) {
-	if m.hasError("Failed to Fetch Kinds") {
+func (s *mockGraphDB) FetchKinds(ctx context.Context) (graph.Kinds, error) {
+	if s.hasError("Failed to Fetch Kinds") {
 		return nil, fmt.Errorf("Failed to Fetch Kinds")
 	}
-	return m.kinds, nil
+	return s.kinds, nil
 }
 
-func (m *mockGraphDB) RefreshKinds(ctx context.Context) error {
-	if m.hasError("Failed to refresh kinds") {
+func (s *mockGraphDB) RefreshKinds(ctx context.Context) error {
+	if s.hasError("Failed to refresh kinds") {
 		return fmt.Errorf("Failed to refresh kinds")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) Run(ctx context.Context, query string, parameters map[string]any) error {
-	if m.hasError("Failed to run SQL statement") {
+func (s *mockGraphDB) Run(ctx context.Context, query string, parameters map[string]any) error {
+	if s.hasError("Failed to run SQL statement") {
 		return fmt.Errorf("Failed to run SQL statement")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) OptimizeStorage(ctx context.Context) error { return nil }
+func (s *mockGraphDB) OptimizeStorage(ctx context.Context) error { return nil }
 
 func collectionPath(startID, endID, relationshipID graph.ID) graph.Path {
 	return graph.Path{

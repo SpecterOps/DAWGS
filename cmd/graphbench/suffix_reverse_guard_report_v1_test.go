@@ -457,9 +457,9 @@ func stampSuffixReverseGuardSelections(artifacts ...[]CaseResult) {
 	}
 	for _, records := range artifacts {
 		for index := range records {
-			copy := selection
-			copy.Resolved = append([]ResolvedCaseSelector(nil), selection.Resolved...)
-			records[index].Environment.Selection = &copy
+			selectionCopy := selection
+			selectionCopy.Resolved = append([]ResolvedCaseSelector(nil), selection.Resolved...)
+			records[index].Environment.Selection = &selectionCopy
 		}
 	}
 }

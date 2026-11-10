@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestNewCounterToMaximum checks the false-before-bound and true-after-bound contract for both integer widths.
 func TestNewCounterToMaximum(t *testing.T) {
 	t.Run("Count to 0", func(t *testing.T) {
 		var (

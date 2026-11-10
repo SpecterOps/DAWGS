@@ -796,11 +796,11 @@ func intFromHex(value string) int {
 }
 
 func normalizeKey(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.ReplaceAll(value, "-", "")
-	value = strings.ReplaceAll(value, "_", "")
-	value = strings.ReplaceAll(value, " ", "")
-	return value
+	normalizedName := strings.ToLower(strings.TrimSpace(value))
+	normalizedName = strings.ReplaceAll(normalizedName, "-", "")
+	normalizedName = strings.ReplaceAll(normalizedName, "_", "")
+	normalizedName = strings.ReplaceAll(normalizedName, " ", "")
+	return normalizedName
 }
 
 func isTimestampKey(normalizedKey string) bool {

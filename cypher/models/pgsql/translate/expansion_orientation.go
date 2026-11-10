@@ -276,7 +276,7 @@ func orientationCount(source pgsql.Identifier) pgsql.Subquery {
 // buildExpansionOrientationRootProbe materializes duplicate-preserving root
 // evidence. It is evidence only; candidate and fallback continue to read the
 // exact root relation.
-func buildExpansionOrientationRootProbe(rootFrame pgsql.Identifier, root *BoundIdentifier, ids expansionOrientationIdentifiers, cap int64) pgsql.CommonTableExpression {
+func buildExpansionOrientationRootProbe(rootFrame pgsql.Identifier, root *BoundIdentifier, ids expansionOrientationIdentifiers, probeLimit int64) pgsql.CommonTableExpression {
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: ids.rootProbe},
 		Materialized: &pgsql.Materialized{Materialized: true},
@@ -288,7 +288,7 @@ func buildExpansionOrientationRootProbe(rootFrame pgsql.Identifier, root *BoundI
 				}},
 				From: []pgsql.FromClause{tableFrom(rootFrame)},
 			},
-			Limit: pgsql.NewLiteral(cap+1, pgsql.Int8),
+			Limit: pgsql.NewLiteral(probeLimit+1, pgsql.Int8),
 		},
 	}
 }
@@ -315,7 +315,7 @@ func buildExpansionOrientationDegreeProbe(
 	alias, seedSource, seedColumn pgsql.Identifier,
 	edgeAlias, edgeSeedColumn pgsql.Identifier,
 	edgeConstraint pgsql.Expression,
-	cap int64,
+	probeLimit int64,
 ) pgsql.CommonTableExpression {
 	sampleRows := pgsql.Identifier(string(alias) + "_samples")
 	samples := pgsql.Query{
@@ -337,7 +337,7 @@ func buildExpansionOrientationDegreeProbe(
 			}},
 			Where: edgeConstraint,
 		},
-		Limit: pgsql.NewLiteral(cap+1, pgsql.Int8),
+		Limit: pgsql.NewLiteral(probeLimit+1, pgsql.Int8),
 	}
 	return pgsql.CommonTableExpression{
 		Alias:        pgsql.TableAlias{Name: alias},

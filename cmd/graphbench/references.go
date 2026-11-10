@@ -1969,11 +1969,11 @@ func referenceInt64Slice(value any) ([]int64, error) {
 
 // copyReferenceParams duplicates reference params without aliasing mutable state.
 func copyReferenceParams(params map[string]any) map[string]any {
-	copy := make(map[string]any, len(params)+10)
+	referenceParams := make(map[string]any, len(params)+10)
 	for name, value := range params {
-		copy[name] = value
+		referenceParams[name] = value
 	}
-	return copy
+	return referenceParams
 }
 
 // measureRawPostgres executes raw PostgreSQL and records its timing observations.

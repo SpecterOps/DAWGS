@@ -36,9 +36,16 @@ func TestOpenTraversalResourceFailureRollsBackWrites(t *testing.T) {
 		}
 		return nil
 	}))
-	for _, budget := range []struct{ name, setting, value string }{
-		{"states", "dawgs.traversal_state_limit", "2"},
-		{"bytes", "dawgs.traversal_byte_limit", "150"},
+	for _, budget := range []struct {
+		// name identifies this test case in subtest and benchmark output.
+		name string
+		// setting is the PostgreSQL traversal budget setting to override.
+		setting string
+		// value is the input value supplied to the statement or setting.
+		value string
+	}{
+		{name: "states", setting: "dawgs.traversal_state_limit", value: "2"},
+		{name: "bytes", setting: "dawgs.traversal_byte_limit", value: "150"},
 	} {
 		for _, query := range []string{
 			"MATCH (a:DAWGS065ResourceNode {i:0})-[:DAWGS065ResourceStep*]->(b) SET b.changed = true RETURN b",

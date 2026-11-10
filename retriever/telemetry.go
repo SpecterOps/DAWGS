@@ -63,12 +63,12 @@ func currentRSS() uint64 {
 
 func logInfoWithRuntimeTelemetry(message string, args ...any) {
 	telemetry := sampleRuntimeTelemetry()
-	args = append(args,
+	telemetryArgs := append(args,
 		slog.Uint64("heap_alloc_bytes", telemetry.heapAlloc),
 		slog.Uint64("heap_inuse_bytes", telemetry.heapInuse),
 		slog.Uint64("sys_bytes", telemetry.sys),
 		slog.Uint64("gc_count", uint64(telemetry.numGC)),
 		slog.Uint64("rss_bytes", telemetry.rss),
 	)
-	slog.Info(message, args...)
+	slog.Info(message, telemetryArgs...)
 }

@@ -537,12 +537,12 @@ func cloneOrientationV2Split(records []CaseResult, split string) []CaseResult {
 		if record.Shape.QualificationSplit != split {
 			continue
 		}
-		copy := record
+		recordCopy := record
 		if record.Environment != nil {
 			environment := *record.Environment
-			copy.Environment = &environment
+			recordCopy.Environment = &environment
 		}
-		result = append(result, copy)
+		result = append(result, recordCopy)
 	}
 	return result
 }
@@ -555,9 +555,9 @@ func compactOrientationV2Artifacts(artifacts orientationSelectorV2Artifacts, rou
 			if record.Environment.Round > rounds {
 				continue
 			}
-			copy := record
-			copy.Stats.Samples = append([]LatencySample(nil), record.Stats.Samples[:samples]...)
-			result = append(result, copy)
+			recordCopy := record
+			recordCopy.Stats.Samples = append([]LatencySample(nil), record.Stats.Samples[:samples]...)
+			result = append(result, recordCopy)
 		}
 		return result
 	}
@@ -825,9 +825,9 @@ func stampOrientationV2Selections(artifacts *orientationSelectorV2Artifacts) {
 	}
 	for _, records := range [][]CaseResult{artifacts.shadow, artifacts.incumbent, artifacts.reverse, artifacts.guarded} {
 		for index := range records {
-			copy := *selection
-			copy.Resolved = append([]ResolvedCaseSelector(nil), selection.Resolved...)
-			records[index].Environment.Selection = &copy
+			recordCopy := *selection
+			recordCopy.Resolved = append([]ResolvedCaseSelector(nil), selection.Resolved...)
+			records[index].Environment.Selection = &recordCopy
 		}
 	}
 }

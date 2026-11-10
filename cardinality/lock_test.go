@@ -52,67 +52,67 @@ type gatedDuplex struct {
 	release chan struct{}
 }
 
-func (g gatedDuplex) Clear() {
-	g.inner.Clear()
+func (s gatedDuplex) Clear() {
+	s.inner.Clear()
 }
 
-func (g gatedDuplex) Add(values ...uint64) {
-	g.inner.Add(values...)
+func (s gatedDuplex) Add(values ...uint64) {
+	s.inner.Add(values...)
 }
 
-func (g gatedDuplex) Remove(value uint64) {
-	g.inner.Remove(value)
+func (s gatedDuplex) Remove(value uint64) {
+	s.inner.Remove(value)
 }
 
-func (g gatedDuplex) Contains(value uint64) bool {
-	return g.inner.Contains(value)
+func (s gatedDuplex) Contains(value uint64) bool {
+	return s.inner.Contains(value)
 }
 
-func (g gatedDuplex) CheckedAdd(value uint64) bool {
-	return g.inner.CheckedAdd(value)
+func (s gatedDuplex) CheckedAdd(value uint64) bool {
+	return s.inner.CheckedAdd(value)
 }
 
-func (g gatedDuplex) Cardinality() uint64 {
-	return g.inner.Cardinality()
+func (s gatedDuplex) Cardinality() uint64 {
+	return s.inner.Cardinality()
 }
 
-func (g gatedDuplex) Slice() []uint64 {
-	return g.inner.Slice()
+func (s gatedDuplex) Slice() []uint64 {
+	return s.inner.Slice()
 }
 
-func (g gatedDuplex) Each(delegate func(value uint64) bool) {
-	g.inner.Each(delegate)
+func (s gatedDuplex) Each(delegate func(value uint64) bool) {
+	s.inner.Each(delegate)
 }
 
-func (g gatedDuplex) Clone() Duplex[uint64] {
+func (s gatedDuplex) Clone() Duplex[uint64] {
 	// Snapshots of this provider are ungated real bitmaps.
-	return g.inner.Clone()
+	return s.inner.Clone()
 }
 
-func (g gatedDuplex) Or(other Provider[uint64]) {
+func (s gatedDuplex) Or(other Provider[uint64]) {
 	if _, isWrapper := other.(threadSafeDuplex[uint64]); isWrapper {
-		close(g.arrived)
-		<-g.release
+		close(s.arrived)
+		<-s.release
 	}
 
 	if typedOther, ok := other.(Duplex[uint64]); ok {
 		typedOther.Each(func(nextValue uint64) bool {
-			g.inner.Add(nextValue)
+			s.inner.Add(nextValue)
 			return true
 		})
 	}
 }
 
-func (g gatedDuplex) And(other Provider[uint64]) {
-	g.inner.And(other)
+func (s gatedDuplex) And(other Provider[uint64]) {
+	s.inner.And(other)
 }
 
-func (g gatedDuplex) AndNot(other Provider[uint64]) {
-	g.inner.AndNot(other)
+func (s gatedDuplex) AndNot(other Provider[uint64]) {
+	s.inner.AndNot(other)
 }
 
-func (g gatedDuplex) Xor(other Provider[uint64]) {
-	g.inner.Xor(other)
+func (s gatedDuplex) Xor(other Provider[uint64]) {
+	s.inner.Xor(other)
 }
 
 func newGatedDuplexPair(t *testing.T) (a, b Duplex[uint64], arrivedA, arrivedB, releaseA, releaseB chan struct{}) {

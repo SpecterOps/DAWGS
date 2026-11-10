@@ -37,10 +37,10 @@ func TestValidateSPI2V2ComponentAuthorization(t *testing.T) {
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
-			copy := authorization
-			copy.Components = append([]SPI2V2ComponentAuthorizationCase(nil), authorization.Components...)
-			mutate(&copy)
-			require.Error(t, validateSPI2V2ComponentAuthorization(copy, protocolSHA256))
+			authorizationCopy := authorization
+			authorizationCopy.Components = append([]SPI2V2ComponentAuthorizationCase(nil), authorization.Components...)
+			mutate(&authorizationCopy)
+			require.Error(t, validateSPI2V2ComponentAuthorization(authorizationCopy, protocolSHA256))
 		})
 	}
 }

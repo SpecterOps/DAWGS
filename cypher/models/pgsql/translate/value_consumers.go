@@ -26,9 +26,9 @@ func (s *Translator) functionTextArgument(argument pgsql.Expression, function st
 	// have a native text representation at their consumer.
 	if function != "toString" {
 		if property, ok := expressionToPropertyLookupBinaryExpression(argument); ok {
-			copy := *property
-			copy.Operator = pgsql.OperatorJSONTextField
-			return &copy, nil
+			textLookup := *property
+			textLookup.Operator = pgsql.OperatorJSONTextField
+			return &textLookup, nil
 		}
 	}
 	value, dynamic, err := s.functionJSONArgument(argument)

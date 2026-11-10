@@ -17,9 +17,12 @@ import (
 // total. Eviction (second chance) operates within each shard; entries do not
 // migrate between shards.
 type ShardedSieve[K comparable, V any] struct {
-	shards  []*Sieve[K, V]
+	// shards owns independent second-chance caches whose capacities sum to the effective total.
+	shards []*Sieve[K, V]
+	// shardFn selects a shard from the low hash bits and must support concurrent calls.
 	shardFn func(key K) uint64
-	mask    uint64
+	// mask maps a hash into the power-of-two shard count.
+	mask uint64
 }
 
 // NewShardedSieve creates a sharded second-chance cache with the supplied
@@ -28,29 +31,36 @@ type ShardedSieve[K comparable, V any] struct {
 // shard. A capacity of zero or less yields a single shard of capacity one,
 // matching NewSieve.
 func NewShardedSieve[K comparable, V any](totalCapacity int, shards int, shardFn func(key K) uint64) Cache[K, V] {
-	if totalCapacity <= 0 {
-		totalCapacity = 1
+	var (
+		effectiveCapacity = totalCapacity
+		effectiveShardFn  = shardFn
+	)
+
+	if effectiveCapacity <= 0 {
+		effectiveCapacity = 1
 	}
 
-	shards = nextPowerOfTwo(shards)
-	if maxShards := previousPowerOfTwo(totalCapacity); shards > maxShards {
-		shards = maxShards
+	normalizedShardCount := nextPowerOfTwo(shards)
+	if maxShards := previousPowerOfTwo(effectiveCapacity); normalizedShardCount > maxShards {
+		normalizedShardCount = maxShards
 	}
 
-	if shardFn == nil {
-		shardFn = func(key K) uint64 { return 0 }
+	if effectiveShardFn == nil {
+		effectiveShardFn = func(key K) uint64 { return 0 }
 	}
 
 	sharded := &ShardedSieve[K, V]{
-		shards:  make([]*Sieve[K, V], shards),
-		shardFn: shardFn,
-		mask:    uint64(shards - 1),
+		shards:  make([]*Sieve[K, V], normalizedShardCount),
+		shardFn: effectiveShardFn,
+		mask:    uint64(normalizedShardCount - 1),
 	}
 
 	// Distribute the total capacity across shards without inflating it: the
 	// first remainder shards hold one extra entry each.
-	perShard := totalCapacity / shards
-	remainder := totalCapacity % shards
+	var (
+		perShard  = effectiveCapacity / normalizedShardCount
+		remainder = effectiveCapacity % normalizedShardCount
+	)
 
 	for idx := range sharded.shards {
 		capacity := perShard

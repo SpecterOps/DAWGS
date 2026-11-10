@@ -13,9 +13,14 @@ import (
 
 func TestEmitRawKinds(t *testing.T) {
 	for _, strip := range []bool{false, true} {
-		for _, tc := range []struct{ raw, token string }{
-			{"Base", "Base"}, {"has space", "`has space`"},
-			{"has`tick", "`has``tick`"}, {"`Base`", "```Base```"},
+		for _, tc := range []struct {
+			// raw is the decoded kind name without Cypher quoting.
+			raw string
+			// token is the Cypher spelling, including any backtick quoting.
+			token string
+		}{
+			{raw: "Base", token: "Base"}, {raw: "has space", token: "`has space`"},
+			{raw: "has`tick", token: "`has``tick`"}, {raw: "`Base`", token: "```Base```"},
 		} {
 			kind := graph.StringKind(tc.raw)
 			pattern := cypher.NewPatternPredicate()

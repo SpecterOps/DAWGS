@@ -246,7 +246,8 @@ func normalizeReferenceTournamentOptions(options *ReferenceTournamentOptions) er
 	return nil
 }
 
-// referenceTournamentRequirements supports benchmark evidence processing for reference tournament requirements.
+// referenceTournamentRequirements returns the warmup minimum, round minimum and maximum,
+// and per-arm sample minimum for the selected tournament protocol.
 func referenceTournamentRequirements(protocol string) (int, int, int, int, error) {
 	switch protocol {
 	case referencePairProtocolDiscovery:
