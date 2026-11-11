@@ -1,0 +1,4054 @@
+{
+  "families": [
+    {
+      "name": "typed predicate values",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a-string",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "a-string",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "123",
+              "y": "1"
+            }
+          },
+          {
+            "id": "b-other-string",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "b-other-string",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "xyz",
+              "y": "z"
+            }
+          },
+          {
+            "id": "c-number",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "c-number",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": 123,
+              "y": 200
+            }
+          },
+          {
+            "id": "d-bool",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "d-bool",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": true,
+              "y": false
+            }
+          },
+          {
+            "id": "e-list",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "e-list",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": [
+                2
+              ],
+              "y": [
+                1,
+                3
+              ]
+            }
+          },
+          {
+            "id": "f-missing",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "f-missing",
+              "role": "candidate",
+              "matched": "unchanged"
+            }
+          },
+          {
+            "id": "g-empty",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "g-empty",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "",
+              "y": ""
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "STARTS WITH literal",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x STARTS WITH '1' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "STARTS WITH parameter",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x STARTS WITH $pattern AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          },
+          "params": {
+            "pattern": "1"
+          }
+        },
+        {
+          "name": "negated STARTS WITH",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, NOT n.x STARTS WITH '1' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                false,
+                true,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "STARTS WITH dynamic operand",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x STARTS WITH n.y AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "ENDS WITH literal",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x ENDS WITH '3' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "ENDS WITH parameter",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x ENDS WITH $pattern AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          },
+          "params": {
+            "pattern": "3"
+          }
+        },
+        {
+          "name": "negated ENDS WITH",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, NOT n.x ENDS WITH '3' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                false,
+                true,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "ENDS WITH dynamic operand",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x ENDS WITH n.y AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                false,
+                true,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "CONTAINS literal",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x CONTAINS '2' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "CONTAINS parameter",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x CONTAINS $pattern AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          },
+          "params": {
+            "pattern": "2"
+          }
+        },
+        {
+          "name": "negated CONTAINS",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, NOT n.x CONTAINS '2' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                false,
+                true,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "CONTAINS dynamic operand",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x CONTAINS n.y AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                true,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "=~ literal",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x =~ '1.*' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "=~ parameter",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x =~ $pattern AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          },
+          "params": {
+            "pattern": "1.*"
+          }
+        },
+        {
+          "name": "negated =~",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, NOT n.x =~ '1.*' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                false,
+                true,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "non-string right parameter",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x CONTAINS $pattern AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          },
+          "params": {
+            "pattern": 1
+          }
+        },
+        {
+          "name": "null right operand",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x STARTS WITH null AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "numeric ordered boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < 200 AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                true,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "reverse numeric boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, 200 > n.x AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                true,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "negated numeric boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, NOT n.x < 200 AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "string ordered boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < '2' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "property pair ordering",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < n.y AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                false,
+                true,
+                true,
+                false,
+                false,
+                null,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "property pair greater equal",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x >= n.y AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                false,
+                true,
+                true,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "Boolean boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x >= false AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                true,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "list lexical boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < [1, 3] AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "numeric literal float",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < 123.5 AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                true,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "null comparison",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < null AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "carried string predicate",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WITH n, n.x AS x RETURN n.tag AS tag, x STARTS WITH '1' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "carried numeric comparison",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WITH n, n.x AS x RETURN n.tag AS tag, x < 200 AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                true,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "carried property pair",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WITH n, n.x AS x, n.y AS y RETURN n.tag AS tag, x < y AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                false,
+                true,
+                true,
+                false,
+                false,
+                null,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "WITH numeric scalar boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WITH n, 200 AS boundary RETURN n.tag AS tag, n.x < boundary AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                true,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "UNWIND numeric scalar boundary",
+          "vars": {
+            "query": "UNWIND [200] AS boundary MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < boundary AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                true,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "WITH string scalar boundary",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WITH n, '2' AS boundary RETURN n.tag AS tag, n.x < boundary AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                false,
+                null,
+                null,
+                null,
+                null,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "UNWIND numeric string operand",
+          "vars": {
+            "query": "UNWIND [123] AS boundary MATCH (n:TypedPredicate) RETURN n.tag AS tag, boundary STARTS WITH '1' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "UNWIND string operand",
+          "vars": {
+            "query": "UNWIND ['123'] AS boundary MATCH (n:TypedPredicate) RETURN n.tag AS tag, boundary STARTS WITH '1' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "null string parameter",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x STARTS WITH $pattern AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          },
+          "params": {
+            "pattern": null
+          }
+        },
+        {
+          "name": "null comparison parameter",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) RETURN n.tag AS tag, n.x < $boundary AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 7,
+            "ordered_column_values": {
+              "tag": [
+                "a-string",
+                "b-other-string",
+                "c-number",
+                "d-bool",
+                "e-list",
+                "f-missing",
+                "g-empty"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          },
+          "params": {
+            "boundary": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "typed predicate filtering",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a-string",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "a-string",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "123",
+              "y": "1"
+            }
+          },
+          {
+            "id": "b-other-string",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "b-other-string",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "xyz",
+              "y": "z"
+            }
+          },
+          {
+            "id": "c-number",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "c-number",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": 123,
+              "y": 200
+            }
+          },
+          {
+            "id": "d-bool",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "d-bool",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": true,
+              "y": false
+            }
+          },
+          {
+            "id": "e-list",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "e-list",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": [
+                2
+              ],
+              "y": [
+                1,
+                3
+              ]
+            }
+          },
+          {
+            "id": "f-missing",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "f-missing",
+              "role": "candidate",
+              "matched": "unchanged"
+            }
+          },
+          {
+            "id": "g-empty",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "g-empty",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "",
+              "y": ""
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "string predicate",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.x STARTS WITH '1' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "a-string"
+            ]
+          }
+        },
+        {
+          "name": "negated string",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE NOT n.x STARTS WITH '1' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "b-other-string",
+              "g-empty"
+            ]
+          }
+        },
+        {
+          "name": "numeric",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.x < 200 RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "c-number"
+            ]
+          }
+        },
+        {
+          "name": "negated numeric",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE NOT n.x < 200 RETURN n"
+          },
+          "assert": {
+            "node_id_set": []
+          }
+        },
+        {
+          "name": "different properties",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.x < n.y RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "b-other-string",
+              "c-number"
+            ]
+          }
+        },
+        {
+          "name": "disjunction",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.x STARTS WITH '1' OR n.x < 200 RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "a-string",
+              "c-number"
+            ]
+          }
+        },
+        {
+          "name": "string inequality",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.x > '2' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "b-other-string"
+            ]
+          }
+        },
+        {
+          "name": "WITH filter x STARTS WITH '1'",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WITH n, n.x AS x WHERE x STARTS WITH '1' RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "a-string"
+            ]
+          }
+        },
+        {
+          "name": "WITH filter x < 200",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WITH n, n.x AS x WHERE x < 200 RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "c-number"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "typed node mutation selection",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a-string",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "a-string",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "123",
+              "y": "1"
+            }
+          },
+          {
+            "id": "b-other-string",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "b-other-string",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "xyz",
+              "y": "z"
+            }
+          },
+          {
+            "id": "c-number",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "c-number",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": 123,
+              "y": 200
+            }
+          },
+          {
+            "id": "d-bool",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "d-bool",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": true,
+              "y": false
+            }
+          },
+          {
+            "id": "e-list",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "e-list",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": [
+                2
+              ],
+              "y": [
+                1,
+                3
+              ]
+            }
+          },
+          {
+            "id": "f-missing",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "f-missing",
+              "role": "candidate",
+              "matched": "unchanged"
+            }
+          },
+          {
+            "id": "g-empty",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "g-empty",
+              "role": "candidate",
+              "matched": "unchanged",
+              "x": "",
+              "y": ""
+            }
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "OtherTypedPredicate"
+            ],
+            "properties": {
+              "tag": "wrong-kind",
+              "role": "candidate",
+              "x": "123",
+              "matched": "unchanged"
+            }
+          },
+          {
+            "id": "wrong-role",
+            "kinds": [
+              "TypedPredicate"
+            ],
+            "properties": {
+              "tag": "wrong-role",
+              "role": "decoy",
+              "x": 123,
+              "matched": "unchanged"
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "string",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND n.x STARTS WITH '1' SET n.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "string returning",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND n.x STARTS WITH '1' SET n.matched = true RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "a-string"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated string",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND NOT n.x STARTS WITH '1' SET n.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "numeric",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND n.x < 200 SET n.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "numeric returning",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND n.x < 200 SET n.matched = true RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "c-number"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "reverse numeric",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND 200 > n.x SET n.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated numeric",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND NOT n.x < 200 SET n.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "property pair",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND n.x < n.y SET n.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "assign predicate",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' SET n.matched = coalesce(n.x STARTS WITH '1', false)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": false
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "assign comparison",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' SET n.matched = coalesce(n.x < 200, false)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": false
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": false,
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WITH numeric",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' WITH n, n.x AS x WHERE x < 200 SET n.matched = true WITH n RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "c-number"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WITH string",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' WITH n, n.x AS x WHERE x STARTS WITH '1' SET n.matched = true WITH n RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "a-string"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": true,
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE numeric",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND n.x < 200 CREATE (c:CreatedTypedPredicate {source: n.tag})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n:TypedPredicate OR n:OtherTypedPredicate RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CreatedTypedPredicate) RETURN c.source AS source",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "source": [
+                    "c-number"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE numeric returning",
+          "vars": {
+            "query": "MATCH (n:TypedPredicate) WHERE n.role = 'candidate' AND n.x < 200 CREATE (c:CreatedTypedPredicate {source: n.tag}) RETURN c"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n:TypedPredicate OR n:OtherTypedPredicate RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "a-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "123",
+                      "y": "1"
+                    }
+                  },
+                  {
+                    "id": "b-other-string",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "b-other-string",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "xyz",
+                      "y": "z"
+                    }
+                  },
+                  {
+                    "id": "c-number",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "c-number",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": 123,
+                      "y": 200
+                    }
+                  },
+                  {
+                    "id": "d-bool",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "d-bool",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": true,
+                      "y": false
+                    }
+                  },
+                  {
+                    "id": "e-list",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "e-list",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": [
+                        2
+                      ],
+                      "y": [
+                        1,
+                        3
+                      ]
+                    }
+                  },
+                  {
+                    "id": "f-missing",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "f-missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "g-empty",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "g-empty",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "x": "",
+                      "y": ""
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OtherTypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "TypedPredicate"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CreatedTypedPredicate) RETURN c.source AS source",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "source": [
+                    "c-number"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "typed relationship mutation selection",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "PredicateRoot"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "end",
+            "kinds": [
+              "PredicateEnd"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "number-end",
+            "kinds": [
+              "PredicateEnd"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "role-end",
+            "kinds": [
+              "PredicateEnd"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "missing-end",
+            "kinds": [
+              "PredicateEnd"
+            ],
+            "properties": {}
+          }
+        ],
+        "edges": [
+          {
+            "kind": "TypedEdge",
+            "properties": {
+              "tag": "string",
+              "role": "candidate",
+              "x": "123",
+              "matched": "unchanged"
+            },
+            "start_id": "root",
+            "end_id": "end"
+          },
+          {
+            "kind": "TypedEdge",
+            "properties": {
+              "tag": "number",
+              "role": "candidate",
+              "x": 123,
+              "matched": "unchanged"
+            },
+            "start_id": "root",
+            "end_id": "number-end"
+          },
+          {
+            "kind": "TypedEdge",
+            "properties": {
+              "tag": "reverse",
+              "role": "candidate",
+              "x": "123",
+              "matched": "unchanged"
+            },
+            "start_id": "end",
+            "end_id": "root"
+          },
+          {
+            "kind": "OtherTypedEdge",
+            "properties": {
+              "tag": "kind",
+              "role": "candidate",
+              "x": "123",
+              "matched": "unchanged"
+            },
+            "start_id": "root",
+            "end_id": "end"
+          },
+          {
+            "kind": "TypedEdge",
+            "properties": {
+              "tag": "role",
+              "role": "decoy",
+              "x": 123,
+              "matched": "unchanged"
+            },
+            "start_id": "root",
+            "end_id": "role-end"
+          },
+          {
+            "kind": "TypedEdge",
+            "properties": {
+              "tag": "missing",
+              "role": "candidate",
+              "matched": "unchanged"
+            },
+            "start_id": "root",
+            "end_id": "missing-end"
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "string",
+          "vars": {
+            "query": "MATCH (:PredicateRoot)-[r:TypedEdge]->(:PredicateEnd) WHERE r.role = 'candidate' AND r.x STARTS WITH '1' SET r.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "PredicateRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "number-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "role-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "missing-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "string",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "number-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "number",
+                      "role": "candidate",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "end",
+                    "end": "root",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "OtherTypedEdge",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "role-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "numeric",
+          "vars": {
+            "query": "MATCH (:PredicateRoot)-[r:TypedEdge]->(:PredicateEnd) WHERE r.role = 'candidate' AND r.x < 200 SET r.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "PredicateRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "number-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "role-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "missing-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "string",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "number-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "number",
+                      "role": "candidate",
+                      "x": 123,
+                      "matched": true
+                    }
+                  },
+                  {
+                    "start": "end",
+                    "end": "root",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "OtherTypedEdge",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "role-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated string",
+          "vars": {
+            "query": "MATCH (:PredicateRoot)-[r:TypedEdge]->(:PredicateEnd) WHERE r.role = 'candidate' AND NOT r.x STARTS WITH '1' SET r.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "PredicateRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "number-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "role-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "missing-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "string",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "number-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "number",
+                      "role": "candidate",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "end",
+                    "end": "root",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "OtherTypedEdge",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "role-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "negated numeric",
+          "vars": {
+            "query": "MATCH (:PredicateRoot)-[r:TypedEdge]->(:PredicateEnd) WHERE r.role = 'candidate' AND NOT r.x < 200 SET r.matched = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "PredicateRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "number-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "role-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "missing-end",
+                    "kinds": [
+                      "PredicateEnd"
+                    ],
+                    "props": {}
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "string",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "number-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "number",
+                      "role": "candidate",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "end",
+                    "end": "root",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "end",
+                    "kind": "OtherTypedEdge",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "x": "123",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "role-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "x": 123,
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-end",
+                    "kind": "TypedEdge",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

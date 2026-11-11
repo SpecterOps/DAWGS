@@ -1463,23 +1463,26 @@ func validateAssertion(path, contextName string, raw json.RawMessage) ([]Quality
 	return findings, false
 }
 
+// placeholderNames returns the sorted unique nonempty placeholders referenced by a case template.
 func placeholderNames(template string) []string {
+	remainingTemplate := template
+
 	seen := map[string]struct{}{}
 	for {
-		start := strings.Index(template, "{{")
+		start := strings.Index(remainingTemplate, "{{")
 		if start == -1 {
 			break
 		}
-		template = template[start+2:]
-		end := strings.Index(template, "}}")
+		remainingTemplate = remainingTemplate[start+2:]
+		end := strings.Index(remainingTemplate, "}}")
 		if end == -1 {
 			break
 		}
-		name := strings.TrimSpace(template[:end])
+		name := strings.TrimSpace(remainingTemplate[:end])
 		if name != "" {
 			seen[name] = struct{}{}
 		}
-		template = template[end+2:]
+		remainingTemplate = remainingTemplate[end+2:]
 	}
 
 	names := make([]string, 0, len(seen))

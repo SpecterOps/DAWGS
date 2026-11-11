@@ -24,9 +24,11 @@ import (
 
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
+	"github.com/specterops/dawgs/drivers/pg"
 	"github.com/stretchr/testify/require"
 )
 
+// TestWriteJSONEmitsBaselineFriendlyReport verifies that JSON retains row diagnostics, timing values, SQL, and every optimizer decision needed for baseline comparisons.
 func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 	var (
 		distinctRows  = int64(2)
@@ -43,10 +45,19 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 			}},
 		}
 		report = Report{
-			Driver:     "pg",
-			GitRef:     "abc123",
-			Date:       "2026-05-14",
-			Iterations: 3,
+			Driver:           "pg",
+			GitRef:           "abc123",
+			Date:             "2026-05-14",
+			Iterations:       3,
+			WarmupIterations: 1,
+			Workers:          2,
+			TranslationCache: &pg.Stats{
+				LiveConnections:    2,
+				Aggregate:          pg.TranslationCacheStats{Hits: 4, Misses: 2},
+				TraversalWorkspace: pg.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
+				PreparedStatements: pg.PreparedStatementStats{Prepared: 2, Reuses: 4},
+				StrategySelection:  pg.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
+			},
 			Results: []Result{{
 				Section:           "Traversal",
 				Dataset:           "base",
@@ -85,6 +96,10 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 	for _, expected := range []string{
 		`"driver": "pg"`,
 		`"git_ref": "abc123"`,
+		`"warmup_iterations": 1`,
+		`"workers": 2`,
+		`"translation_cache": {`,
+		`"hits": 4`,
 		`"median": 10000000`,
 		`"row_count": 2`,
 		`"distinct_row_count": 2`,
@@ -105,18 +120,28 @@ func TestWriteJSONEmitsBaselineFriendlyReport(t *testing.T) {
 	}
 }
 
+// TestWriteMarkdownIncludesDiagnosticColumns verifies that Markdown exposes distinct and duplicate row counts alongside timing and plan-capture status.
 func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 	var (
 		distinctRows  = int64(2)
 		duplicateRows = int64(0)
 		report        = Report{
-			Driver:     "pg",
-			GitRef:     "abc123",
-			Date:       "2026-05-14",
-			Iterations: 3,
+			Driver:           "pg",
+			GitRef:           "abc123",
+			Date:             "2026-05-14",
+			Iterations:       3,
+			WarmupIterations: 1,
+			Workers:          2,
+			TranslationCache: &pg.Stats{
+				LiveConnections:    2,
+				Aggregate:          pg.TranslationCacheStats{Hits: 4, Misses: 2},
+				TraversalWorkspace: pg.TraversalWorkspaceStats{Initializations: 1, Reuses: 3},
+				PreparedStatements: pg.PreparedStatementStats{Prepared: 2, Reuses: 4},
+				StrategySelection:  pg.StrategySelectionStats{Incumbent: 3, ExactQueryCanary: 1, StructuralShadow: 2, ShapeUnavailable: 2},
+			},
 			Results: []Result{{
-				Section:           "ADCS Fanout",
-				Dataset:           "adcs_fanout",
+				Section:           "Fixed Suffix Expansion Fanout",
+				Dataset:           "fixed_suffix_expansion_fanout",
 				Label:             "combined",
 				RowCount:          2,
 				DistinctRowCount:  &distinctRows,
@@ -138,22 +163,56 @@ func TestWriteMarkdownIncludesDiagnosticColumns(t *testing.T) {
 	for _, expected := range []string{
 		"Distinct Rows",
 		"Duplicate Rows",
-		"| ADCS Fanout / combined | adcs_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
+		"| Fixed Suffix Expansion Fanout / combined | fixed_suffix_expansion_fanout | 2 | 2 | 0 | 10.0ms | 20.0ms | 30.0ms | captured |",
+		"PostgreSQL connection state: cache 4 hits, 2 misses, 0 bypasses, 0 evictions; workspaces 1 initialized/3 reused; statements 2 prepared/4 reused across 2 live connections.",
+		"PostgreSQL strategy selection: 3 incumbent, 1 exact-query canary, 0 structurally authorized, 2 structural-shadow, 2 shape-unavailable observations.",
 	} {
 		require.Contains(t, text, expected)
 	}
 }
 
+func TestWriteMarkdownIdentifiesProductionPolicyPath(t *testing.T) {
+	report := Report{
+		Driver:                        pg.DriverName,
+		GitRef:                        "abcdef0",
+		Date:                          "2026-08-20",
+		Iterations:                    2,
+		ShortestPathExecutor:          string(optimize.ShortestPathExecutorASPI1DAG),
+		ShortestPathMode:              shortestPathModeProductionPolicy,
+		TraversalPolicyGeneration:     42,
+		TraversalPolicyManifestSHA256: "0123456789abcdef",
+		PostgreSQLPlanCacheMode:       "auto",
+		PostgreSQLJIT:                 true,
+	}
+	var output bytes.Buffer
+
+	require.NoError(t, writeMarkdown(&output, report))
+	require.Contains(t, output.String(), "through production traversal policy generation 42")
+	require.Contains(t, output.String(), "manifest `0123456789abcdef`")
+}
+
+// TestValidateIterationsRejectsZero verifies that benchmark execution requires at least one measured iteration.
 func TestValidateIterationsRejectsZero(t *testing.T) {
 	require.Error(t, validateIterations(0))
 	require.NoError(t, validateIterations(1))
 }
 
+// TestValidateBenchmarkConcurrencyRejectsInvalidInputs verifies that cold and
+// concurrent measurements reject invalid values before database work starts.
+func TestValidateBenchmarkConcurrencyRejectsInvalidInputs(t *testing.T) {
+	require.Error(t, validateBenchmarkConcurrency(-1, 1))
+	require.Error(t, validateBenchmarkConcurrency(0, 0))
+	require.NoError(t, validateBenchmarkConcurrency(0, 1))
+	require.NoError(t, validateBenchmarkConcurrency(2, 4))
+}
+
+// TestWriteReportRejectsUnknownFormat verifies that report dispatch fails instead of silently choosing a serializer for an unsupported format.
 func TestWriteReportRejectsUnknownFormat(t *testing.T) {
 	err := writeReport(&bytes.Buffer{}, Report{}, "xml")
 	require.ErrorContains(t, err, "unsupported output format")
 }
 
+// TestWriteJSON verifies that JSON dispatch preserves the selected driver and emits raw duration samples in nanoseconds.
 func TestWriteJSON(t *testing.T) {
 	report := testReport()
 	var out bytes.Buffer
@@ -165,6 +224,7 @@ func TestWriteJSON(t *testing.T) {
 	require.Contains(t, out.String(), `1000000`)
 }
 
+// TestWriteBenchfmt verifies that benchfmt output carries platform metadata, a stable benchmark name, and one ns/op observation per sample.
 func TestWriteBenchfmt(t *testing.T) {
 	report := testReport()
 	var out bytes.Buffer
@@ -180,6 +240,7 @@ func TestWriteBenchfmt(t *testing.T) {
 	require.Contains(t, output, "\t1\t2000000 ns/op")
 }
 
+// TestSanitizeBenchNamePart verifies that benchmark labels normalize whitespace and arrows without destroying hierarchy separators, and that empty labels receive a fallback.
 func TestSanitizeBenchNamePart(t *testing.T) {
 	require.Equal(t, "Shortest_Paths", sanitizeBenchNamePart("Shortest Paths"))
 	require.Equal(t, "n1_-_n3", sanitizeBenchNamePart("n1 -> n3"))
@@ -187,6 +248,7 @@ func TestSanitizeBenchNamePart(t *testing.T) {
 	require.Equal(t, "unknown", sanitizeBenchNamePart(""))
 }
 
+// TestWriteMarkdownOmitsSamples verifies that Markdown reports aggregate timings without leaking the raw nanosecond sample series.
 func TestWriteMarkdownOmitsSamples(t *testing.T) {
 	report := testReport()
 	var out bytes.Buffer
@@ -198,6 +260,7 @@ func TestWriteMarkdownOmitsSamples(t *testing.T) {
 	require.False(t, strings.Contains(output, "1000000"))
 }
 
+// testReport returns a representative report used by serializer tests.
 func testReport() Report {
 	return Report{
 		Driver:     "pg",

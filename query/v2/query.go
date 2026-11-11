@@ -21,10 +21,12 @@ type TraversalDepth struct {
 	err          error
 }
 
+// traversalDepthBound returns an independently addressable bound for a pattern range.
 func traversalDepthBound(value int64) *int64 {
 	return &value
 }
 
+// newTraversalDepth retains bounds and records negative or reversed-range errors for the query builder.
 func newTraversalDepth(start, end *int64) TraversalDepth {
 	if start != nil && *start < 0 {
 		return TraversalDepth{
@@ -49,6 +51,7 @@ func newTraversalDepth(start, end *int64) TraversalDepth {
 	}
 }
 
+// rangePattern returns an independent range node, using omitted bounds when no range was set.
 func (s TraversalDepth) rangePattern() *cypher.PatternRange {
 	if s.patternRange == nil {
 		return &cypher.PatternRange{}
@@ -57,22 +60,27 @@ func (s TraversalDepth) rangePattern() *cypher.PatternRange {
 	return cypher.Copy(s.patternRange)
 }
 
+// AnyDepth leaves both variable-length traversal bounds unspecified.
 func AnyDepth() TraversalDepth {
 	return newTraversalDepth(nil, nil)
 }
 
-func MinDepth(min int64) TraversalDepth {
-	return newTraversalDepth(traversalDepthBound(min), nil)
+// MinDepth sets an inclusive lower traversal bound and records an error for negative input.
+func MinDepth(minDepth int64) TraversalDepth {
+	return newTraversalDepth(traversalDepthBound(minDepth), nil)
 }
 
-func MaxDepth(max int64) TraversalDepth {
-	return newTraversalDepth(nil, traversalDepthBound(max))
+// MaxDepth sets an inclusive upper traversal bound and records an error for negative input.
+func MaxDepth(maxDepth int64) TraversalDepth {
+	return newTraversalDepth(nil, traversalDepthBound(maxDepth))
 }
 
-func DepthRange(min, max int64) TraversalDepth {
-	return newTraversalDepth(traversalDepthBound(min), traversalDepthBound(max))
+// DepthRange sets inclusive traversal bounds and records negative or reversed-range errors.
+func DepthRange(minDepth, maxDepth int64) TraversalDepth {
+	return newTraversalDepth(traversalDepthBound(minDepth), traversalDepthBound(maxDepth))
 }
 
+// ExactDepth sets equal lower and upper traversal bounds and records an error for negative input.
 func ExactDepth(depth int64) TraversalDepth {
 	depthBound := traversalDepthBound(depth)
 	return newTraversalDepth(depthBound, depthBound)
@@ -99,6 +107,8 @@ func (s runtimeIdentifiers) End() *cypher.Variable {
 	return cypher.NewVariableWithSymbol(s.end)
 }
 
+// Identifiers exposes the canonical variables used for path, node, start,
+// relationship, and end expressions.
 var Identifiers = runtimeIdentifiers{
 	path:         "p",
 	node:         "n",
@@ -373,7 +383,10 @@ func Or(operands ...cypher.SyntaxNode) cypher.SyntaxNode {
 type SortDirection int
 
 const (
+	// SortAscending orders values from least to greatest.
 	SortAscending SortDirection = iota
+
+	// SortDescending orders values from greatest to least.
 	SortDescending
 )
 
@@ -652,6 +665,7 @@ func (s *entity[T]) ID() IdentityContinuation {
 	}
 }
 
+// Property returns a comparison continuation for a validated property lookup or records an invalid-key error.
 func (s *entity[T]) Property(propertyName string) PropertyContinuation {
 	if err := cypher.ValidatePropertyKeyName(propertyName); err != nil {
 		return &propertyContinuation{
@@ -783,9 +797,16 @@ type QueryBuilder interface {
 type updatingClauseKind int
 
 const (
+	// updatingClauseSet identifies a pending SET clause.
 	updatingClauseSet updatingClauseKind = iota
+
+	// updatingClauseRemove identifies a pending REMOVE clause.
 	updatingClauseRemove
+
+	// updatingClauseDelete identifies a pending DELETE clause.
 	updatingClauseDelete
+
+	// updatingClauseCreate identifies a pending CREATE clause.
 	updatingClauseCreate
 )
 
@@ -1469,6 +1490,10 @@ func (s *builder) Build() (*PreparedQuery, error) {
 	}
 
 	if len(s.constraints) > 0 {
+		if err := validateConstraintKindPredicates(s.constraints); err != nil {
+			return nil, err
+		}
+
 		var (
 			whereClause                      = match.NewWhere()
 			constraints                      = cypher.NewConjunction()

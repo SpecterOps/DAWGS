@@ -13,10 +13,16 @@ import (
 )
 
 var (
-	// Node and edge kinds to keep queries consistent
+	// NodeKind1 is the first stable node-kind name used by builder translation fixtures.
 	NodeKind1 = graph.StringKind("NodeKind1")
+
+	// NodeKind2 is the second stable node-kind name used by builder translation fixtures.
 	NodeKind2 = graph.StringKind("NodeKind2")
+
+	// EdgeKind1 is the first stable relationship-kind name used by builder translation fixtures.
 	EdgeKind1 = graph.StringKind("EdgeKind1")
+
+	// EdgeKind2 is the second stable relationship-kind name used by builder translation fixtures.
 	EdgeKind2 = graph.StringKind("EdgeKind2")
 )
 

@@ -26,6 +26,13 @@ func HasTokens(ctx TokenProvider, tokens ...int) bool {
 	return true
 }
 
+// NegatesOperand reports whether the NOT tokens of a NotExpression leave the operand negated. The grammar's
+// ( NOT )* prefix makes negation an involution over Cypher's three-valued logic, so only the parity of the
+// token count is meaningful: an even count cancels itself and must not collapse into a single negation.
+func NegatesOperand(ctx *parser.OC_NotExpressionContext) bool {
+	return len(ctx.AllNOT())%2 == 1
+}
+
 // Because the grammar doesn't bind names for certain tokens this is a low-cost, low-effort way of mapping them to more
 // human-readable variable names.
 

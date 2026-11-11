@@ -49,7 +49,7 @@ func (s *NodePatternVisitor) EnterOC_LabelName(ctx *parser.OC_LabelNameContext) 
 }
 
 func (s *NodePatternVisitor) ExitOC_LabelName(ctx *parser.OC_LabelNameContext) {
-	kind := graph.StringKind(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name)
+	kind := s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).kind()
 	s.NodePattern.Kinds = append(s.NodePattern.Kinds, kind)
 }
 
@@ -72,10 +72,9 @@ func (s *RelationshipPatternVisitor) EnterOC_RelTypeName(ctx *parser.OC_RelTypeN
 }
 
 func (s *RelationshipPatternVisitor) ExitOC_RelTypeName(ctx *parser.OC_RelTypeNameContext) {
-	relationshipType := graph.StringKind(ctx.GetText())
+	relationshipType := s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).kind()
 
 	s.RelationshipPattern.Kinds = s.RelationshipPattern.Kinds.Add(relationshipType)
-	s.ctx.Exit()
 }
 
 func (s *RelationshipPatternVisitor) EnterOC_Variable(ctx *parser.OC_VariableContext) {
@@ -124,6 +123,9 @@ func (s *RelationshipPatternVisitor) EnterOC_RangeLiteral(ctx *parser.OC_RangeLi
 			case TokenTypeRange:
 				state = stateSecondIndex
 
+			case parser.CypherLexerSP:
+				// Whitespace and comments do not change which bound follows.
+
 			default:
 				s.ctx.AddErrors(fmt.Errorf("unexpected token in pattern range: %s", typedTokenLeaf.GetText()))
 			}
@@ -144,6 +146,12 @@ func (s *RelationshipPatternVisitor) EnterOC_RangeLiteral(ctx *parser.OC_RangeLi
 				}
 			}
 		}
+	}
+
+	if state == stateFirstIndex && s.RelationshipPattern.Range.StartIndex != nil {
+		// Without a range separator, *k denotes exactly k relationships.
+		value := *s.RelationshipPattern.Range.StartIndex
+		s.RelationshipPattern.Range.EndIndex = &value
 	}
 }
 

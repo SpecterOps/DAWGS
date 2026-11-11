@@ -13,8 +13,22 @@ import (
 // KindMapper is an interface that represents a service that can map a given slice of graph.Kind to a slice of
 // int16 numeric identifiers.
 type KindMapper interface {
+	// MapKinds returns MissingKindsError for authoritative misses. Other errors
+	// remain execution failures, including when translating match predicates.
 	MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error)
 	AssertKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error)
+}
+
+// MissingKindsError reports an authoritative lookup miss after any cache refresh.
+// KindIDs contains only the resolved kinds, in input order. Callers requiring all
+// kinds must still treat this as an error; match translation can apply AND/OR semantics.
+type MissingKindsError struct {
+	Kinds   graph.Kinds
+	KindIDs []int16
+}
+
+func (s *MissingKindsError) Error() string {
+	return fmt.Sprintf("unable to map kinds: %s", strings.Join(s.Kinds.Strings(), ", "))
 }
 
 // FormattingLiteral is a syntax node that is used as a transparent formatting syntax node. The formatter will
@@ -298,6 +312,10 @@ func NewUnaryExpression(operator Operator, operand Expression) *UnaryExpression 
 	}
 }
 
+func (s UnaryExpression) AsSelectItem() SelectItem {
+	return s
+}
+
 func (s UnaryExpression) AsExpression() Expression {
 	return s
 }
@@ -416,8 +434,12 @@ func (s *Parenthetical) AsExpression() Expression {
 	return s
 }
 
+// EdgeArrayFromPathIDs hydrates edge composites from a path's ordered edge identifiers.
 type EdgeArrayFromPathIDs struct {
+	// PathIDs is the ordered edge-ID array to hydrate.
 	PathIDs Expression
+	// GraphID identifies the graph whose edge IDs are hydrated into edge composites.
+	GraphID Expression
 }
 
 func (s *EdgeArrayFromPathIDs) NodeType() string {
@@ -431,9 +453,16 @@ func (s *EdgeArrayFromPathIDs) AsExpression() Expression {
 type JoinType int
 
 const (
+	// JoinTypeInner retains rows that satisfy the join constraint on both sides.
 	JoinTypeInner JoinType = iota
+
+	// JoinTypeLeftOuter retains every left row even when no right row matches.
 	JoinTypeLeftOuter
+
+	// JoinTypeRightOuter retains every right row even when no left row matches.
 	JoinTypeRightOuter
+
+	// JoinTypeFullOuter retains unmatched rows from both sides.
 	JoinTypeFullOuter
 )
 
@@ -468,16 +497,26 @@ func (s OrderBy) NodeType() string {
 type WindowFrameUnit int
 
 const (
+	// WindowFrameUnitRows measures frame boundaries in physical rows.
 	WindowFrameUnitRows WindowFrameUnit = iota
+
+	// WindowFrameUnitRange measures frame boundaries by ordering-key value ranges.
 	WindowFrameUnitRange
+
+	// WindowFrameUnitGroups measures frame boundaries in peer groups.
 	WindowFrameUnitGroups
 )
 
 type WindowFrameBoundaryType int
 
 const (
+	// WindowFrameBoundaryTypeCurrentRow anchors a window boundary at the current row or peer group.
 	WindowFrameBoundaryTypeCurrentRow WindowFrameBoundaryType = iota
+
+	// WindowFrameBoundaryTypePreceding places a window boundary before the current row.
 	WindowFrameBoundaryTypePreceding
+
+	// WindowFrameBoundaryTypeFollowing places a window boundary after the current row.
 	WindowFrameBoundaryTypeFollowing
 )
 
@@ -580,13 +619,22 @@ func AsParameter(identifier Identifier, value any) (*Parameter, error) {
 	return parameter, nil
 }
 
+// FunctionCall represents a PostgreSQL function invocation and its aggregate or window options.
 type FunctionCall struct {
-	Bare       bool
-	Distinct   bool
-	Function   Identifier
+	// Bare omits the usual argument parentheses for SQL keyword-like functions.
+	Bare bool
+	// Distinct deduplicates argument rows before aggregate evaluation.
+	Distinct bool
+	// Function identifies the PostgreSQL function to invoke.
+	Function Identifier
+	// Parameters contains the function arguments in call order.
 	Parameters []Expression
-	Over       *Window
-	CastType   DataType
+	// OrderBy orders aggregate inputs before the function is evaluated.
+	OrderBy []*OrderBy
+	// Over supplies the window specification for a window-function call.
+	Over *Window
+	// CastType records the function result type known to the translator.
+	CastType DataType
 }
 
 func (s FunctionCall) AsAssignment() Assignment {

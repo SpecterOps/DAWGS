@@ -755,7 +755,8 @@ func (s *RangeQuantifier) copy() *RangeQuantifier {
 
 type KindMatcher struct {
 	Reference Expression
-	Kinds     graph.Kinds
+	// Kinds contains decoded semantic names, not Cypher tokens.
+	Kinds graph.Kinds
 	// IsExclusive changes the kind matching operator from overlap (PG &&) to a stricter "left contains right" (PG @>)
 	IsExclusive bool
 }
@@ -1306,7 +1307,9 @@ func (s *ProjectionItem) copy() *ProjectionItem {
 	}
 }
 
+// PropertyLookup represents access to a named property on an expression.
 type PropertyLookup struct {
+	// Atom is the expression whose property is accessed.
 	Atom Expression
 
 	// Symbol is the raw property key, not an already-rendered Cypher token.
@@ -1398,7 +1401,7 @@ func (s *Properties) copy() *Properties {
 
 // NodePattern Type
 //
-// Kinds is a conjunction of types for the given node.
+// Kinds is a conjunction of decoded semantic names for the given node.
 // e.g. (n:K1:K2) may be rendered as (n) where n:K1 and n:K2
 
 // NodePattern
@@ -1426,7 +1429,7 @@ func (s *NodePattern) AddKind(kind graph.Kind) {
 
 // RelationshipPattern Type
 //
-// Kinds is a disjunction of types for the given edge.
+// Kinds is a disjunction of decoded semantic names for the given edge.
 //	e.g. [r:K1|K2] may be rendered as `()-[r]-() where type(r) = K1 or type(r) = K2`
 
 // RelationshipPattern

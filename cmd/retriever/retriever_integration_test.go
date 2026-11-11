@@ -38,6 +38,7 @@ import (
 	"github.com/specterops/dawgs/retriever"
 )
 
+// TestDumpLoadRoundTrip checks that exporting and importing a graph preserves the expected entities and properties.
 func TestDumpLoadRoundTrip(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -93,7 +94,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	)
 	var seededNodeIDs, seededEdgeIDs []graph.ID
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{
+		scopedTx := tx.WithGraph(graph.Graph{
 			Name: graphName,
 		})
 
@@ -104,7 +105,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 				kind = systemKind
 			}
 
-			node, err := tx.CreateNode(graph.AsProperties(map[string]any{
+			node, err := scopedTx.CreateNode(graph.AsProperties(map[string]any{
 				"name": fmt.Sprintf("node-%d", index),
 				"role": fmt.Sprintf("role-%d", index%3),
 			}), kind)
@@ -116,7 +117,7 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 		}
 
 		for index := range edgeCount {
-			relationship, err := tx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
+			relationship, err := scopedTx.CreateRelationshipByIDs(nodes[index].ID, nodes[index+1].ID, adminKind, graph.AsProperties(map[string]any{
 				"route": fmt.Sprintf("route-%d", index),
 			}))
 			if err != nil {
@@ -140,8 +141,12 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected seeded graph counts: nodes=%d edges=%d", entitySnapshot.NodeCount, entitySnapshot.EdgeCount)
 	}
 
-	assertBoundedRetrieverScans(t, ctx, db, graph.Graph{Name: graphName}, entitySnapshot, batchSize)
-	assertSkipAndLimit(t, ctx, db, graph.Graph{Name: graphName}, seededNodeIDs, seededEdgeIDs)
+	assertBoundedRetrieverScans(t, ctx, db, graph.Graph{
+		Name: graphName,
+	}, entitySnapshot, batchSize)
+	assertSkipAndLimit(t, ctx, db, graph.Graph{
+		Name: graphName,
+	}, seededNodeIDs, seededEdgeIDs)
 
 	dumpDir := t.TempDir()
 	dumpResult, err := retriever.Dump(ctx, db, driverName, []retriever.GraphTarget{{
@@ -196,7 +201,10 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	archiveDumpDir := filepath.Join(archiveBase, "dumpdir")
 	archivePath := filepath.Join(archiveBase, "dump.tar")
 	var archiveOutput bytes.Buffer
-	runtime := commandRuntime{stdout: &archiveOutput, stderr: io.Discard}
+	runtime := commandRuntime{
+		stdout: &archiveOutput,
+		stderr: io.Discard,
+	}
 	if err := runtime.run(ctx, []string{
 		"dump", "-connection", connection, "-out", archiveDumpDir,
 		"-archive-out", archivePath,
@@ -262,12 +270,14 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	var loadedNodes []*graph.Node
 	var loadedEdges []*graph.Relationship
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{Name: graphName})
+		scopedTx := tx.WithGraph(graph.Graph{
+			Name: graphName,
+		})
 		var err error
-		if loadedNodes, err = ops.FetchNodes(tx.Nodes()); err != nil {
+		if loadedNodes, err = ops.FetchNodes(scopedTx.Nodes()); err != nil {
 			return err
 		}
-		loadedEdges, err = ops.FetchRelationships(tx.Relationships())
+		loadedEdges, err = ops.FetchRelationships(scopedTx.Relationships())
 		return err
 	}); err != nil {
 		t.Fatalf("read restored topology: %v", err)
@@ -336,10 +346,10 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	}
 
 	if err := db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(graph.Graph{
+		scopedTx := tx.WithGraph(graph.Graph{
 			Name: graphName,
 		})
-		_, err := tx.CreateNode(graph.AsProperties(map[string]any{"name": "extra"}), userKind)
+		_, err := scopedTx.CreateNode(graph.AsProperties(map[string]any{"name": "extra"}), userKind)
 		return err
 	}); err != nil {
 		t.Fatalf("mutate loaded graph: %v", err)
@@ -401,13 +411,14 @@ func assertStrictIDs(t *testing.T, entityName string, ids []graph.ID) {
 	}
 }
 
+// assertSkipAndLimit checks that an export's selection bounds produce the expected entity count.
 func assertSkipAndLimit(t *testing.T, ctx context.Context, db graph.Database, targetGraph graph.Graph, nodeIDs, edgeIDs []graph.ID) {
 	t.Helper()
 
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
+		scopedTx := tx.WithGraph(targetGraph)
 		var actualNodeIDs []graph.ID
-		if err := tx.Nodes().OrderBy(query.NodeID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
+		if err := scopedTx.Nodes().OrderBy(query.NodeID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
 			for id := range cursor.Chan() {
 				actualNodeIDs = append(actualNodeIDs, id)
 			}
@@ -420,7 +431,7 @@ func assertSkipAndLimit(t *testing.T, ctx context.Context, db graph.Database, ta
 		}
 
 		var actualEdgeIDs []graph.ID
-		if err := tx.Relationships().OrderBy(query.RelationshipID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
+		if err := scopedTx.Relationships().OrderBy(query.RelationshipID()).Offset(1).Limit(2).FetchIDs(func(cursor graph.Cursor[graph.ID]) error {
 			for id := range cursor.Chan() {
 				actualEdgeIDs = append(actualEdgeIDs, id)
 			}

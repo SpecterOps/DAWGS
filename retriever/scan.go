@@ -236,10 +236,11 @@ func scanDatabaseRelationshipsFrom(ctx context.Context, db graph.Database, targe
 	})
 }
 
+// readDatabaseNodes reads a bounded node batch and retains the cursor needed for the next transaction.
 func readDatabaseNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int, visit func(*graph.Node) error) error {
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
-		nodeQuery := tx.Nodes().OrderBy(query.NodeID()).Limit(batchSize)
+		scopedTx := tx.WithGraph(targetGraph)
+		nodeQuery := scopedTx.Nodes().OrderBy(query.NodeID()).Limit(batchSize)
 
 		if hasAfterID {
 			nodeQuery = nodeQuery.Filter(query.GreaterThan(query.NodeID(), afterID))
@@ -261,10 +262,11 @@ func readDatabaseNodes(ctx context.Context, db graph.Database, targetGraph graph
 	return fmt.Errorf("read initial node batch: %w", err)
 }
 
+// readDatabaseRelationships reads a bounded relationship batch and retains the cursor needed for the next transaction.
 func readDatabaseRelationships(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int, visit func(*graph.Relationship) error) error {
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		tx = tx.WithGraph(targetGraph)
-		relationshipQuery := tx.Relationships().OrderBy(query.RelationshipID()).Limit(batchSize)
+		scopedTx := tx.WithGraph(targetGraph)
+		relationshipQuery := scopedTx.Relationships().OrderBy(query.RelationshipID()).Limit(batchSize)
 
 		if hasAfterID {
 			relationshipQuery = relationshipQuery.Filter(query.GreaterThan(query.RelationshipID(), afterID))

@@ -1,0 +1,245 @@
+{
+  "families": [
+    {
+      "name": "domain object ID order",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "domain09",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-009"
+            }
+          },
+          {
+            "id": "domain03",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-003"
+            }
+          },
+          {
+            "id": "domain12",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-012"
+            }
+          },
+          {
+            "id": "domain01",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-001"
+            }
+          },
+          {
+            "id": "domain08",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-008"
+            }
+          },
+          {
+            "id": "domain04",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-004"
+            }
+          },
+          {
+            "id": "domain11",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-011"
+            }
+          },
+          {
+            "id": "domain02",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-002"
+            }
+          },
+          {
+            "id": "domain10",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-010"
+            }
+          },
+          {
+            "id": "domain05",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-005"
+            }
+          },
+          {
+            "id": "domain07",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-007"
+            }
+          },
+          {
+            "id": "domain06",
+            "kinds": [
+              "Domain"
+            ],
+            "properties": {
+              "objectid": "S-1-5-21-006"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "variants": [
+        {
+          "name": "unordered limit",
+          "vars": {
+            "query": "MATCH (n:Domain) RETURN n LIMIT 10"
+          },
+          "assert": {
+            "row_count": 10
+          }
+        },
+        {
+          "name": "default ascending node limit",
+          "vars": {
+            "query": "MATCH (n:Domain) RETURN n ORDER BY n.objectid LIMIT 10"
+          },
+          "assert": {
+            "ordered_node_ids": [
+              "domain01",
+              "domain02",
+              "domain03",
+              "domain04",
+              "domain05",
+              "domain06",
+              "domain07",
+              "domain08",
+              "domain09",
+              "domain10"
+            ]
+          }
+        },
+        {
+          "name": "explicit ascending node limit",
+          "vars": {
+            "query": "MATCH (n:Domain) RETURN n ORDER BY n.objectid ASC LIMIT 10"
+          },
+          "assert": {
+            "ordered_node_ids": [
+              "domain01",
+              "domain02",
+              "domain03",
+              "domain04",
+              "domain05",
+              "domain06",
+              "domain07",
+              "domain08",
+              "domain09",
+              "domain10"
+            ]
+          }
+        },
+        {
+          "name": "descending node limit",
+          "vars": {
+            "query": "MATCH (n:Domain) RETURN n ORDER BY n.objectid DESC LIMIT 10"
+          },
+          "assert": {
+            "ordered_node_ids": [
+              "domain12",
+              "domain11",
+              "domain10",
+              "domain09",
+              "domain08",
+              "domain07",
+              "domain06",
+              "domain05",
+              "domain04",
+              "domain03"
+            ]
+          }
+        },
+        {
+          "name": "ascending scalar control",
+          "vars": {
+            "query": "MATCH (n:Domain) RETURN n.objectid ORDER BY n.objectid LIMIT 10"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "S-1-5-21-001",
+              "S-1-5-21-002",
+              "S-1-5-21-003",
+              "S-1-5-21-004",
+              "S-1-5-21-005",
+              "S-1-5-21-006",
+              "S-1-5-21-007",
+              "S-1-5-21-008",
+              "S-1-5-21-009",
+              "S-1-5-21-010"
+            ]
+          }
+        },
+        {
+          "name": "descending scalar control",
+          "vars": {
+            "query": "MATCH (n:Domain) RETURN n.objectid ORDER BY n.objectid DESC LIMIT 10"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "S-1-5-21-012",
+              "S-1-5-21-011",
+              "S-1-5-21-010",
+              "S-1-5-21-009",
+              "S-1-5-21-008",
+              "S-1-5-21-007",
+              "S-1-5-21-006",
+              "S-1-5-21-005",
+              "S-1-5-21-004",
+              "S-1-5-21-003"
+            ]
+          }
+        },
+        {
+          "name": "node page",
+          "vars": {
+            "query": "MATCH (n:Domain) RETURN n ORDER BY n.objectid SKIP 2 LIMIT 3"
+          },
+          "assert": {
+            "ordered_node_ids": [
+              "domain03",
+              "domain04",
+              "domain05"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

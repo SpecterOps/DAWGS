@@ -497,7 +497,19 @@ func sortedDependencies(node cypher.SyntaxNode) []string {
 	}
 
 	_ = walk.Cypher(node, walk.NewSimpleVisitor[cypher.SyntaxNode](func(node cypher.SyntaxNode, _ walk.VisitorHandler) {
-		if variable, isVariable := node.(*cypher.Variable); isVariable && variable.Symbol != "" && variable.Symbol != cypher.TokenLiteralAsterisk {
+		var variable *cypher.Variable
+		switch typedNode := node.(type) {
+		case *cypher.Variable:
+			variable = typedNode
+		case *cypher.NodePattern:
+			// The syntax walker visits pattern properties but omits pattern
+			// variables. In predicates these variables consume bindings, so
+			// clause scheduling must wait for their declarations as well.
+			variable = typedNode.Variable
+		case *cypher.RelationshipPattern:
+			variable = typedNode.Variable
+		}
+		if variable != nil && variable.Symbol != "" && variable.Symbol != cypher.TokenLiteralAsterisk {
 			dependencies[variable.Symbol] = struct{}{}
 		}
 	}))
@@ -513,9 +525,12 @@ func wherePredicateCount(where *cypher.Where) int {
 	return where.Len()
 }
 
+// mergeBindings combines query bindings without discarding metadata from either analysis input.
 func mergeBindings(existing []Binding, next []Binding) []Binding {
+	mergedBindings := existing
+
 	seen := map[string]struct{}{}
-	for _, binding := range existing {
+	for _, binding := range mergedBindings {
 		seen[bindingKey(binding)] = struct{}{}
 	}
 
@@ -525,16 +540,19 @@ func mergeBindings(existing []Binding, next []Binding) []Binding {
 			continue
 		}
 
-		existing = append(existing, binding)
+		mergedBindings = append(mergedBindings, binding)
 		seen[key] = struct{}{}
 	}
 
-	return existing
+	return mergedBindings
 }
 
+// mergePathVariables combines the path-variable information discovered by separate analysis steps.
 func mergePathVariables(existing []PathVariable, next []PathVariable) []PathVariable {
+	mergedPathVariables := existing
+
 	seen := map[string]struct{}{}
-	for _, pathVariable := range existing {
+	for _, pathVariable := range mergedPathVariables {
 		seen[pathVariable.Symbol] = struct{}{}
 	}
 
@@ -543,11 +561,11 @@ func mergePathVariables(existing []PathVariable, next []PathVariable) []PathVari
 			continue
 		}
 
-		existing = append(existing, pathVariable)
+		mergedPathVariables = append(mergedPathVariables, pathVariable)
 		seen[pathVariable.Symbol] = struct{}{}
 	}
 
-	return existing
+	return mergedPathVariables
 }
 
 func bindingKey(binding Binding) string {

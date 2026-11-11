@@ -1,0 +1,90 @@
+{
+  "dataset": "expand_into",
+  "cases": [
+    {
+      "name": "fixed one-hop ExpandInto preserves typed relationship identity",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'source' AND e.name = 'target' MATCH (s)-[r:ExpandIntoKindA]->(e) RETURN type(r), r.slot",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "a"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves wildcard cross-kind multiplicity",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'source' AND e.name = 'target' MATCH (s)-[r]->(e) RETURN type(r), r.slot ORDER BY type(r)",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "a"], ["ExpandIntoKindB", "b"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves multi-kind relationship rows",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'source' AND e.name = 'target' MATCH (s)-[r:ExpandIntoKindA|ExpandIntoKindB]->(e) RETURN type(r), r.slot ORDER BY type(r)",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "a"], ["ExpandIntoKindB", "b"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto reapplies duplicate outer pair multiplicity",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'source' AND e.name = 'target' WITH s, e, [1, 2] AS copies UNWIND copies AS copy MATCH (s)-[r:ExpandIntoKindA|ExpandIntoKindB]->(e) RETURN copy, type(r) ORDER BY copy, type(r)",
+      "assert": {"ordered_row_values": [[1, "ExpandIntoKindA"], [1, "ExpandIntoKindB"], [2, "ExpandIntoKindA"], [2, "ExpandIntoKindB"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto recognizes node endpoints introduced by UNWIND",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'source' AND e.name = 'target' WITH collect(s) AS sources, e UNWIND sources AS source MATCH (source)-[r:ExpandIntoKindA]->(e) RETURN r.slot",
+      "assert": {"ordered_row_values": [["a"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves self loop",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'loop' AND e.name = 'loop' MATCH (s)-[r:ExpandIntoKindA]->(e) RETURN type(r), r.slot",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "loop"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto missing pair is empty",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'missing' AND e.name = 'target' MATCH (s)-[r]->(e) RETURN r",
+      "assert": "empty"
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves a pair when the source has lower degree",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'low-source' AND e.name = 'high-target' MATCH (s)-[r:ExpandIntoKindA]->(e) RETURN r.slot",
+      "assert": {"ordered_row_values": [["low-source-match"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves a pair when the target has lower degree",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'high-source' AND e.name = 'low-target' MATCH (s)-[r:ExpandIntoKindA]->(e) RETURN r.slot",
+      "assert": {"ordered_row_values": [["low-target-match"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves reversed directionless cross-kind multiplicity",
+      "cypher": "MATCH (s:ExpandIntoTarget), (e:ExpandIntoSource) WHERE s.name = 'target' AND e.name = 'source' MATCH (s)-[r:ExpandIntoKindA|ExpandIntoKindB]-(e) RETURN type(r), r.slot ORDER BY type(r)",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "a"], ["ExpandIntoKindB", "b"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves inbound cross-kind multiplicity",
+      "cypher": "MATCH (s:ExpandIntoTarget), (e:ExpandIntoSource) WHERE s.name = 'target' AND e.name = 'source' MATCH (s)<-[r:ExpandIntoKindA|ExpandIntoKindB]-(e) RETURN type(r), r.slot ORDER BY type(r)",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "a"], ["ExpandIntoKindB", "b"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto emits a directionless self loop once",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'loop' AND e.name = 'loop' MATCH (s)-[r:ExpandIntoKindA]-(e) RETURN type(r), r.slot",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "loop"]]}
+    },
+    {
+      "name": "fixed one-hop directionless traversal emits an unbound self loop once",
+      "cypher": "MATCH (s:ExpandIntoSource)-[r:ExpandIntoKindA]-(e:ExpandIntoTarget) WHERE r.slot = 'loop' RETURN type(r), r.slot",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "loop"]]}
+    },
+    {
+      "name": "fixed one-hop directionless traversal emits a single-bound self loop once",
+      "cypher": "MATCH (s:ExpandIntoSource) WHERE s.name = 'loop' MATCH (s)-[r:ExpandIntoKindA]-(e:ExpandIntoTarget) RETURN type(r), r.slot",
+      "assert": {"ordered_row_values": [["ExpandIntoKindA", "loop"]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto preserves arbitrary varying bound pairs",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE (s.name = 'source' AND e.name = 'target') OR (s.name = 'low-source' AND e.name = 'high-target') MATCH (s)-[r:ExpandIntoKindA]->(e) RETURN s.name, e.name, r.slot ORDER BY s.name",
+      "assert": {"ordered_row_values": [["low-source", "high-target", "low-source-match"], ["source", "target", "a"]]}
+    },
+    {
+      "name": "optional fixed one-hop ExpandInto preserves null relationship rows",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'missing' AND e.name = 'target' OPTIONAL MATCH (s)-[r:ExpandIntoKindA]->(e) RETURN s.name, e.name, r.slot",
+      "assert": {"ordered_row_values": [["missing", "target", null]]}
+    },
+    {
+      "name": "fixed one-hop ExpandInto composes with multiple path bindings",
+      "cypher": "MATCH (s:ExpandIntoSource), (e:ExpandIntoTarget) WHERE s.name = 'source' AND e.name = 'target' MATCH p = (s)-[r:ExpandIntoKindA]->(e) MATCH q = (s)-[r2:ExpandIntoKindB]->(e) RETURN length(p), length(q), r.slot, r2.slot",
+      "assert": {"ordered_row_values": [[1, 1, "a", "b"]]}
+    }
+  ]
+}

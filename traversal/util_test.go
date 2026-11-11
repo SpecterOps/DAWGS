@@ -15,81 +15,94 @@ type mockGraphDB struct {
 	config                *graph.TransactionConfig
 }
 
-func (m *mockGraphDB) hasError(msg string) bool {
-	return m.errorMsg != nil && m.errorMsg.Error() == msg
+// hasError matches the failure message configured on the graph database test double.
+func (s *mockGraphDB) hasError(msg string) bool {
+	return s.errorMsg != nil && s.errorMsg.Error() == msg
 }
 
-func (m *mockGraphDB) SetBatchWriteSize(interval int) {}
+// SetBatchWriteSize accepts batch sizing without changing the test double's behavior.
+func (s *mockGraphDB) SetBatchWriteSize(interval int) {}
 
-func (m *mockGraphDB) SetWriteFlushSize(size int) {}
+// SetWriteFlushSize accepts flush sizing without changing the test double's behavior.
+func (s *mockGraphDB) SetWriteFlushSize(size int) {}
 
-func (m *mockGraphDB) SetDefaultGraph(ctx context.Context, graph graph.Graph) error {
-	if m.hasError("Failed setting default graph namespace") {
+// SetDefaultGraph returns the configured namespace-selection failure when requested.
+func (s *mockGraphDB) SetDefaultGraph(ctx context.Context, graph graph.Graph) error {
+	if s.hasError("Failed setting default graph namespace") {
 		return fmt.Errorf("Failed setting default graph namespace")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) ReadTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
+// ReadTransaction records the read and executes its delegate unless the configured failure is active.
+func (s *mockGraphDB) ReadTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 
-	m.readTransactionCalled = true
-	if m.hasError("Read Transaction Failed") {
+	s.readTransactionCalled = true
+	if s.hasError("Read Transaction Failed") {
 		return fmt.Errorf("Read Transaction Failed")
 	}
 
-	return txDelegate(m.tx)
+	return txDelegate(s.tx)
 }
 
-func (m *mockGraphDB) WriteTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
-	if m.hasError("Write Transaction Failed") {
+// WriteTransaction returns the configured write failure without executing a delegate.
+func (s *mockGraphDB) WriteTransaction(ctx context.Context, txDelegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
+	if s.hasError("Write Transaction Failed") {
 		return fmt.Errorf("Write Transaction Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) AssertSchema(ctx context.Context, dbSchema graph.Schema) error {
-	if m.hasError("Schema Assertion Failed") {
+// AssertSchema returns the configured schema-assertion failure when requested.
+func (s *mockGraphDB) AssertSchema(ctx context.Context, dbSchema graph.Schema) error {
+	if s.hasError("Schema Assertion Failed") {
 		return fmt.Errorf("Schema Assertion Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
-	if m.hasError("Batch Transaction Failed") {
+// BatchOperation returns the configured batch-operation failure when requested.
+func (s *mockGraphDB) BatchOperation(ctx context.Context, batchDelegate graph.BatchDelegate, options ...graph.BatchOption) error {
+	if s.hasError("Batch Transaction Failed") {
 		return fmt.Errorf("Batch Transaction Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) Close(ctx context.Context) error {
-	if m.hasError("Closing DB Failed") {
+// Close returns the configured database-close failure when requested.
+func (s *mockGraphDB) Close(ctx context.Context) error {
+	if s.hasError("Closing DB Failed") {
 		return fmt.Errorf("Closing DB Failed")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) FetchKinds(ctx context.Context) (graph.Kinds, error) {
-	if m.hasError("Failed to Fetch Kinds") {
+// FetchKinds returns the injected kinds or the configured lookup failure.
+func (s *mockGraphDB) FetchKinds(ctx context.Context) (graph.Kinds, error) {
+	if s.hasError("Failed to Fetch Kinds") {
 		return nil, fmt.Errorf("Failed to Fetch Kinds")
 	}
-	return m.kinds, nil
+	return s.kinds, nil
 }
 
-func (m *mockGraphDB) RefreshKinds(ctx context.Context) error {
-	if m.hasError("Failed to refresh kinds") {
+// RefreshKinds returns the configured kind-refresh failure when requested.
+func (s *mockGraphDB) RefreshKinds(ctx context.Context) error {
+	if s.hasError("Failed to refresh kinds") {
 		return fmt.Errorf("Failed to refresh kinds")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) Run(ctx context.Context, query string, parameters map[string]any) error {
-	if m.hasError("Failed to run SQL statement") {
+// Run returns the configured raw-statement failure when requested.
+func (s *mockGraphDB) Run(ctx context.Context, query string, parameters map[string]any) error {
+	if s.hasError("Failed to run SQL statement") {
 		return fmt.Errorf("Failed to run SQL statement")
 	}
 	return nil
 }
 
-func (m *mockGraphDB) OptimizeStorage(ctx context.Context) error { return nil }
+// OptimizeStorage accepts maintenance calls without performing storage work in the test double.
+func (s *mockGraphDB) OptimizeStorage(ctx context.Context) error { return nil }
 
 func collectionPath(startID, endID, relationshipID graph.ID) graph.Path {
 	return graph.Path{

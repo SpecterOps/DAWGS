@@ -1,0 +1,92 @@
+{
+  "cases": [
+    {
+      "name": "HOP-01_dense_outbound_bound_anchor",
+      "dataset": "generated_hops",
+      "category": "standalone_one_hop",
+      "cypher": "MATCH (s)-[r:HopKind01]->(e) WHERE id(s) = $anchor RETURN r, e",
+      "node_params": {"anchor": "hop-out-root"},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "bound_start_id", "edge_kinds": ["HopKind01"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["HOP-01", "outbound", "dense", "full-direction"]
+    },
+    {
+      "name": "HOP-02_dense_inbound_bound_anchor",
+      "dataset": "generated_hops",
+      "category": "standalone_one_hop",
+      "cypher": "MATCH (s)-[r:HopKind01]->(e) WHERE id(e) = $anchor RETURN r, s",
+      "node_params": {"anchor": "hop-in-root"},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"terminal_predicate": "bound_end_id", "edge_kinds": ["HopKind01"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["HOP-02", "inbound", "dense", "full-direction"]
+    },
+    {
+      "name": "HOP-03_dense_thirty_kind_outbound_anchor",
+      "dataset": "generated_hops",
+      "category": "standalone_one_hop",
+      "cypher": "MATCH (s)-[r:HopKind01|HopKind02|HopKind03|HopKind04|HopKind05|HopKind06|HopKind07|HopKind08|HopKind09|HopKind10|HopKind11|HopKind12|HopKind13|HopKind14|HopKind15|HopKind16|HopKind17|HopKind18|HopKind19|HopKind20|HopKind21|HopKind22|HopKind23|HopKind24|HopKind25|HopKind26|HopKind27|HopKind28|HopKind29|HopKind30]->(e) WHERE id(s) = $anchor RETURN r, e",
+      "node_params": {"anchor": "hop-kind-root"},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "bound_start_id", "edge_kinds": ["HopKind01", "HopKind02", "HopKind03", "HopKind04", "HopKind05", "HopKind06", "HopKind07", "HopKind08", "HopKind09", "HopKind10", "HopKind11", "HopKind12", "HopKind13", "HopKind14", "HopKind15", "HopKind16", "HopKind17", "HopKind18", "HopKind19", "HopKind20", "HopKind21", "HopKind22", "HopKind23", "HopKind24", "HopKind25", "HopKind26", "HopKind27", "HopKind28", "HopKind29", "HopKind30"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["HOP-03", "outbound", "dense", "30-kinds"]
+    },
+    {
+      "name": "HOP-04_dense_opposite_endpoint_kind_disjunction",
+      "dataset": "generated_hops",
+      "category": "standalone_one_hop",
+      "cypher": "MATCH (s)-[r:HopTypedEdge]->(e) WHERE id(s) = $anchor AND (e:HopEndA OR e:HopEndB) RETURN r, e",
+      "node_params": {"anchor": "hop-out-root"},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "bound_start_id", "terminal_predicate": "endpoint_kind_disjunction", "edge_kinds": ["HopTypedEdge"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["HOP-04", "dense", "endpoint-kinds", "multi-kind-nodes"]
+    },
+    {
+      "name": "HOP-05_thousand_endpoint_IDs_with_sparse_matches",
+      "dataset": "generated_hops",
+      "category": "standalone_one_hop",
+      "cypher": "MATCH (s)-[r:HopIDEdge]->(e) WHERE id(s) = $anchor AND id(e) IN $end_ids RETURN r, e",
+      "node_params": {"anchor": "hop-out-root"},
+      "generated_node_list_params": {"end_ids": {"prefix": "hop-id-target", "count": 1000}},
+      "expected": {"row_count": 128},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "bound_start_id", "terminal_predicate": "large_end_id_list", "edge_kinds": ["HopIDEdge"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["HOP-05", "1000-list", "endpoint-ids", "sparse-match"]
+    },
+    {
+      "name": "HOP-07_nested_branch_selectivity",
+      "dataset": "generated_hops",
+      "category": "standalone_one_hop",
+      "cypher": "MATCH (s)-[r:HopNestedEdge]->(e:HopTemplate) WHERE id(s) = $anchor AND ((e.requiresmanagerapproval = false AND e.schemaversion > 1 AND e.authorizedsignatures = 0 AND e.authenticationenabled = true) OR (e.requiresmanagerapproval = false AND e.schemaversion = 1 AND e.authenticationenabled = true)) RETURN r, e",
+      "node_params": {"anchor": "hop-out-root"},
+      "expected": {"row_count": 64},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "bound_start_id", "terminal_predicate": "nested_property_disjunction", "edge_kinds": ["HopNestedEdge"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["HOP-07", "nested-or", "branch-local", "selectivity"]
+    },
+    {
+      "name": "HOP-09_dense_two_sided_ID_sets",
+      "dataset": "generated_hops",
+      "category": "standalone_one_hop",
+      "cypher": "MATCH (s)-[r:HopSetEdge]->(e) WHERE id(s) IN $start_ids AND id(e) IN $end_ids RETURN r, e",
+      "generated_node_list_params": {
+        "start_ids": {"prefix": "hop-set-start", "count": 32},
+        "end_ids": {"prefix": "hop-set-end", "count": 32}
+      },
+      "expected": {"row_count": 1024},
+      "observes": {"paths": false, "nodes": true, "relationships": true, "properties": true},
+      "shape": {"root_predicate": "start_id_list", "terminal_predicate": "end_id_list", "edge_kinds": ["HopSetEdge"], "path_materialization_required": false},
+      "candidate_modes": ["postgres_sql", "neo4j"],
+      "tags": ["HOP-09", "dense", "two-sided-ids", "32x32"]
+    }
+  ]
+}

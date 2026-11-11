@@ -293,6 +293,7 @@ func removeKnownDumpCheckpointTemps(outputDir string, value dumpCheckpoint) erro
 	return nil
 }
 
+// validateDumpCheckpointFiles checks that checkpoint shard files match the metadata required to resume an export.
 func validateDumpCheckpointFiles(outputDir string, value dumpCheckpoint) error {
 	expected := map[string]struct{}{dumpCheckpointFileName: {}}
 	for _, graphEntry := range value.Manifest.Graphs {
@@ -313,9 +314,9 @@ func validateDumpCheckpointFiles(outputDir string, value dumpCheckpoint) error {
 		if entry.IsDir() {
 			return nil
 		}
-		relativePath, err := filepath.Rel(outputDir, filePath)
-		if err != nil {
-			return err
+		relativePath, pathErr := filepath.Rel(outputDir, filePath)
+		if pathErr != nil {
+			return pathErr
 		}
 		relativePath = filepath.ToSlash(relativePath)
 		if _, found := expected[relativePath]; !found {
@@ -364,7 +365,7 @@ func verifyDumpCheckpointFile(outputDir string, fileEntry FileManifest) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("dump checkpoint fragment %q is not a regular file", fileEntry.Path)
 	}
-	return verifyChecksum(absolutePath, fileEntry.SHA256, fileEntry.CompressedBytes)
+	return verifyFragmentChecksum(outputDir, fileEntry)
 }
 
 func verifyDumpCheckpointParquetFile(outputDir, relativePath string) error {
@@ -412,6 +413,8 @@ func checkpointActionCounts(files []FileManifest, phase Phase) scrubActionCounts
 				result.redact += count
 			case actionShiftTimestamp:
 				result.shift += count
+			case actionScrubNested:
+				result.nested += count
 			}
 		}
 	}

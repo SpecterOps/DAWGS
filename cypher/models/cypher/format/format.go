@@ -13,6 +13,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// strippedLiteral replaces literal values when emitting a privacy-preserving Cypher query.
 const strippedLiteral = "$STRIPPED"
 
 func writeJoinedKinds(output io.Writer, delimiter string, kinds graph.Kinds) error {
@@ -23,7 +24,7 @@ func writeJoinedKinds(output io.Writer, delimiter string, kinds graph.Kinds) err
 			}
 		}
 
-		if _, err := io.WriteString(output, kind.String()); err != nil {
+		if _, err := io.WriteString(output, cypher.EscapeKindName(kind.String())); err != nil {
 			return err
 		}
 	}
@@ -318,6 +319,7 @@ func (s Emitter) formatWhere(output io.Writer, whereClause *cypher.Where) error 
 	return nil
 }
 
+// formatMapLiteral renders a Cypher map literal with each property key escaped as needed.
 func (s Emitter) formatMapLiteral(output io.Writer, mapLiteral cypher.MapLiteral) error {
 	if _, err := io.WriteString(output, "{"); err != nil {
 		return err
@@ -431,12 +433,12 @@ func (s Emitter) formatLiteral(output io.Writer, literal *cypher.Literal) error 
 		}
 
 	case float32:
-		if _, err := io.WriteString(output, strconv.FormatFloat(float64(typedLiteral), 'f', -1, 64)); err != nil {
+		if _, err := io.WriteString(output, cypher.FormatFloatLiteral(float64(typedLiteral))); err != nil {
 			return err
 		}
 
 	case float64:
-		if _, err := io.WriteString(output, strconv.FormatFloat(typedLiteral, 'f', -1, 64)); err != nil {
+		if _, err := io.WriteString(output, cypher.FormatFloatLiteral(typedLiteral)); err != nil {
 			return err
 		}
 
@@ -447,6 +449,7 @@ func (s Emitter) formatLiteral(output io.Writer, literal *cypher.Literal) error 
 	return nil
 }
 
+// WriteExpression renders an expression and its nested operands as Cypher syntax.
 func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression) error {
 	switch typedExpression := expression.(type) {
 	case *cypher.ProjectionItem:
@@ -569,6 +572,11 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 				}
 			}
 
+			// XOR binds less tightly than AND in Cypher. Preserve the AST
+			// grouping without changing the builder's exported return type.
+			if _, isXor := joinedExpression.(*cypher.ExclusiveDisjunction); isXor {
+				joinedExpression = &cypher.Parenthetical{Expression: joinedExpression}
+			}
 			if err := s.WriteExpression(output, joinedExpression); err != nil {
 				return err
 			}
@@ -643,8 +651,10 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 		}
 
 	case *cypher.FunctionInvocation:
-		if _, err := io.WriteString(output, strings.Join(typedExpression.Namespace, ".")); err != nil {
-			return err
+		if len(typedExpression.Namespace) > 0 {
+			if _, err := io.WriteString(output, strings.Join(typedExpression.Namespace, ".")+"."); err != nil {
+				return err
+			}
 		}
 
 		if _, err := io.WriteString(output, typedExpression.Name); err != nil {
@@ -682,7 +692,7 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 			return err
 		}
 
-		if _, err := io.WriteString(output, typedExpression.String()); err != nil {
+		if _, err := io.WriteString(output, cypher.EscapeKindName(typedExpression.String())); err != nil {
 			return err
 		}
 
@@ -704,7 +714,11 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 
 		for idx, matcher := range typedExpression.Kinds {
 			if idx > 0 {
-				if _, err := io.WriteString(output, " or "); err != nil {
+				operator := " or "
+				if typedExpression.IsExclusive {
+					operator = " and "
+				}
+				if _, err := io.WriteString(output, operator); err != nil {
 					return err
 				}
 			}
@@ -717,7 +731,7 @@ func (s Emitter) WriteExpression(output io.Writer, expression cypher.Expression)
 				return err
 			}
 
-			if _, err := io.WriteString(output, matcher.String()); err != nil {
+			if _, err := io.WriteString(output, cypher.EscapeKindName(matcher.String())); err != nil {
 				return err
 			}
 		}
@@ -898,8 +912,9 @@ func (s Emitter) formatSet(output io.Writer, set *cypher.Set) error {
 	return nil
 }
 
-func (s Emitter) formatDelete(output io.Writer, delete *cypher.Delete) error {
-	if delete.Detach {
+// formatDelete emits a DELETE clause while retaining its detached form and expression order.
+func (s Emitter) formatDelete(output io.Writer, deleteClause *cypher.Delete) error {
+	if deleteClause.Detach {
 		if _, err := io.WriteString(output, "detach delete "); err != nil {
 			return err
 		}
@@ -907,7 +922,7 @@ func (s Emitter) formatDelete(output io.Writer, delete *cypher.Delete) error {
 		return err
 	}
 
-	for idx, expression := range delete.Expressions {
+	for idx, expression := range deleteClause.Expressions {
 		if idx > 0 {
 			if _, err := io.WriteString(output, ", "); err != nil {
 				return err

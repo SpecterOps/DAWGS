@@ -48,7 +48,7 @@ func (s *Translator) createSourceFromClauses(previousFrame *Frame) []pgsql.FromC
 }
 
 func bindingProjectionExpression(binding *BoundIdentifier, referenceFrame *Frame) pgsql.Expression {
-	if referenceFrame != nil && !referenceFrame.Synthetic {
+	if referenceFrame != nil && !referenceFrame.Synthetic && binding.LastProjection != nil {
 		return pgsql.CompoundIdentifier{referenceFrame.Binding.Identifier, binding.Identifier}
 	}
 
@@ -97,10 +97,16 @@ func (s *Translator) buildCreateSourceFrame(idAlias pgsql.Identifier, sequenceTa
 	if currentFrame != nil {
 		carried = currentFrame.Known()
 	}
+	// The multipart frame names this part's eventual output CTE. Until a
+	// clause materializes a source, its input is the preceding query part.
+	inputFrame := currentFrame
+	if inputFrame == s.query.CurrentPart().Frame && inputFrame != nil {
+		inputFrame = inputFrame.Previous
+	}
 
 	// Reserve the database ID before the INSERT CTE runs. This lets later edge
 	// creations in the same Cypher CREATE clause refer to newly-created nodes.
-	sourceProjection, err := buildCarryProjection(s.scope, carried, currentFrame)
+	sourceProjection, err := buildCarryProjection(s.scope, carried, inputFrame)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,7 +126,7 @@ func (s *Translator) buildCreateSourceFrame(idAlias pgsql.Identifier, sequenceTa
 
 	s.addCTE(sourceFrame, pgsql.Select{
 		Projection: sourceProjection,
-		From:       s.createSourceFromClauses(currentFrame),
+		From:       s.createSourceFromClauses(inputFrame),
 	})
 
 	for _, identifier := range carried.Slice() {
@@ -132,8 +138,11 @@ func (s *Translator) buildCreateSourceFrame(idAlias pgsql.Identifier, sequenceTa
 	return sourceFrame, carried, nil
 }
 
+// buildCreateProjectionFrame materializes the row stream and entity bindings needed by a CREATE stage.
 func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame, carried *pgsql.IdentifierSet, createdBinding *BoundIdentifier, idAlias pgsql.Identifier) (*Frame, error) {
-	projection, err := buildCarryProjection(s.scope, carried, sourceFrame)
+	carriedBindings := carried
+
+	projection, err := buildCarryProjection(s.scope, carriedBindings, sourceFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -150,9 +159,9 @@ func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame,
 
 	// Join the source and insert CTEs by the preallocated ID so row cardinality
 	// from the incoming pipeline is preserved after RETURNING materializes the composite.
-	carried = carried.Copy().Add(createdBinding.Identifier)
-	projectFrame.Visible = carried.Copy()
-	projectFrame.Exported = carried.Copy()
+	carriedBindings = carriedBindings.Copy().Add(createdBinding.Identifier)
+	projectFrame.Visible = carriedBindings.Copy()
+	projectFrame.Exported = carriedBindings.Copy()
 
 	s.addCTE(projectFrame, pgsql.Select{
 		Projection: projection,
@@ -167,7 +176,7 @@ func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame,
 		),
 	})
 
-	for _, identifier := range carried.Slice() {
+	for _, identifier := range carriedBindings.Slice() {
 		if binding, bound := s.scope.Lookup(identifier); bound {
 			binding.MaterializedBy(projectFrame)
 		}
@@ -292,6 +301,7 @@ func (s *Translator) buildKindIDsArray(nodeCreate *NodeCreate) (pgsql.SelectItem
 	return arrayLiteral, nil
 }
 
+// buildPropertiesObject assembles the PostgreSQL JSON object used to store created entity properties.
 func (s *Translator) buildPropertiesObject(properties TranslatedProperties) (pgsql.SelectItem, error) {
 	if properties.Parameter != nil {
 		if err := RewriteFrameBindings(s.scope, properties.Parameter); err != nil {
@@ -318,6 +328,12 @@ func (s *Translator) buildPropertiesObject(properties TranslatedProperties) (pgs
 
 	for _, key := range keys {
 		value := properties.Map[key]
+		if lookup, ok := expressionToPropertyLookupBinaryExpression(unwrapParenthetical(value)); ok {
+			// CREATE consumes the stored JSON value, including its scalar type.
+			jsonLookup := *lookup
+			jsonLookup.Operator = pgsql.OperatorJSONField
+			value = &jsonLookup
+		}
 		if err := RewriteFrameBindings(s.scope, value); err != nil {
 			return nil, err
 		}

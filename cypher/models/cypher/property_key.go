@@ -6,20 +6,25 @@ import (
 	"unicode"
 )
 
+// ErrEmptyPropertyKeyName reports that a property-key token decoded to an empty name.
 var ErrEmptyPropertyKeyName = errors.New("property key name must not be empty")
 
+// isCypherIDStart reports whether char may begin an unescaped Cypher identifier.
 func isCypherIDStart(char rune) bool {
 	return unicode.IsLetter(char) || unicode.In(char, unicode.Nl, unicode.Other_ID_Start)
 }
 
+// isCypherIDContinue reports whether char may follow the first rune of an unescaped Cypher identifier.
 func isCypherIDContinue(char rune) bool {
 	return isCypherIDStart(char) || unicode.In(char, unicode.Mn, unicode.Mc, unicode.Nd, unicode.Pc, unicode.Other_ID_Continue)
 }
 
+// isCypherSymbolStart reports whether char may begin an unescaped symbolic name, including connector punctuation.
 func isCypherSymbolStart(char rune) bool {
 	return isCypherIDStart(char) || unicode.In(char, unicode.Pc)
 }
 
+// isCypherSymbolPart reports whether char may appear after the first rune of an unescaped symbolic name.
 func isCypherSymbolPart(char rune) bool {
 	return isCypherIDContinue(char) || unicode.In(char, unicode.Sc)
 }
@@ -48,6 +53,7 @@ func CanEmitBarePropertyKeyName(name string) bool {
 	return true
 }
 
+// ValidatePropertyKeyName rejects empty decoded property-key names.
 func ValidatePropertyKeyName(name string) error {
 	if name == "" {
 		return ErrEmptyPropertyKeyName

@@ -1,0 +1,391 @@
+{
+  "families": [
+    {
+      "name": "leading optional on empty graph",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": []
+      },
+      "variants": [
+        {
+          "name": "empty graph produces one null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) RETURN n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph preserves all relationship bindings",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingNode)-[r:LeadingLink]->(b:LeadingTarget) RETURN a,r,b"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "chained optionals preserve the null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingNode) OPTIONAL MATCH (a)-[r:LeadingLink]->(b:LeadingTarget) RETURN a,r,b"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "wildcard hides input identity",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) RETURN *"
+          },
+          "assert": {
+            "keys": [
+              "n"
+            ],
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "aggregate counts null row but not null binding",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) RETURN count(*) AS rows, count(n) AS nodes"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "unwind duplicates null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) UNWIND [1,1] AS x RETURN n,x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                1
+              ],
+              [
+                null,
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "create from null row with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) CREATE (m:LeadingCreated {name:'made'}) RETURN m.name"
+          },
+          "assert": {
+            "scalar_values": [
+              "made"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (m:LeadingCreated) RETURN m.name",
+              "assert": {
+                "scalar_values": [
+                  "made"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create from null row without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) CREATE (m:LeadingCreated {name:'made'})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (m:LeadingCreated) RETURN m.name",
+              "assert": {
+                "scalar_values": [
+                  "made"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "leading optional on populated graph",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "LeadingNode"
+            ],
+            "properties": {
+              "name": "a",
+              "selected": false
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "LeadingNode"
+            ],
+            "properties": {
+              "name": "b",
+              "selected": false
+            }
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "target"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "a",
+            "end_id": "target",
+            "kind": "LeadingLink"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "matching nodes have no extra null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) RETURN n.name"
+          },
+          "assert": {
+            "scalar_values": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        {
+          "name": "rejecting predicate nulls node and property",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) WHERE n.name='missing' RETURN n,n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "unmatched relationship nulls every binding",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingNode)-[r:LeadingLink]->(b:LeadingTarget) WHERE a.name='b' RETURN a,r,b"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "matched relationship returns one row",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingNode)-[r:LeadingLink]->(b:LeadingTarget) RETURN a.name,b.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "a",
+                "target"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "comma patterns null the whole clause",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode),(m:LeadingTarget {name:'missing'}) RETURN n,m"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "null binding survives another optional",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode {name:'missing'}) OPTIONAL MATCH (n)-[r:LeadingLink]->(m:LeadingTarget) RETURN n,r,m"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "null binding cannot satisfy a mandatory traversal",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode {name:'missing'}) MATCH (n)-[r:LeadingLink]->(m) RETURN m"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "unmatched update preserves fixture",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) WHERE n.name='missing' SET n.selected=true RETURN n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "LeadingNode"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "selected": false
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "LeadingNode"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "selected": false
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:LeadingLink]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        },
+        {
+          "name": "matched update changes only selected node",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingNode) WHERE n.name='a' SET n.selected=true RETURN n.name"
+          },
+          "assert": {
+            "scalar_values": [
+              "a"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "a",
+                    "kinds": [
+                      "LeadingNode"
+                    ],
+                    "props": {
+                      "name": "a",
+                      "selected": true
+                    }
+                  },
+                  {
+                    "id": "b",
+                    "kinds": [
+                      "LeadingNode"
+                    ],
+                    "props": {
+                      "name": "b",
+                      "selected": false
+                    }
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "target"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:LeadingLink]->() RETURN count(r)",
+              "assert": {
+                "exact_int": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

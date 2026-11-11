@@ -60,6 +60,7 @@ func listConnectionsCmd() CommandDesc {
 	}
 }
 
+// openCmd defines the shell command that opens a configured database connection.
 func openCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("open", flag.ContinueOnError)
 
@@ -89,13 +90,13 @@ func openCmd() CommandDesc {
 				return fmt.Errorf("could not parse flags: %w", err)
 			}
 
-			fields = flagSet.Args()
-			if len(fields) < 2 {
+			positionalArgs := flagSet.Args()
+			if len(positionalArgs) < 2 {
 				return fmt.Errorf("invalid usage: open [flags] <name> <connection str>")
 			}
 
-			name := fields[0]
-			connStr := fields[1]
+			name := positionalArgs[0]
+			connStr := positionalArgs[1]
 
 			if strings.TrimSpace(driverOverride) != "" {
 				driverOverride = strings.ToLower(strings.TrimSpace(driverOverride))
@@ -118,6 +119,7 @@ func openCmd() CommandDesc {
 const (
 	// defaultConnectionName is the connection name used by connect-local when none is supplied.
 	defaultConnectionName = "local"
+
 	// defaultPGConnectionString is the docker-compose Postgres connection string using the repo's default dev credentials.
 	defaultPGConnectionString = "postgres://dawgs:weneedbetterpasswords@localhost:65432/dawgs?sslmode=disable"
 )

@@ -1,0 +1,92 @@
+package pg
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+// unsupportedImportCreateCases lists unsupported import and CREATE forms with their expected diagnostics.
+func unsupportedImportCreateCases() []struct {
+	// source is the query text supplied to the parser or rewriter.
+	source string
+	// message is the diagnostic substring expected for the rejected query.
+	message string
+} {
+	return []struct {
+		// source is the query text supplied to the parser or rewriter.
+		source string
+		// message is the diagnostic substring expected for the rejected query.
+		message string
+	}{
+		{
+			source:  "MATCH (a), (b) CREATE UNIQUE (a)-[:RejectedEdge]->(b)",
+			message: "CREATE UNIQUE is not supported",
+		},
+		{
+			source:  "CREATE UNIQUE (:PGV2IntegrationNode {name: 'rejected'})",
+			message: "CREATE UNIQUE is not supported",
+		},
+		{
+			source:  "MATCH (a), (b) SET a.name = 'changed' CREATE UNIQUE (a)-[:RejectedEdge]->(b) RETURN a",
+			message: "CREATE UNIQUE is not supported",
+		},
+		{
+			source:  "CREATE (:PGV2IntegrationNode {name: 'before'}) WITH 1 AS x CREATE UNIQUE (:PGV2IntegrationNode {name: 'after'})",
+			message: "CREATE UNIQUE is not supported",
+		},
+		{
+			source:  "MATCH (a), (b) CREATE UNIQUE (a)-[:RejectedEdge]->(b) WITH a RETURN a",
+			message: "CREATE UNIQUE is not supported",
+		},
+		{
+			source:  "LOAD CSV FROM 'file:///missing.csv' AS row MATCH (n) RETURN count(*) AS c",
+			message: "LOAD CSV is not supported",
+		},
+		{
+			source:  "LOAD CSV WITH HEADERS FROM 'file:///missing.csv' AS row FIELDTERMINATOR ';' RETURN row",
+			message: "LOAD CSV is not supported",
+		},
+		{
+			source:  "LOAD CSV FROM $url AS row WITH row RETURN row",
+			message: "LOAD CSV is not supported",
+		},
+		{
+			source:  "LOAD CSV FROM $url AS row CREATE (:PGV2IntegrationNode {name: 'rejected'})",
+			message: "LOAD CSV is not supported",
+		},
+		{
+			source:  "LOAD CSV FROM $url AS row MATCH (n) SET n.name = 'changed'",
+			message: "LOAD CSV is not supported",
+		},
+		{
+			source:  "LOAD CSV FROM $url AS row MATCH (n) DETACH DELETE n",
+			message: "LOAD CSV is not supported",
+		},
+		{
+			source:  "CREATE (:PGV2IntegrationNode {name: 'before'}) WITH 1 AS x LOAD CSV FROM $url AS row RETURN x",
+			message: "LOAD CSV is not supported",
+		},
+	}
+}
+
+func TestCompileTextRejectsUnsupportedImportAndCreate(t *testing.T) {
+	for _, optimized := range []bool{true, false} {
+		t.Run(fmt.Sprint(optimized), func(t *testing.T) {
+			setOptimizedTranslationForTest(t, optimized)
+			manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 4})
+			for _, tc := range unsupportedImportCreateCases() {
+				t.Run(tc.source, func(t *testing.T) {
+					for range 2 {
+						sql, _, err := manager.compileText(context.Background(), tc.source, map[string]any{"url": "file:///missing.csv"}, 7)
+						require.ErrorContains(t, err, tc.message)
+						require.NotContains(t, err.Error(), "panic")
+						require.Empty(t, sql)
+					}
+				})
+			}
+		})
+	}
+}

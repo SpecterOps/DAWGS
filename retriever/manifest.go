@@ -67,7 +67,7 @@ func VerifyManifestFiles(inputDir string, value Manifest) error {
 func verifyManifestFiles(inputDir string, value Manifest) error {
 	for _, graphEntry := range value.Graphs {
 		for _, fileEntry := range graphEntry.Files {
-			if err := verifyChecksum(filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path)), fileEntry.SHA256, fileEntry.CompressedBytes); err != nil {
+			if err := verifyFragmentChecksum(inputDir, fileEntry); err != nil {
 				return err
 			}
 		}

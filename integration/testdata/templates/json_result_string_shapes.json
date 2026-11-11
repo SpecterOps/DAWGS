@@ -1,0 +1,691 @@
+{
+  "families": [
+    {
+      "name": "JSON-like string mutation results",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "target", "kinds": ["JSONText"], "properties": {"role": "target", "value": "original", "keep": "untouched"}},
+          {"id": "decoy", "kinds": ["JSONText"], "properties": {"role": "decoy", "value": "original", "keep": "untouched"}}
+        ],
+        "edges": [
+          {
+            "start_id": "target",
+            "end_id": "decoy",
+            "kind": "JSONTextEdge",
+            "properties": {
+              "role": "target",
+              "value": "original",
+              "keep": "untouched"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "SET node array",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": "[1, 2]"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "[1, 2]"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "[1, 2]", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET node object",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": "{\"k\":\"v\"}"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "{\"k\":\"v\"}"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "{\"k\":\"v\"}", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET node quoted",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": "\"q\""
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "\"q\""
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "\"q\"", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET node whitespace",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": " \t[1, 2]\n"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                " \t[1, 2]\n"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": " \t[1, 2]\n", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET node empty array",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": "[]"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "[]"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "[]", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET node empty object",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": "{}"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "{}"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "{}", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET node quoted empty",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": "\"\""
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "\"\""
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "\"\"", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET node escape text",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value RETURN n.value AS value"
+          },
+          "params": {
+            "value": "\"\\u0041\""
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "\"\\u0041\""
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "\"\\u0041\"", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET relationship array",
+          "vars": {
+            "query": "MATCH ()-[r:JSONTextEdge]->() SET r.value = $value RETURN r.value AS value"
+          },
+          "params": {
+            "value": "[1, 2]"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "[1, 2]"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "original", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "[1, 2]", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE array",
+          "vars": {
+            "query": "CREATE (n:JSONText {role: 'created', value: $value}) RETURN n.value AS value"
+          },
+          "params": {
+            "value": "[1, 2]"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "[1, 2]"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText {role:'created'}) RETURN n.value AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "[1, 2]"
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH (n:JSONText) RETURN count(*)",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n:JSONText) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "original", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WITH after SET array",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value WITH n.value AS value RETURN value"
+          },
+          "params": {
+            "value": "[1, 2]"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "[1, 2]"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "[1, 2]", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET relationship object",
+          "vars": {
+            "query": "MATCH ()-[r:JSONTextEdge]->() SET r.value = $value RETURN r.value AS value"
+          },
+          "params": {
+            "value": "{\"k\":\"v\"}"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "{\"k\":\"v\"}"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "original", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "{\"k\":\"v\"}", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE object",
+          "vars": {
+            "query": "CREATE (n:JSONText {role: 'created', value: $value}) RETURN n.value AS value"
+          },
+          "params": {
+            "value": "{\"k\":\"v\"}"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "{\"k\":\"v\"}"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText {role:'created'}) RETURN n.value AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "{\"k\":\"v\"}"
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH (n:JSONText) RETURN count(*)",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n:JSONText) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "original", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WITH after SET object",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value WITH n.value AS value RETURN value"
+          },
+          "params": {
+            "value": "{\"k\":\"v\"}"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "{\"k\":\"v\"}"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "{\"k\":\"v\"}", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET relationship quoted",
+          "vars": {
+            "query": "MATCH ()-[r:JSONTextEdge]->() SET r.value = $value RETURN r.value AS value"
+          },
+          "params": {
+            "value": "\"q\""
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "\"q\""
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "original", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "\"q\"", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE quoted",
+          "vars": {
+            "query": "CREATE (n:JSONText {role: 'created', value: $value}) RETURN n.value AS value"
+          },
+          "params": {
+            "value": "\"q\""
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "\"q\""
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText {role:'created'}) RETURN n.value AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    "\"q\""
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH (n:JSONText) RETURN count(*)",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n:JSONText) WHERE n.role <> 'created' RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "original", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WITH after SET quoted",
+          "vars": {
+            "query": "MATCH (n:JSONText {role:'target'}) SET n.value = $value WITH n.value AS value RETURN value"
+          },
+          "params": {
+            "value": "\"q\""
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "\"q\""
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:JSONText) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "target", "kinds": ["JSONText"], "props": {"role": "target", "value": "\"q\"", "keep": "untouched"}},
+                  {"id": "decoy", "kinds": ["JSONText"], "props": {"role": "decoy", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r:JSONTextEdge]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "target", "end": "decoy", "kind": "JSONTextEdge", "props": {"role": "target", "value": "original", "keep": "untouched"}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

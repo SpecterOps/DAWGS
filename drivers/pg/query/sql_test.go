@@ -33,3 +33,12 @@ func TestSchemaUpIndexNamesAvoidReindexArtifactSuffix(t *testing.T) {
 		require.NotRegexp(t, reindexArtifactSuffixPattern, name, "schema_up.sql index %q uses a reindex artifact suffix", name)
 	}
 }
+
+func TestNodePartitionDeleteTrigger(t *testing.T) {
+	require.Equal(t, "create table node_42 partition of node for values in (42)",
+		formatCreatePartitionTable("node_42", "node", 42))
+	require.Contains(t, formatCreateNodeDeleteTrigger("node_42"),
+		"create trigger delete_node_edges after delete on node_42 referencing old table as deleted_nodes")
+	require.Equal(t, "create table edge_42 partition of edge for values in (42)",
+		formatCreatePartitionTable("edge_42", "edge", 42))
+}

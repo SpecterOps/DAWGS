@@ -7,13 +7,14 @@ import (
 
 const retrieverProgressEntityInterval int64 = DefaultProgressInterval
 
+// retrieverInitialProgressAtInterval selects the first intermediate entity checkpoint or disables it for small workloads.
 func retrieverInitialProgressAtInterval(planned int64, interval int64) int64 {
-	interval = normalizedProgressInterval(interval)
-	if planned <= interval {
+	effectiveInterval := normalizedProgressInterval(interval)
+	if planned <= effectiveInterval {
 		return 0
 	}
 
-	return interval
+	return effectiveInterval
 }
 
 func retrieverBatchLimit(remaining int64, batchSize int) int {
@@ -66,17 +67,20 @@ func logRetrieverEntityProgressInterval(message string, graphName string, phaseN
 	return retrieverNextProgressAtInterval(processed, planned, nextProgressAt, interval)
 }
 
+// retrieverNextProgressAtInterval advances the entity checkpoint beyond completed work and disables it at the final boundary.
 func retrieverNextProgressAtInterval(processed int64, planned int64, nextProgressAt int64, interval int64) int64 {
-	interval = normalizedProgressInterval(interval)
-	if nextProgressAt <= processed {
-		nextProgressAt += ((processed-nextProgressAt)/interval + 1) * interval
+	nextCheckpoint := nextProgressAt
+
+	effectiveInterval := normalizedProgressInterval(interval)
+	if nextCheckpoint <= processed {
+		nextCheckpoint += ((processed-nextCheckpoint)/effectiveInterval + 1) * effectiveInterval
 	}
 
-	if nextProgressAt >= planned {
+	if nextCheckpoint >= planned {
 		return 0
 	}
 
-	return nextProgressAt
+	return nextCheckpoint
 }
 
 func normalizedProgressInterval(interval int64) int64 {

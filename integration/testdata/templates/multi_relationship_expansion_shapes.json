@@ -1,0 +1,1095 @@
+{
+  "node_kinds": ["MultiExpansionAbsent"],
+  "families": [
+    {
+      "name": "Okta multi relationship bounded expansion",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "properties": {"name": "root", "selected": false}},
+          {"id": "a", "kinds": ["MultiExpansionNode"], "properties": {"name": "a", "selected": false}},
+          {"id": "b", "kinds": ["MultiExpansionNode"], "properties": {"name": "b", "selected": false}},
+          {"id": "target", "kinds": ["MultiExpansionNode"], "properties": {"name": "target", "selected": false}},
+          {"id": "third", "kinds": ["MultiExpansionNode"], "properties": {"name": "third", "selected": false}},
+          {"id": "fourth", "kinds": ["MultiExpansionNode"], "properties": {"name": "fourth", "selected": false}},
+          {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "properties": {"name": "wrong-first", "selected": false}},
+          {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "properties": {"name": "wrong-next", "selected": false}},
+          {"id": "reverse", "kinds": ["MultiExpansionNode"], "properties": {"name": "reverse", "selected": false}}
+        ],
+        "edges": [
+          {"start_id": "root", "end_id": "a", "kind": "Okta_MemberOf"},
+          {"start_id": "root", "end_id": "b", "kind": "Okta_HasRoleAssignment"},
+          {"start_id": "a", "end_id": "target", "kind": "Okta_MemberOf"},
+          {"start_id": "a", "end_id": "target", "kind": "Okta_HasRoleAssignment"},
+          {"start_id": "b", "end_id": "target", "kind": "Okta_MemberOf"},
+          {"start_id": "b", "end_id": "target", "kind": "Okta_HasRoleAssignment"},
+          {"start_id": "target", "end_id": "third", "kind": "Okta_MemberOf"},
+          {"start_id": "target", "end_id": "third", "kind": "Okta_HasRoleAssignment"},
+          {"start_id": "third", "end_id": "fourth", "kind": "Okta_MemberOf"},
+          {"start_id": "third", "end_id": "fourth", "kind": "Okta_HasRoleAssignment"},
+          {"start_id": "root", "end_id": "wrong-first", "kind": "MultiExpansionOther"},
+          {"start_id": "wrong-first", "end_id": "target", "kind": "Okta_MemberOf"},
+          {"start_id": "a", "end_id": "wrong-next", "kind": "MultiExpansionOther"},
+          {"start_id": "wrong-next", "end_id": "third", "kind": "Okta_HasRoleAssignment"},
+          {"start_id": "reverse", "end_id": "root", "kind": "Okta_MemberOf"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "outbound paths depth 2",
+          "vars": {"query": "MATCH p = (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target"]
+            ],
+            "path_edge_kinds": [
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"]
+            ],
+            "row_count": 6
+          }
+        },
+        {
+          "name": "inbound syntax depth 2",
+          "vars": {"query": "MATCH p = (t)<-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]-(s:MultiExpansionRoot {name: 'root'}) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["a", "root"],
+              ["target", "a", "root"],
+              ["target", "a", "root"],
+              ["b", "root"],
+              ["target", "b", "root"],
+              ["target", "b", "root"]
+            ],
+            "path_edge_kinds": [
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"]
+            ],
+            "row_count": 6
+          }
+        },
+        {
+          "name": "path count depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 6}
+        },
+        {
+          "name": "duplicate carried roots depth 2",
+          "vars": {"query": "UNWIND [1, 1] AS input MATCH (s:MultiExpansionRoot {name: 'root'}) WITH s MATCH p = (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target"],
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target"]
+            ],
+            "path_edge_kinds": [
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"]
+            ],
+            "row_count": 12
+          }
+        },
+        {
+          "name": "endpoint filter depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) WHERE t.name = 'third' RETURN count(*)"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "absent terminal depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'}) OPTIONAL MATCH (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t:MultiExpansionAbsent) RETURN count(t)"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "single type Okta_MemberOf depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf*1..2]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "single type Okta_HasRoleAssignment depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_HasRoleAssignment*1..2]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "SET depth 2 with RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) SET t.selected = true RETURN t"},
+          "assert": {
+            "node_ids": ["a", "target", "target", "b", "target", "target"],
+            "row_count": 6
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": false}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "Okta_MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET depth 2 without RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..2]->(t) SET t.selected = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": false}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "Okta_MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "outbound paths depth 3",
+          "vars": {"query": "MATCH p = (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"]
+            ],
+            "path_edge_kinds": [
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"]
+            ],
+            "row_count": 14
+          }
+        },
+        {
+          "name": "inbound syntax depth 3",
+          "vars": {"query": "MATCH p = (t)<-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]-(s:MultiExpansionRoot {name: 'root'}) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["a", "root"],
+              ["target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["b", "root"],
+              ["target", "b", "root"],
+              ["third", "target", "b", "root"],
+              ["third", "target", "b", "root"],
+              ["target", "b", "root"],
+              ["third", "target", "b", "root"],
+              ["third", "target", "b", "root"]
+            ],
+            "path_edge_kinds": [
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"]
+            ],
+            "row_count": 14
+          }
+        },
+        {
+          "name": "path count depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 14}
+        },
+        {
+          "name": "duplicate carried roots depth 3",
+          "vars": {"query": "UNWIND [1, 1] AS input MATCH (s:MultiExpansionRoot {name: 'root'}) WITH s MATCH p = (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"]
+            ],
+            "path_edge_kinds": [
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"]
+            ],
+            "row_count": 28
+          }
+        },
+        {
+          "name": "endpoint filter depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) WHERE t.name = 'third' RETURN count(*)"},
+          "assert": {"exact_int": 8}
+        },
+        {
+          "name": "absent terminal depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'}) OPTIONAL MATCH (s)-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t:MultiExpansionAbsent) RETURN count(t)"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "single type Okta_MemberOf depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf*1..3]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 3}
+        },
+        {
+          "name": "single type Okta_HasRoleAssignment depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_HasRoleAssignment*1..3]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 3}
+        },
+        {
+          "name": "SET depth 3 with RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) SET t.selected = true RETURN t"},
+          "assert": {
+            "node_ids": ["a", "target", "third", "third", "target", "third", "third", "b", "target", "third", "third", "target", "third", "third"],
+            "row_count": 14
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": true}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "Okta_MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET depth 3 without RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) SET t.selected = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": true}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "Okta_MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "Okta_HasRoleAssignment", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "Okta_MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Okta cycles and self loops",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "properties": {"name": "root", "selected": false}},
+          {"id": "a", "kinds": ["MultiExpansionNode"], "properties": {"name": "a", "selected": false}}
+        ],
+        "edges": [
+          {"start_id": "root", "end_id": "a", "kind": "Okta_MemberOf"},
+          {"start_id": "a", "end_id": "a", "kind": "Okta_MemberOf"},
+          {"start_id": "a", "end_id": "root", "kind": "Okta_HasRoleAssignment"},
+          {"start_id": "root", "end_id": "root", "kind": "Okta_HasRoleAssignment"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "three hop trails preserve node revisits and reject relationship reuse",
+          "vars": {"query": "MATCH p = (s:MultiExpansionRoot {name: 'root'})-[:Okta_MemberOf|Okta_HasRoleAssignment*1..3]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "a"],
+              ["root", "a", "a", "root"],
+              ["root", "a", "root"],
+              ["root", "a", "root", "root"],
+              ["root", "root"],
+              ["root", "root", "a"],
+              ["root", "root", "a", "a"],
+              ["root", "root", "a", "root"]
+            ],
+            "path_edge_kinds": [
+              ["Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_MemberOf", "Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment"],
+              ["Okta_MemberOf", "Okta_HasRoleAssignment", "Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_MemberOf"],
+              ["Okta_HasRoleAssignment", "Okta_MemberOf", "Okta_HasRoleAssignment"]
+            ],
+            "row_count": 9
+          }
+        }
+      ]
+    },
+    {
+      "name": "AD multi relationship bounded expansion",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "properties": {"name": "root", "selected": false}},
+          {"id": "a", "kinds": ["MultiExpansionNode"], "properties": {"name": "a", "selected": false}},
+          {"id": "b", "kinds": ["MultiExpansionNode"], "properties": {"name": "b", "selected": false}},
+          {"id": "target", "kinds": ["MultiExpansionNode"], "properties": {"name": "target", "selected": false}},
+          {"id": "third", "kinds": ["MultiExpansionNode"], "properties": {"name": "third", "selected": false}},
+          {"id": "fourth", "kinds": ["MultiExpansionNode"], "properties": {"name": "fourth", "selected": false}},
+          {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "properties": {"name": "wrong-first", "selected": false}},
+          {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "properties": {"name": "wrong-next", "selected": false}},
+          {"id": "reverse", "kinds": ["MultiExpansionNode"], "properties": {"name": "reverse", "selected": false}}
+        ],
+        "edges": [
+          {"start_id": "root", "end_id": "a", "kind": "MemberOf"},
+          {"start_id": "root", "end_id": "b", "kind": "AdminTo"},
+          {"start_id": "a", "end_id": "target", "kind": "MemberOf"},
+          {"start_id": "a", "end_id": "target", "kind": "AdminTo"},
+          {"start_id": "b", "end_id": "target", "kind": "MemberOf"},
+          {"start_id": "b", "end_id": "target", "kind": "AdminTo"},
+          {"start_id": "target", "end_id": "third", "kind": "MemberOf"},
+          {"start_id": "target", "end_id": "third", "kind": "AdminTo"},
+          {"start_id": "third", "end_id": "fourth", "kind": "MemberOf"},
+          {"start_id": "third", "end_id": "fourth", "kind": "AdminTo"},
+          {"start_id": "root", "end_id": "wrong-first", "kind": "MultiExpansionOther"},
+          {"start_id": "wrong-first", "end_id": "target", "kind": "MemberOf"},
+          {"start_id": "a", "end_id": "wrong-next", "kind": "MultiExpansionOther"},
+          {"start_id": "wrong-next", "end_id": "third", "kind": "AdminTo"},
+          {"start_id": "reverse", "end_id": "root", "kind": "MemberOf"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "outbound paths depth 2",
+          "vars": {"query": "MATCH p = (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..2]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target"]
+            ],
+            "path_edge_kinds": [
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "AdminTo"],
+              ["AdminTo"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo", "AdminTo"]
+            ],
+            "row_count": 6
+          }
+        },
+        {
+          "name": "inbound syntax depth 2",
+          "vars": {"query": "MATCH p = (t)<-[:MemberOf|AdminTo*1..2]-(s:MultiExpansionRoot {name: 'root'}) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["a", "root"],
+              ["target", "a", "root"],
+              ["target", "a", "root"],
+              ["b", "root"],
+              ["target", "b", "root"],
+              ["target", "b", "root"]
+            ],
+            "path_edge_kinds": [
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo"],
+              ["MemberOf", "AdminTo"],
+              ["AdminTo", "AdminTo"]
+            ],
+            "row_count": 6
+          }
+        },
+        {
+          "name": "path count depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..2]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 6}
+        },
+        {
+          "name": "duplicate carried roots depth 2",
+          "vars": {"query": "UNWIND [1, 1] AS input MATCH (s:MultiExpansionRoot {name: 'root'}) WITH s MATCH p = (s)-[:MemberOf|AdminTo*1..2]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target"],
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target"]
+            ],
+            "path_edge_kinds": [
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "AdminTo"],
+              ["AdminTo"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo", "AdminTo"],
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "AdminTo"],
+              ["AdminTo"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo", "AdminTo"]
+            ],
+            "row_count": 12
+          }
+        },
+        {
+          "name": "endpoint filter depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..2]->(t) WHERE t.name = 'third' RETURN count(*)"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "absent terminal depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'}) OPTIONAL MATCH (s)-[:MemberOf|AdminTo*1..2]->(t:MultiExpansionAbsent) RETURN count(t)"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "single type MemberOf depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf*1..2]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "single type AdminTo depth 2",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:AdminTo*1..2]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 2}
+        },
+        {
+          "name": "SET depth 2 with RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..2]->(t) SET t.selected = true RETURN t"},
+          "assert": {
+            "node_ids": ["a", "target", "target", "b", "target", "target"],
+            "row_count": 6
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": false}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "AdminTo", "props": {}},
+                  {"start": "a", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "b", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "target", "end": "third", "kind": "MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "AdminTo", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET depth 2 without RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..2]->(t) SET t.selected = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": false}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "AdminTo", "props": {}},
+                  {"start": "a", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "b", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "target", "end": "third", "kind": "MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "AdminTo", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "outbound paths depth 3",
+          "vars": {"query": "MATCH p = (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..3]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"]
+            ],
+            "path_edge_kinds": [
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo", "MemberOf"],
+              ["MemberOf", "AdminTo", "AdminTo"],
+              ["AdminTo"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo", "MemberOf", "MemberOf"],
+              ["AdminTo", "MemberOf", "AdminTo"],
+              ["AdminTo", "AdminTo"],
+              ["AdminTo", "AdminTo", "MemberOf"],
+              ["AdminTo", "AdminTo", "AdminTo"]
+            ],
+            "row_count": 14
+          }
+        },
+        {
+          "name": "inbound syntax depth 3",
+          "vars": {"query": "MATCH p = (t)<-[:MemberOf|AdminTo*1..3]-(s:MultiExpansionRoot {name: 'root'}) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["a", "root"],
+              ["target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["third", "target", "a", "root"],
+              ["b", "root"],
+              ["target", "b", "root"],
+              ["third", "target", "b", "root"],
+              ["third", "target", "b", "root"],
+              ["target", "b", "root"],
+              ["third", "target", "b", "root"],
+              ["third", "target", "b", "root"]
+            ],
+            "path_edge_kinds": [
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "MemberOf"],
+              ["AdminTo", "MemberOf", "MemberOf"],
+              ["AdminTo", "MemberOf"],
+              ["MemberOf", "AdminTo", "MemberOf"],
+              ["AdminTo", "AdminTo", "MemberOf"],
+              ["AdminTo"],
+              ["MemberOf", "AdminTo"],
+              ["MemberOf", "MemberOf", "AdminTo"],
+              ["AdminTo", "MemberOf", "AdminTo"],
+              ["AdminTo", "AdminTo"],
+              ["MemberOf", "AdminTo", "AdminTo"],
+              ["AdminTo", "AdminTo", "AdminTo"]
+            ],
+            "row_count": 14
+          }
+        },
+        {
+          "name": "path count depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..3]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 14}
+        },
+        {
+          "name": "duplicate carried roots depth 3",
+          "vars": {"query": "UNWIND [1, 1] AS input MATCH (s:MultiExpansionRoot {name: 'root'}) WITH s MATCH p = (s)-[:MemberOf|AdminTo*1..3]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "a"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target"],
+              ["root", "a", "target", "third"],
+              ["root", "a", "target", "third"],
+              ["root", "b"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target"],
+              ["root", "b", "target", "third"],
+              ["root", "b", "target", "third"]
+            ],
+            "path_edge_kinds": [
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo", "MemberOf"],
+              ["MemberOf", "AdminTo", "AdminTo"],
+              ["AdminTo"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo", "MemberOf", "MemberOf"],
+              ["AdminTo", "MemberOf", "AdminTo"],
+              ["AdminTo", "AdminTo"],
+              ["AdminTo", "AdminTo", "MemberOf"],
+              ["AdminTo", "AdminTo", "AdminTo"],
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo", "MemberOf"],
+              ["MemberOf", "AdminTo", "AdminTo"],
+              ["AdminTo"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo", "MemberOf", "MemberOf"],
+              ["AdminTo", "MemberOf", "AdminTo"],
+              ["AdminTo", "AdminTo"],
+              ["AdminTo", "AdminTo", "MemberOf"],
+              ["AdminTo", "AdminTo", "AdminTo"]
+            ],
+            "row_count": 28
+          }
+        },
+        {
+          "name": "endpoint filter depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..3]->(t) WHERE t.name = 'third' RETURN count(*)"},
+          "assert": {"exact_int": 8}
+        },
+        {
+          "name": "absent terminal depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'}) OPTIONAL MATCH (s)-[:MemberOf|AdminTo*1..3]->(t:MultiExpansionAbsent) RETURN count(t)"},
+          "assert": {"exact_int": 0}
+        },
+        {
+          "name": "single type MemberOf depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf*1..3]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 3}
+        },
+        {
+          "name": "single type AdminTo depth 3",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:AdminTo*1..3]->(t) RETURN count(*)"},
+          "assert": {"exact_int": 3}
+        },
+        {
+          "name": "SET depth 3 with RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..3]->(t) SET t.selected = true RETURN t"},
+          "assert": {
+            "node_ids": ["a", "target", "third", "third", "target", "third", "third", "b", "target", "third", "third", "target", "third", "third"],
+            "row_count": 14
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": true}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "AdminTo", "props": {}},
+                  {"start": "a", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "b", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "target", "end": "third", "kind": "MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "AdminTo", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET depth 3 without RETURN",
+          "vars": {"query": "MATCH (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..3]->(t) SET t.selected = true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:MultiExpansionNode) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "props": {"name": "root", "selected": false}},
+                  {"id": "a", "kinds": ["MultiExpansionNode"], "props": {"name": "a", "selected": true}},
+                  {"id": "b", "kinds": ["MultiExpansionNode"], "props": {"name": "b", "selected": true}},
+                  {"id": "target", "kinds": ["MultiExpansionNode"], "props": {"name": "target", "selected": true}},
+                  {"id": "third", "kinds": ["MultiExpansionNode"], "props": {"name": "third", "selected": true}},
+                  {"id": "fourth", "kinds": ["MultiExpansionNode"], "props": {"name": "fourth", "selected": false}},
+                  {"id": "wrong-first", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-first", "selected": false}},
+                  {"id": "wrong-next", "kinds": ["MultiExpansionNode"], "props": {"name": "wrong-next", "selected": false}},
+                  {"id": "reverse", "kinds": ["MultiExpansionNode"], "props": {"name": "reverse", "selected": false}}
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {"start": "root", "end": "a", "kind": "MemberOf", "props": {}},
+                  {"start": "root", "end": "b", "kind": "AdminTo", "props": {}},
+                  {"start": "a", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "b", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "b", "end": "target", "kind": "AdminTo", "props": {}},
+                  {"start": "target", "end": "third", "kind": "MemberOf", "props": {}},
+                  {"start": "target", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "MemberOf", "props": {}},
+                  {"start": "third", "end": "fourth", "kind": "AdminTo", "props": {}},
+                  {"start": "root", "end": "wrong-first", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-first", "end": "target", "kind": "MemberOf", "props": {}},
+                  {"start": "a", "end": "wrong-next", "kind": "MultiExpansionOther", "props": {}},
+                  {"start": "wrong-next", "end": "third", "kind": "AdminTo", "props": {}},
+                  {"start": "reverse", "end": "root", "kind": "MemberOf", "props": {}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AD cycles and self loops",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {"id": "root", "kinds": ["MultiExpansionNode", "MultiExpansionRoot"], "properties": {"name": "root", "selected": false}},
+          {"id": "a", "kinds": ["MultiExpansionNode"], "properties": {"name": "a", "selected": false}}
+        ],
+        "edges": [
+          {"start_id": "root", "end_id": "a", "kind": "MemberOf"},
+          {"start_id": "a", "end_id": "a", "kind": "MemberOf"},
+          {"start_id": "a", "end_id": "root", "kind": "AdminTo"},
+          {"start_id": "root", "end_id": "root", "kind": "AdminTo"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "three hop trails preserve node revisits and reject relationship reuse",
+          "vars": {"query": "MATCH p = (s:MultiExpansionRoot {name: 'root'})-[:MemberOf|AdminTo*1..3]->(t) RETURN p"},
+          "assert": {
+            "path_node_ids": [
+              ["root", "a"],
+              ["root", "a", "a"],
+              ["root", "a", "a", "root"],
+              ["root", "a", "root"],
+              ["root", "a", "root", "root"],
+              ["root", "root"],
+              ["root", "root", "a"],
+              ["root", "root", "a", "a"],
+              ["root", "root", "a", "root"]
+            ],
+            "path_edge_kinds": [
+              ["MemberOf"],
+              ["MemberOf", "MemberOf"],
+              ["MemberOf", "MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo"],
+              ["MemberOf", "AdminTo", "AdminTo"],
+              ["AdminTo"],
+              ["AdminTo", "MemberOf"],
+              ["AdminTo", "MemberOf", "MemberOf"],
+              ["AdminTo", "MemberOf", "AdminTo"]
+            ],
+            "row_count": 9
+          }
+        }
+      ]
+    }
+  ]
+}

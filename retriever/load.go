@@ -13,6 +13,7 @@ import (
 
 	"github.com/specterops/dawgs/drivers/neo4j"
 	"github.com/specterops/dawgs/graph"
+	"github.com/specterops/dawgs/internal/jsonutil"
 )
 
 type LoadResult struct {
@@ -89,6 +90,7 @@ func canonicalNumericSourceID(sourceID string) (uint64, bool) {
 	return value, true
 }
 
+// Load imports a validated collection while applying the configured progress, batching and relationship policies.
 func Load(ctx context.Context, db graph.Database, driverName string, options LoadOptions) (LoadResult, error) {
 	preparedOptions, cleanupInput, err := prepareLoadInput(options)
 	if err != nil {
@@ -96,42 +98,40 @@ func Load(ctx context.Context, db graph.Database, driverName string, options Loa
 	}
 	defer cleanupInput()
 
-	options = preparedOptions
-
 	startedAt := time.Now()
 	slog.Info("retriever load started",
 		slog.String("driver", driverName),
-		slog.String("input_dir", options.InputDir),
-		slog.Int("batch_size", options.BatchSize),
+		slog.String("input_dir", preparedOptions.InputDir),
+		slog.Int("batch_size", preparedOptions.BatchSize),
 	)
-	options.Progress.emit(ProgressEvent{
+	preparedOptions.Progress.emit(ProgressEvent{
 		Operation: OperationLoad,
 		Message:   "retriever load started",
 		Driver:    driverName,
-		InputDir:  options.InputDir,
-		BatchSize: options.BatchSize,
+		InputDir:  preparedOptions.InputDir,
+		BatchSize: preparedOptions.BatchSize,
 	})
 
 	readManifestStartedAt := time.Now()
 	slog.Info("retriever load reading manifest",
-		slog.String("input_dir", options.InputDir),
+		slog.String("input_dir", preparedOptions.InputDir),
 	)
-	nextManifest, err := readLoadManifest(options.InputDir, driverName)
+	nextManifest, err := readLoadManifest(preparedOptions.InputDir, driverName)
 	if err != nil {
 		return LoadResult{}, err
 	}
 
 	slog.Info("retriever load manifest ready",
-		slog.String("input_dir", options.InputDir),
+		slog.String("input_dir", preparedOptions.InputDir),
 		slog.Int("graph_count", len(nextManifest.Graphs)),
 		slog.String("source_driver", nextManifest.Driver),
 		slog.String("compression", string(nextManifest.Compression)),
 		slog.Duration("wall_elapsed", time.Since(readManifestStartedAt)),
 	)
-	options.Progress.emit(ProgressEvent{
+	preparedOptions.Progress.emit(ProgressEvent{
 		Operation:   OperationLoad,
 		Message:     "retriever load manifest ready",
-		InputDir:    options.InputDir,
+		InputDir:    preparedOptions.InputDir,
 		GraphCount:  len(nextManifest.Graphs),
 		FileCount:   manifestFileCount(nextManifest),
 		Compression: nextManifest.Compression,
@@ -140,23 +140,23 @@ func Load(ctx context.Context, db graph.Database, driverName string, options Loa
 
 	verifyStartedAt := time.Now()
 	slog.Info("retriever load verifying fragments",
-		slog.String("input_dir", options.InputDir),
+		slog.String("input_dir", preparedOptions.InputDir),
 		slog.Int("file_count", manifestFileCount(nextManifest)),
 	)
-	if err := verifyLoadFragments(options.InputDir, nextManifest); err != nil {
+	if err := verifyLoadFragments(preparedOptions.InputDir, nextManifest); err != nil {
 		return LoadResult{}, err
 	}
 	compressedBytes, decompressedBytes := manifestFragmentBytes(nextManifest)
 
 	slog.Info("retriever load fragments verified",
-		slog.String("input_dir", options.InputDir),
+		slog.String("input_dir", preparedOptions.InputDir),
 		slog.Int("file_count", manifestFileCount(nextManifest)),
 		slog.Duration("wall_elapsed", time.Since(verifyStartedAt)),
 	)
-	options.Progress.emit(ProgressEvent{
+	preparedOptions.Progress.emit(ProgressEvent{
 		Operation:             OperationLoad,
 		Message:               "retriever load fragments verified",
-		InputDir:              options.InputDir,
+		InputDir:              preparedOptions.InputDir,
 		FileCount:             manifestFileCount(nextManifest),
 		Elapsed:               time.Since(verifyStartedAt),
 		CompressedBytesRead:   compressedBytes,
@@ -176,7 +176,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options Loa
 		slog.Int("graph_count", len(nextManifest.Graphs)),
 		slog.Duration("wall_elapsed", time.Since(schemaStartedAt)),
 	)
-	options.Progress.emit(ProgressEvent{
+	preparedOptions.Progress.emit(ProgressEvent{
 		Operation:  OperationLoad,
 		Message:    "retriever load schemas ready",
 		GraphCount: len(nextManifest.Graphs),
@@ -195,7 +195,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options Loa
 		slog.Int("graph_count", len(nextManifest.Graphs)),
 		slog.Duration("wall_elapsed", time.Since(emptyStartedAt)),
 	)
-	options.Progress.emit(ProgressEvent{
+	preparedOptions.Progress.emit(ProgressEvent{
 		Operation:  OperationLoad,
 		Message:    "retriever load target graphs ready",
 		GraphCount: len(nextManifest.Graphs),
@@ -206,7 +206,7 @@ func Load(ctx context.Context, db graph.Database, driverName string, options Loa
 	result.GraphCount = len(nextManifest.Graphs)
 
 	for graphIndex, graphEntry := range nextManifest.Graphs {
-		nodeCount, edgeCount, err := loadManifestGraph(ctx, db, options, nextManifest.Compression, graphIndex, len(nextManifest.Graphs), graphEntry)
+		nodeCount, edgeCount, err := loadManifestGraph(ctx, db, preparedOptions, nextManifest.Compression, graphIndex, len(nextManifest.Graphs), graphEntry)
 		if err != nil {
 			return LoadResult{}, err
 		}
@@ -215,8 +215,8 @@ func Load(ctx context.Context, db graph.Database, driverName string, options Loa
 		result.EdgeCount += edgeCount
 	}
 
-	if options.VerifyMetrics {
-		if err := verifyLoadedMetrics(ctx, db, nextManifest, options.BatchSize, options.Progress, options.ProgressInterval); err != nil {
+	if preparedOptions.VerifyMetrics {
+		if err := verifyLoadedMetrics(ctx, db, nextManifest, preparedOptions.BatchSize, preparedOptions.Progress, preparedOptions.ProgressInterval); err != nil {
 			return LoadResult{}, err
 		}
 	}
@@ -228,11 +228,11 @@ func Load(ctx context.Context, db graph.Database, driverName string, options Loa
 		slog.Int64("edge_count", result.EdgeCount),
 		slog.Duration("wall_elapsed", time.Since(startedAt)),
 	)
-	options.Progress.emit(ProgressEvent{
+	preparedOptions.Progress.emit(ProgressEvent{
 		Operation:             OperationLoad,
 		Message:               "retriever load completed",
 		Driver:                driverName,
-		InputDir:              options.InputDir,
+		InputDir:              preparedOptions.InputDir,
 		GraphCount:            result.GraphCount,
 		NodeCount:             result.NodeCount,
 		EdgeCount:             result.EdgeCount,
@@ -621,11 +621,14 @@ func manifestFileCount(value Manifest) int {
 	return count
 }
 
+// loadGraphNodes loads node shards and builds the source-to-destination ID map used by relationship import.
 func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, codec CompressionCodec, graphEntry GraphManifest, batchSize int, progress ProgressFunc, progressInterval int64) (*nodeIDResolver, int64, error) {
 	nodeMap := newNodeIDResolver(graphEntry.NodeCount)
 	type pendingNode struct {
+		// sourceID identifies the source node before destination ID mapping.
 		sourceID string
-		node     *graph.Node
+		// node holds the node queued for import into the destination graph.
+		node *graph.Node
 	}
 	var (
 		loaded     int64
@@ -649,10 +652,12 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 
 		var destinationIDs []graph.ID
 		if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
-			batch = batch.WithGraph(graph.Graph{Name: graphEntry.Name})
-			creator, ok := batch.(graph.NodeBatchCreator)
+			scopedBatch := batch.WithGraph(graph.Graph{
+				Name: graphEntry.Name,
+			})
+			creator, ok := scopedBatch.(graph.NodeBatchCreator)
 			if !ok {
-				return fmt.Errorf("database batch %T does not support correlated bulk node creation", batch)
+				return fmt.Errorf("database batch %T does not support correlated bulk node creation", scopedBatch)
 			}
 
 			var err error
@@ -719,6 +724,7 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 	return nodeMap, loaded, nil
 }
 
+// loadGraphEdges loads relationship shards after resolving endpoints through the imported node map.
 func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, codec CompressionCodec, graphEntry GraphManifest, nodeMap *nodeIDResolver, batchSize int, progress ProgressFunc, progressInterval int64) (int64, error) {
 	var (
 		loaded int64
@@ -734,7 +740,7 @@ func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, cod
 
 		var fragmentCount int
 		if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
-			batch = batch.WithGraph(graph.Graph{
+			scopedBatch := batch.WithGraph(graph.Graph{
 				Name: graphEntry.Name,
 			})
 
@@ -744,7 +750,7 @@ func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, cod
 					return err
 				}
 
-				if err := batch.CreateRelationshipByIDs(resolved.StartID, resolved.EndID, resolved.Kind, resolved.Properties); err != nil {
+				if err := scopedBatch.CreateRelationshipByIDs(resolved.StartID, resolved.EndID, resolved.Kind, resolved.Properties); err != nil {
 					return fmt.Errorf("create edge (%s)-[%s]->(%s): %w", item.StartID, item.Kind, item.EndID, err)
 				}
 
@@ -774,9 +780,17 @@ func decodeNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	fragmentPath := filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path))
+	file, err := openCollectionFragment(inputDir, fileEntry.Path)
+	if err != nil {
+		return 0, fmt.Errorf("read node fragment %s: %w", fileEntry.Path, err)
+	}
+	defer file.Close()
 	validate := func(item FragmentNode) error {
 		if item.ID == "" {
 			return fmt.Errorf("node fragment %s contains empty source ID", fileEntry.Path)
+		}
+		if _, err := jsonutil.NormalizeNumbers(item.Properties); err != nil {
+			return fmt.Errorf("node fragment %s source ID %q: %w", fileEntry.Path, item.ID, err)
 		}
 
 		if handle != nil {
@@ -787,11 +801,10 @@ func decodeNodeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	var count int
-	var err error
 	if verifyIntegrity {
-		count, err = readVerifiedCompressedJSONLines(fragmentPath, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
+		count, err = readVerifiedCompressedJSONLinesFromReader(fragmentPath, file, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
 	} else {
-		count, err = readCompressedJSONLines(fragmentPath, codec, validate)
+		count, err = readCompressedJSONLinesFromReader(file, codec, validate)
 	}
 	if err != nil {
 		return count, fmt.Errorf("read node fragment %s: %w", fileEntry.Path, err)
@@ -814,12 +827,20 @@ func decodeEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	fragmentPath := filepath.Join(inputDir, filepath.FromSlash(fileEntry.Path))
+	file, err := openCollectionFragment(inputDir, fileEntry.Path)
+	if err != nil {
+		return 0, fmt.Errorf("read edge fragment %s: %w", fileEntry.Path, err)
+	}
+	defer file.Close()
 	validate := func(item FragmentEdge) error {
 		if item.StartID == "" {
 			return fmt.Errorf("edge fragment %s contains empty start source ID", fileEntry.Path)
 		}
 		if item.EndID == "" {
 			return fmt.Errorf("edge fragment %s contains empty end source ID", fileEntry.Path)
+		}
+		if _, err := jsonutil.NormalizeNumbers(item.Properties); err != nil {
+			return fmt.Errorf("edge fragment %s (%s)-[%s]->(%s): %w", fileEntry.Path, item.StartID, item.Kind, item.EndID, err)
 		}
 
 		if handle != nil {
@@ -830,11 +851,10 @@ func decodeEdgeFragmentFile(inputDir string, codec CompressionCodec, fileEntry F
 	}
 
 	var count int
-	var err error
 	if verifyIntegrity {
-		count, err = readVerifiedCompressedJSONLines(fragmentPath, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
+		count, err = readVerifiedCompressedJSONLinesFromReader(fragmentPath, file, codec, fileEntry.SHA256, fileEntry.CompressedBytes, validate)
 	} else {
-		count, err = readCompressedJSONLines(fragmentPath, codec, validate)
+		count, err = readCompressedJSONLinesFromReader(file, codec, validate)
 	}
 	if err != nil {
 		return count, fmt.Errorf("read edge fragment %s: %w", fileEntry.Path, err)

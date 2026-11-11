@@ -2,9 +2,13 @@ package algo_test
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/specterops/dawgs/algo"
+	"github.com/specterops/dawgs/cardinality"
 	"github.com/specterops/dawgs/container"
 	"github.com/specterops/dawgs/container/util"
 	"github.com/specterops/dawgs/graph"
@@ -69,5 +73,299 @@ func TestReachabilityCache(t *testing.T) {
 	for expectedNode, expectedReach := range expected {
 		actualReach := reachability.ReachOfComponentContainingMember(expectedNode, graph.DirectionOutbound).Slice()
 		require.Equalf(t, expectedReach, actualReach, "Reach for node %d is invalid", expectedNode)
+	}
+}
+
+// This oracle walks the original graph without using SCCs or the reach cache.
+func expectedReach(adj map[uint64][]uint64, root uint64, direction graph.Direction) []uint64 {
+	if _, known := adj[root]; !known {
+		return []uint64{}
+	}
+
+	neighbors := map[uint64][]uint64{}
+	for start, ends := range adj {
+		for _, end := range ends {
+			if direction != graph.DirectionInbound {
+				neighbors[start] = append(neighbors[start], end)
+			}
+			if direction != graph.DirectionOutbound {
+				neighbors[end] = append(neighbors[end], start)
+			}
+		}
+	}
+
+	seen := map[uint64]bool{root: true}
+	pending := []uint64{root}
+	for len(pending) > 0 {
+		next := pending[0]
+		pending = pending[1:]
+		for _, neighbor := range neighbors[next] {
+			if !seen[neighbor] {
+				seen[neighbor] = true
+				pending = append(pending, neighbor)
+			}
+		}
+	}
+
+	result := make([]uint64, 0, len(seen))
+	for member := range seen {
+		result = append(result, member)
+	}
+	slices.Sort(result)
+	return result
+}
+
+func requireReach(t *testing.T, reach *algo.ReachabilityCache, adj map[uint64][]uint64, member uint64, direction graph.Direction) {
+	t.Helper()
+	expected := expectedReach(adj, member, direction)
+	require.Equalf(t, expected, reach.ReachOfComponentContainingMember(member, direction).Slice(), "member %d, direction %v", member, direction)
+
+	combined := cardinality.NewBitmap64()
+	for _, component := range reach.ReachSliceOfComponentContainingMember(member, direction) {
+		combined.Or(component)
+	}
+	require.Equalf(t, expected, combined.Slice(), "slice for member %d, direction %v", member, direction)
+}
+
+func TestReachabilityCacheDiamondTail(t *testing.T) {
+	for _, direction := range []graph.Direction{graph.DirectionOutbound, graph.DirectionInbound} {
+		t.Run(fmt.Sprint(direction), func(t *testing.T) {
+			adj := map[uint64][]uint64{1: {2, 3}, 2: {4}, 3: {4}, 4: {5}, 5: {}}
+			if direction == graph.DirectionInbound {
+				reversed := map[uint64][]uint64{}
+				for start, ends := range adj {
+					if _, ok := reversed[start]; !ok {
+						reversed[start] = nil
+					}
+					for _, end := range ends {
+						reversed[end] = append(reversed[end], start)
+					}
+				}
+				adj = reversed
+			}
+
+			digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+			warm := algo.NewReachabilityCache(context.Background(), digraph, 16)
+			requireReach(t, warm, adj, 1, direction)
+			for _, member := range []uint64{2, 3} {
+				// Both branches must include the shared tail after warming the root.
+				requireReach(t, warm, adj, member, direction)
+				cold := algo.NewReachabilityCache(context.Background(), digraph, 16)
+				require.Equal(t, cold.ReachOfComponentContainingMember(member, direction).Slice(), warm.ReachOfComponentContainingMember(member, direction).Slice())
+			}
+		})
+	}
+}
+
+func TestReachabilityCacheCompletedEntryReuse(t *testing.T) {
+	adj := map[uint64][]uint64{1: {2, 3}, 2: {4}, 3: {4}, 4: {5}, 5: {}}
+	digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+	reach := algo.NewReachabilityCache(context.Background(), digraph, 16)
+
+	// A complete tail can short-circuit a larger traversal without being
+	// changed by that traversal's union into its own local result.
+	requireReach(t, reach, adj, 4, graph.DirectionOutbound)
+	hits := reach.Stats().Hits()
+	require.Equal(t, []uint64{1, 2, 3, 4, 5}, reach.ReachOfComponentContainingMember(1, graph.DirectionOutbound).Slice())
+	require.Greater(t, reach.Stats().Hits(), hits)
+	requireReach(t, reach, adj, 4, graph.DirectionOutbound)
+
+	// Capacity one forces the root out when a different component is queried.
+	reach = algo.NewReachabilityCache(context.Background(), digraph, 1)
+	requireReach(t, reach, adj, 1, graph.DirectionOutbound)
+	requireReach(t, reach, adj, 3, graph.DirectionOutbound)
+	misses := reach.Stats().Misses()
+	requireReach(t, reach, adj, 1, graph.DirectionOutbound)
+	require.Greater(t, reach.Stats().Misses(), misses)
+	require.Equal(t, int64(1), reach.Stats().Size())
+}
+
+// TestReachabilityCacheIntermediateReuse verifies that single-direction
+// traversals publish complete intermediate results. The traversal for member 1
+// completes members 2 through 5 as intermediate components; those entries must
+// be complete, reusable by later queries, and merged correctly even when the
+// shared cache evicts every intermediate entry while the traversal is still
+// running.
+func TestReachabilityCacheIntermediateReuse(t *testing.T) {
+	reverse := func(adj map[uint64][]uint64) map[uint64][]uint64 {
+		reversed := map[uint64][]uint64{}
+		for start, ends := range adj {
+			if _, ok := reversed[start]; !ok {
+				reversed[start] = nil
+			}
+			for _, end := range ends {
+				reversed[end] = append(reversed[end], start)
+			}
+		}
+		return reversed
+	}
+
+	for _, direction := range []graph.Direction{graph.DirectionOutbound, graph.DirectionInbound} {
+		t.Run(fmt.Sprint(direction), func(t *testing.T) {
+			adj := map[uint64][]uint64{1: {2, 3}, 2: {4}, 3: {4}, 4: {5}, 5: {}}
+			if direction == graph.DirectionInbound {
+				adj = reverse(adj)
+			}
+
+			digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+
+			// With enough capacity every intermediate entry published while
+			// serving member 1 is retained, so each later member query must
+			// register cache hits instead of recomputing its traversal.
+			retained := algo.NewReachabilityCache(context.Background(), digraph, 16)
+			requireReach(t, retained, adj, 1, direction)
+			for _, member := range []uint64{2, 3, 4, 5} {
+				hits := retained.Stats().Hits()
+				requireReach(t, retained, adj, member, direction)
+				require.Greaterf(t, retained.Stats().Hits(), hits, "member %d should reuse an intermediate entry published while serving member 1", member)
+			}
+
+			// Capacity one evicts each intermediate entry as soon as the next
+			// one is published. The traversal-local memo must still supply
+			// complete intermediate results to later branches, and queries
+			// after the traversal must recompute complete results.
+			evicting := algo.NewReachabilityCache(context.Background(), digraph, 1)
+			requireReach(t, evicting, adj, 1, direction)
+			for _, member := range []uint64{2, 3, 4, 5} {
+				requireReach(t, evicting, adj, member, direction)
+			}
+		})
+	}
+}
+
+func TestReachabilityCacheQueryOrderAndEviction(t *testing.T) {
+	fixtures := map[string]map[uint64][]uint64{
+		"diamond": {1: {2, 3}, 2: {4}, 3: {4}, 4: {5}, 5: {}},
+		// Each diamond vertex is an SCC; a disconnected cycle and isolated
+		// vertex check that neither direction leaks unrelated members.
+		"scc_diamond": {0: {1}, 1: {0, 2, 4}, 2: {3}, 3: {2, 6}, 4: {5}, 5: {4, 6}, 6: {7}, 7: {6, 8}, 8: {}, 9: {10}, 10: {9}, 1 << 40: {}},
+		"shortcuts":   {0: {0, 1, 2, 3}, 1: {2, 3}, 2: {3}, 3: {4}, 4: {}},
+		"empty":       {},
+	}
+	for name, adj := range fixtures {
+		for _, capacity := range []int{0, 1, 2, 64} {
+			t.Run(fmt.Sprintf("%s/capacity_%d", name, capacity), func(t *testing.T) {
+				digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+				reach := algo.NewReachabilityCache(context.Background(), digraph, capacity)
+				members := make([]uint64, 0, len(adj)+1)
+				for member := range adj {
+					members = append(members, member)
+				}
+				members = append(members, 999) // Unknown member.
+				slices.Sort(members)
+				random := rand.New(rand.NewSource(73))
+				for permutation := 0; permutation < 8; permutation++ {
+					for _, member := range members {
+						for _, direction := range []graph.Direction{graph.DirectionInbound, graph.DirectionOutbound, graph.DirectionBoth} {
+							requireReach(t, reach, adj, member, direction)
+						}
+					}
+					random.Shuffle(len(members), func(i, j int) { members[i], members[j] = members[j], members[i] })
+				}
+				require.LessOrEqual(t, reach.Stats().Size(), int64(reach.Stats().Capacity))
+			})
+		}
+	}
+}
+
+func TestReachabilityCacheGeneratedGraphs(t *testing.T) {
+	random := rand.New(rand.NewSource(73))
+	for fixture := 0; fixture < 24; fixture++ {
+		t.Run(fmt.Sprint(fixture), func(t *testing.T) {
+			adj := map[uint64][]uint64{}
+			for start := uint64(0); start < 10; start++ {
+				adj[start] = nil
+				for end := uint64(0); end < 10; end++ {
+					// Alternate DAGs and cyclic graphs with branch convergence.
+					if (fixture%2 != 0 || end > start) && random.Intn(5) == 0 {
+						adj[start] = append(adj[start], end)
+					}
+				}
+			}
+			digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+			reach := algo.NewReachabilityCache(context.Background(), digraph, 1+fixture%4)
+			for round := 0; round < 3; round++ {
+				for _, member := range random.Perm(10) {
+					for _, direction := range []graph.Direction{graph.DirectionOutbound, graph.DirectionInbound, graph.DirectionBoth} {
+						requireReach(t, reach, adj, uint64(member), direction)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestReachabilityCacheConcurrentQueries(t *testing.T) {
+	adj := map[uint64][]uint64{1: {2, 3}, 2: {4}, 3: {4}, 4: {5}, 5: {4}}
+	digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+	reach := algo.NewReachabilityCache(context.Background(), digraph, 2)
+	for worker := 0; worker < 8; worker++ {
+		t.Run(fmt.Sprint(worker), func(t *testing.T) {
+			t.Parallel()
+			for round := 0; round < 20; round++ {
+				for member := range adj {
+					for _, direction := range []graph.Direction{graph.DirectionInbound, graph.DirectionOutbound, graph.DirectionBoth} {
+						requireReach(t, reach, adj, member, direction)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestReachabilityCacheColdStartStampede models the analysis-phase start: many
+// workers begin querying overlapping roots against a cold, shared,
+// production-configured cache at the same time. In-flight coordination must
+// deduplicate the overlapping computations without deadlock while every worker
+// observes complete results.
+func TestReachabilityCacheColdStartStampede(t *testing.T) {
+	// Six roots fan into a shared diamond whose tail is a deep chain.
+	adj := map[uint64][]uint64{}
+	for root := uint64(1); root <= 6; root++ {
+		adj[root] = []uint64{7}
+	}
+	adj[7] = []uint64{8, 9}
+	adj[8] = []uint64{10}
+	adj[9] = []uint64{10}
+	for node := uint64(10); node < 30; node++ {
+		adj[node] = []uint64{node + 1}
+	}
+	adj[30] = nil
+
+	digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+	reach := algo.NewReachabilityCache(context.Background(), digraph, 8)
+
+	for worker := 0; worker < 12; worker++ {
+		t.Run(fmt.Sprint(worker), func(t *testing.T) {
+			t.Parallel()
+
+			// Every worker sweeps all members so their traversals overlap on
+			// the shared diamond and tail from the first instant.
+			for round := 0; round < 5; round++ {
+				for member := uint64(1); member <= 30; member++ {
+					for _, direction := range []graph.Direction{graph.DirectionInbound, graph.DirectionOutbound} {
+						requireReach(t, reach, adj, member, direction)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestReachabilityCacheResultIsolationAndSetOperations(t *testing.T) {
+	adj := map[uint64][]uint64{1: {2, 3}, 2: {4}, 3: {4}, 4: {5}, 5: {}}
+	digraph := util.BuildGraph(container.NewCSRDigraphBuilder, adj)
+	reach := algo.NewReachabilityCache(context.Background(), digraph, 16)
+	reach.ReachOfComponentContainingMember(1, graph.DirectionOutbound).Clear()
+	requireReach(t, reach, adj, 1, graph.DirectionOutbound)
+
+	for _, member := range []uint64{2, 3} {
+		union := cardinality.NewBitmap64With(99)
+		reach.OrReach(member, graph.DirectionOutbound, union)
+		require.Equal(t, []uint64{4, 5, 99}, union.Slice())
+		xor := cardinality.NewBitmap64With(4, 99)
+		reach.XorReach(member, graph.DirectionOutbound, xor)
+		require.Equal(t, []uint64{5, 99}, xor.Slice())
+		requireReach(t, reach, adj, member, graph.DirectionOutbound)
 	}
 }

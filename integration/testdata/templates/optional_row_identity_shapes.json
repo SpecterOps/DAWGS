@@ -1,0 +1,1282 @@
+{
+  "families": [
+    {
+      "name": "optional matches preserve input row identity",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "OptSource"
+            ],
+            "properties": {
+              "name": "source"
+            }
+          },
+          {
+            "id": "isolated",
+            "kinds": [
+              "OptSource"
+            ],
+            "properties": {
+              "name": "isolated"
+            }
+          },
+          {
+            "id": "one",
+            "kinds": [
+              "OptTarget"
+            ],
+            "properties": {
+              "name": "one",
+              "active": true
+            }
+          },
+          {
+            "id": "two",
+            "kinds": [
+              "OptTarget"
+            ],
+            "properties": {
+              "name": "two",
+              "active": true
+            }
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "OptDecoy"
+            ],
+            "properties": {
+              "name": "wrong-kind",
+              "active": true
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "OptTarget"
+            ],
+            "properties": {
+              "name": "missing"
+            }
+          },
+          {
+            "id": "leaf",
+            "kinds": [
+              "OptLeaf"
+            ],
+            "properties": {
+              "name": "leaf"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "one",
+            "kind": "OptLink",
+            "properties": {
+              "marker": "yes"
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "two",
+            "kind": "OptLink",
+            "properties": {
+              "marker": "yes"
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-kind",
+            "kind": "OptLink",
+            "properties": {
+              "marker": "yes"
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "missing",
+            "kind": "OptLink",
+            "properties": {
+              "marker": "no"
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "leaf",
+            "kind": "OtherOptLink",
+            "properties": {
+              "marker": "yes"
+            }
+          },
+          {
+            "start_id": "one",
+            "end_id": "source",
+            "kind": "OptLink",
+            "properties": {
+              "marker": "reverse"
+            }
+          },
+          {
+            "start_id": "one",
+            "end_id": "leaf",
+            "kind": "OptTail",
+            "properties": {
+              "marker": "tail"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "three identical origins match once each",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 3
+          }
+        },
+        {
+          "name": "mixed duplicate scalar origins",
+          "vars": {
+            "query": "UNWIND [1,1,2] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN x, b.name ORDER BY x"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                2,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "fan out preserves duplicates",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[:OptLink {marker:'yes'}]->(b:OptTarget) RETURN x, b.name ORDER BY b.name"
+          },
+          "assert": {
+            "row_count": 6,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "two"
+              ],
+              [
+                1,
+                "two"
+              ],
+              [
+                1,
+                "two"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "unmatched preserves each origin",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[:OptLink]->(b:OptTarget {name:'absent'}) RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "mixed matched and isolated origins",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN a.name, b.name ORDER BY a.name"
+          },
+          "assert": {
+            "row_count": 6,
+            "ordered_row_values": [
+              [
+                "isolated",
+                null
+              ],
+              [
+                "isolated",
+                null
+              ],
+              [
+                "isolated",
+                null
+              ],
+              [
+                "source",
+                "one"
+              ],
+              [
+                "source",
+                "one"
+              ],
+              [
+                "source",
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "pending unwind before optional",
+          "vars": {
+            "query": "MATCH (a:OptSource {name:'source'}) UNWIND [1,1,1] AS x OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "leading unwind before optional node lookup",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x OPTIONAL MATCH (b:OptTarget {name:'one'}) RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty pending unwind",
+          "vars": {
+            "query": "MATCH (a:OptSource {name:'source'}) UNWIND [] AS x OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "empty input",
+          "vars": {
+            "query": "UNWIND [] AS x MATCH (a:OptSource) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN count(*) AS c"
+          },
+          "assert": {
+            "exact_int": 0
+          }
+        },
+        {
+          "name": "with aliases preserve repeated origins",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) WITH a AS root, x AS item OPTIONAL MATCH (root)-[:OptLink]->(b:OptTarget {name:'one'}) RETURN item, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "distinct boundary groups visible values",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) WITH DISTINCT x, b RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "aggregate boundary ignores internal identity",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) WITH a, count(b) AS c RETURN a.name, c"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_row_values": [
+              [
+                "source",
+                3
+              ]
+            ]
+          }
+        },
+        {
+          "name": "staged pagination precedes optional",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) SET a.ready = true WITH a, x ORDER BY x SKIP 1 LIMIT 1 OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "nullable prior binding",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[:OtherOptLink]->(z:OptTarget) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN x, z.name, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                null,
+                "one"
+              ],
+              [
+                1,
+                null,
+                "one"
+              ],
+              [
+                1,
+                null,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "chained optional after fan out",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[:OptLink {marker:'yes'}]->(b:OptTarget) OPTIONAL MATCH (b)-[:OptTail]->(c:OptLeaf) RETURN x, b.name, c.name ORDER BY b.name"
+          },
+          "assert": {
+            "row_count": 6,
+            "ordered_row_values": [
+              [
+                1,
+                "one",
+                "leaf"
+              ],
+              [
+                1,
+                "one",
+                "leaf"
+              ],
+              [
+                1,
+                "one",
+                "leaf"
+              ],
+              [
+                1,
+                "two",
+                null
+              ],
+              [
+                1,
+                "two",
+                null
+              ],
+              [
+                1,
+                "two",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "multiple optional pattern parts",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[:OptLink]->(b:OptTarget {name:'one'}), (a)-[:OptLink]->(c:OptTarget {name:'two'}) RETURN x, b.name, c.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one",
+                "two"
+              ],
+              [
+                1,
+                "one",
+                "two"
+              ],
+              [
+                1,
+                "one",
+                "two"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "uncorrelated optional",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (b:OptLeaf) RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "leaf"
+              ],
+              [
+                1,
+                "leaf"
+              ],
+              [
+                1,
+                "leaf"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "optional where preserves filtered origins",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[:OptLink]->(b:OptTarget) WHERE b.name = 'one' AND x = $wanted RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ]
+            ]
+          },
+          "params": {
+            "wanted": 1
+          }
+        },
+        {
+          "name": "optional where rejects matches not origins",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[:OptLink]->(b:OptTarget) WHERE b.name = 'one' AND x = 2 RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "bound endpoints preserve duplicate identities",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) MATCH (b:OptTarget {name:'one'}) OPTIONAL MATCH (a)-[r:OptLink]->(b) RETURN x, r.marker"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "yes"
+              ],
+              [
+                1,
+                "yes"
+              ],
+              [
+                1,
+                "yes"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "variable expansion preserves duplicates",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH p = (a)-[:OptLink*1..2]->(b:OptTarget {name:'one'}) RETURN x, length(p) AS hops"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                1
+              ],
+              [
+                1,
+                1
+              ],
+              [
+                1,
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "zero hop preserves duplicates",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH p = (a)-[:OptLink*0..0]->(a) RETURN x, length(p) AS hops"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                0
+              ],
+              [
+                1,
+                0
+              ],
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "wildcard hides identity",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN *"
+          },
+          "assert": {
+            "row_count": 3
+          }
+        },
+        {
+          "name": "with wildcard retains only named bindings",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) WITH * RETURN a.name, b.name, r.marker, x"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                "source",
+                "one",
+                "yes",
+                1
+              ],
+              [
+                "source",
+                "one",
+                "yes",
+                1
+              ],
+              [
+                "source",
+                "one",
+                "yes",
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "nullable scalar origins",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) WITH a, null AS absent OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN absent, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                null,
+                "one"
+              ],
+              [
+                null,
+                "one"
+              ],
+              [
+                null,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "incoming path remains available",
+          "vars": {
+            "query": "MATCH p = (a:OptSource {name:'source'})-[:OptLink]->(:OptTarget {name:'one'}) UNWIND [1,1,1] AS x OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) RETURN length(p), x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                1,
+                "one"
+              ],
+              [
+                1,
+                1,
+                "one"
+              ],
+              [
+                1,
+                1,
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "node and relationship mutations preserve rows",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) SET b.visited = true, r.visited = true, a.visited = true RETURN x, b.name, r.visited"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one",
+                true
+              ],
+              [
+                1,
+                "one",
+                true
+              ],
+              [
+                1,
+                "one",
+                true
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "OptSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "visited": true
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "OptSource"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "active": true,
+                      "visited": true
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "active": true
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OptDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "active": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "leaf",
+                    "kinds": [
+                      "OptLeaf"
+                    ],
+                    "props": {
+                      "name": "leaf"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes",
+                      "visited": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "no"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "leaf",
+                    "kind": "OtherOptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "one",
+                    "end": "source",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "reverse"
+                    }
+                  },
+                  {
+                    "start": "one",
+                    "end": "leaf",
+                    "kind": "OptTail",
+                    "props": {
+                      "marker": "tail"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "null targets retain source mutation",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink]->(b:OptTarget {name:'absent'}) SET b.visited = true, r.visited = true, a.visited = true RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "OptSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "visited": true
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "OptSource"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "active": true
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "active": true
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OptDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "active": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "leaf",
+                    "kinds": [
+                      "OptLeaf"
+                    ],
+                    "props": {
+                      "name": "leaf"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "no"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "leaf",
+                    "kind": "OtherOptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "one",
+                    "end": "source",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "reverse"
+                    }
+                  },
+                  {
+                    "start": "one",
+                    "end": "leaf",
+                    "kind": "OptTail",
+                    "props": {
+                      "marker": "tail"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "with mutation retains repeated input",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) WITH a, b, r, x SET b.visited = true RETURN x, b.name"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ],
+              [
+                1,
+                "one"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "OptSource"
+                    ],
+                    "props": {
+                      "name": "source"
+                    }
+                  },
+                  {
+                    "id": "isolated",
+                    "kinds": [
+                      "OptSource"
+                    ],
+                    "props": {
+                      "name": "isolated"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "active": true,
+                      "visited": true
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "active": true
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "OptDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "active": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "OptTarget"
+                    ],
+                    "props": {
+                      "name": "missing"
+                    }
+                  },
+                  {
+                    "id": "leaf",
+                    "kinds": [
+                      "OptLeaf"
+                    ],
+                    "props": {
+                      "name": "leaf"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "no"
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "leaf",
+                    "kind": "OtherOptLink",
+                    "props": {
+                      "marker": "yes"
+                    }
+                  },
+                  {
+                    "start": "one",
+                    "end": "source",
+                    "kind": "OptLink",
+                    "props": {
+                      "marker": "reverse"
+                    }
+                  },
+                  {
+                    "start": "one",
+                    "end": "leaf",
+                    "kind": "OptTail",
+                    "props": {
+                      "marker": "tail"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create consumes each optional result once",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) CREATE (audit:OptAudit {item:x}) RETURN audit.item"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_row_values": [
+              [
+                1
+              ],
+              [
+                1
+              ],
+              [
+                1
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OptAudit) RETURN count(n) AS c",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n:OptAudit) RETURN n.item ORDER BY n.item",
+              "assert": {
+                "ordered_row_values": [
+                  [
+                    1
+                  ],
+                  [
+                    1
+                  ],
+                  [
+                    1
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create without return preserves stored cardinality",
+          "vars": {
+            "query": "UNWIND [1,1,1] AS x MATCH (a:OptSource {name:'source'}) OPTIONAL MATCH (a)-[r:OptLink {marker:'yes'}]->(b:OptTarget {name:'one'}) CREATE (audit:OptAudit {item:x})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:OptAudit) RETURN count(n) AS c",
+              "assert": {
+                "exact_int": 3
+              }
+            },
+            {
+              "cypher": "MATCH (n:OptAudit) RETURN n.item ORDER BY n.item",
+              "assert": {
+                "ordered_row_values": [
+                  [
+                    1
+                  ],
+                  [
+                    1
+                  ],
+                  [
+                    1
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

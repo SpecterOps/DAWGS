@@ -21,13 +21,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testCaseFiles embeds the parser and analyzer fixture cases consumed by Runner.
+//
 //go:embed cases
 var testCaseFiles embed.FS
 
 type Type = string
 
 const (
-	TypeStringMatch  Type = "string_match"
+	// TypeStringMatch identifies a case that compares formatted query text.
+	TypeStringMatch Type = "string_match"
+
+	// TypeNegativeCase identifies a case that expects parsing or analysis errors.
 	TypeNegativeCase Type = "negative_case"
 )
 
@@ -208,6 +213,7 @@ func LoadFixture(t *testing.T, filename string) Cases {
 	return fixture
 }
 
+// testRunner loads one embedded fixture and dispatches it to the runner selected by its case type.
 func testRunner[T Runner](testCase Case) func(t *testing.T) {
 	return func(t *testing.T) {
 		// Run the test case if it isn't ignored
@@ -221,6 +227,7 @@ func testRunner[T Runner](testCase Case) func(t *testing.T) {
 	}
 }
 
+// testCase parses one named JSON fixture from fs into the concrete case type requested by its metadata.
 func testCase(test Case) func(t *testing.T) {
 	switch test.Type {
 	case TypeStringMatch:
@@ -236,6 +243,7 @@ func testCase(test Case) func(t *testing.T) {
 	}
 }
 
+// updatedCasesDir creates and returns updated_cases beneath the current working directory.
 func updatedCasesDir() (string, error) {
 	if workingDir, err := os.Getwd(); err != nil {
 		return "", err
@@ -250,6 +258,7 @@ func updatedCasesDir() (string, error) {
 	}
 }
 
+// UpdatePositiveTestCasesFitness writes parser/analyzer fixtures with refreshed ExpectedFitness values into updated_cases.
 func UpdatePositiveTestCasesFitness() error {
 	if updatedCasesPath, err := updatedCasesDir(); err != nil {
 		return err
@@ -291,10 +300,13 @@ func UpdatePositiveTestCasesFitness() error {
 						} else {
 							details.ExpectedFitness = &complexity.RelativeFitness
 
-							if updatedDetails, err := json.Marshal(details); err != nil {
+							var updatedDetails bytes.Buffer
+							encoder := json.NewEncoder(&updatedDetails)
+							encoder.SetEscapeHTML(false)
+							if err := encoder.Encode(details); err != nil {
 								return fmt.Errorf("error marshalling test case details: %v", err)
 							} else {
-								nextCase.Details = updatedDetails
+								nextCase.Details = bytes.TrimSpace(updatedDetails.Bytes())
 							}
 						}
 
@@ -309,7 +321,10 @@ func UpdatePositiveTestCasesFitness() error {
 				} else {
 					defer output.Close()
 
-					if err := json.NewEncoder(output).Encode(updatedCases); err != nil {
+					encoder := json.NewEncoder(output)
+					encoder.SetEscapeHTML(false)
+					encoder.SetIndent("", "  ")
+					if err := encoder.Encode(updatedCases); err != nil {
 						return err
 					}
 				}

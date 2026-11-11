@@ -1,0 +1,5801 @@
+{
+  "families": [
+    {
+      "name": "read-only WITH modifiers",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "WithPageRoot"
+            ],
+            "properties": {
+              "tag": "root",
+              "fixture": "active"
+            }
+          },
+          {
+            "id": "other-root",
+            "kinds": [
+              "WithPageRoot"
+            ],
+            "properties": {
+              "tag": "other-root",
+              "fixture": "other"
+            }
+          },
+          {
+            "id": "n1",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n1",
+              "role": "eligible",
+              "score": 1,
+              "group": "a"
+            }
+          },
+          {
+            "id": "n2",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n2",
+              "role": "eligible",
+              "score": 2,
+              "group": "a"
+            }
+          },
+          {
+            "id": "n3",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n3",
+              "role": "eligible",
+              "score": 3,
+              "group": "b"
+            }
+          },
+          {
+            "id": "n4",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n4",
+              "role": "eligible",
+              "score": 4,
+              "group": "b"
+            }
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "WithPageDecoy"
+            ],
+            "properties": {
+              "tag": "wrong-kind",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-role",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-role",
+              "score": 99,
+              "role": "excluded"
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "missing-role",
+              "score": 99
+            }
+          },
+          {
+            "id": "wrong-direction",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-direction",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-kind",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-edge-kind",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-property",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-edge-property",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "missing-edge-property",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "missing-edge-property",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-root",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-root",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "created-kind",
+            "kinds": [
+              "WithPageCreated"
+            ],
+            "properties": {
+              "tag": "created-kind",
+              "role": "fixture"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "n1",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 1
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "n2",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 2
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "n3",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 3
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "n4",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 4
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-kind",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-role",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "missing-role",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "wrong-direction",
+            "end_id": "root",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-edge-kind",
+            "kind": "WithPageOtherLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-edge-property",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": false
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "missing-edge-property",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99
+            }
+          },
+          {
+            "start_id": "other-root",
+            "end_id": "wrong-root",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "descending order",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score DESC RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              4,
+              3,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "ascending order",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              1,
+              2,
+              3,
+              4
+            ]
+          }
+        },
+        {
+          "name": "ordered page",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score DESC SKIP 1 LIMIT 2 RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2
+            ]
+          }
+        },
+        {
+          "name": "skip only",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n SKIP 2 RETURN n.score"
+          },
+          "assert": {
+            "row_count": 2
+          }
+        },
+        {
+          "name": "limit only",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n LIMIT 2 RETURN n.score"
+          },
+          "assert": {
+            "row_count": 2
+          }
+        },
+        {
+          "name": "skip beyond rows",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score SKIP 9 RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          }
+        },
+        {
+          "name": "zero limit",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n LIMIT 0 RETURN count(n)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              0
+            ]
+          }
+        },
+        {
+          "name": "entity alias",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n AS item ORDER BY item.score DESC LIMIT 2 RETURN item.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              4,
+              3
+            ]
+          }
+        },
+        {
+          "name": "scalar alias",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n.score AS value ORDER BY value DESC SKIP 1 LIMIT 2 RETURN value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2
+            ]
+          }
+        },
+        {
+          "name": "nested alias order",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n.score AS value ORDER BY value + 1 DESC LIMIT 2 RETURN value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              4,
+              3
+            ]
+          }
+        },
+        {
+          "name": "hidden order key",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n.tag AS value ORDER BY n.score DESC LIMIT 2 RETURN value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "n4",
+              "n3"
+            ]
+          }
+        },
+        {
+          "name": "relationship order",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH r ORDER BY r.score DESC SKIP 1 LIMIT 2 RETURN r.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2
+            ]
+          }
+        },
+        {
+          "name": "relationship alias",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH r AS link ORDER BY link.score DESC LIMIT 2 RETURN link.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              4,
+              3
+            ]
+          }
+        },
+        {
+          "name": "multiple sort keys",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.group, n.score DESC SKIP 1 LIMIT 2 RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              1,
+              4
+            ]
+          }
+        },
+        {
+          "name": "distinct before page",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH DISTINCT n.group AS value ORDER BY value DESC LIMIT 1 RETURN value"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "b"
+            ]
+          }
+        },
+        {
+          "name": "aggregate before page",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n.group AS value, count(n) AS total ORDER BY total DESC, value LIMIT 1 RETURN value, total"
+          },
+          "assert": {
+            "ordered_row_values": [
+              [
+                "a",
+                2
+              ]
+            ]
+          }
+        },
+        {
+          "name": "where after page empty",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score DESC LIMIT 1 WHERE n.score < 4 RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          }
+        },
+        {
+          "name": "where alias after page empty",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n.score AS value ORDER BY value DESC LIMIT 1 WHERE value < 4 RETURN value"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          }
+        },
+        {
+          "name": "where after skip",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score DESC SKIP 1 LIMIT 2 WHERE n.score > 2 RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "parameter where after page",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score DESC LIMIT 1 WHERE n.score < $threshold RETURN n.score"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          },
+          "params": {
+            "threshold": 4
+          }
+        },
+        {
+          "name": "empty input",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true AND n.score < 0 WITH n ORDER BY n.score LIMIT 2 RETURN count(n)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              0
+            ]
+          }
+        },
+        {
+          "name": "leading unwind",
+          "vars": {
+            "query": "UNWIND [3, 1, 2] AS x WITH x ORDER BY x DESC SKIP 1 LIMIT 1 RETURN x"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              2
+            ]
+          }
+        },
+        {
+          "name": "duplicate input rows",
+          "vars": {
+            "query": "UNWIND [3, 1, 3, 2] AS x WITH x ORDER BY x DESC LIMIT 2 RETURN x"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              3
+            ]
+          }
+        },
+        {
+          "name": "distinct duplicate rows",
+          "vars": {
+            "query": "UNWIND [3, 1, 3, 2] AS x WITH DISTINCT x ORDER BY x DESC LIMIT 2 RETURN x"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              2
+            ]
+          }
+        },
+        {
+          "name": "literal projection keeps cardinality",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH 1 AS value LIMIT 3 RETURN count(value)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3
+            ]
+          }
+        },
+        {
+          "name": "literal projection on empty input",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true AND n.score < 0 WITH 1 AS value LIMIT 3 RETURN count(value)"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              0
+            ]
+          }
+        },
+        {
+          "name": "consecutive pages",
+          "vars": {
+            "query": "UNWIND [5, 1, 4, 2, 3] AS x WITH x ORDER BY x DESC LIMIT 4 WITH x ORDER BY x SKIP 1 LIMIT 2 RETURN x"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3,
+              4
+            ]
+          }
+        },
+        {
+          "name": "return has separate page",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n ORDER BY n.score DESC LIMIT 3 RETURN n.score ORDER BY n.score SKIP 1 LIMIT 1"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              3
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "WITH pagination mutation selection",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "WithPageRoot"
+            ],
+            "properties": {
+              "tag": "root",
+              "fixture": "active"
+            }
+          },
+          {
+            "id": "other-root",
+            "kinds": [
+              "WithPageRoot"
+            ],
+            "properties": {
+              "tag": "other-root",
+              "fixture": "other"
+            }
+          },
+          {
+            "id": "n1",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n1",
+              "role": "eligible",
+              "score": 1,
+              "group": "a"
+            }
+          },
+          {
+            "id": "n2",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n2",
+              "role": "eligible",
+              "score": 2,
+              "group": "a"
+            }
+          },
+          {
+            "id": "n3",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n3",
+              "role": "eligible",
+              "score": 3,
+              "group": "b"
+            }
+          },
+          {
+            "id": "n4",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "n4",
+              "role": "eligible",
+              "score": 4,
+              "group": "b"
+            }
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "WithPageDecoy"
+            ],
+            "properties": {
+              "tag": "wrong-kind",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-role",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-role",
+              "score": 99,
+              "role": "excluded"
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "missing-role",
+              "score": 99
+            }
+          },
+          {
+            "id": "wrong-direction",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-direction",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-kind",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-edge-kind",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-property",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-edge-property",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "missing-edge-property",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "missing-edge-property",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-root",
+            "kinds": [
+              "WithPageTarget"
+            ],
+            "properties": {
+              "tag": "wrong-root",
+              "score": 99,
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "created-kind",
+            "kinds": [
+              "WithPageCreated"
+            ],
+            "properties": {
+              "tag": "created-kind",
+              "role": "fixture"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "n1",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 1
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "n2",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 2
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "n3",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 3
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "n4",
+            "kind": "WithPageLink",
+            "properties": {
+              "enabled": true,
+              "score": 4
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-kind",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-role",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "missing-role",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "wrong-direction",
+            "end_id": "root",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-edge-kind",
+            "kind": "WithPageOtherLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "wrong-edge-property",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": false
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "missing-edge-property",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99
+            }
+          },
+          {
+            "start_id": "other-root",
+            "end_id": "wrong-root",
+            "kind": "WithPageLink",
+            "properties": {
+              "score": 99,
+              "enabled": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node page without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 SET n.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship page without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY r.score DESC SKIP 1 LIMIT 2 SET r.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "combined page without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 SET n.seen = true, r.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "create page without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 CREATE (c:WithPageCreated {role: 'created', source: n.tag, score: n.score})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 17
+              }
+            },
+            {
+              "cypher": "MATCH (c:WithPageCreated) WHERE c.role = 'created' RETURN c.source, c.score ORDER BY c.source",
+              "assert": {
+                "ordered_row_values": [
+                  [
+                    "n2",
+                    2
+                  ],
+                  [
+                    "n3",
+                    3
+                  ]
+                ],
+                "row_count": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "where after page without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r, n.score AS value ORDER BY value DESC LIMIT 1 WHERE value < 4 SET n.seen = true, r.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "where after skip without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 WHERE n.score > 2 SET n.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "zero limit without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r LIMIT 0 SET n.seen = true, r.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty create without return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n LIMIT 0 CREATE (c:WithPageCreated {role: 'created', source: n.tag, score: n.score})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            },
+            {
+              "cypher": "MATCH (c:WithPageCreated) WHERE c.role = 'created' RETURN c.source, c.score ORDER BY c.source",
+              "assert": {
+                "ordered_row_values": [],
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "node page with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 SET n.seen = true RETURN n.tag ORDER BY n.tag"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "n2",
+              "n3"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship page with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY r.score DESC SKIP 1 LIMIT 2 SET r.seen = true RETURN n.tag ORDER BY n.tag"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "n2",
+              "n3"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "combined page with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 SET n.seen = true, r.seen = true RETURN n.tag ORDER BY n.tag"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "n2",
+              "n3"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "create page with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 CREATE (c:WithPageCreated {role: 'created', source: n.tag, score: n.score}) RETURN c.source ORDER BY c.source"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "n2",
+              "n3"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 17
+              }
+            },
+            {
+              "cypher": "MATCH (c:WithPageCreated) WHERE c.role = 'created' RETURN c.source, c.score ORDER BY c.source",
+              "assert": {
+                "ordered_row_values": [
+                  [
+                    "n2",
+                    2
+                  ],
+                  [
+                    "n3",
+                    3
+                  ]
+                ],
+                "row_count": 2
+              }
+            }
+          ]
+        },
+        {
+          "name": "where after page with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r, n.score AS value ORDER BY value DESC LIMIT 1 WHERE value < 4 SET n.seen = true, r.seen = true RETURN n.tag ORDER BY n.tag"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "where after skip with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r ORDER BY n.score DESC SKIP 1 LIMIT 2 WHERE n.score > 2 SET n.seen = true RETURN n.tag ORDER BY n.tag"
+          },
+          "assert": {
+            "ordered_scalar_values": [
+              "n3"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "zero limit with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n, r LIMIT 0 SET n.seen = true, r.seen = true RETURN n.tag ORDER BY n.tag"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty create with return",
+          "vars": {
+            "query": "MATCH (s:WithPageRoot {fixture: 'active'})-[r:WithPageLink]->(n:WithPageTarget) WHERE n.role = 'eligible' AND r.enabled = true WITH n LIMIT 0 CREATE (c:WithPageCreated {role: 'created', source: n.tag, score: n.score}) RETURN c.source ORDER BY c.source"
+          },
+          "assert": {
+            "ordered_scalar_values": []
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.tag IS NOT NULL RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "root",
+                      "fixture": "active"
+                    }
+                  },
+                  {
+                    "id": "other-root",
+                    "kinds": [
+                      "WithPageRoot"
+                    ],
+                    "props": {
+                      "tag": "other-root",
+                      "fixture": "other"
+                    }
+                  },
+                  {
+                    "id": "n1",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n1",
+                      "role": "eligible",
+                      "score": 1,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n2",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n2",
+                      "role": "eligible",
+                      "score": 2,
+                      "group": "a"
+                    }
+                  },
+                  {
+                    "id": "n3",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n3",
+                      "role": "eligible",
+                      "score": 3,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "n4",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "n4",
+                      "role": "eligible",
+                      "score": 4,
+                      "group": "b"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "WithPageDecoy"
+                    ],
+                    "props": {
+                      "tag": "wrong-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-role",
+                      "score": 99,
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-role",
+                      "score": 99
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-direction",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-kind",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "missing-edge-property",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-root",
+                    "kinds": [
+                      "WithPageTarget"
+                    ],
+                    "props": {
+                      "tag": "wrong-root",
+                      "score": 99,
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "created-kind",
+                    "kinds": [
+                      "WithPageCreated"
+                    ],
+                    "props": {
+                      "tag": "created-kind",
+                      "role": "fixture"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "root",
+                    "end": "n1",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 1
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n2",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 2
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n3",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 3
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "n4",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "enabled": true,
+                      "score": 4
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-kind",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-role",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-kind",
+                    "kind": "WithPageOtherLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "wrong-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "root",
+                    "end": "missing-edge-property",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99
+                    }
+                  },
+                  {
+                    "start": "other-root",
+                    "end": "wrong-root",
+                    "kind": "WithPageLink",
+                    "props": {
+                      "score": 99,
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "exact_int": 15
+              }
+            },
+            {
+              "cypher": "MATCH (c:WithPageCreated) WHERE c.role = 'created' RETURN c.source, c.score ORDER BY c.source",
+              "assert": {
+                "ordered_row_values": [],
+                "row_count": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -69,7 +69,6 @@ func Pipeline[R any, T any](ctx context.Context, inC <-chan R, outC chan<- T, co
 		} else {
 			return Submit(ctx, outC, convertedValue), nil
 		}
-
 	}
 
 	return false, nil

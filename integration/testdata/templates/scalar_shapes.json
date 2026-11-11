@@ -321,6 +321,196 @@
             "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return count(n), count(distinct n.department), min(n.score), max(n.score), avg(n.score)"
           },
           "assert": {"row_values": [[3, 2, 1, 3, 2]]}
+        },
+        {
+          "name": "literal null predicate projection returns true",
+          "vars": {
+            "query": "return null is null as value"
+          },
+          "assert": {"ordered_row_values": [[true]]}
+        },
+        {
+          "name": "literal null predicate negated projection returns false",
+          "vars": {
+            "query": "return null is not null as value"
+          },
+          "assert": {"ordered_row_values": [[false]]}
+        },
+        {
+          "name": "non-null literal null predicate projections",
+          "vars": {
+            "query": "return 1 is null as missing, 'a' is not null as present"
+          },
+          "assert": {"ordered_row_values": [[false, true]]}
+        },
+        {
+          "name": "true literal null predicate retains where matches",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and null is null return count(n.name)"
+          },
+          "assert": {"ordered_scalar_values": [3]}
+        },
+        {
+          "name": "false literal null predicate empties where matches",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and 1 is null return n.name"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "false negated literal null predicate empties where matches",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and null is not null return n.name"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "bound node is never null in a match",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and n is not null return count(n.name)"
+          },
+          "assert": {"ordered_scalar_values": [3]}
+        },
+        {
+          "name": "with bound null value satisfies null predicate",
+          "vars": {
+            "query": "with null as v return v is null as value"
+          },
+          "assert": {"ordered_row_values": [[true]]}
+        },
+        {
+          "name": "unwind value null predicate continuation",
+          "vars": {
+            "query": "unwind [1, 2] as x with x where x is not null return count(x)"
+          },
+          "assert": {"ordered_scalar_values": [2]}
+        },
+        {
+          "name": "double negation where matches the positive predicate",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where not not n.group = 'shape' return n.name order by n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha"], ["beta"], ["gamma"]]}
+        },
+        {
+          "name": "triple negation where behaves as a single negation",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where not not not n.group = 'shape' return n.name"
+          },
+          "assert": {"row_values": [["fallback"], ["has%percent"], ["hasXpercent"], ["missing-tags"], ["null-tags"], ["under_score"], ["underXscore"]]}
+        },
+        {
+          "name": "double negated projected predicate preserves values",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' return n.name, not not n.score > 1 as again order by n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha", false], ["beta", true], ["gamma", true]]}
+        },
+        {
+          "name": "double negation preserves null predicate filtering",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group in ['missing-tags', 'null-tags'] and not not n.tags is null return n.name order by n.name"
+          },
+          "assert": {"ordered_row_values": [["missing-tags"], ["null-tags"]]}
+        },
+        {
+          "name": "double negated string prefix predicate matches the positive form",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where not not n.name starts with 'under_' return n.name"
+          },
+          "assert": {"row_values": [["under_score"]]}
+        },
+        {
+          "name": "double negation in with where continuation",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) with n where not not n.group = 'shape' return n.name order by n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha"], ["beta"], ["gamma"]]}
+        }
+      ]
+    },
+    {
+      "name": "float literal type shapes",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "alpha",
+            "kinds": ["TemplateNodeKind1"],
+            "properties": {
+              "name": "alpha",
+              "group": "shape",
+              "department": "eng",
+              "score": 1,
+              "objectid": "S-1-500",
+              "tags": ["admin", "tier0"]
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "integral float division stays float arithmetic",
+          "vars": {
+            "query": "return 3.0 / 2.0 as a"
+          },
+          "assert": {"ordered_row_values": [[1.5]]}
+        },
+        {
+          "name": "integral float multiplication stays float arithmetic",
+          "vars": {
+            "query": "return 3.0 * 2.0 as a"
+          },
+          "assert": {"ordered_row_values": [[6.0]]}
+        },
+        {
+          "name": "mixed integral and fractional float arithmetic",
+          "vars": {
+            "query": "return 3.0 - 0.5 as a"
+          },
+          "assert": {"ordered_row_values": [[2.5]]}
+        },
+        {
+          "name": "exponent literal keeps float division",
+          "vars": {
+            "query": "return 1e3 / 2.0 as a"
+          },
+          "assert": {"ordered_row_values": [[500.0]]}
+        },
+        {
+          "name": "integral float projection returns a float",
+          "vars": {
+            "query": "return 3.0 as a"
+          },
+          "assert": {"ordered_row_values": [[3.0]]}
+        },
+        {
+          "name": "toString of an integral float keeps fractional text",
+          "vars": {
+            "query": "return toString(1.0) as s"
+          },
+          "assert": {"ordered_row_values": [["1.0"]]}
+        },
+        {
+          "name": "float list literal keeps element values",
+          "vars": {
+            "query": "return [1.0, 2.5] as values"
+          },
+          "assert": {"ordered_row_values": [[[1.0, 2.5]]]}
+        },
+        {
+          "name": "property equality against an integral float",
+          "vars": {
+            "query": "match (n:TemplateNodeKind1) where n.group = 'shape' and n.score = 1.0 return n.name"
+          },
+          "assert": {"ordered_row_values": [["alpha"]]}
+        },
+        {
+          "name": "integer division control stays integer arithmetic",
+          "vars": {
+            "query": "return 3 / 2 as a"
+          },
+          "assert": {"ordered_row_values": [[1]]}
         }
       ]
     }

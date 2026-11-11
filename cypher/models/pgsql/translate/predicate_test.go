@@ -82,7 +82,7 @@ func translatePredicateQuery(t *testing.T, cypherQuery string, parameters map[st
 func TestExclusiveDisjunctionTranslates(t *testing.T) {
 	formatted := translatePredicateQuery(t, `MATCH (n:NodeKind1) WHERE true XOR false RETURN n`, nil)
 
-	require.Contains(t, formatted, "true != false")
+	require.Contains(t, formatted, "(true) != (false)")
 }
 
 func TestDynamicStringPredicatesUseEscapedLikePatterns(t *testing.T) {
@@ -96,19 +96,19 @@ func TestDynamicStringPredicatesUseEscapedLikePatterns(t *testing.T) {
 			name:       "contains parameter",
 			query:      `MATCH (n:NodeKind1) WHERE n.name CONTAINS $needle RETURN n`,
 			parameters: map[string]any{"needle": "needle"},
-			expected:   "((n0.properties ->> E'name') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit0::text)::text)",
+			expected:   "(n0.properties ->> E'name') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text",
 		},
 		{
 			name:       "starts with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE n.name STARTS WITH $prefix RETURN n`,
 			parameters: map[string]any{"prefix": "prefix"},
-			expected:   "((n0.properties ->> E'name') like (cypher_like_escape((@pi0::text)::text)::text || @__strlit0::text)::text)",
+			expected:   "(n0.properties ->> E'name') like (cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text",
 		},
 		{
 			name:       "ends with parameter",
 			query:      `MATCH (n:NodeKind1) WHERE n.name ENDS WITH $suffix RETURN n`,
 			parameters: map[string]any{"suffix": "suffix"},
-			expected:   "((n0.properties ->> E'name') like (@__strlit0::text || cypher_like_escape((@pi0::text)::text)::text)::text)",
+			expected:   "(n0.properties ->> E'name') like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -140,17 +140,17 @@ func TestLiteralStringPredicatesKeepLikePatterns(t *testing.T) {
 		{
 			name:     "contains",
 			query:    `MATCH (n:NodeKind1) WHERE n.name CONTAINS 'needle' RETURN n`,
-			expected: "((n0.properties ->> E'name') like @__strlit0::text)",
+			expected: "(n0.properties ->> E'name') like @__strlit1::text",
 		},
 		{
 			name:     "starts with",
 			query:    `MATCH (n:NodeKind1) WHERE n.name STARTS WITH 'prefix' RETURN n`,
-			expected: "((n0.properties ->> E'name') like @__strlit0::text)",
+			expected: "(n0.properties ->> E'name') like @__strlit1::text",
 		},
 		{
 			name:     "ends with",
 			query:    `MATCH (n:NodeKind1) WHERE n.name ENDS WITH 'suffix' RETURN n`,
-			expected: "((n0.properties ->> E'name') like @__strlit0::text)",
+			expected: "(n0.properties ->> E'name') like @__strlit1::text",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -211,41 +211,19 @@ func TestStringPropertyEqualityKeepsBTreeIndexableTextLookup(t *testing.T) {
 	}
 }
 
-func TestNegatedDynamicStringPredicatesCoalescePropertyLookups(t *testing.T) {
-	for _, testCase := range []struct {
-		name       string
-		query      string
-		parameters map[string]any
-		expected   string
-	}{
-		{
-			name:       "contains parameter",
-			query:      `MATCH (n:NodeKind1) WHERE not n.name CONTAINS $needle RETURN n`,
-			parameters: map[string]any{"needle": "needle"},
-			expected:   "not coalesce((n0.properties ->> E'name'), @__strlit0::text)::text like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text",
-		},
-		{
-			name:     "contains property",
-			query:    `MATCH (n:NodeKind1) WHERE not n.name CONTAINS n.other RETURN n`,
-			expected: "not cypher_contains(coalesce((n0.properties ->> E'name'), @__strlit0::text)::text, coalesce((n0.properties ->> E'other'), @__strlit0::text)::text)::bool",
-		},
-		{
-			name:       "starts with parameter",
-			query:      `MATCH (n:NodeKind1) WHERE not n.name STARTS WITH $prefix RETURN n`,
-			parameters: map[string]any{"prefix": "prefix"},
-			expected:   "not coalesce((n0.properties ->> E'name'), @__strlit0::text)::text like (cypher_like_escape((@pi0::text)::text)::text || @__strlit1::text)::text",
-		},
-		{
-			name:       "ends with parameter",
-			query:      `MATCH (n:NodeKind1) WHERE not n.name ENDS WITH $suffix RETURN n`,
-			parameters: map[string]any{"suffix": "suffix"},
-			expected:   "not coalesce((n0.properties ->> E'name'), @__strlit0::text)::text like (@__strlit1::text || cypher_like_escape((@pi0::text)::text)::text)::text",
-		},
+func TestNegatedDynamicStringPredicatesPreserveNulls(t *testing.T) {
+	for _, query := range []string{
+		`MATCH (n:NodeKind1) WHERE not n.name CONTAINS $needle RETURN n`,
+		`MATCH (n:NodeKind1) WHERE not n.name CONTAINS n.other RETURN n`,
+		`MATCH (n:NodeKind1) WHERE not n.name STARTS WITH $needle RETURN n`,
+		`MATCH (n:NodeKind1) WHERE not n.name ENDS WITH $needle RETURN n`,
 	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			formatted := translatePredicateQuery(t, testCase.query, testCase.parameters)
-
-			require.Contains(t, formatted, testCase.expected)
+		t.Run(query, func(t *testing.T) {
+			formatted := translatePredicateQuery(t, query, map[string]any{"needle": "needle"})
+			require.Contains(t, formatted, "not (")
+			require.Contains(t, formatted, "jsonb_typeof(")
+			require.Contains(t, formatted, "and null")
+			require.NotContains(t, formatted, "coalesce(")
 		})
 	}
 }
@@ -372,6 +350,44 @@ func TestSelfReferentialPatternDoesNotPanic(t *testing.T) {
 
 			_, err = Translated(translation)
 			require.NoError(t, err)
+		})
+	}
+}
+
+// TestExclusiveDisjunctionPreservesComparisonGrouping checks that XOR translation preserves comparison boundaries inside conjunctions.
+func TestExclusiveDisjunctionPreservesComparisonGrouping(t *testing.T) {
+	for _, tc := range []struct {
+		// name identifies this test case in subtest and benchmark output.
+		name string
+		// predicate is the Cypher Boolean expression translated by the case.
+		predicate string
+		// expected is the SQL substring required for the predicate grouping.
+		expected string
+	}{
+		{
+			name:      "comparisons",
+			predicate: "(true = false XOR false = false) AND true",
+			expected:  "((true = false) != (false = false))",
+		},
+		{
+			name:      "three operands",
+			predicate: "true XOR false XOR true",
+			expected:  "(true) != (((false) != (true)))",
+		},
+		{
+			name:      "and operand",
+			predicate: "(true AND false) XOR true",
+			expected:  "((true and false)) != (true)",
+		},
+		{
+			name:      "null operand",
+			predicate: "null XOR true",
+			expected:  "(null) != (true)",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			formatted := translatePredicateQuery(t, "MATCH (n:NodeKind1) WHERE "+tc.predicate+" RETURN n", nil)
+			require.Contains(t, formatted, tc.expected)
 		})
 	}
 }

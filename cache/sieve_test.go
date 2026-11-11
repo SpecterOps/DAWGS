@@ -37,6 +37,26 @@ func TestSieve_UpdateExistingKey(t *testing.T) {
 	require.Equal(t, 20, fetched)
 }
 
+// TestSieve_NonPositiveCapacity checks that non-positive capacities retain a functional single-entry cache.
+//
+// Non-positive capacities floor at one so the cache stays functional.
+func TestSieve_NonPositiveCapacity(t *testing.T) {
+	for _, capacity := range []int{0, -2} {
+		sieve := cache.NewSieve[uint64, uint64](capacity)
+		require.Equal(t, 1, sieve.Stats().Capacity)
+
+		sieve.Put(1, 1)
+		sieve.Put(2, 2) // Evicts 1 at capacity one.
+
+		fetched, exists := sieve.Get(2)
+		require.True(t, exists)
+		require.Equal(t, uint64(2), fetched)
+
+		_, exists = sieve.Get(1)
+		require.False(t, exists)
+	}
+}
+
 func TestSieve_EvictWhenFull(t *testing.T) {
 	var (
 		sieve      = cache.NewSieve[int, string](3)

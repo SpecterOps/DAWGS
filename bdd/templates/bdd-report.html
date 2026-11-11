@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cypher Technology Compatibility Kit Report</title>
+<style>body{font:16px system-ui,sans-serif;margin:2rem;color:#202124}table{border-collapse:collapse;width:100%;max-width:1000px}th,td{border:1px solid #dadce0;padding:.6rem;text-align:left}th{background:#f1f3f4}.pass{color:#137333}.fail{color:#c5221f}details{margin-top:.75rem}code{white-space:pre-wrap}</style>
+</head><body><h1>Cypher Technology Compatibility Kit Report</h1><p>Generated {{.GeneratedAt}}</p>
+<p><strong>Total:</strong> {{.Total}} &nbsp; <span class="pass"><strong>Passed:</strong> {{.Passed}}</span> &nbsp; <span class="fail"><strong>Failed:</strong> {{.Failed}}</span></p>
+<p><strong>Enforced gate:</strong> {{.Enforced}} scenarios, {{.EnforcedFailed}} failed. Scenarios tagged <code>@report-only</code> are compatibility reports and do not fail the gate.</p>
+{{range .Folders}}<details><summary><strong>{{.Name}}</strong> — {{.Total}} scenarios, <span class="pass">{{.Passed}} passed</span>, <span class="fail">{{.Failed}} failed</span></summary>
+{{range .Features}}<details><summary>{{.Name}} — {{.Total}} scenarios, <span class="pass">{{.Passed}} passed</span>, <span class="fail">{{.Failed}} failed</span></summary><ul>
+{{range .Scenarios}}<li class="{{if eq .Status "passed"}}pass{{else}}fail{{end}}"><strong>{{.Status}}</strong> — {{.Name}} ({{if .Enforced}}enforced{{else}}report-only{{end}}){{if .Error}}<br><code>{{.Error}}</code>{{end}}</li>
+{{end}}</ul></details>
+{{end}}</details>
+{{end}}</body></html>

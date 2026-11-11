@@ -37,12 +37,13 @@ func LoadConfig(configPath string) (Config, error) {
 	return config, nil
 }
 
-func (config Config) Save(configPath string) error {
-	if config.Connections == nil {
-		config.Connections = make(map[string]ConnectionConfig)
+// Save persists the connection configuration at the requested file path.
+func (s Config) Save(configPath string) error {
+	if s.Connections == nil {
+		s.Connections = make(map[string]ConnectionConfig)
 	}
 
-	contents, err := json.MarshalIndent(config, "", "  ")
+	contents, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("could not marshal config: %w", err)
 	}

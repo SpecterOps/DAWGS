@@ -585,6 +585,7 @@ func stripFinalArchiveFrame(t *testing.T, payload []byte) []byte {
 	return nil
 }
 
+// readFileTree reads a directory's file contents for archive round-trip comparisons.
 func readFileTree(t *testing.T, root string) map[string][]byte {
 	t.Helper()
 	tree := map[string][]byte{}
@@ -597,14 +598,14 @@ func readFileTree(t *testing.T, root string) map[string][]byte {
 			return nil
 		}
 
-		relativePath, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
+		relativePath, pathErr := filepath.Rel(root, path)
+		if pathErr != nil {
+			return pathErr
 		}
 
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return err
+		contents, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
 		}
 
 		tree[filepath.ToSlash(relativePath)] = contents

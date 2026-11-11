@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -26,24 +27,39 @@ import (
 )
 
 const (
-	prefixCase          = "case:"
+	// prefixCase introduces a named translation case in a fixture file.
+	prefixCase = "case:"
+
+	// prefixExclusiveTest marks a fixture case that must run without the other cases.
 	prefixExclusiveTest = "exclusive:"
-	prefixCypherParams  = "cypher_params:"
-	prefixPgSQLParams   = "pgsql_params:"
+
+	// prefixCypherParams introduces the JSON parameter map supplied to Cypher translation.
+	prefixCypherParams = "cypher_params:"
+
+	// prefixPgSQLParams introduces the JSON parameter map expected in rendered PostgreSQL.
+	prefixPgSQLParams = "pgsql_params:"
 )
 
+// testCaseFiles embeds the translation fixtures consumed by the package test runner.
+//
 //go:embed translation_cases/*
 var testCaseFiles embed.FS
 
-// Case is a translation test case
+// TranslationTestCase pairs a Cypher query and dynamic parameters with the expected PostgreSQL translation.
 type TranslationTestCase struct {
-	Name         string
-	Cypher       string
-	PgSQL        string
+	// Name identifies the fixture within its source file.
+	Name string
+	// Cypher is the source query supplied to the frontend.
+	Cypher string
+	// PgSQL is the expected rendered PostgreSQL statement.
+	PgSQL string
+	// CypherParams contains dynamic caller parameters keyed by Cypher symbol.
 	CypherParams map[string]any
-	PgSQLParams  map[string]any
+	// PgSQLParams contains the expected dynamic SQL parameter bindings.
+	PgSQLParams map[string]any
 }
 
+// Reset clears the fixture fields so the parser can accumulate the next case.
 func (s *TranslationTestCase) Reset() {
 	s.Name = ""
 	s.Cypher = ""
@@ -52,6 +68,7 @@ func (s *TranslationTestCase) Reset() {
 	s.PgSQLParams = nil
 }
 
+// Copy duplicates the fixture record while retaining its parameter map references.
 func (s *TranslationTestCase) Copy() *TranslationTestCase {
 	return &TranslationTestCase{
 		Name:         s.Name,
@@ -62,6 +79,7 @@ func (s *TranslationTestCase) Copy() *TranslationTestCase {
 	}
 }
 
+// writeStrings writes each string to writer in order and returns the first write failure.
 func writeStrings(output io.Writer, strs ...string) error {
 	for _, str := range strs {
 		if _, err := output.Write([]byte(str)); err != nil {
@@ -72,24 +90,24 @@ func writeStrings(output io.Writer, strs ...string) error {
 	return nil
 }
 
-var licenseHeader = `-- Copyright %d Specter Ops, Inc.
---
--- Licensed under the Apache License, Version 2.0
--- you may not use this file except in compliance with the License.
--- You may obtain a copy of the License at
---
---     http://www.apache.org/licenses/LICENSE-2.0
---
--- Unless required by applicable law or agreed to in writing, software
--- distributed under the License is distributed on an "AS IS" BASIS,
--- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--- See the License for the specific language governing permissions and
--- limitations under the License.
---
--- SPDX-License-Identifier: Apache-2.0
+// fixtureAssets contains the exact license preamble emitted by the fixture writer.
+//
+//go:embed assets/license_header.sql
+var fixtureAssets embed.FS
 
-`
+// licenseHeader preserves the fixture preamble bytes and its printf year placeholder.
+var licenseHeader = loadLicenseHeader()
 
+// loadLicenseHeader loads the embedded preamble at initialization and fails if it is missing.
+func loadLicenseHeader() string {
+	if header, err := fixtureAssets.ReadFile("assets/license_header.sql"); err != nil {
+		panic(err)
+	} else {
+		return string(header)
+	}
+}
+
+// WriteTo parses and translates the query, then writes its source, parameters, and SQL fixture text.
 func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMapper) error {
 	if regularQuery, err := frontend.ParseCypher(frontend.NewContext(), s.Cypher); err != nil {
 		return err
@@ -149,6 +167,7 @@ func (s *TranslationTestCase) WriteTo(output io.Writer, kindMapper pgsql.KindMap
 	return nil
 }
 
+// Assert translates the case and compares normalized SQL and parameters with the golden expectations.
 func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMapper pgsql.KindMapper) {
 	if regularQuery, err := frontend.ParseCypher(frontend.NewContext(), s.Cypher); err != nil {
 		t.Fatalf("Failed to compile cypher query: %s - %v", s.Cypher, err)
@@ -180,7 +199,15 @@ func (s *TranslationTestCase) Assert(t *testing.T, expectedSQL string, kindMappe
 
 			if s.PgSQLParams != nil {
 				maps.Copy(translation.Parameters, formattedQuery.Parameters)
-				require.Equal(t, s.PgSQLParams, translation.Parameters)
+				// Golden parameters are stored as JSON, whose decoder represents
+				// numbers as float64. Compare the translated bag through the same
+				// serialization boundary so typed integer parameters do not create a
+				// false mismatch while their values and emitted casts remain exact.
+				var normalizedParameters map[string]any
+				encodedParameters, err := json.Marshal(translation.Parameters)
+				require.NoError(t, err)
+				require.NoError(t, json.Unmarshal(encodedParameters, &normalizedParameters))
+				require.Equal(t, s.PgSQLParams, normalizedParameters)
 			}
 		}
 	}
@@ -327,6 +354,7 @@ func ReadTranslationTestCaseFile(path string, fin fs.File) (TranslationTestCaseF
 	}, err
 }
 
+// updatedCasesDir returns the configured fixture update directory or an isolated temporary directory.
 func updatedCasesDir() (string, error) {
 	if workingDir, err := os.Getwd(); err != nil {
 		return "", err
@@ -341,6 +369,7 @@ func updatedCasesDir() (string, error) {
 	}
 }
 
+// UpdateTranslationTestCases regenerates SQL golden files from their embedded Cypher cases.
 func UpdateTranslationTestCases(mapper pgsql.KindMapper) error {
 	if updatedCasesPath, err := updatedCasesDir(); err != nil {
 		return err
@@ -361,20 +390,28 @@ func UpdateTranslationTestCases(mapper pgsql.KindMapper) error {
 						return err
 					} else if nextCases, _, err := caseFile.Load(); err != nil {
 						return err
-					} else if output, err := os.OpenFile(updatedCaseFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644); err != nil {
-						return err
 					} else {
+						var output strings.Builder
 						formattedLicenseHeader := fmt.Sprintf(licenseHeader, time.Now().Year())
 
-						if _, err := io.WriteString(output, formattedLicenseHeader); err != nil {
+						if _, err := io.WriteString(&output, formattedLicenseHeader); err != nil {
 							return err
 						}
 
 						for _, nextCase := range nextCases {
-							nextCase.WriteTo(output, mapper)
+							if err := nextCase.WriteTo(&output, mapper); err != nil {
+								return err
+							}
 						}
 
-						output.Close()
+						trailingNewlines := "\n"
+						if bytes.HasSuffix(caseFile.content, []byte("\n\n")) {
+							trailingNewlines = "\n\n"
+						}
+						content := strings.TrimRight(output.String(), "\n") + trailingNewlines
+						if err := os.WriteFile(updatedCaseFilePath, []byte(content), 0644); err != nil {
+							return err
+						}
 					}
 				}
 			}

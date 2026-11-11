@@ -1,0 +1,1602 @@
+{
+  "families": [
+    {
+      "name": "integer property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": 7,
+              "y": 2
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "add",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x + n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                9
+              ]
+            }
+          }
+        },
+        {
+          "name": "subtract",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x - n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                5
+              ]
+            }
+          }
+        },
+        {
+          "name": "multiply",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x * n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                14
+              ]
+            }
+          }
+        },
+        {
+          "name": "divide",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x / n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "modulo",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x % n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "power",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x ^ n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                49.0
+              ]
+            }
+          }
+        },
+        {
+          "name": "chain",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN (n.x + n.y) * n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                18
+              ]
+            }
+          }
+        },
+        {
+          "name": "left chain",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x + n.y + n.x AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                16
+              ]
+            }
+          }
+        },
+        {
+          "name": "literal chain",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN (n.x + n.y) * 2 AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                18
+              ]
+            }
+          }
+        },
+        {
+          "name": "float chain",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN (n.x + n.y) / 2.0 AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                4.5
+              ]
+            }
+          }
+        },
+        {
+          "name": "parentheses",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN (n.x) + (n.y) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                9
+              ]
+            }
+          }
+        },
+        {
+          "name": "missing",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x + n.missing AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "WITH aliases",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n WITH n.x AS x, n.y AS y RETURN x + y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                9
+              ]
+            }
+          }
+        },
+        {
+          "name": "WITH result",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n WITH n.x + n.y AS total RETURN total * 2 AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                18
+              ]
+            }
+          }
+        },
+        {
+          "name": "WHERE result",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n WHERE n.x + n.y = 9 RETURN n.x AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "WHERE chain",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n WHERE (n.x + n.y) * n.y > 17 RETURN n.x AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "null chain",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN (n.x + n.missing) + n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "float result remains float",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7.5, n.y = 2.5 WITH n RETURN (n.x + n.y) / 4 AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                2.5
+              ]
+            }
+          }
+        },
+        {
+          "name": "floating remainder",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 1.0, n.y = 0.1 WITH n RETURN n.x % n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                0.09999999999999995
+              ]
+            }
+          }
+        },
+        {
+          "name": "null literal",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN (n.x + n.y) + null AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "reverse comparison",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN 9 = n.x + n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "equal property",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n RETURN n.x + n.y = n.x AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                false
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "float property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": 7.5,
+              "y": 2.0
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "add",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7.5, n.y = 2.0 WITH n RETURN n.x + n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                9.5
+              ]
+            }
+          }
+        },
+        {
+          "name": "subtract",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7.5, n.y = 2.0 WITH n RETURN n.x - n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                5.5
+              ]
+            }
+          }
+        },
+        {
+          "name": "multiply",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7.5, n.y = 2.0 WITH n RETURN n.x * n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                15.0
+              ]
+            }
+          }
+        },
+        {
+          "name": "divide",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7.5, n.y = 2.0 WITH n RETURN n.x / n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                3.75
+              ]
+            }
+          }
+        },
+        {
+          "name": "modulo",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7.5, n.y = 2.0 WITH n RETURN n.x % n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1.5
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative integer property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": -7,
+              "y": 2
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "divide",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = -7, n.y = 2 WITH n RETURN n.x / n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -3
+              ]
+            }
+          }
+        },
+        {
+          "name": "modulo",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = -7, n.y = 2 WITH n RETURN n.x % n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                -1
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed numeric property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": 7,
+              "y": 2.0
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "divide",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2.0 WITH n RETURN n.x / n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                3.5
+              ]
+            }
+          }
+        },
+        {
+          "name": "modulo",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2.0 WITH n RETURN n.x % n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "string property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": "7",
+              "y": "2"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "add",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = \"7\", n.y = \"2\" WITH n RETURN n.x + n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "72"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed string property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": "value=",
+              "y": 2
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "add",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = \"value=\", n.y = 2 WITH n RETURN n.x + n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "value=2"
+              ]
+            }
+          }
+        },
+        {
+          "name": "reverse",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = \"value=\", n.y = 2 WITH n RETURN n.y + n.x AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "2value="
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "list property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": [
+                1,
+                2
+              ],
+              "y": [
+                3,
+                4
+              ]
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "add",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = [1, 2], n.y = [3, 4] WITH n RETURN n.x + n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                [
+                  1,
+                  2,
+                  3,
+                  4
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "exact integer property arithmetic",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": 9007199254740992,
+              "y": 1
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "add",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 9007199254740992, n.y = 1 WITH n RETURN n.x + n.y AS value"
+          },
+          "assert": {
+            "exact_int": 9007199254740993
+          }
+        },
+        {
+          "name": "subtract",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 9007199254740992, n.y = 1 WITH n RETURN n.x - n.y AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                9007199254740991
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "property arithmetic mutation state",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "role": "target",
+              "x": 7,
+              "y": 2,
+              "keep": true
+            }
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "role": "decoy",
+              "x": 7,
+              "y": 2,
+              "keep": true
+            }
+          },
+          {
+            "id": "kind-decoy",
+            "kinds": [
+              "OtherArithmetic"
+            ],
+            "properties": {
+              "role": "target",
+              "x": 7,
+              "y": 2,
+              "keep": true
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "Arithmetic"
+            ],
+            "properties": {
+              "x": 7,
+              "y": 2,
+              "keep": true
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "target",
+            "end_id": "decoy",
+            "kind": "ArithmeticEdge",
+            "properties": {
+              "role": "target",
+              "x": 7,
+              "y": 2
+            }
+          },
+          {
+            "start_id": "decoy",
+            "end_id": "target",
+            "kind": "ArithmeticEdge",
+            "properties": {
+              "role": "target",
+              "x": 7,
+              "y": 2
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "kind-decoy",
+            "kind": "OtherEdge",
+            "properties": {
+              "role": "target",
+              "x": 7,
+              "y": 2
+            }
+          },
+          {
+            "start_id": "target",
+            "end_id": "missing",
+            "kind": "ArithmeticEdge",
+            "properties": {
+              "role": "decoy",
+              "x": 7,
+              "y": 2
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "node add",
+          "vars": {
+            "query": "MATCH (n:Arithmetic {role:'target'}) SET n.x = 7, n.y = 2 WITH n SET n.total = n.x + n.y RETURN n.total AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                9
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true,
+                      "total": 9
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherArithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "target",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node modulo",
+          "vars": {
+            "query": "MATCH (n:Arithmetic {role:'target'}) SET n.x = 7, n.y = 2 WITH n SET n.total = n.x % n.y"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true,
+                      "total": 1
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherArithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "target",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "node chain",
+          "vars": {
+            "query": "MATCH (n:Arithmetic {role:'target'}) SET n.x = 7, n.y = 2 WITH n SET n.total = (n.x + n.y) * n.y RETURN n.total AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                18
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true,
+                      "total": 18
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherArithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "target",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WITH write",
+          "vars": {
+            "query": "MATCH (n:Arithmetic {role:'target'}) SET n.x = 7, n.y = 2 WITH n, n.x + n.y AS total SET n.total = total RETURN n.total AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                9
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true,
+                      "total": 9
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherArithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "target",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "relationship divide",
+          "vars": {
+            "query": "MATCH (n:Arithmetic {role:'target'})-[r:ArithmeticEdge {role:'target'}]->() SET r.x = 7, r.y = 2 WITH r SET r.total = r.x / r.y RETURN r.total AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                3
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherArithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "total": 3
+                    }
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "target",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WHERE mutation",
+          "vars": {
+            "query": "MATCH (n:Arithmetic) SET n.x = 7, n.y = 2 WITH n WHERE n.x + n.y = 9 AND n.role = 'target' SET n.total = n.x - n.y"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true,
+                      "total": 5
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherArithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "target",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE cardinality",
+          "vars": {
+            "query": "MATCH (n:Arithmetic {role:'target'}) SET n.x = 7, n.y = 2 WITH n CREATE (m:ArithmeticResult {total:n.x + n.y})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n:Arithmetic OR n:OtherArithmetic RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "decoy",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "kind-decoy",
+                    "kinds": [
+                      "OtherArithmetic"
+                    ],
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "Arithmetic"
+                    ],
+                    "props": {
+                      "x": 7,
+                      "y": 2,
+                      "keep": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "target",
+                    "end": "decoy",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "decoy",
+                    "end": "target",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "kind-decoy",
+                    "kind": "OtherEdge",
+                    "props": {
+                      "role": "target",
+                      "x": 7,
+                      "y": 2
+                    }
+                  },
+                  {
+                    "start": "target",
+                    "end": "missing",
+                    "kind": "ArithmeticEdge",
+                    "props": {
+                      "role": "decoy",
+                      "x": 7,
+                      "y": 2
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:ArithmeticResult) RETURN n.total AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "value": [
+                    9
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ var forbiddenIntegrationKeys = map[string]struct{}{
 	"skip_drivers":     {},
 }
 
+// TestCoreIntegrationSuitesDoNotDriftByDriver checks that shared cases and templates retain equivalent backend coverage.
 func TestCoreIntegrationSuitesDoNotDriftByDriver(t *testing.T) {
 	for _, root := range []string{
 		filepath.Join("testdata", "cases"),
@@ -26,9 +27,9 @@ func TestCoreIntegrationSuitesDoNotDriftByDriver(t *testing.T) {
 				return nil
 			}
 
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return err
+			raw, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
 			}
 
 			var doc any

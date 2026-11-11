@@ -1,0 +1,4195 @@
+{
+  "families": [
+    {
+      "name": "leading optional on an empty graph",
+      "template": "{{query}}",
+      "fixture": {},
+      "variants": [
+        {
+          "name": "empty graph node",
+          "vars": {
+            "query": "OPTIONAL MATCH (n) RETURN n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph known label",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) RETURN n, n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph relationship",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingSource)-[r:LeadingLink]->(b:LeadingTarget) RETURN a, r, b"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph path",
+          "vars": {
+            "query": "OPTIONAL MATCH p = (a:LeadingSource)-[:LeadingLink]->(b:LeadingTarget) RETURN p"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph variable path",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingSource)-[:LeadingLink*1..2]->(b:LeadingTarget) RETURN a, b"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph zero hop",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingSource)-[:LeadingLink*0..0]->(b:LeadingSource) RETURN a, b"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph aggregate",
+          "vars": {
+            "query": "OPTIONAL MATCH (n) RETURN count(*), count(n), collect(n)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                0,
+                []
+              ]
+            ]
+          }
+        },
+        {
+          "name": "empty graph chained optional",
+          "vars": {
+            "query": "OPTIONAL MATCH (a:LeadingSource) OPTIONAL MATCH (a)-[r:LeadingLink]->(b:LeadingTarget) RETURN a, r, b"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "null row feeds unwind duplicates",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) UNWIND [7,7] AS x RETURN n, x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                7
+              ],
+              [
+                null,
+                7
+              ]
+            ]
+          }
+        },
+        {
+          "name": "null row feeds with alias",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) WITH n AS item RETURN item, coalesce(item.name, 'missing')"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                "missing"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "null row feeds constant with",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) WITH 7 AS x RETURN x"
+          },
+          "assert": {
+            "row_values": [
+              [
+                7
+              ]
+            ]
+          }
+        },
+        {
+          "name": "plain match empty control",
+          "vars": {
+            "query": "MATCH (n:LeadingSource) RETURN n"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "empty graph create without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c) RETURN labels(c), c.role, c.source",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "LeadingTarget"
+                    ],
+                    "created",
+                    "missing"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty graph create with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')}) RETURN c.source"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "missing"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c) RETURN labels(c), c.role, c.source",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "LeadingTarget"
+                    ],
+                    "created",
+                    "missing"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty graph null update then create without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) SET n.seen = true WITH n CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c) RETURN labels(c), c.role, c.source",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "LeadingTarget"
+                    ],
+                    "created",
+                    "missing"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "empty graph null update then create with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) SET n.seen = true WITH n CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')}) RETURN c.source"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "missing"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (c) RETURN labels(c), c.role, c.source",
+              "assert": {
+                "row_values": [
+                  [
+                    [
+                      "LeadingTarget"
+                    ],
+                    "created",
+                    "missing"
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "row_count": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "null row feeds with alias property",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingSource) WITH n AS item RETURN item, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "unwind rows feed optional with alias",
+          "vars": {
+            "query": "UNWIND [1,1] AS x OPTIONAL MATCH (n:LeadingSource) WITH x, n AS item RETURN x, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                null
+              ],
+              [
+                1,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "with row feeds optional with alias",
+          "vars": {
+            "query": "WITH 1 AS x OPTIONAL MATCH (n:LeadingSource) WITH x, n AS item RETURN x, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "with and unwind rows feed optional with alias",
+          "vars": {
+            "query": "WITH 1 AS x UNWIND [2,2] AS y OPTIONAL MATCH (n:LeadingSource) WITH x, y, n AS item RETURN x, y, item.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                2,
+                null
+              ],
+              [
+                1,
+                2,
+                null
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "leading optional filters and continuations",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "LeadingSource"
+            ],
+            "properties": {
+              "name": "source",
+              "fixture": "leading"
+            }
+          },
+          {
+            "id": "other-source",
+            "kinds": [
+              "LeadingSource"
+            ],
+            "properties": {
+              "name": "other-source",
+              "fixture": "leading"
+            }
+          },
+          {
+            "id": "one",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "one",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "two",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "two",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-direction",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-direction",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-kind",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-edge-kind",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-property",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-edge-property",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "missing-edge-property",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "missing-edge-property",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-source",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-source",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "LeadingDecoy"
+            ],
+            "properties": {
+              "name": "wrong-kind",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-role",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-role",
+              "fixture": "leading",
+              "role": "excluded"
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "missing-role",
+              "fixture": "leading"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "one",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "two",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-kind",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-role",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "missing-role",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "wrong-direction",
+            "end_id": "source",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-edge-kind",
+            "kind": "LeadingOtherLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-edge-property",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": false
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "missing-edge-property",
+            "kind": "LeadingLink",
+            "properties": {}
+          },
+          {
+            "start_id": "other-source",
+            "end_id": "wrong-source",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "matching nodes without extra null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget) WHERE n.name IN ['one','two'] RETURN n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "one"
+              ],
+              [
+                "two"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "all nodes rejected",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget) WHERE n.name = 'absent' RETURN n, n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "parameter rejects all nodes",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget) WHERE n.name = $name RETURN n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          },
+          "params": {
+            "name": "absent"
+          }
+        },
+        {
+          "name": "inline map rejects all nodes",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget {name:'absent'}) RETURN n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "false predicate preserves null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget) WHERE false RETURN n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "null predicate preserves null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget) WHERE n.missing = 1 RETURN n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "matching relationships without extra null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'eligible' AND r.enabled = true RETURN s.name, r.enabled, n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "source",
+                true,
+                "one"
+              ],
+              [
+                "source",
+                true,
+                "two"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "rejected relationship nulls every binding",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true RETURN s, r, n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "rejected incoming relationship",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget)<-[r:LeadingLink]-(s:LeadingSource {name:'source'}) WHERE n.role = 'absent' RETURN s, r, n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "rejected undirected relationship",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]-(n:LeadingTarget) WHERE n.role = 'absent' RETURN s, r, n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "all comma separated bindings are null",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'}), (n:LeadingTarget {name:'absent'}) RETURN s, n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "matching comma separated bindings",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'}), (n:LeadingTarget {name:'one'}) RETURN s.name, n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "source",
+                "one"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "rejected variable length relationship",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[:LeadingLink*1..2]->(n:LeadingTarget {name:'absent'}) RETURN s, n"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "zero hop matching node",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[:LeadingLink*0..0]->(n:LeadingSource) RETURN s.name, n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "source",
+                "source"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "null path value",
+          "vars": {
+            "query": "OPTIONAL MATCH p = (s:LeadingSource {name:'absent'})-[:LeadingLink]->(n:LeadingTarget) RETURN p"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "matching path length",
+          "vars": {
+            "query": "OPTIONAL MATCH p = (s:LeadingSource {name:'source'})-[:LeadingLink]->(n:LeadingTarget {name:'one'}) RETURN length(p)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        {
+          "name": "wildcard null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'absent'})-[r:LeadingLink]->(n:LeadingTarget) RETURN *"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "chained optional preserves failed leading row",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true OPTIONAL MATCH (n)-[:LeadingOtherLink]->(m:LeadingTarget) RETURN s, n, m"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "independent optional can match after leading failure",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget {name:'absent'}) OPTIONAL MATCH (s:LeadingSource {name:'source'}) RETURN n, s.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                "source"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "mandatory independent match consumes null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget {name:'absent'}) MATCH (s:LeadingSource {name:'source'}) RETURN n, s.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null,
+                "source"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "with where filters null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget {name:'absent'}) WITH n WHERE n IS NOT NULL RETURN n"
+          },
+          "assert": {
+            "row_count": 0
+          }
+        },
+        {
+          "name": "distinct null and aggregate row counts",
+          "vars": {
+            "query": "OPTIONAL MATCH (n:LeadingTarget {name:'absent'}) WITH DISTINCT n RETURN count(*), count(n)"
+          },
+          "assert": {
+            "row_values": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        },
+        {
+          "name": "rejected pattern predicate retains null row",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource) WHERE (s)-[:LeadingOtherLink]->(:LeadingDecoy) RETURN s"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "name": "accepted pattern predicate retains matches",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource) WHERE (s)-[:LeadingOtherLink]->(:LeadingTarget) RETURN s.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "source"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "negated pattern predicate retains matches",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource) WHERE NOT (s)-[:LeadingLink]->(:LeadingTarget) RETURN s.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "leading optional mutations",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "source",
+            "kinds": [
+              "LeadingSource"
+            ],
+            "properties": {
+              "name": "source",
+              "fixture": "leading"
+            }
+          },
+          {
+            "id": "other-source",
+            "kinds": [
+              "LeadingSource"
+            ],
+            "properties": {
+              "name": "other-source",
+              "fixture": "leading"
+            }
+          },
+          {
+            "id": "one",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "one",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "two",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "two",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-direction",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-direction",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-kind",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-edge-kind",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-edge-property",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-edge-property",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "missing-edge-property",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "missing-edge-property",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-source",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-source",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-kind",
+            "kinds": [
+              "LeadingDecoy"
+            ],
+            "properties": {
+              "name": "wrong-kind",
+              "fixture": "leading",
+              "role": "eligible"
+            }
+          },
+          {
+            "id": "wrong-role",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "wrong-role",
+              "fixture": "leading",
+              "role": "excluded"
+            }
+          },
+          {
+            "id": "missing-role",
+            "kinds": [
+              "LeadingTarget"
+            ],
+            "properties": {
+              "name": "missing-role",
+              "fixture": "leading"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "source",
+            "end_id": "one",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "two",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-kind",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-role",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "missing-role",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "wrong-direction",
+            "end_id": "source",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-edge-kind",
+            "kind": "LeadingOtherLink",
+            "properties": {
+              "enabled": true
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "wrong-edge-property",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": false
+            }
+          },
+          {
+            "start_id": "source",
+            "end_id": "missing-edge-property",
+            "kind": "LeadingLink",
+            "properties": {}
+          },
+          {
+            "start_id": "other-source",
+            "end_id": "wrong-source",
+            "kind": "LeadingLink",
+            "properties": {
+              "enabled": true
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "set matched with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'eligible' AND r.enabled = true SET n.seen = true, r.seen = true RETURN n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "one"
+              ],
+              [
+                "two"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create matched with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'eligible' AND r.enabled = true CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')}) RETURN c.source"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "one"
+              ],
+              [
+                "two"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "one",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ],
+                  [
+                    "created",
+                    "two",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  14
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set then create matched with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'eligible' AND r.enabled = true SET n.seen = true WITH n CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')}) RETURN c.source"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "one"
+              ],
+              [
+                "two"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "one",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ],
+                  [
+                    "created",
+                    "two",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  14
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set matched without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'eligible' AND r.enabled = true SET n.seen = true, r.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true,
+                      "seen": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create matched without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'eligible' AND r.enabled = true CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "one",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ],
+                  [
+                    "created",
+                    "two",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  14
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set then create matched without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'eligible' AND r.enabled = true SET n.seen = true WITH n CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible",
+                      "seen": true
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "one",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ],
+                  [
+                    "created",
+                    "two",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 2
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  14
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set unmatched with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true SET n.seen = true, r.seen = true RETURN n.name"
+          },
+          "assert": {
+            "row_values": [
+              [
+                null
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create unmatched with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')}) RETURN c.source"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "missing"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "missing",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  13
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set then create unmatched with return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true SET n.seen = true WITH n CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')}) RETURN c.source"
+          },
+          "assert": {
+            "row_values": [
+              [
+                "missing"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "missing",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  13
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set unmatched without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true SET n.seen = true, r.seen = true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create unmatched without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "missing",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  13
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set then create unmatched without return",
+          "vars": {
+            "query": "OPTIONAL MATCH (s:LeadingSource {name:'source'})-[r:LeadingLink]->(n:LeadingTarget) WHERE n.role = 'absent' AND r.enabled = true SET n.seen = true WITH n CREATE (c:LeadingTarget {role:'created', source:coalesce(n.name, 'missing')})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n.fixture = 'leading' RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "other-source",
+                    "kinds": [
+                      "LeadingSource"
+                    ],
+                    "props": {
+                      "name": "other-source",
+                      "fixture": "leading"
+                    }
+                  },
+                  {
+                    "id": "one",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "one",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "two",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "two",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-direction",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-direction",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-kind",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "missing-edge-property",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-edge-property",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-source",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-source",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-kind",
+                    "kinds": [
+                      "LeadingDecoy"
+                    ],
+                    "props": {
+                      "name": "wrong-kind",
+                      "fixture": "leading",
+                      "role": "eligible"
+                    }
+                  },
+                  {
+                    "id": "wrong-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "wrong-role",
+                      "fixture": "leading",
+                      "role": "excluded"
+                    }
+                  },
+                  {
+                    "id": "missing-role",
+                    "kinds": [
+                      "LeadingTarget"
+                    ],
+                    "props": {
+                      "name": "missing-role",
+                      "fixture": "leading"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "start": "source",
+                    "end": "one",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "two",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-kind",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-role",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "wrong-direction",
+                    "end": "source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-kind",
+                    "kind": "LeadingOtherLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "wrong-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": false
+                    }
+                  },
+                  {
+                    "start": "source",
+                    "end": "missing-edge-property",
+                    "kind": "LeadingLink",
+                    "props": {}
+                  },
+                  {
+                    "start": "other-source",
+                    "end": "wrong-source",
+                    "kind": "LeadingLink",
+                    "props": {
+                      "enabled": true
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:LeadingTarget {role:'created'}) RETURN c.role, c.source, labels(c)",
+              "assert": {
+                "row_values": [
+                  [
+                    "created",
+                    "missing",
+                    [
+                      "LeadingTarget"
+                    ]
+                  ]
+                ],
+                "row_count": 1
+              }
+            },
+            {
+              "cypher": "MATCH (n) RETURN count(n)",
+              "assert": {
+                "scalar_values": [
+                  13
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

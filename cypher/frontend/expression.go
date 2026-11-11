@@ -7,7 +7,6 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/specterops/dawgs/cypher/parser"
-	"github.com/specterops/dawgs/graph"
 )
 
 // PropertiesVisitor
@@ -120,7 +119,7 @@ func (s *ExpressionVisitor) ExitOC_ComparisonExpression(ctx *parser.OC_Compariso
 }
 
 func (s *ExpressionVisitor) EnterOC_NotExpression(ctx *parser.OC_NotExpressionContext) {
-	if len(ctx.AllNOT()) > 0 {
+	if NegatesOperand(ctx) {
 		s.ctx.Enter(&NegationVisitor{
 			Negation: &cypher.Negation{},
 		})
@@ -128,7 +127,7 @@ func (s *ExpressionVisitor) EnterOC_NotExpression(ctx *parser.OC_NotExpressionCo
 }
 
 func (s *ExpressionVisitor) ExitOC_NotExpression(ctx *parser.OC_NotExpressionContext) {
-	if len(ctx.AllNOT()) > 0 {
+	if NegatesOperand(ctx) {
 		visitor := s.ctx.Exit().(*NegationVisitor)
 		s.Expression = visitor.Negation
 	}
@@ -375,6 +374,26 @@ type NonArithmeticOperatorExpressionVisitor struct {
 	PropertyKeyName string
 }
 
+func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_ListOperatorExpression(ctx *parser.OC_ListOperatorExpressionContext) {
+	operation := "indexing"
+	if HasTokens(ctx, TokenTypeRange) {
+		operation = "slicing"
+	}
+	s.ctx.AddErrors(SyntaxError{
+		Line:            ctx.GetStart().GetLine(),
+		Column:          ctx.GetStart().GetColumn(),
+		OffendingSymbol: ctx.GetText(),
+		Message:         "list " + operation + " is not supported",
+	})
+	// The AST has no subscript or slice node. Ignore the rejected subtree so
+	// its atoms cannot replace the operand or disrupt later property lookups.
+	s.ctx.Enter(&BaseVisitor{})
+}
+
+func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_ListOperatorExpression(ctx *parser.OC_ListOperatorExpressionContext) {
+	s.ctx.Exit()
+}
+
 func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_NodeLabels(ctx *parser.OC_NodeLabelsContext) {
 	s.Expression = &cypher.KindMatcher{
 		Reference: s.Expression,
@@ -389,7 +408,7 @@ func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_NodeLabel(ctx *parser.O
 
 func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_NodeLabel(ctx *parser.OC_NodeLabelContext) {
 	matcher := s.Expression.(*cypher.KindMatcher)
-	matcher.Kinds = append(matcher.Kinds, graph.StringKind(s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).Name))
+	matcher.Kinds = append(matcher.Kinds, s.ctx.Exit().(*SymbolicNameOrReservedWordVisitor).kind())
 }
 
 func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_Atom(ctx *parser.OC_AtomContext) {
@@ -423,6 +442,7 @@ func (s *NonArithmeticOperatorExpressionVisitor) EnterOC_PropertyKeyName(ctx *pa
 	s.ctx.Enter(&SymbolicNameOrReservedWordVisitor{})
 }
 
+// ExitOC_PropertyKeyName assigns the parsed key to the property lookup under construction.
 func (s *NonArithmeticOperatorExpressionVisitor) ExitOC_PropertyKeyName(ctx *parser.OC_PropertyKeyNameContext) {
 	s.PropertyKeyName = extractPropertyKeyName(s.ctx, ctx)
 }

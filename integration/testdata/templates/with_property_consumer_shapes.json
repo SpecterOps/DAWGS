@@ -1,0 +1,3434 @@
+{
+  "families": [
+    {
+      "name": "carried scalar consumers",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "a",
+              "text": "Alice"
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "b",
+              "text": "B\"o\\b\n\u96ea"
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "c",
+              "text": ""
+            }
+          },
+          {
+            "id": "d",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "d",
+              "text": null
+            }
+          },
+          {
+            "id": "e",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "e"
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "toString",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, toString(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "repeated WITH alias",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x WITH n, x AS y RETURN n.tag AS tag, toString(y) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "rebound string alias",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x WITH n, toString(x) AS x RETURN n.tag AS tag, toString(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "rebound length alias",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x WITH n, size(x) AS x RETURN n.tag AS tag, x + 1 AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                6,
+                8,
+                1,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "rebound entity alias",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n AS x WITH n, x.text AS x RETURN n.tag AS tag, toString(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "direct property control",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) RETURN n.tag AS tag, toString(n.text) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "lower",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, toLower(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "alice",
+                "b\"o\\b\n\u96ea",
+                "",
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "upper",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, toUpper(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "ALICE",
+                "B\"O\\B\n\u96ea",
+                "",
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "size",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, size(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                5,
+                7,
+                0,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "split",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, split(x + '!', $delimiter) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                [
+                  "Alice!"
+                ],
+                [
+                  "B",
+                  "o\\b\n\u96ea!"
+                ],
+                [
+                  "!"
+                ],
+                null,
+                null
+              ]
+            }
+          },
+          "params": {
+            "delimiter": "\""
+          }
+        },
+        {
+          "name": "coalesce",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, coalesce(x, $fallback) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                "fallback",
+                "fallback"
+              ]
+            }
+          },
+          "params": {
+            "fallback": "fallback"
+          }
+        },
+        {
+          "name": "mixed coalesce",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, coalesce(x, 7) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                7,
+                7
+              ]
+            }
+          }
+        },
+        {
+          "name": "coalesce consumer",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, toString(coalesce(x, 7)) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                "7",
+                "7"
+              ]
+            }
+          }
+        },
+        {
+          "name": "coalesce list fallback",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, size(coalesce(x, [1, 2])) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                5,
+                7,
+                0,
+                2,
+                2
+              ]
+            }
+          }
+        },
+        {
+          "name": "coalesce two properties",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, coalesce(x, n.tag) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "B\"o\\b\n\u96ea",
+                "",
+                "d",
+                "e"
+              ]
+            }
+          }
+        },
+        {
+          "name": "null check",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, x IS NULL AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                false,
+                false,
+                false,
+                true,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "not null check",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, x IS NOT NULL AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                true,
+                true,
+                true,
+                false,
+                false
+              ]
+            }
+          }
+        },
+        {
+          "name": "equality",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, x = 'Alice' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                true,
+                false,
+                false,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "reverse equality",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, 'Alice' = x AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                true,
+                false,
+                false,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "inequality",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, x <> 'Alice' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                false,
+                true,
+                true,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "null equality",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, x = null AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "predicate",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, x STARTS WITH 'Al' AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                true,
+                false,
+                false,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "string literal control",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WITH n, n.text AS x RETURN n.tag AS tag, toString('Alice') AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 5,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e"
+              ],
+              "value": [
+                "Alice",
+                "Alice",
+                "Alice",
+                "Alice",
+                "Alice"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "carried node mutation state",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "target",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          },
+          {
+            "id": "property",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "property",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Bob"
+            }
+          },
+          {
+            "id": "role",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "role",
+              "role": "decoy",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          },
+          {
+            "id": "kind",
+            "kinds": [
+              "OtherWithConsumer"
+            ],
+            "properties": {
+              "tag": "kind",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "missing",
+              "role": "candidate",
+              "matched": "unchanged"
+            }
+          },
+          {
+            "id": "identity",
+            "kinds": [
+              "WithConsumer"
+            ],
+            "properties": {
+              "tag": "identity",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "string",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = toString(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "string returning",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = toString(x) RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "lower",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = toLower(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "lower returning",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = toLower(x) RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "size",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = size(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": 5,
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "size returning",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = size(x) RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": 5,
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "coalesce",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = coalesce(x, 'fallback')"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "coalesce returning",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = coalesce(x, 'fallback') RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "continuation",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' SET n.matched = toString(x) WITH n, x RETURN toString(x) AS value"
+          },
+          "assert": {
+            "row_count": 1,
+            "ordered_column_values": {
+              "value": [
+                "Alice"
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "rebound alias mutation",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WITH n, toString(x) AS x WHERE x = 'Alice' SET n.matched = x"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' CREATE (c:CreatedWithConsumer {source: n.tag, value: toString(x)})"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n:WithConsumer OR n:OtherWithConsumer RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CreatedWithConsumer) RETURN c.source AS source, c.value AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "source": [
+                    "target"
+                  ],
+                  "value": [
+                    "Alice"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE returning",
+          "vars": {
+            "query": "MATCH (n:WithConsumer) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.text AS x WHERE toString(x) = 'Alice' CREATE (c:CreatedWithConsumer {source: n.tag, value: toString(x)}) RETURN c"
+          },
+          "assert": {
+            "row_count": 1
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) WHERE n:WithConsumer OR n:OtherWithConsumer RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithConsumer"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithConsumer"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (c:CreatedWithConsumer) RETURN c.source AS source, c.value AS value",
+              "assert": {
+                "row_count": 1,
+                "ordered_column_values": {
+                  "source": [
+                    "target"
+                  ],
+                  "value": [
+                    "Alice"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carried relationship mutation state",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "root",
+            "kinds": [
+              "WithRoot"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "target",
+            "kinds": [
+              "WithEnd"
+            ],
+            "properties": {
+              "tag": "target"
+            }
+          },
+          {
+            "id": "property",
+            "kinds": [
+              "WithEnd"
+            ],
+            "properties": {
+              "tag": "property"
+            }
+          },
+          {
+            "id": "reverse",
+            "kinds": [
+              "WithEnd"
+            ],
+            "properties": {
+              "tag": "reverse"
+            }
+          },
+          {
+            "id": "kind",
+            "kinds": [
+              "WithEnd"
+            ],
+            "properties": {
+              "tag": "kind"
+            }
+          },
+          {
+            "id": "role",
+            "kinds": [
+              "WithEnd"
+            ],
+            "properties": {
+              "tag": "role"
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "WithEnd"
+            ],
+            "properties": {
+              "tag": "missing"
+            }
+          },
+          {
+            "id": "identity",
+            "kinds": [
+              "WithEnd"
+            ],
+            "properties": {
+              "tag": "identity"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "root",
+            "end_id": "target",
+            "kind": "WithEdge",
+            "properties": {
+              "tag": "target",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "property",
+            "kind": "WithEdge",
+            "properties": {
+              "tag": "property",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Bob"
+            }
+          },
+          {
+            "start_id": "reverse",
+            "end_id": "root",
+            "kind": "WithEdge",
+            "properties": {
+              "tag": "reverse",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "kind",
+            "kind": "OtherWithEdge",
+            "properties": {
+              "tag": "kind",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "role",
+            "kind": "WithEdge",
+            "properties": {
+              "tag": "role",
+              "role": "decoy",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "missing",
+            "kind": "WithEdge",
+            "properties": {
+              "tag": "missing",
+              "role": "candidate",
+              "matched": "unchanged"
+            }
+          },
+          {
+            "start_id": "root",
+            "end_id": "identity",
+            "kind": "WithEdge",
+            "properties": {
+              "tag": "identity",
+              "role": "candidate",
+              "matched": "unchanged",
+              "text": "Alice"
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "toString(x)",
+          "vars": {
+            "query": "MATCH (:WithRoot)-[r:WithEdge]->(:WithEnd) WHERE r.role = 'candidate' AND r.tag <> 'identity' WITH r, r.text AS x WHERE toString(x) = 'Alice' SET r.matched = toString(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "target"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "property"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "reverse"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "kind"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "role"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "identity"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "target",
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "property",
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "reverse",
+                    "end": "root",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "OtherWithEdge",
+                    "start": "root",
+                    "end": "kind",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "role",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "missing",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "identity",
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "toUpper(x)",
+          "vars": {
+            "query": "MATCH (:WithRoot)-[r:WithEdge]->(:WithEnd) WHERE r.role = 'candidate' AND r.tag <> 'identity' WITH r, r.text AS x WHERE toString(x) = 'Alice' SET r.matched = toUpper(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "target"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "property"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "reverse"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "kind"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "role"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "identity"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "target",
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "ALICE",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "property",
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "reverse",
+                    "end": "root",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "OtherWithEdge",
+                    "start": "root",
+                    "end": "kind",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "role",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "missing",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "identity",
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "size(x)",
+          "vars": {
+            "query": "MATCH (:WithRoot)-[r:WithEdge]->(:WithEnd) WHERE r.role = 'candidate' AND r.tag <> 'identity' WITH r, r.text AS x WHERE toString(x) = 'Alice' SET r.matched = size(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "target"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "property"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "reverse"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "kind"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "role"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "identity"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "target",
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": 5,
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "property",
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "reverse",
+                    "end": "root",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "OtherWithEdge",
+                    "start": "root",
+                    "end": "kind",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "role",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "missing",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "identity",
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "coalesce(x, 'fallback')",
+          "vars": {
+            "query": "MATCH (:WithRoot)-[r:WithEdge]->(:WithEnd) WHERE r.role = 'candidate' AND r.tag <> 'identity' WITH r, r.text AS x WHERE toString(x) = 'Alice' SET r.matched = coalesce(x, 'fallback')"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "root",
+                    "kinds": [
+                      "WithRoot"
+                    ],
+                    "props": {}
+                  },
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "target"
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "property"
+                    }
+                  },
+                  {
+                    "id": "reverse",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "reverse"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "kind"
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "role"
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "missing"
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithEnd"
+                    ],
+                    "props": {
+                      "tag": "identity"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH ()-[r]->() RETURN r",
+              "assert": {
+                "relationship_records": [
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "target",
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": "Alice",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "property",
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Bob"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "reverse",
+                    "end": "root",
+                    "props": {
+                      "tag": "reverse",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "OtherWithEdge",
+                    "start": "root",
+                    "end": "kind",
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "role",
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "missing",
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "kind": "WithEdge",
+                    "start": "root",
+                    "end": "identity",
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "text": "Alice"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "carried Boolean consumers",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "WithBoolean"
+            ],
+            "properties": {
+              "tag": "a",
+              "flag": false
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "WithBoolean"
+            ],
+            "properties": {
+              "tag": "b",
+              "flag": true
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "WithBoolean"
+            ],
+            "properties": {
+              "tag": "c"
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "NOT x",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x RETURN n.tag AS tag, NOT x AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c"
+              ],
+              "value": [
+                true,
+                false,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "x AND true",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x RETURN n.tag AS tag, x AND true AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c"
+              ],
+              "value": [
+                false,
+                true,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "x OR true",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x RETURN n.tag AS tag, x OR true AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c"
+              ],
+              "value": [
+                true,
+                true,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "NOT coalesce(x, false)",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x RETURN n.tag AS tag, NOT coalesce(x, false) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c"
+              ],
+              "value": [
+                true,
+                false,
+                true
+              ]
+            }
+          }
+        },
+        {
+          "name": "toString(x)",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x RETURN n.tag AS tag, toString(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c"
+              ],
+              "value": [
+                "false",
+                "true",
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "coalesce(x, null)",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x RETURN n.tag AS tag, coalesce(x, null) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 3,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c"
+              ],
+              "value": [
+                false,
+                true,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "WHERE x",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x WHERE x RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "b"
+            ]
+          }
+        },
+        {
+          "name": "WHERE coalesce(x, false)",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x WHERE coalesce(x, false) RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "b"
+            ]
+          }
+        },
+        {
+          "name": "WHERE NOT x",
+          "vars": {
+            "query": "MATCH (n:WithBoolean) WITH n, n.flag AS x WHERE NOT x RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "a"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "carried list consumers",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "a",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "a",
+              "items": [
+                "one",
+                "two"
+              ]
+            }
+          },
+          {
+            "id": "b",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "b",
+              "items": []
+            }
+          },
+          {
+            "id": "c",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "c"
+            }
+          },
+          {
+            "id": "d",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "d",
+              "items": [
+                "other"
+              ]
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "head(x)",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, head(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                "one",
+                null,
+                null,
+                "other"
+              ]
+            }
+          }
+        },
+        {
+          "name": "size(coalesce(x, []))",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, size(coalesce(x, [])) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                2,
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "name": "tail(x)",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, tail(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                [
+                  "two"
+                ],
+                [],
+                null,
+                []
+              ]
+            }
+          }
+        },
+        {
+          "name": "head(coalesce(x, ['fallback']))",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, head(coalesce(x, ['fallback'])) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                "one",
+                null,
+                "fallback",
+                "other"
+              ]
+            }
+          }
+        },
+        {
+          "name": "tail(coalesce(x, ['fallback', 'tail']))",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, tail(coalesce(x, ['fallback', 'tail'])) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                [
+                  "two"
+                ],
+                [],
+                [
+                  "tail"
+                ],
+                []
+              ]
+            }
+          }
+        },
+        {
+          "name": "head(tail(x))",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, head(tail(x)) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                "two",
+                null,
+                null,
+                null
+              ]
+            }
+          }
+        },
+        {
+          "name": "size(tail(x))",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, size(tail(x)) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                1,
+                0,
+                null,
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "toString(head(x))",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x RETURN n.tag AS tag, toString(head(x)) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                "one",
+                null,
+                null,
+                "other"
+              ]
+            }
+          }
+        },
+        {
+          "name": "toString(x) WITH n, head(x) AS x",
+          "vars": {
+            "query": "MATCH (n:WithList) WITH n, n.items AS x WITH n, head(x) AS x RETURN n.tag AS tag, toString(x) AS value ORDER BY tag"
+          },
+          "assert": {
+            "row_count": 4,
+            "ordered_column_values": {
+              "tag": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ],
+              "value": [
+                "one",
+                null,
+                null,
+                "other"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "carried list mutation state",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "target",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "target",
+              "role": "candidate",
+              "matched": "unchanged",
+              "items": [
+                "one",
+                "two"
+              ]
+            }
+          },
+          {
+            "id": "property",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "property",
+              "role": "candidate",
+              "matched": "unchanged",
+              "items": [
+                "other"
+              ]
+            }
+          },
+          {
+            "id": "missing",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "missing",
+              "role": "candidate",
+              "matched": "unchanged"
+            }
+          },
+          {
+            "id": "kind",
+            "kinds": [
+              "OtherWithList"
+            ],
+            "properties": {
+              "tag": "kind",
+              "role": "candidate",
+              "matched": "unchanged",
+              "items": [
+                "one",
+                "two"
+              ]
+            }
+          },
+          {
+            "id": "role",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "role",
+              "role": "decoy",
+              "matched": "unchanged",
+              "items": [
+                "one",
+                "two"
+              ]
+            }
+          },
+          {
+            "id": "identity",
+            "kinds": [
+              "WithList"
+            ],
+            "properties": {
+              "tag": "identity",
+              "role": "candidate",
+              "matched": "unchanged",
+              "items": [
+                "one",
+                "two"
+              ]
+            }
+          }
+        ]
+      },
+      "template": "{{query}}",
+      "variants": [
+        {
+          "name": "tail SET",
+          "vars": {
+            "query": "MATCH (n:WithList) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.items AS x WHERE head(x) = 'one' SET n.matched = tail(x)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": [
+                        "two"
+                      ],
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "items": [
+                        "other"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithList"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "tail SET RETURN n",
+          "vars": {
+            "query": "MATCH (n:WithList) WHERE n.role = 'candidate' AND n.tag <> 'identity' WITH n, n.items AS x WHERE head(x) = 'one' SET n.matched = tail(x) RETURN n"
+          },
+          "assert": {
+            "node_id_set": [
+              "target"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {
+                    "id": "target",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "target",
+                      "role": "candidate",
+                      "matched": [
+                        "two"
+                      ],
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "property",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "property",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "items": [
+                        "other"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "missing",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "missing",
+                      "role": "candidate",
+                      "matched": "unchanged"
+                    }
+                  },
+                  {
+                    "id": "kind",
+                    "kinds": [
+                      "OtherWithList"
+                    ],
+                    "props": {
+                      "tag": "kind",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "role",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "role",
+                      "role": "decoy",
+                      "matched": "unchanged",
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "identity",
+                    "kinds": [
+                      "WithList"
+                    ],
+                    "props": {
+                      "tag": "identity",
+                      "role": "candidate",
+                      "matched": "unchanged",
+                      "items": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
