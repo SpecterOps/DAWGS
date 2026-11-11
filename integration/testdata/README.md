@@ -522,3 +522,13 @@ malformed SQL fragments that must not return or stop at unrelated endpoints.
 Property-filtered open shortest searches additionally check that self-endpoint
 errors apply only to eligible roots, including terminals with outgoing edges,
 wrong-direction empty results, inbound searches and exact mutation targets.
+
+`all_shortest_path_pair_resolution.json` checks roots and terminals reached at
+different depths, relationship-distinct equal-length paths, longer alternatives
+to already resolved pairs, and unreachable endpoints. Label-filtered and
+prior-MATCH-bound roots share the same expectations on both backends. Mutations
+with and without RETURN verify the complete node state, including untouched
+unreachable targets. PostgreSQL driver-scoped tests exercise both unidirectional
+harness overloads and repeated calls on the same physical session. Open-ended
+shortestPath and allShortestPaths variants preserve prior-MATCH endpoint sets
+in reads and mutations, including multiple terminals.

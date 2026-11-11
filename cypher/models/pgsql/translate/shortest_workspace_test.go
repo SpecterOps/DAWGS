@@ -49,6 +49,30 @@ func TestSelfEndpointErrorRequiresAnEligibleSeedRoot(t *testing.T) {
 	require.Contains(t, formatted.Statement, "case when exists (select 1 from s1_seed where s1_seed.root_id = e0.start_id) then case")
 }
 
+func TestBoundedShortestPathKeepsSingleBoundEndpointSets(t *testing.T) {
+	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
+		for _, source := range []string{
+			"MATCH (:User)-[:MemberOf]->(u:Group) MATCH p=shortestPath((u)-[:AdminTo*1..4]->(d)) RETURN p",
+			"MATCH (:User)-[:MemberOf]->(d:Group) MATCH p=shortestPath((u:Computer)-[:AdminTo*1..4]->(d)) RETURN p",
+		} {
+			t.Run(fmt.Sprintf("%s/%s", mode, source), func(t *testing.T) {
+				query, err := frontend.ParseCypher(frontend.NewContext(), source)
+				require.NoError(t, err)
+				translation, err := TranslateWithOptions(context.Background(), query, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				require.NoError(t, err)
+				formatted, err := Translated(translation)
+				require.NoError(t, err)
+				// The bounded harness accepts whole endpoint sets, including an
+				// unconstrained opposite endpoint. Materialize IDs in the caller.
+				require.Contains(t, formatted.Statement, "(array(select distinct (s0.")
+				require.Contains(t, formatted.Statement, ")::int8[]")
+				require.NotContains(t, formatted.Statement, "format(")
+				require.NotContains(t, formatted.Statement, "_harness_v2(")
+			})
+		}
+	}
+}
+
 func TestSingletonShortestPathFragmentsUseCurrentEndpointArrays(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		for _, bound := range []int{65, 128} {

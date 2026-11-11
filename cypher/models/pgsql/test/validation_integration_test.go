@@ -130,25 +130,133 @@ func TestTranslationTestCases(t *testing.T) {
 	}
 }
 
-func TestBidirectionalASPHarnessOverloads(t *testing.T) {
+func setupShortestPathHarnessTest(t *testing.T) (context.Context, *pgxpool.Pool) {
+	t.Helper()
+
 	testCtx, done := context.WithCancel(context.Background())
-	defer done()
+	t.Cleanup(done)
 
 	pgConnectionStr := pgConnectionString(t)
 	pgxPoolCfg, err := pgxpool.ParseConfig(pgConnectionStr)
 	require.NoError(t, err)
 	pgxPool, err := pg.NewPool(pgxPoolCfg)
 	require.NoError(t, err)
-	defer pgxPool.Close()
+	t.Cleanup(pgxPool.Close)
 
 	connection, err := dawgs.Open(context.TODO(), pg.DriverName, dawgs.Config{
 		GraphQueryMemoryLimit: size.Gibibyte,
 		Pool:                  pgxPool,
 	})
 	require.NoError(t, err)
-	defer connection.Close(testCtx)
+	t.Cleanup(func() {
+		connection.Close(testCtx)
+	})
 
 	require.NoError(t, connection.AssertSchema(testCtx, translationValidationGraphSchema()))
+	return testCtx, pgxPool
+}
+
+func TestUnidirectionalASPHarness(t *testing.T) {
+	testCtx, pgxPool := setupShortestPathHarnessTest(t)
+
+	t.Run("resolves roots independently", func(t *testing.T) {
+		testCases := []struct {
+			name       string
+			query      string
+			parameters []any
+		}{
+			{
+				name:  "array overload",
+				query: "select root_id, next_id, depth, path from unidirectional_asp_harness($1::text, $2::text, 4, $3::int8[], $4::int8[]) order by root_id, next_id, path",
+				parameters: []any{
+					[]int64{1, 3, 5},
+					[]int64{2, 4, 6},
+				},
+			},
+			{
+				name:  "text overload",
+				query: "select root_id, next_id, depth, path from unidirectional_asp_harness($1::text, $2::text, 4, ''::text, ''::text) order by root_id, next_id, path",
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				tx, err := pgxPool.Begin(testCtx)
+				require.NoError(t, err)
+				defer tx.Rollback(testCtx)
+
+				var (
+					graphID int64
+					kindID  int16
+				)
+
+				require.NoError(t, tx.QueryRow(testCtx, "select id from graph where name = 'test'").Scan(&graphID))
+				require.NoError(t, tx.QueryRow(testCtx, "select id from kind where name = 'EdgeKind1'").Scan(&kindID))
+
+				_, err = tx.Exec(testCtx,
+					"insert into edge (graph_id, start_id, end_id, kind_id, properties) values ($1, 30, 30, $2, '{}'::jsonb) on conflict do nothing",
+					graphID,
+					kindID,
+				)
+				require.NoError(t, err)
+
+				var (
+					forwardPrimer = nextFrontValues(
+						"(1::int8, 2::int8, 1::int4, true, false, array [102]::int8[])",
+						"(1::int8, 2::int8, 1::int4, true, false, array [103]::int8[])",
+						"(3::int8, 30::int8, 1::int4, false, false, array [330]::int8[])",
+						"(5::int8, 50::int8, 1::int4, false, false, array [550]::int8[])",
+					)
+					forwardRecursive = `insert into next_front (root_id, next_id, depth, satisfied, is_cycle, path)
+select root_id, 4::int8, depth + 1, true, false, path || 304::int8
+from forward_front
+where root_id = 3::int8;`
+				)
+
+				args := []any{forwardPrimer, forwardRecursive}
+				args = append(args, testCase.parameters...)
+				rows, err := tx.Query(testCtx, testCase.query, args...)
+				require.NoError(t, err)
+				defer rows.Close()
+
+				type result struct {
+					rootID int64
+					nextID int64
+					depth  int32
+					path   []int64
+				}
+
+				var results []result
+				for rows.Next() {
+					var next result
+					require.NoError(t, rows.Scan(&next.rootID, &next.nextID, &next.depth, &next.path))
+					results = append(results, next)
+				}
+				require.NoError(t, rows.Err())
+
+				require.Equal(t, []result{{
+					rootID: 1,
+					nextID: 2,
+					depth:  1,
+					path:   []int64{102},
+				}, {
+					rootID: 1,
+					nextID: 2,
+					depth:  1,
+					path:   []int64{103},
+				}, {
+					rootID: 3,
+					nextID: 4,
+					depth:  2,
+					path:   []int64{330, 304},
+				}}, results)
+			})
+		}
+	})
+}
+
+func TestBidirectionalASPHarness(t *testing.T) {
+	testCtx, pgxPool := setupShortestPathHarnessTest(t)
 
 	t.Run("array overload does not require pair filter", func(t *testing.T) {
 		tx, err := pgxPool.Begin(testCtx)
@@ -303,39 +411,43 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 			path:   []int64{330, 305},
 		}}, results)
 	})
+}
 
-	t.Run("shortest path harnesses avoid output column ambiguity", func(t *testing.T) {
+func TestUnidirectionalSPHarness(t *testing.T) {
+	testCtx, pgxPool := setupShortestPathHarnessTest(t)
+
+	t.Run("avoids output column ambiguity", func(t *testing.T) {
 		var (
-			frontier            = nextFrontValues("(1::int8, 2::int8, 1::int4, false, false, array [101]::int8[])")
-			unidirectionalCount int
+			frontier = nextFrontValues("(1::int8, 2::int8, 1::int4, false, false, array [101]::int8[])")
+			count    int
 		)
 
 		require.NoError(t, pgxPool.QueryRow(testCtx,
 			"select count(*) from unidirectional_sp_harness($1::text, $2::text, 1, array []::int8[], array []::int8[])",
 			frontier,
 			emptyFrontier,
-		).Scan(&unidirectionalCount))
-		require.Equal(t, 0, unidirectionalCount)
+		).Scan(&count))
+		require.Equal(t, 0, count)
+	})
+}
 
-		var bidirectionalCount int
+func TestBidirectionalSPHarness(t *testing.T) {
+	testCtx, pgxPool := setupShortestPathHarnessTest(t)
+
+	t.Run("avoids output column ambiguity", func(t *testing.T) {
+		var (
+			frontier = nextFrontValues("(1::int8, 2::int8, 1::int4, false, false, array [101]::int8[])")
+			count    int
+		)
+
 		require.NoError(t, pgxPool.QueryRow(testCtx,
 			"select count(*) from bidirectional_sp_harness($1::text, $2::text, $3::text, $4::text, 1, array []::int8[], array []::int8[])",
 			frontier,
 			emptyFrontier,
 			emptyFrontier,
 			emptyFrontier,
-		).Scan(&bidirectionalCount))
-		require.Equal(t, 0, bidirectionalCount)
-	})
-
-	t.Run("shortest path self endpoint helper reports clear error", func(t *testing.T) {
-		var (
-			ok  bool
-			err = pgxPool.QueryRow(testCtx, "select shortest_path_self_endpoint_error(1::int8, 1::int8)").Scan(&ok)
-		)
-
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "shortest path endpoints must not resolve to the same node")
+		).Scan(&count))
+		require.Equal(t, 0, count)
 	})
 
 	t.Run("pair-aware shortest path harness resolves all explicit pairs", func(t *testing.T) {
@@ -393,4 +505,16 @@ func TestBidirectionalASPHarnessOverloads(t *testing.T) {
 			path:   []int64{330, 304},
 		}}, results)
 	})
+}
+
+func TestShortestPathSelfEndpointError(t *testing.T) {
+	testCtx, pgxPool := setupShortestPathHarnessTest(t)
+
+	var (
+		ok  bool
+		err = pgxPool.QueryRow(testCtx, "select shortest_path_self_endpoint_error(1::int8, 1::int8)").Scan(&ok)
+	)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "shortest path endpoints must not resolve to the same node")
 }

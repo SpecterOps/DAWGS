@@ -1,0 +1,194 @@
+{
+  "families": [
+    {
+      "name": "resolve roots and terminals independently",
+      "template": "{{prefix}}MATCH p={{function}}((s:ASPResolutionRoot)-[:ASPResolutionStep|ASPResolutionAlternate*{{bounds}}]->(e:ASPResolutionTarget)) {{suffix}}",
+      "fixture": {
+        "nodes": [
+          {"id": "entry", "kinds": ["ASPResolutionEntry"], "properties": {}},
+          {"id": "r1", "kinds": ["ASPResolutionRoot"], "properties": {}},
+          {"id": "r2", "kinds": ["ASPResolutionRoot"], "properties": {}},
+          {"id": "r3", "kinds": ["ASPResolutionRoot"], "properties": {}},
+          {"id": "mid", "kinds": ["ASPResolutionMiddle"], "properties": {}},
+          {"id": "near", "kinds": ["ASPResolutionTarget"], "properties": {}},
+          {"id": "far", "kinds": ["ASPResolutionTarget"], "properties": {}},
+          {"id": "unreachable", "kinds": ["ASPResolutionTarget"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "entry", "end_id": "r1", "kind": "ASPResolutionBind"},
+          {"start_id": "entry", "end_id": "r2", "kind": "ASPResolutionBind"},
+          {"start_id": "entry", "end_id": "r3", "kind": "ASPResolutionBind"},
+          {"start_id": "r1", "end_id": "near", "kind": "ASPResolutionStep"},
+          {"start_id": "r1", "end_id": "near", "kind": "ASPResolutionAlternate"},
+          {"start_id": "r1", "end_id": "mid", "kind": "ASPResolutionStep"},
+          {"start_id": "r2", "end_id": "mid", "kind": "ASPResolutionStep"},
+          {"start_id": "mid", "end_id": "near", "kind": "ASPResolutionStep"},
+          {"start_id": "mid", "end_id": "far", "kind": "ASPResolutionStep"}
+        ]
+      },
+      "variants": [
+        {
+          "name": "label filters preserve every shortest pair",
+          "vars": {"prefix": "", "function": "allShortestPaths", "bounds": "1..4", "suffix": "RETURN p"},
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [["r1", "near"], ["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]],
+            "path_lengths": [1, 1, 2, 2, 2]
+          }
+        },
+        {
+          "name": "prior match roots preserve every shortest pair",
+          "vars": {
+            "prefix": "MATCH (:ASPResolutionEntry)-[:ASPResolutionBind]->(s:ASPResolutionRoot) ",
+            "function": "allShortestPaths",
+            "bounds": "1..4",
+            "suffix": "RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [["r1", "near"], ["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]],
+            "path_lengths": [1, 1, 2, 2, 2]
+          }
+        },
+        {
+          "name": "mutation returns all shortest paths",
+          "vars": {
+            "prefix": "MATCH (:ASPResolutionEntry)-[:ASPResolutionBind]->(s:ASPResolutionRoot) ",
+            "function": "allShortestPaths",
+            "bounds": "1..4",
+            "suffix": "SET e.selected=true RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [["r1", "near"], ["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "entry", "kinds": ["ASPResolutionEntry"], "props": {}},
+                  {"id": "r1", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r2", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r3", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "mid", "kinds": ["ASPResolutionMiddle"], "props": {}},
+                  {"id": "near", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "far", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "unreachable", "kinds": ["ASPResolutionTarget"], "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mutation without return updates every reachable terminal",
+          "vars": {"prefix": "", "function": "allShortestPaths", "bounds": "1..4", "suffix": "SET e.selected=true"},
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "entry", "kinds": ["ASPResolutionEntry"], "props": {}},
+                  {"id": "r1", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r2", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r3", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "mid", "kinds": ["ASPResolutionMiddle"], "props": {}},
+                  {"id": "near", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "far", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "unreachable", "kinds": ["ASPResolutionTarget"], "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "open search preserves all prior match roots and terminals",
+          "vars": {
+            "prefix": "MATCH (:ASPResolutionEntry)-[:ASPResolutionBind]->(s:ASPResolutionRoot) ",
+            "function": "allShortestPaths",
+            "bounds": "1..",
+            "suffix": "RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [["r1", "near"], ["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+          }
+        },
+        {
+          "name": "open mutation preserves every prior match pair",
+          "vars": {
+            "prefix": "MATCH (:ASPResolutionEntry)-[:ASPResolutionBind]->(s:ASPResolutionRoot) ",
+            "function": "allShortestPaths",
+            "bounds": "1..",
+            "suffix": "SET e.selected=true RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [["r1", "near"], ["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "entry", "kinds": ["ASPResolutionEntry"], "props": {}},
+                  {"id": "r1", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r2", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r3", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "mid", "kinds": ["ASPResolutionMiddle"], "props": {}},
+                  {"id": "near", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "far", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "unreachable", "kinds": ["ASPResolutionTarget"], "props": {}}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "open shortest path preserves every prior match pair",
+          "vars": {
+            "prefix": "MATCH (:ASPResolutionEntry)-[:ASPResolutionBind]->(s:ASPResolutionRoot) ",
+            "function": "shortestPath",
+            "bounds": "1..",
+            "suffix": "RETURN p"
+          },
+          "assert": {
+            "row_count": 4,
+            "path_node_ids": [["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+          }
+        },
+        {
+          "name": "open shortest mutation updates every reachable terminal",
+          "vars": {
+            "prefix": "MATCH (:ASPResolutionEntry)-[:ASPResolutionBind]->(s:ASPResolutionRoot) ",
+            "function": "shortestPath",
+            "bounds": "1..",
+            "suffix": "SET e.selected=true RETURN p"
+          },
+          "assert": {
+            "row_count": 4,
+            "path_node_ids": [["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n) RETURN n",
+              "assert": {
+                "node_records": [
+                  {"id": "entry", "kinds": ["ASPResolutionEntry"], "props": {}},
+                  {"id": "r1", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r2", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "r3", "kinds": ["ASPResolutionRoot"], "props": {}},
+                  {"id": "mid", "kinds": ["ASPResolutionMiddle"], "props": {}},
+                  {"id": "near", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "far", "kinds": ["ASPResolutionTarget"], "props": {"selected": true}},
+                  {"id": "unreachable", "kinds": ["ASPResolutionTarget"], "props": {}}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
