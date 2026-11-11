@@ -525,6 +525,7 @@ func wherePredicateCount(where *cypher.Where) int {
 	return where.Len()
 }
 
+// mergeBindings combines query bindings without discarding metadata from either analysis input.
 func mergeBindings(existing []Binding, next []Binding) []Binding {
 	mergedBindings := existing
 
@@ -546,6 +547,7 @@ func mergeBindings(existing []Binding, next []Binding) []Binding {
 	return mergedBindings
 }
 
+// mergePathVariables combines the path-variable information discovered by separate analysis steps.
 func mergePathVariables(existing []PathVariable, next []PathVariable) []PathVariable {
 	mergedPathVariables := existing
 

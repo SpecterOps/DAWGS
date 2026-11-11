@@ -68,6 +68,7 @@ func assertUnsupportedClause(t *testing.T, source, message string) {
 	require.Empty(t, formatted)
 }
 
+// TestUnsupportedImportAndCreateErrorLocations checks that unsupported clauses report errors at their source locations.
 func TestUnsupportedImportAndCreateErrorLocations(t *testing.T) {
 	for _, tc := range []struct {
 		// source is the query text supplied to the parser or rewriter.
@@ -75,8 +76,14 @@ func TestUnsupportedImportAndCreateErrorLocations(t *testing.T) {
 		// message is the diagnostic substring expected for the rejected query.
 		message string
 	}{
-		{source: "MATCH (a), (b)\n  CREATE UNIQUE (a)-[:R]->(b)", message: "line 2:2 CREATE UNIQUE is not supported"},
-		{source: "// comment\n  LOAD CSV FROM $url AS row RETURN row", message: "line 2:2 LOAD CSV is not supported"},
+		{
+			source:  "MATCH (a), (b)\n  CREATE UNIQUE (a)-[:R]->(b)",
+			message: "line 2:2 CREATE UNIQUE is not supported",
+		},
+		{
+			source:  "// comment\n  LOAD CSV FROM $url AS row RETURN row",
+			message: "line 2:2 LOAD CSV is not supported",
+		},
 	} {
 		t.Run(tc.source, func(t *testing.T) {
 			_, err := frontend.ParseCypher(frontend.NewContext(), tc.source)

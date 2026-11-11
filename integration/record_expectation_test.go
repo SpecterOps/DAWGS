@@ -74,6 +74,8 @@ func TestRecordExpectationsRejectUnknownFields(t *testing.T) {
 	require.Equal(t, false, edge.Props["flag"])
 }
 
+// TestCorpusRecordExpectations validates record assertions, including nested paths, without opening a database.
+//
 // Validate expectations without connecting to a database, including nested paths.
 func TestCorpusRecordExpectations(t *testing.T) {
 	for _, root := range []string{"testdata/cases", "testdata/templates"} {

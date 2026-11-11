@@ -585,6 +585,7 @@ func stripFinalArchiveFrame(t *testing.T, payload []byte) []byte {
 	return nil
 }
 
+// readFileTree reads a directory's file contents for archive round-trip comparisons.
 func readFileTree(t *testing.T, root string) map[string][]byte {
 	t.Helper()
 	tree := map[string][]byte{}

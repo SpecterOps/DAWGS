@@ -90,6 +90,7 @@ func canonicalNumericSourceID(sourceID string) (uint64, bool) {
 	return value, true
 }
 
+// Load imports a validated collection while applying the configured progress, batching and relationship policies.
 func Load(ctx context.Context, db graph.Database, driverName string, options LoadOptions) (LoadResult, error) {
 	preparedOptions, cleanupInput, err := prepareLoadInput(options)
 	if err != nil {
@@ -620,11 +621,14 @@ func manifestFileCount(value Manifest) int {
 	return count
 }
 
+// loadGraphNodes loads node shards and builds the source-to-destination ID map used by relationship import.
 func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, codec CompressionCodec, graphEntry GraphManifest, batchSize int, progress ProgressFunc, progressInterval int64) (*nodeIDResolver, int64, error) {
 	nodeMap := newNodeIDResolver(graphEntry.NodeCount)
 	type pendingNode struct {
+		// sourceID identifies the source node before destination ID mapping.
 		sourceID string
-		node     *graph.Node
+		// node holds the node queued for import into the destination graph.
+		node *graph.Node
 	}
 	var (
 		loaded     int64
@@ -648,7 +652,9 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 
 		var destinationIDs []graph.ID
 		if err := db.BatchOperation(ctx, func(batch graph.Batch) error {
-			scopedBatch := batch.WithGraph(graph.Graph{Name: graphEntry.Name})
+			scopedBatch := batch.WithGraph(graph.Graph{
+				Name: graphEntry.Name,
+			})
 			creator, ok := scopedBatch.(graph.NodeBatchCreator)
 			if !ok {
 				return fmt.Errorf("database batch %T does not support correlated bulk node creation", scopedBatch)
@@ -718,6 +724,7 @@ func loadGraphNodes(ctx context.Context, db graph.Database, inputDir string, cod
 	return nodeMap, loaded, nil
 }
 
+// loadGraphEdges loads relationship shards after resolving endpoints through the imported node map.
 func loadGraphEdges(ctx context.Context, db graph.Database, inputDir string, codec CompressionCodec, graphEntry GraphManifest, nodeMap *nodeIDResolver, batchSize int, progress ProgressFunc, progressInterval int64) (int64, error) {
 	var (
 		loaded int64

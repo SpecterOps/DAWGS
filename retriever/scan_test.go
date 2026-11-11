@@ -86,8 +86,19 @@ func TestScanEntityBatchesVisitsStrictKeysetsIncrementally(t *testing.T) {
 	}
 }
 
+// TestScanEntityBatchesResumesAfterCommittedCursor checks that successive scan transactions resume after the last committed entity ID.
 func TestScanEntityBatchesResumesAfterCommittedCursor(t *testing.T) {
-	entities := []scanTestEntity{{id: 1}, {id: 2}, {id: 3}, {id: 4}, {id: 5}}
+	entities := []scanTestEntity{{
+		id: 1,
+	}, {
+		id: 2,
+	}, {
+		id: 3,
+	}, {
+		id: 4,
+	}, {
+		id: 5,
+	}}
 	var handled []graph.ID
 
 	processed, err := scanEntityBatches(entityScanOptions[scanTestEntity]{

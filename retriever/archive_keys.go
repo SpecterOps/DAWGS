@@ -94,6 +94,7 @@ func Keygen(options KeygenOptions) error {
 	return generateArchiveKeyFiles(options.PrivatePath, options.PublicPath)
 }
 
+// generateArchiveKeyFiles writes a newly generated public/private key pair to the requested destinations.
 func generateArchiveKeyFiles(privatePath, publicPath string) error {
 	trimmedPrivatePath := strings.TrimSpace(privatePath)
 	trimmedPublicPath := strings.TrimSpace(publicPath)
@@ -195,6 +196,7 @@ func LoadArchivePublicKey(path string) (hpke.PublicKey, error) {
 	return loadArchivePublicKey(path)
 }
 
+// loadArchivePublicKey validates a public-key path and decodes its archive key envelope.
 func loadArchivePublicKey(path string) (hpke.PublicKey, error) {
 	trimmedPath := strings.TrimSpace(path)
 	if trimmedPath == "" {
@@ -228,6 +230,7 @@ func LoadArchivePrivateKey(path string) (hpke.PrivateKey, error) {
 	return loadArchivePrivateKey(path)
 }
 
+// loadArchivePrivateKey validates a private-key path and decodes its archive key envelope.
 func loadArchivePrivateKey(path string) (hpke.PrivateKey, error) {
 	trimmedPath := strings.TrimSpace(path)
 	if trimmedPath == "" {

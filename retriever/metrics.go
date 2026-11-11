@@ -86,6 +86,7 @@ func newMetricsManifest(graphCount int) MetricsManifest {
 	}
 }
 
+// newMetricsBuilder initializes metric collection for the selected operation and database context.
 func newMetricsBuilder(graphName string, expectedNodeCount int64) *metricsBuilder {
 	boundedNodeCount := expectedNodeCount
 
@@ -443,6 +444,7 @@ func compareMetricHistogram(prefix, field string, expected, actual map[string]in
 	return differences
 }
 
+// appendMetricDiffs records changes between before/after metric samples without treating missing values as measurements.
 func appendMetricDiffs(target []string, values ...string) []string {
 	accumulatedDiffs := target
 

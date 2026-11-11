@@ -795,6 +795,7 @@ func intFromHex(value string) int {
 	return result
 }
 
+// normalizeKey normalizes property-key spelling for the scrubber's matching rules.
 func normalizeKey(value string) string {
 	normalizedName := strings.ToLower(strings.TrimSpace(value))
 	normalizedName = strings.ReplaceAll(normalizedName, "-", "")

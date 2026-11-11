@@ -25,13 +25,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestImportExactNumbers checks that imported numeric properties retain their exact values across the database boundary.
 func TestImportExactNumbers(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
 		t.Skip("CONNECTION_STRING not set")
 	}
 	ctx := context.Background()
-	db, driverName, err := openDatabase(ctx, databaseConfig{Connection: connection})
+	db, driverName, err := openDatabase(ctx, databaseConfig{
+		Connection: connection,
+	})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close(ctx)) })
 	target := graph.Graph{
@@ -39,12 +42,17 @@ func TestImportExactNumbers(t *testing.T) {
 		Nodes: graph.StringsToKinds([]string{"ImportExactNode"}),
 		Edges: graph.StringsToKinds([]string{"ImportExactEdge"}),
 	}
-	require.NoError(t, db.AssertSchema(ctx, graph.Schema{Graphs: []graph.Graph{target}, DefaultGraph: target}))
+	require.NoError(t, db.AssertSchema(ctx, graph.Schema{
+		Graphs:       []graph.Graph{target},
+		DefaultGraph: target,
+	}))
 	// Retriever loads require an empty target. Reset the selected test graph,
 	// including fixtures from earlier packages when Neo4j ignores graph names.
 	clearGraph := func() {
 		require.NoError(t, db.WriteTransaction(ctx, func(tx graph.Transaction) error {
-			scopedTx := tx.WithGraph(graph.Graph{Name: target.Name})
+			scopedTx := tx.WithGraph(graph.Graph{
+				Name: target.Name,
+			})
 			if err := scopedTx.Relationships().Delete(); err != nil {
 				return err
 			}
@@ -86,16 +94,35 @@ func TestImportExactNumbers(t *testing.T) {
 					writeImportNumberFragment(t, dir, codec, retriever.PhaseEdges, edges, 1),
 				}
 				manifest := retriever.Manifest{
-					Format: "retriever-jsonl-collection-v1", IDStrategy: "source_database_id_string",
-					Driver: driverName, Compression: codec, Source: retriever.SourceMetadata{GraphCount: 1},
-					Scrub: retriever.ScrubMetadata{Mode: retriever.ScrubNone},
-					Schema: retriever.SchemaMetadata{Graphs: []retriever.GraphSchemaMetadata{{
-						Name: target.Name, NodeKinds: []string{"ImportExactNode"}, EdgeKinds: []string{"ImportExactEdge"},
-					}}},
-					Graphs: []retriever.GraphManifest{{Name: target.Name, NodeCount: 2, EdgeCount: 1, Files: files}},
+					Format:      "retriever-jsonl-collection-v1",
+					IDStrategy:  "source_database_id_string",
+					Driver:      driverName,
+					Compression: codec,
+					Source: retriever.SourceMetadata{
+						GraphCount: 1,
+					},
+					Scrub: retriever.ScrubMetadata{
+						Mode: retriever.ScrubNone,
+					},
+					Schema: retriever.SchemaMetadata{
+						Graphs: []retriever.GraphSchemaMetadata{{
+							Name:      target.Name,
+							NodeKinds: []string{"ImportExactNode"},
+							EdgeKinds: []string{"ImportExactEdge"},
+						}},
+					},
+					Graphs: []retriever.GraphManifest{{
+						Name:      target.Name,
+						NodeCount: 2,
+						EdgeCount: 1,
+						Files:     files,
+					}},
 				}
 				require.NoError(t, retriever.WriteManifest(dir, manifest))
-				result, err := retriever.Load(ctx, db, driverName, retriever.LoadOptions{InputDir: dir, BatchSize: 1})
+				result, err := retriever.Load(ctx, db, driverName, retriever.LoadOptions{
+					InputDir:  dir,
+					BatchSize: 1,
+				})
 				require.NoError(t, err)
 				require.Equal(t, int64(2), result.NodeCount)
 				require.Equal(t, int64(1), result.EdgeCount)

@@ -21,7 +21,9 @@ func (s failingHTMLWriter) Write(data []byte) (int, error) {
 // TestWriteHTMLPropagatesWriterError checks that rendering retains output error identity.
 func TestWriteHTMLPropagatesWriterError(t *testing.T) {
 	writeErr := errors.New("report output unavailable")
-	err := WriteHTML(failingHTMLWriter{err: writeErr}, Report{}, HTMLReportOptions{})
+	err := WriteHTML(failingHTMLWriter{
+		err: writeErr,
+	}, Report{}, HTMLReportOptions{})
 	if !errors.Is(err, writeErr) {
 		t.Fatalf("expected wrapped output error, got %v", err)
 	}
@@ -29,12 +31,14 @@ func TestWriteHTMLPropagatesWriterError(t *testing.T) {
 
 // TestWriteHTMLConcurrentReports checks shared-template execution remains deterministic and escaped.
 func TestWriteHTMLConcurrentReports(t *testing.T) {
-	report := Report{Records: []FunctionMetric{{
-		Package:    "sample",
-		Function:   "<function>&",
-		File:       "sample.go",
-		Statements: 1,
-	}}}
+	report := Report{
+		Records: []FunctionMetric{{
+			Package:    "sample",
+			Function:   "<function>&",
+			File:       "sample.go",
+			Statements: 1,
+		}},
+	}
 	var expected bytes.Buffer
 	if err := WriteHTML(&expected, report, HTMLReportOptions{}); err != nil {
 		t.Fatal(err)
@@ -68,13 +72,34 @@ func TestWriteHTMLSeverityBoundaries(t *testing.T) {
 		// pill is the expected rendered CSS class and human-readable severity label.
 		pill string
 	}{
-		{name: "below watch", score: 29.9, pill: `<span class="pill ok">OK</span>`},
-		{name: "watch", score: 30, pill: `<span class="pill watch">Watch</span>`},
-		{name: "high", score: 60, pill: `<span class="pill high">High</span>`},
-		{name: "critical", score: 100, pill: `<span class="pill critical">Critical</span>`},
+		{
+			name:  "below watch",
+			score: 29.9,
+			pill:  `<span class="pill ok">OK</span>`,
+		},
+		{
+			name:  "watch",
+			score: 30,
+			pill:  `<span class="pill watch">Watch</span>`,
+		},
+		{
+			name:  "high",
+			score: 60,
+			pill:  `<span class="pill high">High</span>`,
+		},
+		{
+			name:  "critical",
+			score: 100,
+			pill:  `<span class="pill critical">Critical</span>`,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			report := Report{Records: []FunctionMetric{{Function: "boundary", CRAP: test.score}}}
+			report := Report{
+				Records: []FunctionMetric{{
+					Function: "boundary",
+					CRAP:     test.score,
+				}},
+			}
 			var output bytes.Buffer
 			if err := WriteHTML(&output, report, HTMLReportOptions{}); err != nil {
 				t.Fatal(err)

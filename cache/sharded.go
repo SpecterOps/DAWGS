@@ -78,6 +78,7 @@ func NewShardedSieve[K comparable, V any](totalCapacity int, shards int, shardFn
 	return sharded
 }
 
+// nextPowerOfTwo rounds the requested shard count up, with a minimum of one shard.
 func nextPowerOfTwo(value int) int {
 	if value <= 1 {
 		return 1
@@ -105,6 +106,7 @@ func previousPowerOfTwo(value int) int {
 	return power
 }
 
+// shard selects the owning cache using the caller's hash and the shard mask.
 func (s *ShardedSieve[K, V]) shard(key K) *Sieve[K, V] {
 	return s.shards[s.shardFn(key)&s.mask]
 }

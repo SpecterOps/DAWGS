@@ -63,7 +63,9 @@ func (s *Driver) RefreshTraversalTopologySynopsis(ctx context.Context, target gr
 	}
 	defer conn.Release()
 
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.ReadCommitted,
+	})
 	if err != nil {
 		return TraversalTopologySynopsis{}, fmt.Errorf("begin topology synopsis refresh: %w", err)
 	}
@@ -88,12 +90,27 @@ func (s *Driver) RefreshTraversalTopologySynopsis(ctx context.Context, target gr
 		return TraversalTopologySynopsis{}, fmt.Errorf("read topology synopsis generation: %w", err)
 	}
 	for _, operation := range []topologySynopsisOperation{
-		{query: deleteTopologySynopsisDegreesQuery},
-		{query: deleteTopologySynopsisEdgeCountsQuery},
-		{query: deleteTopologySynopsisNodeCountsQuery},
-		{query: insertTopologySynopsisNodeCountsQuery, withEpoch: true},
-		{query: insertTopologySynopsisEdgeCountsQuery, withEpoch: true},
-		{query: insertTopologySynopsisDegreesQuery, withEpoch: true},
+		{
+			query: deleteTopologySynopsisDegreesQuery,
+		},
+		{
+			query: deleteTopologySynopsisEdgeCountsQuery,
+		},
+		{
+			query: deleteTopologySynopsisNodeCountsQuery,
+		},
+		{
+			query:     insertTopologySynopsisNodeCountsQuery,
+			withEpoch: true,
+		},
+		{
+			query:     insertTopologySynopsisEdgeCountsQuery,
+			withEpoch: true,
+		},
+		{
+			query:     insertTopologySynopsisDegreesQuery,
+			withEpoch: true,
+		},
 	} {
 		args := []any{graphID}
 		if operation.withEpoch {

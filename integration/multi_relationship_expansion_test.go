@@ -4,6 +4,7 @@ package integration
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -14,11 +15,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	// multiExpansionStudyEnv enables repeated timing samples in the fanout diagnostic.
+	multiExpansionStudyEnv = "MULTI_EXPANSION_STUDY"
+
+	// multiExpansionStudyEnabledValue requests timing samples in addition to correctness checks.
+	multiExpansionStudyEnabledValue = "1"
+
+	// multiExpansionWarmupRounds primes each query arm before recording timing samples.
+	multiExpansionWarmupRounds = 1
+
+	// multiExpansionSampleRounds supplies the warm observations used for each median.
+	multiExpansionSampleRounds = 5
+)
+
+// multiExpansionDomains covers equivalent Okta and AD relationship disjunctions.
 var multiExpansionDomains = [][2]string{
 	{"Okta_MemberOf", "Okta_HasRoleAssignment"},
 	{"MemberOf", "AdminTo"},
 }
 
+// TestMultiRelationshipExpansionEquivalence compares complete path multisets with every fixed relationship-type sequence.
+//
 // The layered fixture converges many paths on the same endpoints. Comparing
 // complete node/edge identities preserves multiplicity, unlike DISTINCT nodes.
 func TestMultiRelationshipExpansionEquivalence(t *testing.T) {
@@ -60,10 +78,20 @@ func TestMultiRelationshipExpansionEquivalence(t *testing.T) {
 	}
 }
 
-// Timing is diagnostic: exact cardinalities enforce the traversal contract,
-// while balanced warm samples compare equivalent work without a flaky deadline.
+// TestMultiRelationshipExpansionFanout checks exact counts and fully consumed
+// paths once per query arm. Repeated warm timing samples require an explicit
+// study so ordinary integration runs retain the entire matrix without repetition.
 func TestMultiRelationshipExpansionFanout(t *testing.T) {
-	session := openMultiExpansionSession(t)
+	var (
+		session      = openMultiExpansionSession(t)
+		studyEnabled = os.Getenv(multiExpansionStudyEnv) == multiExpansionStudyEnabledValue
+		roundCount   = 1
+	)
+
+	if studyEnabled {
+		roundCount = multiExpansionWarmupRounds + multiExpansionSampleRounds
+	}
+
 	for _, kinds := range multiExpansionDomains {
 		for _, width := range []int{2, 8} {
 			fixture := multiExpansionFixture(kinds, width, 256)
@@ -71,18 +99,26 @@ func TestMultiRelationshipExpansionFanout(t *testing.T) {
 				for _, projection := range []string{"count(*)", "p"} {
 					t.Run(fmt.Sprintf("%s/width=%d/depth=%d/%s", kinds[0], width, depth, projection), func(t *testing.T) {
 						require.NoError(t, session.WithRollbackFixture(t, fixture, true, func(tx graph.Transaction, ids opengraph.IDMap) error {
-							params := map[string]any{"root": ids["root"].Int64()}
-							combined := []string{multiExpansionQuery([]string{fmt.Sprintf("%s|%s*1..%d", kinds[0], kinds[1], depth)}, false, projection)}
-							var components, homogeneous []string
+							var (
+								params   = map[string]any{"root": ids["root"].Int64()}
+								combined = []string{multiExpansionQuery([]string{fmt.Sprintf("%s|%s*1..%d", kinds[0], kinds[1], depth)}, false, projection)}
+
+								components  []string
+								homogeneous []string
+							)
+
 							for _, sequence := range multiExpansionSequences(kinds, depth) {
 								components = append(components, multiExpansionQuery(sequence, false, projection))
 							}
 							for _, kind := range kinds {
 								homogeneous = append(homogeneous, multiExpansionQuery([]string{fmt.Sprintf("%s*1..%d", kind, depth)}, false, projection))
 							}
-							arms := [][]string{combined, components, homogeneous}
-							var samples [3][]time.Duration
-							for round := range 6 {
+							var (
+								arms    = [][]string{combined, components, homogeneous}
+								samples [3][]time.Duration
+							)
+
+							for round := range roundCount {
 								for offset := range arms {
 									arm := (round + offset) % len(arms)
 									started := time.Now()
@@ -100,15 +136,20 @@ func TestMultiRelationshipExpansionFanout(t *testing.T) {
 										want = 2 * multiExpansionCount(width, depth)
 									}
 									require.Equal(t, int64(want), count)
-									if round > 0 {
+									if studyEnabled && round >= multiExpansionWarmupRounds {
 										samples[arm] = append(samples[arm], elapsed)
 									}
 								}
 							}
-							for _, sample := range samples {
-								sort.Slice(sample, func(i, j int) bool { return sample[i] < sample[j] })
+							if studyEnabled {
+								for _, sample := range samples {
+									sort.Slice(sample, func(i, j int) bool { return sample[i] < sample[j] })
+								}
+
+								medianIndex := multiExpansionSampleRounds / 2
+								t.Logf("%s: %d paths; warm median combined=%s, %d exhaustive components=%s; two single-type queries=%s (%d paths)", session.Driver, multiExpansionCount(2*width, depth), samples[0][medianIndex], len(components), samples[1][medianIndex], samples[2][medianIndex], 2*multiExpansionCount(width, depth))
 							}
-							t.Logf("%s: %d paths; warm median combined=%s, %d exhaustive components=%s; two single-type queries=%s (%d paths)", session.Driver, multiExpansionCount(2*width, depth), samples[0][2], len(components), samples[1][2], samples[2][2], 2*multiExpansionCount(width, depth))
+
 							return nil
 						}))
 					})
@@ -118,25 +159,40 @@ func TestMultiRelationshipExpansionFanout(t *testing.T) {
 	}
 }
 
+// openMultiExpansionSession opens a rollback-fixture session with the relationship kinds used by both domains.
 func openMultiExpansionSession(t *testing.T) *Session {
 	t.Helper()
 	kinds := graph.Kinds{graph.StringKind("MultiExpansionOther")}
 	for _, domain := range multiExpansionDomains {
 		kinds = kinds.Add(graph.StringsToKinds(domain[:])...)
 	}
-	return Open(t, Options{SkipIfNoConnection: true, CleanupMode: CloseOnly,
-		ExtraNodeKinds: graph.Kinds{graph.StringKind("MultiExpansionNode")}, ExtraEdgeKinds: kinds})
+	return Open(t, Options{
+		SkipIfNoConnection: true,
+		CleanupMode:        CloseOnly,
+		ExtraNodeKinds:     graph.Kinds{graph.StringKind("MultiExpansionNode")},
+		ExtraEdgeKinds:     kinds,
+	})
 }
 
+// multiExpansionFixture builds convergent layers and wrong-type, reverse and disconnected traversal decoys.
+//
 // Four layers make depth-three over-expansion observable. Wrong-type first and
 // later hops, reverse edges, and a disconnected component are deliberate decoys.
 func multiExpansionFixture(kinds [2]string, width, disconnected int) *opengraph.Graph {
 	fixture := &opengraph.Graph{}
 	addNode := func(id string) {
-		fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: id, Kinds: []string{"MultiExpansionNode"}, Properties: map[string]any{"name": id}})
+		fixture.Nodes = append(fixture.Nodes, opengraph.Node{
+			ID:         id,
+			Kinds:      []string{"MultiExpansionNode"},
+			Properties: map[string]any{"name": id},
+		})
 	}
 	addEdge := func(start, end, kind string) {
-		fixture.Edges = append(fixture.Edges, opengraph.Edge{StartID: start, EndID: end, Kind: kind})
+		fixture.Edges = append(fixture.Edges, opengraph.Edge{
+			StartID: start,
+			EndID:   end,
+			Kind:    kind,
+		})
 	}
 	addNode("root")
 	previous := []string{"root"}
@@ -174,6 +230,7 @@ func multiExpansionFixture(kinds [2]string, width, disconnected int) *opengraph.
 	return fixture
 }
 
+// multiExpansionQuery renders a directed or inbound path pattern anchored to the fixture root.
 func multiExpansionQuery(sequence []string, inbound bool, projection string) string {
 	pattern := "(s:MultiExpansionNode)"
 	for _, kind := range sequence {
@@ -186,6 +243,8 @@ func multiExpansionQuery(sequence []string, inbound bool, projection string) str
 	return "MATCH p = " + pattern + " WHERE id(s) = $root RETURN " + projection
 }
 
+// multiExpansionSequences enumerates every nonempty relationship-type word through the requested depth.
+//
 // Enumerate every type word, rather than treating the two homogeneous
 // expansions as an equivalent decomposition of the relationship disjunction.
 func multiExpansionSequences(kinds [2]string, depth int) [][]string {
@@ -205,6 +264,7 @@ func multiExpansionSequences(kinds [2]string, depth int) [][]string {
 	return sequences
 }
 
+// multiExpansionCount counts paths in a layered graph with constant branching at each hop.
 func multiExpansionCount(branches, depth int) int {
 	count, paths := 0, 1
 	for range depth {
@@ -214,6 +274,7 @@ func multiExpansionCount(branches, depth int) int {
 	return count
 }
 
+// multiExpansionPaths consumes path results and returns sorted node-and-edge identity signatures.
 func multiExpansionPaths(t *testing.T, result graph.Result) []string {
 	t.Helper()
 	defer result.Close()
@@ -235,6 +296,7 @@ func multiExpansionPaths(t *testing.T, result graph.Result) []string {
 	return paths
 }
 
+// multiExpansionScalar consumes a single count result and rejects extra rows or result errors.
 func multiExpansionScalar(t *testing.T, result graph.Result) int64 {
 	t.Helper()
 	defer result.Close()

@@ -73,14 +73,22 @@ func TestKindCacheAddOnlyReloadKeepsTranslationGeneration(t *testing.T) {
 	require.NotContains(t, cache.current.Load().ids, int16(1))
 }
 
+// TestKindMapperTargetedMisses checks targeted kind resolution without unnecessary full catalog reloads.
 func TestKindMapperTargetedMisses(t *testing.T) {
 	manager := testKindManager(t)
 	known, found, missing := graph.StringKind("Known"), graph.StringKind("Found"), graph.StringKind("Missing")
 	manager.kindCache.merge(map[graph.Kind]int16{known: 1}, 0)
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
-	tx := &transaction{ctx: context.Background(), tx: mock, schemaManager: manager}
-	mapper := &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
+	tx := &transaction{
+		ctx:           context.Background(),
+		tx:            mock,
+		schemaManager: manager,
+	}
+	mapper := &transactionKindMapper{
+		tx:       tx,
+		snapshot: manager.kindCache.current.Load(),
+	}
 	tx.kindMapper = mapper
 	before := mapper.snapshot
 	ids, err := mapper.MapKinds(tx.ctx, nil)
@@ -124,12 +132,20 @@ func TestKindMapperResultMissIsMemoryOnly(t *testing.T) {
 	require.Equal(t, graph.Kinds{known, known}, kinds)
 }
 
+// TestKindMapperCommitFailureDoesNotPublish checks that failed transactions cannot publish their private kind mappings.
 func TestKindMapperCommitFailureDoesNotPublish(t *testing.T) {
 	manager := testKindManager(t)
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
-	tx := &transaction{ctx: context.Background(), tx: mock, schemaManager: manager}
-	tx.kindMapper = &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
+	tx := &transaction{
+		ctx:           context.Background(),
+		tx:            mock,
+		schemaManager: manager,
+	}
+	tx.kindMapper = &transactionKindMapper{
+		tx:       tx,
+		snapshot: manager.kindCache.current.Load(),
+	}
 	failure := errors.New("commit failed")
 	mock.ExpectQuery("with").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int16(7)))
 	_, err = tx.kindMapper.AssertKinds(tx.ctx, graph.Kinds{graph.StringKind("Private")})
@@ -162,12 +178,19 @@ func TestKindMapperUnchangedCommitRetainsSnapshot(t *testing.T) {
 	require.Same(t, before, manager.kindCache.current.Load())
 }
 
+// TestKindReloadFailureRetainsSnapshotAndRequest checks that reload failures preserve the last snapshot and pending invalidation.
 func TestKindReloadFailureRetainsSnapshotAndRequest(t *testing.T) {
 	manager := testKindManager(t)
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
-	tx := &transaction{ctx: context.Background(), tx: mock, schemaManager: manager}
-	tx.kindMapper = &transactionKindMapper{tx: tx}
+	tx := &transaction{
+		ctx:           context.Background(),
+		tx:            mock,
+		schemaManager: manager,
+	}
+	tx.kindMapper = &transactionKindMapper{
+		tx: tx,
+	}
 	manager.kindCache.invalidate()
 	before := manager.kindCache.current.Load()
 	failure := errors.New("catalog unavailable")
@@ -185,6 +208,7 @@ var benchmarkKinds graph.Kinds
 var benchmarkKindID int16
 var benchmarkKindIDs map[int16]graph.Kind
 
+// benchmarkKindTransaction supplies transaction behavior needed by the kind-mapping benchmarks.
 type benchmarkKindTransaction struct {
 	// Tx provides the delegated transaction operations.
 	pgx.Tx
@@ -310,14 +334,23 @@ func TestKindMapperSchemaCatalogDoesNotTrustSharedPositives(t *testing.T) {
 	require.False(t, ok)
 }
 
+// TestKindMapperStableSnapshotDoesNotAdoptDestructiveReload checks that stable transactions retain their owned mappings across destructive refreshes.
 func TestKindMapperStableSnapshotDoesNotAdoptDestructiveReload(t *testing.T) {
 	manager := testKindManager(t)
 	known, learned, private := graph.StringKind("Known"), graph.StringKind("Learned"), graph.StringKind("Private")
 	require.True(t, manager.kindCache.merge(map[graph.Kind]int16{known: 1}, 0))
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
-	tx := &transaction{ctx: context.Background(), schemaManager: manager, tx: mock, isolation: pgx.RepeatableRead}
-	mapper := &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
+	tx := &transaction{
+		ctx:           context.Background(),
+		schemaManager: manager,
+		tx:            mock,
+		isolation:     pgx.RepeatableRead,
+	}
+	mapper := &transactionKindMapper{
+		tx:       tx,
+		snapshot: manager.kindCache.current.Load(),
+	}
 	tx.kindMapper = mapper
 	mapper.learn(learned, 2)
 	mapper.register(private, 3)

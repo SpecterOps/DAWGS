@@ -23,22 +23,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// pathBatchCorpusCase retains a query case together with its source fixture identity.
 type pathBatchCorpusCase struct {
+	// source identifies the ordinary, template or metamorphic fixture that supplied the case.
 	source string
-	test   testCase
+	// test contains the executable query and expected result contract.
+	test testCase
 }
 
+// pathBatchCorpusInventory records candidate admission and exclusion evidence for each translated query case.
 type pathBatchCorpusInventory struct {
-	Mode                 translate.OptimizerMode `json:"mode"`
-	Source               string                  `json:"source"`
-	Name                 string                  `json:"name"`
-	Cypher               string                  `json:"cypher"`
-	DirectPathProjection bool                    `json:"direct_path_projection"`
-	Eligible             bool                    `json:"eligible"`
-	ExcludedReason       string                  `json:"excluded_reason,omitempty"`
-	IsolatableColumns    []int                   `json:"isolatable_path_columns,omitempty"`
+	// Mode identifies the optimizer configuration used to translate the case.
+	Mode translate.OptimizerMode `json:"mode"`
+	// Source identifies the corpus fixture that supplied the case.
+	Source string `json:"source"`
+	// Name identifies the case within its source fixture.
+	Name string `json:"name"`
+	// Cypher retains the source query whose path projection was inspected.
+	Cypher string `json:"cypher"`
+	// DirectPathProjection reports whether a bound path is projected directly.
+	DirectPathProjection bool `json:"direct_path_projection"`
+	// Eligible reports whether the candidate replaces the final path materializer.
+	Eligible bool `json:"eligible"`
+	// ExcludedReason explains why a case was excluded from candidate comparisons.
+	ExcludedReason string `json:"excluded_reason,omitempty"`
+	// IsolatableColumns lists path projection indexes eligible for separate column comparisons.
+	IsolatableColumns []int `json:"isolatable_path_columns,omitempty"`
 }
 
+// TestPostgreSQLPathBatchCorpusInventory records eligible path projections and explicit exclusion reasons without opening a database.
+//
 // Offline inventory distinguishes actual bound-path projections from the many
 // scalar/node queries in the corpus. It does not claim a live comparison: the
 // full corpus test below supplies that evidence separately.
@@ -54,7 +68,12 @@ func TestPostgreSQLPathBatchCorpusInventory(t *testing.T) {
 		excludedPaths := map[string]int{}
 		for _, entry := range entries {
 			tc := entry.test
-			record := pathBatchCorpusInventory{Mode: mode, Source: entry.source, Name: tc.Name, Cypher: tc.Cypher}
+			record := pathBatchCorpusInventory{
+				Mode:   mode,
+				Source: entry.source,
+				Name:   tc.Name,
+				Cypher: tc.Cypher,
+			}
 			parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.Cypher)
 			if err != nil {
 				record.ExcludedReason = "parse error"
@@ -71,7 +90,9 @@ func TestPostgreSQLPathBatchCorpusInventory(t *testing.T) {
 					}
 					params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, ids)
 					translation, err := translate.TranslateWithOptions(context.Background(), parsed, mapper, params, 1,
-						translate.Options{OptimizerMode: mode})
+						translate.Options{
+							OptimizerMode: mode,
+						})
 					if err != nil {
 						record.ExcludedReason = "translation error: " + err.Error()
 					} else {
@@ -99,6 +120,7 @@ func TestPostgreSQLPathBatchCorpusInventory(t *testing.T) {
 	pathBatchStudyWrite(t, "corpus-inventory.json", inventory)
 }
 
+// pathBatchDirectPathProjection reports whether a query exposes a bound path directly in its final projection.
 func pathBatchDirectPathProjection(query *cypher.RegularQuery) bool {
 	paths := map[string]bool{}
 	pathBatchVisit(query, func(node any) {
@@ -148,14 +170,23 @@ func pathBatchDirectPathProjection(query *cypher.RegularQuery) bool {
 	return false
 }
 
+// TestPostgreSQLPathBatchCompleteCorpus compares complete path values only where the candidate replaces final path assembly.
+//
 // The candidate is compared only where it actually replaces final path
 // assembly. Unsupported cases are counted by reason, never run through a
 // fallback and reported as candidate successes. Both ordinary case files and
 // every rendered template/metamorphic variant are inventoried.
 func TestPostgreSQLPathBatchCompleteCorpus(t *testing.T) {
 	entries, nodeKinds, edgeKinds := pathBatchCorpus(t)
-	session := Open(t, Options{RequireDriver: pg.DriverName, SkipIfNoConnection: true, SkipIfDriverMismatch: true,
-		GraphName: "path_batch_corpus", CleanupMode: CloseOnly, ExtraNodeKinds: nodeKinds, ExtraEdgeKinds: edgeKinds})
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		GraphName:            "path_batch_corpus",
+		CleanupMode:          CloseOnly,
+		ExtraNodeKinds:       nodeKinds,
+		ExtraEdgeKinds:       edgeKinds,
+	})
 	driver := session.DB.(*pg.Driver)
 	selected, ok := driver.DefaultGraph()
 	require.True(t, ok)
@@ -184,7 +215,9 @@ func TestPostgreSQLPathBatchCompleteCorpus(t *testing.T) {
 				}
 				params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, dummyIDs)
 				translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), params, selected.ID,
-					translate.Options{OptimizerMode: mode})
+					translate.Options{
+						OptimizerMode: mode,
+					})
 				if err != nil {
 					excluded["translation error"]++
 					continue
@@ -200,7 +233,9 @@ func TestPostgreSQLPathBatchCompleteCorpus(t *testing.T) {
 						parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.Cypher)
 						require.NoError(t, err)
 						translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), params, selected.ID,
-							translate.Options{OptimizerMode: mode})
+							translate.Options{
+								OptimizerMode: mode,
+							})
 						require.NoError(t, err)
 						skeleton, bindings, reason := pathBatchSkeleton(translation)
 						require.Empty(t, reason)
@@ -227,6 +262,7 @@ func TestPostgreSQLPathBatchCompleteCorpus(t *testing.T) {
 	}
 }
 
+// pathBatchCorpus collects ordinary, rendered-template and metamorphic cases for the selected compiler mode.
 func pathBatchCorpus(t *testing.T) ([]pathBatchCorpusCase, graph.Kinds, graph.Kinds) {
 	t.Helper()
 	templates := loadCypherTemplateFiles(t)
@@ -236,18 +272,32 @@ func pathBatchCorpus(t *testing.T) ([]pathBatchCorpusCase, graph.Kinds, graph.Ki
 		source := filepath.ToSlash(file.path)
 		for _, family := range file.Families {
 			for _, variant := range family.Variants {
-				entries = append(entries, pathBatchCorpusCase{source: source, test: testCase{
-					Name: family.Name + "/" + variant.Name, Cypher: renderCypherTemplate(t, family.Template, variant.Vars),
-					Params: mergeParams(family.Params, variant.Params), NodeParams: mergeStringMap(family.NodeParams, variant.NodeParams),
-					NodeListParams: mergeStringListMap(family.NodeListParams, variant.NodeListParams),
-					Assert:         variant.Assert, Fixture: family.Fixture}})
+				entries = append(entries, pathBatchCorpusCase{
+					source: source,
+					test: testCase{
+						Name:           family.Name + "/" + variant.Name,
+						Cypher:         renderCypherTemplate(t, family.Template, variant.Vars),
+						Params:         mergeParams(family.Params, variant.Params),
+						NodeParams:     mergeStringMap(family.NodeParams, variant.NodeParams),
+						NodeListParams: mergeStringListMap(family.NodeListParams, variant.NodeListParams),
+						Assert:         variant.Assert,
+						Fixture:        family.Fixture,
+					},
+				})
 			}
 		}
 		for _, family := range file.Metamorphic {
 			for _, query := range family.Queries {
-				entries = append(entries, pathBatchCorpusCase{source: source, test: testCase{
-					Name: family.Name + "/" + query.Name, Cypher: query.Cypher, Params: query.Params,
-					Assert: json.RawMessage(`"no_error"`), Fixture: family.Fixture}})
+				entries = append(entries, pathBatchCorpusCase{
+					source: source,
+					test: testCase{
+						Name:    family.Name + "/" + query.Name,
+						Cypher:  query.Cypher,
+						Params:  query.Params,
+						Assert:  json.RawMessage(`"no_error"`),
+						Fixture: family.Fixture,
+					},
+				})
 			}
 		}
 	}
@@ -279,12 +329,16 @@ func pathBatchCorpus(t *testing.T) ([]pathBatchCorpusCase, graph.Kinds, graph.Ki
 			}
 			nodes, edges := tc.Fixture.Kinds()
 			nodeKinds, edgeKinds = nodeKinds.Add(nodes...), edgeKinds.Add(edges...)
-			entries = append(entries, pathBatchCorpusCase{source: filepath.ToSlash(path), test: tc})
+			entries = append(entries, pathBatchCorpusCase{
+				source: filepath.ToSlash(path),
+				test:   tc,
+			})
 		}
 	}
 	return entries, nodeKinds, edgeKinds
 }
 
+// TestPostgreSQLPathBatchSemantics checks candidate path hydration against complete values from the production materializer.
 func TestPostgreSQLPathBatchSemantics(t *testing.T) {
 	fixture := &opengraph.Graph{}
 	for _, id := range []string{"root", "a", "b", "isolated"} {
@@ -296,8 +350,15 @@ func TestPostgreSQLPathBatchSemantics(t *testing.T) {
 		pathBatchAddEdge(fixture, edge[0], edge[1], edge[2], 128)
 	}
 	nodes, edges := fixture.Kinds()
-	session := Open(t, Options{RequireDriver: pg.DriverName, SkipIfNoConnection: true, SkipIfDriverMismatch: true,
-		GraphName: "path_batch_corpus", CleanupMode: CloseOnly, ExtraNodeKinds: nodes, ExtraEdgeKinds: edges})
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		GraphName:            "path_batch_corpus",
+		CleanupMode:          CloseOnly,
+		ExtraNodeKinds:       nodes,
+		ExtraEdgeKinds:       edges,
+	})
 	driver := session.DB.(*pg.Driver)
 	selected, ok := driver.DefaultGraph()
 	require.True(t, ok)
@@ -318,7 +379,9 @@ func TestPostgreSQLPathBatchSemantics(t *testing.T) {
 					parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
 					require.NoError(t, err)
 					translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(),
-						map[string]any{"root": ids["root"].Int64(), "isolated": ids["isolated"].Int64()}, selected.ID, translate.Options{OptimizerMode: mode})
+						map[string]any{"root": ids["root"].Int64(), "isolated": ids["isolated"].Int64()}, selected.ID, translate.Options{
+							OptimizerMode: mode,
+						})
 					require.NoError(t, err)
 					skeleton, bindings, reason := pathBatchSkeleton(translation)
 					require.Empty(t, reason, query)
@@ -389,11 +452,16 @@ union all select id,-1,start_id,end_id,kind_id,'{"wrong_graph":true}'::jsonb fro
 	})
 }
 
+// pathBatchProjectionCandidate pairs an isolated path projection index with its replacement translation.
 type pathBatchProjectionCandidate struct {
-	index       int
+	// index identifies the isolated path column in the original result projection.
+	index int
+	// translation contains the candidate translation restricted to that path column.
 	translation translate.Result
 }
 
+// pathBatchProjectionCandidates isolates path columns while retaining the experiment's eligibility restrictions.
+//
 // Isolating one path column removes only other final SELECT items. DISTINCT,
 // grouping, modifiers, mutations, and earlier path materialization still use
 // the main eligibility guard. Other columns' values are not claimed equivalent.
@@ -415,19 +483,31 @@ func pathBatchProjectionCandidates(translation translate.Result) []pathBatchProj
 		isolated := translation
 		isolated.Statement = isolatedQuery
 		if _, _, reason := pathBatchSkeleton(isolated); reason == "" {
-			candidates = append(candidates, pathBatchProjectionCandidate{index: index, translation: isolated})
+			candidates = append(candidates, pathBatchProjectionCandidate{
+				index:       index,
+				translation: isolated,
+			})
 		}
 	}
 	return candidates
 }
 
+// TestPostgreSQLPathBatchProjectedColumns compares isolated candidate path columns with their original multi-column query values.
+//
 // This supplements the single-column corpus comparisons with complete path
 // values from the original multi-column query. Only each path column is
 // replaced in the candidate; this is not a comparison of the other columns.
 func TestPostgreSQLPathBatchProjectedColumns(t *testing.T) {
 	entries, nodes, edges := pathBatchCorpus(t)
-	session := Open(t, Options{RequireDriver: pg.DriverName, SkipIfNoConnection: true, SkipIfDriverMismatch: true,
-		GraphName: "path_batch_corpus", CleanupMode: CloseOnly, ExtraNodeKinds: nodes, ExtraEdgeKinds: edges})
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		GraphName:            "path_batch_corpus",
+		CleanupMode:          CloseOnly,
+		ExtraNodeKinds:       nodes,
+		ExtraEdgeKinds:       edges,
+	})
 	driver := session.DB.(*pg.Driver)
 	selected, ok := driver.DefaultGraph()
 	require.True(t, ok)
@@ -450,7 +530,9 @@ func TestPostgreSQLPathBatchProjectedColumns(t *testing.T) {
 					}
 				}
 				params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, ids)
-				translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), params, selected.ID, translate.Options{OptimizerMode: mode})
+				translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), params, selected.ID, translate.Options{
+					OptimizerMode: mode,
+				})
 				if err != nil || len(pathBatchProjectionCandidates(translation)) == 0 {
 					continue
 				}
@@ -459,7 +541,9 @@ func TestPostgreSQLPathBatchProjectedColumns(t *testing.T) {
 						parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.Cypher)
 						require.NoError(t, err)
 						params := resolveFixtureParams(t, tc.Params, tc.NodeParams, tc.NodeListParams, ids)
-						translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), params, selected.ID, translate.Options{OptimizerMode: mode})
+						translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), params, selected.ID, translate.Options{
+							OptimizerMode: mode,
+						})
 						require.NoError(t, err)
 						candidates := pathBatchProjectionCandidates(translation)
 						for _, column := range candidates {
@@ -482,6 +566,7 @@ func TestPostgreSQLPathBatchProjectedColumns(t *testing.T) {
 	}
 }
 
+// pathBatchColumnFullValues consumes and canonicalizes complete path values from one projected result column.
 func pathBatchColumnFullValues(t *testing.T, result graph.Result, column int) []string {
 	t.Helper()
 	defer result.Close()
@@ -502,32 +587,109 @@ func pathBatchColumnFullValues(t *testing.T, result graph.Result, column int) []
 	return values
 }
 
+// TestPostgreSQLPathBatchEligibility checks that unsupported shapes cannot be counted as candidate replacements.
+//
 // Protect the experiment's boundaries: candidate coverage must not silently
 // include a query which retained its old per-path materializer.
 func TestPostgreSQLPathBatchEligibility(t *testing.T) {
-	path := pgsql.FunctionCall{Function: pgsql.FunctionOrderedEdgeIDsToPath, CastType: pgsql.PathComposite,
+	path := pgsql.FunctionCall{
+		Function: pgsql.FunctionOrderedEdgeIDsToPath,
+		CastType: pgsql.PathComposite,
 		Parameters: []pgsql.Expression{pgsql.NewLiteral(int32(1), pgsql.Int4),
-			pgsql.CompositeValue{DataType: pgsql.NodeComposite, Values: []pgsql.Expression{
-				pgsql.NewLiteral(int64(1), pgsql.Int8), pgsql.ArrayLiteral{CastType: pgsql.Int2Array}, pgsql.NullLiteral()}},
-			pgsql.ArrayLiteral{CastType: pgsql.Int8Array}, pgsql.ArrayLiteral{CastType: pgsql.NodeCompositeArray}}}
-	base := pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{path}}}
+			pgsql.CompositeValue{
+				DataType: pgsql.NodeComposite,
+				Values: []pgsql.Expression{
+					pgsql.NewLiteral(int64(1), pgsql.Int8), pgsql.ArrayLiteral{
+						CastType: pgsql.Int2Array,
+					}, pgsql.NullLiteral()},
+			},
+			pgsql.ArrayLiteral{
+				CastType: pgsql.Int8Array,
+			}, pgsql.ArrayLiteral{
+				CastType: pgsql.NodeCompositeArray,
+			}},
+	}
+	base := pgsql.Query{
+		Body: pgsql.Select{
+			Projection: pgsql.Projection{path},
+		},
+	}
 	for _, tc := range []struct {
-		name, reason string
-		query        pgsql.Query
-		stages       []translate.QueryStage
+		// name identifies the projection eligibility case.
+		name string
+		// reason contains the expected candidate exclusion reason.
+		reason string
+		// query supplies the PostgreSQL AST inspected by the candidate.
+		query pgsql.Query
+		// stages supplies preceding query stages that can affect candidate eligibility.
+		stages []translate.QueryStage
 	}{
-		{name: "plain final path", query: base},
-		{name: "final limit", query: pgsql.Query{Body: base.Body, Limit: pgsql.NewLiteral(1, pgsql.Int8)}, reason: "final LIMIT/OFFSET/ORDER BY"},
-		{name: "distinct", query: pgsql.Query{Body: pgsql.Select{Distinct: true, Projection: pgsql.Projection{path}}}, reason: "final DISTINCT/grouping"},
-		{name: "two columns", query: pgsql.Query{Body: pgsql.Select{Projection: pgsql.Projection{path, path}}}, reason: "multiple result columns"},
-		{name: "set operation", query: pgsql.Query{Body: pgsql.SetOperation{}}, reason: "set operation"},
-		{name: "mutation stages", query: base, stages: []translate.QueryStage{{}}, reason: "multipart mutation"},
-		{name: "earlier materialization", query: pgsql.Query{Body: base.Body,
-			CommonTableExpressions: &pgsql.With{Expressions: []pgsql.CommonTableExpression{{Alias: pgsql.TableAlias{Name: "earlier"}, Query: base}}}},
-			reason: "earlier/additional path materialization"},
+		{
+			name:  "plain final path",
+			query: base,
+		},
+		{
+			name: "final limit",
+			query: pgsql.Query{
+				Body:  base.Body,
+				Limit: pgsql.NewLiteral(1, pgsql.Int8),
+			},
+			reason: "final LIMIT/OFFSET/ORDER BY",
+		},
+		{
+			name: "distinct",
+			query: pgsql.Query{
+				Body: pgsql.Select{
+					Distinct:   true,
+					Projection: pgsql.Projection{path},
+				},
+			},
+			reason: "final DISTINCT/grouping",
+		},
+		{
+			name: "two columns",
+			query: pgsql.Query{
+				Body: pgsql.Select{
+					Projection: pgsql.Projection{path, path},
+				},
+			},
+			reason: "multiple result columns",
+		},
+		{
+			name: "set operation",
+			query: pgsql.Query{
+				Body: pgsql.SetOperation{},
+			},
+			reason: "set operation",
+		},
+		{
+			name:   "mutation stages",
+			query:  base,
+			stages: []translate.QueryStage{{}},
+			reason: "multipart mutation",
+		},
+		{
+			name: "earlier materialization",
+			query: pgsql.Query{
+				Body: base.Body,
+				CommonTableExpressions: &pgsql.With{
+					Expressions: []pgsql.CommonTableExpression{{
+						Alias: pgsql.TableAlias{
+							Name: "earlier",
+						},
+						Query: base,
+					}},
+				},
+			},
+			reason: "earlier/additional path materialization",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			skeleton, _, reason := pathBatchSkeleton(translate.Result{Statement: tc.query, Stages: tc.stages, GraphID: 1})
+			skeleton, _, reason := pathBatchSkeleton(translate.Result{
+				Statement: tc.query,
+				Stages:    tc.stages,
+				GraphID:   1,
+			})
 			require.Equal(t, tc.reason, reason)
 			if reason == "" {
 				require.NotEmpty(t, skeleton)

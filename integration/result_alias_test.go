@@ -10,8 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestResultAliasSpelling checks that returned column names retain the caller's requested alias spelling.
 func TestResultAliasSpelling(t *testing.T) {
-	session := Open(t, Options{SkipIfNoConnection: true, CleanupMode: CleanupGraph, ExtraNodeKinds: graph.Kinds{graph.StringKind("AliasInput")}})
+	session := Open(t, Options{
+		SkipIfNoConnection: true,
+		CleanupMode:        CleanupGraph,
+		ExtraNodeKinds:     graph.Kinds{graph.StringKind("AliasInput")},
+	})
 	ClearGraph(t, session.DB, session.Ctx)
 	modes := []bool{true}
 	if _, ok := session.DB.(*pg.Driver); ok {
@@ -25,13 +30,34 @@ func TestResultAliasSpelling(t *testing.T) {
 			// key is the result-column name expected after alias decoding.
 			key string
 		}{
-			{token: "objectId", key: "objectId"},
-			{token: "`object id`", key: "object id"},
-			{token: "`object``id`", key: "object`id"},
-			{token: "`object\"id`", key: "object\"id"},
-			{token: "`select`", key: "select"},
-			{token: "`étiquette`", key: "étiquette"},
-			{token: "`*`", key: "*"},
+			{
+				token: "objectId",
+				key:   "objectId",
+			},
+			{
+				token: "`object id`",
+				key:   "object id",
+			},
+			{
+				token: "`object``id`",
+				key:   "object`id",
+			},
+			{
+				token: "`object\"id`",
+				key:   "object\"id",
+			},
+			{
+				token: "`select`",
+				key:   "select",
+			},
+			{
+				token: "`étiquette`",
+				key:   "étiquette",
+			},
+			{
+				token: "`*`",
+				key:   "*",
+			},
 		} {
 			for _, query := range []string{
 				"RETURN 7 AS " + tc.token,
@@ -53,12 +79,23 @@ func TestResultAliasSpelling(t *testing.T) {
 		}
 
 		for _, tc := range []struct {
-			query  string
-			keys   []string
+			// query supplies the source query whose result aliases are checked.
+			query string
+			// keys lists the expected result column names in projection order.
+			keys []string
+			// values contains the expected values returned under those column names.
 			values []any
 		}{
-			{"RETURN 1 AS objectId, 2 AS objectid", []string{"objectId", "objectid"}, []any{int64(1), int64(2)}},
-			{"WITH 1 AS `a`, 2 AS `b` RETURN `a` + `b`", []string{"`a` + `b`"}, []any{int64(3)}},
+			{
+				query:  "RETURN 1 AS objectId, 2 AS objectid",
+				keys:   []string{"objectId", "objectid"},
+				values: []any{int64(1), int64(2)},
+			},
+			{
+				query:  "WITH 1 AS `a`, 2 AS `b` RETURN `a` + `b`",
+				keys:   []string{"`a` + `b`"},
+				values: []any{int64(3)},
+			},
 		} {
 			t.Run(tc.query+map[bool]string{true: "/optimized", false: "/generic"}[optimized], func(t *testing.T) {
 				require.NoError(t, session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {

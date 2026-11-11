@@ -279,6 +279,7 @@ func TestRewriteInQueryCallPreservesNativeText(t *testing.T) {
 	}
 }
 
+// TestRewriteQueryPreservesPredicateAndFunctionSemantics checks that rewrites retain predicate grouping and function behavior.
 func TestRewriteQueryPreservesPredicateAndFunctionSemantics(t *testing.T) {
 	for _, tc := range []struct {
 		// name identifies this test case in subtest and benchmark output.
@@ -288,15 +289,51 @@ func TestRewriteQueryPreservesPredicateAndFunctionSemantics(t *testing.T) {
 		// want is the expected formatted value or rewritten query fragment.
 		want string
 	}{
-		{name: "namespace", source: "MATCH (n $props) RETURN apoc.coll.sum([1, 2])", want: "return apoc.coll.sum([1, 2])"},
-		{name: "single namespace", source: "MATCH (n $props) RETURN custom.sum([1, 2])", want: "return custom.sum([1, 2])"},
-		{name: "conjunction", source: "MATCH (n $props) WHERE n:A:B RETURN n", want: "where (n:A and n:B)"},
-		{name: "negation", source: "MATCH (n $props) WHERE NOT n:A:B RETURN n", want: "where not (n:A and n:B)"},
-		{name: "mixed boolean", source: "MATCH (n $props) WHERE n:A:B OR n:C RETURN n", want: "where (n:A and n:B) or n:C"},
-		{name: "set", source: "MATCH (n $props) WHERE n:A:B SET n.x = 3.0 / 2.0 RETURN n.x", want: "where (n:A and n:B) set n.x = 3.0 / 2.0"},
-		{name: "create", source: "MATCH (n $props) WHERE n:A:B CREATE (m {x: 3.0 / 2.0}) RETURN m.x", want: "where (n:A and n:B) create (m {x: 3.0 / 2.0})"},
-		{name: "delete", source: "MATCH (n $props) WHERE n:A:B DELETE n", want: "where (n:A and n:B) delete n"},
-		{name: "temporal trigger", source: "MATCH (n) WHERE n:A:B AND n.created < date() RETURN n", want: "where (n:A and n:B) and date(n.created) < date()"},
+		{
+			name:   "namespace",
+			source: "MATCH (n $props) RETURN apoc.coll.sum([1, 2])",
+			want:   "return apoc.coll.sum([1, 2])",
+		},
+		{
+			name:   "single namespace",
+			source: "MATCH (n $props) RETURN custom.sum([1, 2])",
+			want:   "return custom.sum([1, 2])",
+		},
+		{
+			name:   "conjunction",
+			source: "MATCH (n $props) WHERE n:A:B RETURN n",
+			want:   "where (n:A and n:B)",
+		},
+		{
+			name:   "negation",
+			source: "MATCH (n $props) WHERE NOT n:A:B RETURN n",
+			want:   "where not (n:A and n:B)",
+		},
+		{
+			name:   "mixed boolean",
+			source: "MATCH (n $props) WHERE n:A:B OR n:C RETURN n",
+			want:   "where (n:A and n:B) or n:C",
+		},
+		{
+			name:   "set",
+			source: "MATCH (n $props) WHERE n:A:B SET n.x = 3.0 / 2.0 RETURN n.x",
+			want:   "where (n:A and n:B) set n.x = 3.0 / 2.0",
+		},
+		{
+			name:   "create",
+			source: "MATCH (n $props) WHERE n:A:B CREATE (m {x: 3.0 / 2.0}) RETURN m.x",
+			want:   "where (n:A and n:B) create (m {x: 3.0 / 2.0})",
+		},
+		{
+			name:   "delete",
+			source: "MATCH (n $props) WHERE n:A:B DELETE n",
+			want:   "where (n:A and n:B) delete n",
+		},
+		{
+			name:   "temporal trigger",
+			source: "MATCH (n) WHERE n:A:B AND n.created < date() RETURN n",
+			want:   "where (n:A and n:B) and date(n.created) < date()",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			params := map[string]any{"props": map[string]any{"tag": "probe"}}

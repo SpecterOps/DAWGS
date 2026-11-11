@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestOpenSessionReturnsConnectionStringError checks that missing connection configuration is returned to the caller.
 func TestOpenSessionReturnsConnectionStringError(t *testing.T) {
 	t.Setenv(ConnectionStringEnv, "")
 
@@ -40,10 +41,13 @@ func TestOpenSessionReturnsConnectionStringError(t *testing.T) {
 	}
 }
 
+// TestOpenSessionReturnsDriverMismatchError checks that a requested backend mismatch is returned without opening a session.
 func TestOpenSessionReturnsDriverMismatchError(t *testing.T) {
 	t.Setenv(ConnectionStringEnv, "postgresql://user:password@localhost:5432/database")
 
-	_, err := OpenSession(Options{RequireDriver: "neo4j"})
+	_, err := OpenSession(Options{
+		RequireDriver: "neo4j",
+	})
 	if !errors.Is(err, errDriverMismatch) {
 		t.Fatalf("OpenSession() error = %v, want driver mismatch error", err)
 	}
@@ -191,23 +195,42 @@ func (s *rollbackHarnessDatabase) WriteTransaction(_ context.Context, delegate g
 	return s.delegateErr
 }
 
+// TestSessionRollbackPreservesFailures checks that fixture rollback suppresses only its sentinel and retains real failures.
 func TestSessionRollbackPreservesFailures(t *testing.T) {
 	failure := errors.New("fixture failed")
 	for _, tc := range []struct {
-		name                   string
-		delegateErr, driverErr error
+		// name identifies the rollback outcome in subtest output.
+		name string
+		// delegateErr injects a failure from inside the transaction delegate.
+		delegateErr error
+		// driverErr injects a failure at the database transaction boundary.
+		driverErr error
 	}{
-		{name: "successful fixture requests rollback"},
-		{name: "delegate failure", delegateErr: failure},
-		{name: "driver failure", driverErr: failure},
+		{
+			name: "successful fixture requests rollback",
+		},
+		{
+			name:        "delegate failure",
+			delegateErr: failure,
+		},
+		{
+			name:      "driver failure",
+			driverErr: failure,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tx := &struct {
 				// Transaction provides the delegated transaction operations.
 				graph.Transaction
 			}{}
-			db := &rollbackHarnessDatabase{transaction: tx, err: tc.driverErr}
-			session := &Session{DB: db, Ctx: context.Background()}
+			db := &rollbackHarnessDatabase{
+				transaction: tx,
+				err:         tc.driverErr,
+			}
+			session := &Session{
+				DB:  db,
+				Ctx: context.Background(),
+			}
 			called := false
 			err := session.WithRollback(t, func(actual graph.Transaction) error {
 				called = true

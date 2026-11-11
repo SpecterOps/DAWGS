@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMultiRelationshipExpansionFiltersEveryHop checks that each recursive hop retains the complete relationship-type disjunction.
+//
 // Every hop must retain the type disjunction, including after frame binding,
 // traversal reversal, and projection pruning for mutations.
 func TestMultiRelationshipExpansionFiltersEveryHop(t *testing.T) {
@@ -37,7 +39,9 @@ func TestMultiRelationshipExpansionFiltersEveryHop(t *testing.T) {
 						t.Run(string(mode)+"/"+source, func(t *testing.T) {
 							parsed, err := frontend.ParseCypher(frontend.NewContext(), source)
 							require.NoError(t, err)
-							translation, err := TranslateWithOptions(context.Background(), parsed, mapper, nil, DefaultGraphID, Options{OptimizerMode: mode})
+							translation, err := TranslateWithOptions(context.Background(), parsed, mapper, nil, DefaultGraphID, Options{
+								OptimizerMode: mode,
+							})
 							require.NoError(t, err)
 							sql, err := Translated(translation)
 							require.NoError(t, err)

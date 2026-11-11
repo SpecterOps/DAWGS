@@ -236,6 +236,7 @@ type cancelOnExecConn struct {
 	onStatement string
 }
 
+// Exec delegates the statement and cancels its context at the configured maintenance step.
 func (s *cancelOnExecConn) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
 	if s.onStatement == "" || sql == s.onStatement {
 		defer s.cancel()
@@ -261,6 +262,7 @@ func expectGraphIndexes(conn pgxmock.PgxConnIface, sql string, indexes ...graphI
 	conn.ExpectQuery(sql).WillReturnRows(rows)
 }
 
+// expectIndexStatement registers the expected index maintenance statement with the SQL mock.
 func expectIndexStatement(conn pgxmock.PgxConnIface, stmt string, err error) {
 	expectation := conn.ExpectExec(stmt)
 	if err != nil {
@@ -272,23 +274,30 @@ func expectIndexStatement(conn pgxmock.PgxConnIface, stmt string, err error) {
 
 // optimizeStorageMockConn checks protocol options before pgxmock consumes them.
 type optimizeStorageMockConn struct {
+	// PgxConnIface supplies the expected PostgreSQL connection operations.
 	pgxmock.PgxConnIface
+	// t reports maintenance statement mismatches to the owning test.
 	t *testing.T
 }
 
+// Exec checks maintenance execution through the storage optimization mock connection.
 func (s *optimizeStorageMockConn) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
 	s.t.Helper()
 	require.Equal(s.t, []any{pgx.QueryExecModeSimpleProtocol}, arguments)
 	return s.PgxConnIface.Exec(ctx, sql, arguments...)
 }
 
+// newOptimizeStorageMockConn creates a mock connection that verifies storage optimization statements.
 func newOptimizeStorageMockConn(t *testing.T) *optimizeStorageMockConn {
 	t.Helper()
 
 	conn, err := pgxmock.NewConn(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	require.NoError(t, err)
 
-	return &optimizeStorageMockConn{PgxConnIface: conn, t: t}
+	return &optimizeStorageMockConn{
+		PgxConnIface: conn,
+		t:            t,
+	}
 }
 
 func expectOptimizeStorageVacuum(conn pgxmock.PgxConnIface, stmt string) {

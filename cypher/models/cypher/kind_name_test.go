@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestKindNameCodec checks the encoding and decoding contract for raw and quoted kind names.
 func TestKindNameCodec(t *testing.T) {
 	for _, tc := range []struct {
 		// raw is the decoded kind name without Cypher quoting.
@@ -18,11 +19,53 @@ func TestKindNameCodec(t *testing.T) {
 		// token is the Cypher spelling, including any backtick quoting.
 		token string
 	}{
-		{raw: "Base", token: "Base"}, {raw: "MiXeD", token: "MiXeD"}, {raw: "MATCH", token: "MATCH"},
-		{raw: "has space", token: "`has space`"}, {raw: "   ", token: "`   `"}, {raw: "a-b.!", token: "`a-b.!`"},
-		{raw: "1leading", token: "`1leading`"}, {raw: "日本語", token: "日本語"}, {raw: "e\u0301", token: "e\u0301"},
-		{raw: "has`tick", token: "`has``tick`"}, {raw: "a``b", token: "`a````b`"}, {raw: "`Base`", token: "```Base```"},
-		{raw: "x`) MATCH (n) //", token: "`x``) MATCH (n) //`"}, {raw: "", token: "``"},
+		{
+			raw:   "Base",
+			token: "Base",
+		}, {
+			raw:   "MiXeD",
+			token: "MiXeD",
+		}, {
+			raw:   "MATCH",
+			token: "MATCH",
+		},
+		{
+			raw:   "has space",
+			token: "`has space`",
+		}, {
+			raw:   "   ",
+			token: "`   `",
+		}, {
+			raw:   "a-b.!",
+			token: "`a-b.!`",
+		},
+		{
+			raw:   "1leading",
+			token: "`1leading`",
+		}, {
+			raw:   "日本語",
+			token: "日本語",
+		}, {
+			raw:   "e\u0301",
+			token: "e\u0301",
+		},
+		{
+			raw:   "has`tick",
+			token: "`has``tick`",
+		}, {
+			raw:   "a``b",
+			token: "`a````b`",
+		}, {
+			raw:   "`Base`",
+			token: "```Base```",
+		},
+		{
+			raw:   "x`) MATCH (n) //",
+			token: "`x``) MATCH (n) //`",
+		}, {
+			raw:   "",
+			token: "``",
+		},
 	} {
 		t.Run(tc.token, func(t *testing.T) {
 			require.Equal(t, tc.token, cypher.EscapeKindName(tc.raw))

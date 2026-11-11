@@ -74,14 +74,17 @@ func NewCommandOutput(styledOutputEnabled bool) *CommandOutput {
 	}
 }
 
+// SetStyledOutputEnabled selects whether command output includes terminal styling.
 func (s *CommandContext) SetStyledOutputEnabled(enabled bool) {
 	s.output.styledOutputEnabled = enabled
 }
 
+// defaultConfigPath resolves the shell's default configuration file location.
 func (s *CommandContext) defaultConfigPath() string {
 	return types.DefaultConfigPath(s.appConfigBaseDir)
 }
 
+// warningStyle renders warning text with terminal styling when styled output is enabled.
 func (s *CommandContext) warningStyle(text string) string {
 	if !s.output.styledOutputEnabled {
 		return text

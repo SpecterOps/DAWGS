@@ -243,7 +243,9 @@ func measureRawPGXOnSession(
 	// DAWGS read queries may invoke session-local workspace DDL/DML. The raw
 	// boundary therefore uses a rollback-only read-write transaction, preserving
 	// the exact translated SQL without committing benchmark side effects.
-	txOptions := pgx.TxOptions{AccessMode: pgx.ReadWrite}
+	txOptions := pgx.TxOptions{
+		AccessMode: pgx.ReadWrite,
+	}
 	if len(isolation) > 0 {
 		txOptions.IsoLevel = isolation[0]
 	}

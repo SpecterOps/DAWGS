@@ -138,7 +138,10 @@ func normalizeExpansionDepths(minDepth, maxDepth int) expansionDepthRange {
 		slog.Warn("Negative maxdepth not allowed. Setting max depth for expansion to 0")
 	}
 
-	return expansionDepthRange{minimum: effectiveMinDepth, maximum: effectiveMaxDepth}
+	return expansionDepthRange{
+		minimum: effectiveMinDepth,
+		maximum: effectiveMaxDepth,
+	}
 }
 
 // OutboundWithDepth specifies the next outbound expansion step for this pattern with depth parameters.

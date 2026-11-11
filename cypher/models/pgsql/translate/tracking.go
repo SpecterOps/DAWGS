@@ -13,6 +13,7 @@ import (
 // data type. This ensures that renamed identifiers in queries do not conflict with each other.
 type IdentifierGenerator map[pgsql.DataType]int
 
+// NewIdentifier allocates the next SQL identifier for the requested data type.
 func (s IdentifierGenerator) NewIdentifier(dataType pgsql.DataType) (pgsql.Identifier, error) {
 	identifierDataType := dataType
 

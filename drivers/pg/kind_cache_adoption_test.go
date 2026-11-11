@@ -11,14 +11,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestKindMapperReadCommittedAdoptsAcrossPrivateLookups checks that read-committed private lookups adopt newly published kinds.
 func TestKindMapperReadCommittedAdoptsAcrossPrivateLookups(t *testing.T) {
 	manager := testKindManager(t)
 	known, learned, private := graph.StringKind("Known"), graph.StringKind("Learned"), graph.StringKind("Private")
 	require.True(t, manager.kindCache.merge(map[graph.Kind]int16{known: 1}, 0))
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
-	tx := &transaction{ctx: context.Background(), schemaManager: manager, tx: mock, isolation: pgx.ReadCommitted}
-	mapper := &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
+	tx := &transaction{
+		ctx:           context.Background(),
+		schemaManager: manager,
+		tx:            mock,
+		isolation:     pgx.ReadCommitted,
+	}
+	mapper := &transactionKindMapper{
+		tx:       tx,
+		snapshot: manager.kindCache.current.Load(),
+	}
 	mapper.learn(learned, 2)
 	mapper.register(private, 3)
 	mapper.hasUncommittedKinds = true
@@ -44,6 +53,7 @@ func TestKindMapperReadCommittedAdoptsAcrossPrivateLookups(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TestKindMapperReadCommittedRevalidatesExistingRegistration checks an existing registration against the current catalog before reuse.
 func TestKindMapperReadCommittedRevalidatesExistingRegistration(t *testing.T) {
 	for _, removed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "remapped", true: "removed"}[removed], func(t *testing.T) {
@@ -52,8 +62,16 @@ func TestKindMapperReadCommittedRevalidatesExistingRegistration(t *testing.T) {
 			require.True(t, manager.kindCache.merge(map[graph.Kind]int16{known: 1}, 0))
 			mock, err := pgxmock.NewConn()
 			require.NoError(t, err)
-			tx := &transaction{ctx: context.Background(), schemaManager: manager, tx: mock, isolation: pgx.ReadCommitted}
-			mapper := &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
+			tx := &transaction{
+				ctx:           context.Background(),
+				schemaManager: manager,
+				tx:            mock,
+				isolation:     pgx.ReadCommitted,
+			}
+			mapper := &transactionKindMapper{
+				tx:       tx,
+				snapshot: manager.kindCache.current.Load(),
+			}
 			mapper.register(registered, 2)
 			mapper.hasUncommittedKinds = true
 			refreshed := map[graph.Kind]int16{known: 3}
@@ -78,14 +96,23 @@ func TestKindMapperReadCommittedRevalidatesExistingRegistration(t *testing.T) {
 	}
 }
 
+// TestKindMapperReadCommittedRegistrationRevalidationFailure checks that registration lookup failures prevent cache publication.
 func TestKindMapperReadCommittedRegistrationRevalidationFailure(t *testing.T) {
 	manager := testKindManager(t)
 	known, private := graph.StringKind("Known"), graph.StringKind("Private")
 	require.True(t, manager.kindCache.merge(map[graph.Kind]int16{known: 1}, 0))
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
-	tx := &transaction{ctx: context.Background(), schemaManager: manager, tx: mock, isolation: pgx.ReadCommitted}
-	mapper := &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
+	tx := &transaction{
+		ctx:           context.Background(),
+		schemaManager: manager,
+		tx:            mock,
+		isolation:     pgx.ReadCommitted,
+	}
+	mapper := &transactionKindMapper{
+		tx:       tx,
+		snapshot: manager.kindCache.current.Load(),
+	}
 	tx.kindMapper = mapper
 	mapper.register(private, 2)
 	mapper.hasUncommittedKinds = true
@@ -119,6 +146,7 @@ func TestKindMapperReadCommittedDiscardsRemovedLookup(t *testing.T) {
 	require.NotContains(t, manager.kindCache.current.Load().kinds, removed)
 }
 
+// TestKindMapperStableSnapshotDoesNotUseNewEpochFallback checks that stable snapshots cannot adopt kinds from a newer epoch.
 func TestKindMapperStableSnapshotDoesNotUseNewEpochFallback(t *testing.T) {
 	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
 		t.Run(string(isolation), func(t *testing.T) {
@@ -128,7 +156,12 @@ func TestKindMapperStableSnapshotDoesNotUseNewEpochFallback(t *testing.T) {
 			mock, err := pgxmock.NewConn()
 			require.NoError(t, err)
 			mapper := &transactionKindMapper{
-				tx:       &transaction{ctx: context.Background(), schemaManager: manager, tx: mock, isolation: isolation},
+				tx: &transaction{
+					ctx:           context.Background(),
+					schemaManager: manager,
+					tx:            mock,
+					isolation:     isolation,
+				},
 				snapshot: manager.kindCache.current.Load(),
 			}
 			mapper.tx.kindMapper = mapper

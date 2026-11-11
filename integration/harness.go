@@ -72,18 +72,28 @@ type Options struct {
 	CleanupMode            CleanupMode
 }
 
+// Session owns a backend connection, default graph and cleanup policy for integration work.
 type Session struct {
+	// ConnectionString identifies the configured backend connection used by this session.
 	ConnectionString string
-	Driver           string
-	DB               graph.Database
-	PGPool           *pgxpool.Pool
-	Ctx              context.Context
-	cleanupMode      CleanupMode
+	// Driver names the registered graph driver selected by the connection scheme.
+	Driver string
+	// DB owns the opened graph database and its default graph selection.
+	DB graph.Database
+	// PGPool provides PostgreSQL-specific inspection when the selected driver supports it.
+	PGPool *pgxpool.Pool
+	// Ctx supplies the context shared by session operations and cleanup.
+	Ctx context.Context
+	// cleanupMode selects whether closing the session removes its graph data.
+	cleanupMode CleanupMode
 }
 
 var (
+	// errConnectionStringMissing marks absent connection configuration so test callers can choose whether to skip.
 	errConnectionStringMissing = errors.New("connection string is not set")
-	errDriverMismatch          = errors.New("connection string driver mismatch")
+
+	// errDriverMismatch marks a configured backend that does not match the session's requested driver.
+	errDriverMismatch = errors.New("connection string driver mismatch")
 )
 
 // DriverFromConnectionString maps postgres/postgresql and neo4j/neo4j+s/neo4j+ssc URI schemes to their registered driver names.
@@ -231,6 +241,7 @@ func (s *Session) Close() error {
 	return cleanupErr
 }
 
+// ClearGraph removes the session graph's data and fails the caller's test on cleanup errors.
 func (s *Session) ClearGraph(t *testing.T) {
 	t.Helper()
 
@@ -326,7 +337,9 @@ func buildSchema(opts Options) (*graph.Schema, error) {
 			Nodes: nodeKinds,
 			Edges: edgeKinds,
 		}},
-		DefaultGraph: graph.Graph{Name: graphName},
+		DefaultGraph: graph.Graph{
+			Name: graphName,
+		},
 	}, nil
 }
 

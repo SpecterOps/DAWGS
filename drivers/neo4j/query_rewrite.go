@@ -100,6 +100,7 @@ func queryMayNeedRewrite(query string) bool {
 	return strings.Contains(query, "$") || queryMayContainTemporalFunctionCall(query)
 }
 
+// queryMayContainTemporalFunctionCall detects temporal function candidates before performing the full query rewrite.
 func queryMayContainTemporalFunctionCall(query string) bool {
 	lowerQuery := strings.ToLower(query)
 

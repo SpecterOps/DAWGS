@@ -220,7 +220,9 @@ func TestPostgreSQLShadowOrientationAttestsEmptyIncumbent(t *testing.T) {
 		pgDriver.KindMapper(),
 		map[string]any{"root_key": "missing-orientation-plan-root"},
 		defaultGraph.ID,
-		translate.ToolOptions{EnableExpansionOrientationShadow: true},
+		translate.ToolOptions{
+			EnableExpansionOrientationShadow: true,
+		},
 	)
 	if err != nil {
 		t.Fatalf("translate shadow orientation query: %v", err)
@@ -374,7 +376,9 @@ func executeGuardedOrientationWithReceipt(t *testing.T, session *Session, rootKe
 		pgDriver.KindMapper(),
 		map[string]any{"root_key": rootKey},
 		defaultGraph.ID,
-		translate.ToolOptions{EnableExpansionOrientationTournament: true},
+		translate.ToolOptions{
+			EnableExpansionOrientationTournament: true,
+		},
 	)
 	if err != nil {
 		t.Fatalf("translate guarded orientation query: %v", err)

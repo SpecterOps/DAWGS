@@ -46,6 +46,8 @@ func requireBoundedShortestWitness(t *testing.T, result graph.Result, nodes []*g
 	require.NoError(t, result.Error())
 }
 
+// TestBoundedShortestPathColdConnection checks executor selection from declared bounds on a newly opened connection.
+//
 // The declared bound selects the executor even when the actual path is one edge.
 func TestBoundedShortestPathColdConnection(t *testing.T) {
 	for _, test := range []struct {
@@ -53,7 +55,19 @@ func TestBoundedShortestPathColdConnection(t *testing.T) {
 		bound int
 		// depth is the fixture path length used to test the bound.
 		depth int
-	}{{bound: 64, depth: 1}, {bound: 65, depth: 1}, {bound: 128, depth: 1}, {bound: 128, depth: 128}} {
+	}{{
+		bound: 64,
+		depth: 1,
+	}, {
+		bound: 65,
+		depth: 1,
+	}, {
+		bound: 128,
+		depth: 1,
+	}, {
+		bound: 128,
+		depth: 128,
+	}} {
 		for _, projection := range []string{"length(p)", "p"} {
 			t.Run(fmt.Sprintf("bound=%d/depth=%d/%s", test.bound, test.depth, projection), func(t *testing.T) {
 				driver := newDAWGS065Driver(t, 1)

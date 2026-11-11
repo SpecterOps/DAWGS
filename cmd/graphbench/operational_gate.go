@@ -322,7 +322,11 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 				poolSize = record.Result.Environment.PoolSize
 			}
 			decision.Reasons = append(decision.Reasons, validateOperationalCandidateResult(record.Result, canonicalIdentity, canonicalRequirements, poolSize == 1)...)
-			cell := OperationalMatrixCell{PoolSize: decision.PoolSize, Concurrency: decision.Concurrency, PlanCacheMode: decision.PlanCacheMode}
+			cell := OperationalMatrixCell{
+				PoolSize:      decision.PoolSize,
+				Concurrency:   decision.Concurrency,
+				PlanCacheMode: decision.PlanCacheMode,
+			}
 			seenMatrix[cell]++
 			if seenMatrix[cell] > 1 {
 				decision.Reasons = append(decision.Reasons, "candidate matrix cell is duplicated")
@@ -389,7 +393,11 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 	for _, poolSize := range canonicalRequirements.PoolSizes {
 		for _, concurrency := range canonicalRequirements.ConcurrencyLevels {
 			for _, mode := range canonicalRequirements.PlanCacheModes {
-				cell := OperationalMatrixCell{PoolSize: poolSize, Concurrency: concurrency, PlanCacheMode: normalizedPlanCacheMode(mode)}
+				cell := OperationalMatrixCell{
+					PoolSize:      poolSize,
+					Concurrency:   concurrency,
+					PlanCacheMode: normalizedPlanCacheMode(mode),
+				}
 				report.Coverage.RequiredMatrixCells++
 				if _, found := validMatrix[cell]; found {
 					report.Coverage.ObservedMatrixCells++
@@ -406,14 +414,31 @@ func buildOperationalGateReport(identity PromotionEvidenceIdentity, requirements
 	report.Coverage.SessionIsolation = validScenarios[OperationalScenarioSessionIsolation]
 	report.Coverage.ForcedOverflowFallback = validScenarios[OperationalScenarioForcedOverflow]
 	for _, required := range []struct {
+		// scenario contains one candidate scenario's operational evidence.
 		scenario OperationalEvidenceScenario
-		present  bool
+		// present distinguishes a supplied scenario from a missing evidence record.
+		present bool
 	}{
-		{scenario: OperationalScenarioLowWorkMem, present: report.Coverage.LowWorkMem},
-		{scenario: OperationalScenarioCancellation, present: report.Coverage.CancellationReplay},
-		{scenario: OperationalScenarioConcurrentWriter, present: report.Coverage.RepeatableReadWriter},
-		{scenario: OperationalScenarioSessionIsolation, present: report.Coverage.SessionIsolation},
-		{scenario: OperationalScenarioForcedOverflow, present: report.Coverage.ForcedOverflowFallback},
+		{
+			scenario: OperationalScenarioLowWorkMem,
+			present:  report.Coverage.LowWorkMem,
+		},
+		{
+			scenario: OperationalScenarioCancellation,
+			present:  report.Coverage.CancellationReplay,
+		},
+		{
+			scenario: OperationalScenarioConcurrentWriter,
+			present:  report.Coverage.RepeatableReadWriter,
+		},
+		{
+			scenario: OperationalScenarioSessionIsolation,
+			present:  report.Coverage.SessionIsolation,
+		},
+		{
+			scenario: OperationalScenarioForcedOverflow,
+			present:  report.Coverage.ForcedOverflowFallback,
+		},
 	} {
 		if !required.present {
 			report.Reasons = append(report.Reasons, fmt.Sprintf("required operational scenario %s is missing valid evidence", required.scenario))

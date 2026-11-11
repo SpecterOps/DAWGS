@@ -50,6 +50,7 @@ func TestRelationshipUniquenessAcrossMatchSteps(t *testing.T) {
 	}
 }
 
+// BenchmarkRelationshipUniquenessCompilation measures compilation of patterns that enforce relationship uniqueness.
 func BenchmarkRelationshipUniquenessCompilation(b *testing.B) {
 	for _, tc := range []struct {
 		// name identifies this test case in subtest and benchmark output.
@@ -57,10 +58,22 @@ func BenchmarkRelationshipUniquenessCompilation(b *testing.B) {
 		// query is the Cypher statement exercised by this case.
 		query string
 	}{
-		{name: "single_fixed_control", query: `MATCH (a)-[:MemberOf]->(b) RETURN count(*)`},
-		{name: "comma_fixed", query: `MATCH (a)-[:MemberOf]->(x), (a)-[:MemberOf]->(y) RETURN count(*)`},
-		{name: "consecutive_expansions", query: `MATCH (a)-[:MemberOf*1..2]->(y)-[:MemberOf*1..2]->(z) RETURN count(*)`},
-		{name: "comma_expansions", query: `MATCH (a)-[:MemberOf*1..2]->(x), (a)-[:MemberOf*1..2]->(y) RETURN count(*)`},
+		{
+			name:  "single_fixed_control",
+			query: `MATCH (a)-[:MemberOf]->(b) RETURN count(*)`,
+		},
+		{
+			name:  "comma_fixed",
+			query: `MATCH (a)-[:MemberOf]->(x), (a)-[:MemberOf]->(y) RETURN count(*)`,
+		},
+		{
+			name:  "consecutive_expansions",
+			query: `MATCH (a)-[:MemberOf*1..2]->(y)-[:MemberOf*1..2]->(z) RETURN count(*)`,
+		},
+		{
+			name:  "comma_expansions",
+			query: `MATCH (a)-[:MemberOf*1..2]->(x), (a)-[:MemberOf*1..2]->(y) RETURN count(*)`,
+		},
 	} {
 		b.Run(tc.name, func(b *testing.B) {
 			mapper := optimizerSafetyKindMapper()
@@ -70,7 +83,9 @@ func BenchmarkRelationshipUniquenessCompilation(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				translation, err := TranslateWithOptions(context.Background(), parsed, mapper, nil, DefaultGraphID, Options{OptimizerMode: OptimizerEnabled})
+				translation, err := TranslateWithOptions(context.Background(), parsed, mapper, nil, DefaultGraphID, Options{
+					OptimizerMode: OptimizerEnabled,
+				})
 				if err != nil {
 					b.Fatal(err)
 				}

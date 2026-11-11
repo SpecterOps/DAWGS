@@ -187,6 +187,7 @@ func updateIdentityKey(fields ...string) string {
 	return string(encoded)
 }
 
+// identityPropertiesKey encodes required property values in sorted field order to produce a deterministic identity key.
 func identityPropertiesKey(properties *Properties, fields []string) (string, error) {
 	key := strings.Builder{}
 	sortedFields := slices.Clone(fields)

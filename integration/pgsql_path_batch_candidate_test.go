@@ -109,6 +109,8 @@ func pathBatchSkeleton(translation translate.Result) (string, map[string]any, st
 	return pathBatchSkeletonWithModifiers(translation, false)
 }
 
+// pathBatchLimitedSkeleton retains selection modifiers in the compact path query before batch hydration.
+//
 // The opt-in page experiment retains selection modifiers before hydration.
 // Callers compare unordered truncating pages by multiset membership/count,
 // not by assuming two legal LIMIT executions select the same paths.
@@ -159,6 +161,7 @@ func pathBatchLimitedSkeleton(translation translate.Result) (string, map[string]
 	return pathBatchSkeletonWithModifiers(translation, true)
 }
 
+// pathBatchSkeletonWithModifiers builds a compact path selection while applying the requested modifier policy.
 func pathBatchSkeletonWithModifiers(translation translate.Result, preserveModifiers bool) (string, map[string]any, string) {
 	if len(translation.Stages) != 0 {
 		return "", nil, "multipart mutation"
@@ -217,9 +220,14 @@ func pathBatchSkeletonWithModifiers(translation translate.Result, preserveModifi
 			return "", nil, "nonliteral direct path components"
 		}
 		root, knownNodes = nodes.Values[0], nodes
-		ids := pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+		ids := pgsql.ArrayLiteral{
+			CastType: pgsql.Int8Array,
+		}
 		for _, edge := range edges.Values {
-			ids.Values = append(ids.Values, pgsql.RowColumnReference{Identifier: edge, Column: pgsql.ColumnID})
+			ids.Values = append(ids.Values, pgsql.RowColumnReference{
+				Identifier: edge,
+				Column:     pgsql.ColumnID,
+			})
 		}
 		edgeIDs = ids
 	default:
@@ -248,10 +256,22 @@ func pathBatchSkeletonWithModifiers(translation translate.Result, preserveModifi
 		return "", nil, "earlier/additional path materialization"
 	}
 	selection.Projection = pgsql.Projection{
-		pgsql.AliasedExpression{Expression: root, Alias: pgsql.AsOptionalIdentifier("root")},
-		pgsql.AliasedExpression{Expression: edgeIDs, Alias: pgsql.AsOptionalIdentifier("edge_ids")},
-		pgsql.AliasedExpression{Expression: knownNodes, Alias: pgsql.AsOptionalIdentifier("known_nodes")},
-		pgsql.AliasedExpression{Expression: isNull, Alias: pgsql.AsOptionalIdentifier("is_null")},
+		pgsql.AliasedExpression{
+			Expression: root,
+			Alias:      pgsql.AsOptionalIdentifier("root"),
+		},
+		pgsql.AliasedExpression{
+			Expression: edgeIDs,
+			Alias:      pgsql.AsOptionalIdentifier("edge_ids"),
+		},
+		pgsql.AliasedExpression{
+			Expression: knownNodes,
+			Alias:      pgsql.AsOptionalIdentifier("known_nodes"),
+		},
+		pgsql.AliasedExpression{
+			Expression: isNull,
+			Alias:      pgsql.AsOptionalIdentifier("is_null"),
+		},
 	}
 	if preserveModifiers && len(query.OrderBy) != 0 {
 		var orderingSQL []string
@@ -284,6 +304,8 @@ func pathBatchSkeletonWithModifiers(translation translate.Result, preserveModifi
 	return strings.TrimSuffix(formatted.Statement, ";"), parameters, ""
 }
 
+// pathBatchCompactEdgeIDs recovers path edge IDs without retaining per-row edge-composite hydration.
+//
 // Mixed read paths may use the conservative edge-composite helper. Recover
 // IDs structurally so the compact query does not retain the helper's per-row
 // EdgeArrayFromPathIDs hydration under a different SQL spelling.
@@ -309,9 +331,14 @@ func pathBatchCompactEdgeIDs(expression pgsql.Expression) (pgsql.Expression, boo
 		if value.CastType != pgsql.EdgeCompositeArray {
 			return nil, false
 		}
-		ids := pgsql.ArrayLiteral{CastType: pgsql.Int8Array}
+		ids := pgsql.ArrayLiteral{
+			CastType: pgsql.Int8Array,
+		}
 		for _, edge := range value.Values {
-			ids.Values = append(ids.Values, pgsql.RowColumnReference{Identifier: edge, Column: pgsql.ColumnID})
+			ids.Values = append(ids.Values, pgsql.RowColumnReference{
+				Identifier: edge,
+				Column:     pgsql.ColumnID,
+			})
 		}
 		return ids, true
 	default:
@@ -319,6 +346,7 @@ func pathBatchCompactEdgeIDs(expression pgsql.Expression) (pgsql.Expression, boo
 	}
 }
 
+// pathBatchExpression unwraps formatting indirections before inspecting a candidate projection expression.
 func pathBatchExpression(expression pgsql.Expression) pgsql.Expression {
 	switch value := expression.(type) {
 	case *pgsql.AliasedExpression:
@@ -336,6 +364,8 @@ func pathBatchExpression(expression pgsql.Expression) pgsql.Expression {
 	}
 }
 
+// pathBatchVisit visits exported AST fields, including formatting nodes, while avoiding pointer cycles.
+//
 // The production walker omits some formatting-only AST nodes (RecordShape).
 // This test visitor includes exported fields and avoids pointer cycles.
 func pathBatchVisit(node any, visit func(any)) {

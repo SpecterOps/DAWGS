@@ -34,9 +34,13 @@ func newKindCache() *kindCache {
 	return c
 }
 
+// pending reports whether a kind-cache invalidation is still awaiting acknowledgment.
 func (s *kindCache) pending() bool { return s.requested.Load() != s.acknowledged.Load() }
-func (s *kindCache) invalidate()   { s.requested.Add(1) }
 
+// invalidate advances the invalidation epoch after a schema change.
+func (s *kindCache) invalidate() { s.requested.Add(1) }
+
+// lockRefresh acquires exclusive ownership of a kind-cache refresh.
 func (s *kindCache) lockRefresh(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -49,6 +53,7 @@ func (s *kindCache) lockRefresh(ctx context.Context) error {
 	}
 }
 
+// tryLockRefresh attempts to acquire refresh ownership without waiting.
 func (s *kindCache) tryLockRefresh() bool {
 	select {
 	case s.refresh <- struct{}{}:
@@ -58,6 +63,7 @@ func (s *kindCache) tryLockRefresh() bool {
 	}
 }
 
+// unlockRefresh releases exclusive refresh ownership.
 func (s *kindCache) unlockRefresh() { <-s.refresh }
 
 // merge publishes only changes learned by a successfully completed operation.
@@ -83,7 +89,12 @@ func (s *kindCache) merge(changes map[graph.Kind]int16, epoch uint64) bool {
 	if !changed {
 		return true
 	}
-	next := &kindSnapshot{kinds: maps.Clone(current.kinds), ids: maps.Clone(current.ids), epoch: current.epoch, loaded: current.loaded}
+	next := &kindSnapshot{
+		kinds:  maps.Clone(current.kinds),
+		ids:    maps.Clone(current.ids),
+		epoch:  current.epoch,
+		loaded: current.loaded,
+	}
 	for kind, id := range changes {
 		if previous, ok := next.kinds[kind]; ok && previous != id {
 			s.invalidate()
@@ -105,7 +116,12 @@ func (s *kindCache) fence() {
 	s.publication.Lock()
 	defer s.publication.Unlock()
 	old := s.current.Load()
-	s.current.Store(&kindSnapshot{kinds: old.kinds, ids: old.ids, epoch: old.epoch + 1, loaded: old.loaded})
+	s.current.Store(&kindSnapshot{
+		kinds:  old.kinds,
+		ids:    old.ids,
+		epoch:  old.epoch + 1,
+		loaded: old.loaded,
+	})
 	s.invalidate()
 }
 
@@ -132,7 +148,12 @@ func (s *kindCache) replace(base *kindSnapshot, generation uint64, kinds map[gra
 	for kind, id := range kinds {
 		ids[id] = kind
 	}
-	s.current.Store(&kindSnapshot{kinds: kinds, ids: ids, epoch: epoch, loaded: true})
+	s.current.Store(&kindSnapshot{
+		kinds:  kinds,
+		ids:    ids,
+		epoch:  epoch,
+		loaded: true,
+	})
 	// Publish the new catalog before advancing translation generations, so a
 	// compiler retry in the new generation cannot read the replaced catalog.
 	if destructive || force {

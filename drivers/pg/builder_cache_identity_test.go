@@ -67,6 +67,7 @@ func TestBuilderIdentityFramesAndSortsMapEntries(t *testing.T) {
 	require.NotEqual(t, encode(int64(1)), encode(float64(1)))
 }
 
+// TestBuilderIdentityBypassesUnsupportedAndBoundedWork checks that unsupported values and work limits disable identity reuse safely.
 func TestBuilderIdentityBypassesUnsupportedAndBoundedWork(t *testing.T) {
 	cycle := cypher.NewParenthetical(nil)
 	cycle.Expression = cycle
@@ -75,7 +76,9 @@ func TestBuilderIdentityBypassesUnsupportedAndBoundedWork(t *testing.T) {
 		struct {
 			// Hidden carries unsupported external state for cache identity rejection.
 			Hidden string
-		}{Hidden: "external state"},
+		}{
+			Hidden: "external state",
+		},
 		map[int]string{1: "unsupported key"},
 		cycle,
 		strings.Repeat("x", maxCachedCypherBytes),

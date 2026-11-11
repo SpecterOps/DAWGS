@@ -11,6 +11,7 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 )
 
+// saveOpenGraphCmd defines the command that exports a selected connection in the OpenGraph format.
 func saveOpenGraphCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("save-opengraph", flag.ContinueOnError)
 

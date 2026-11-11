@@ -236,6 +236,7 @@ func scanDatabaseRelationshipsFrom(ctx context.Context, db graph.Database, targe
 	})
 }
 
+// readDatabaseNodes reads a bounded node batch and retains the cursor needed for the next transaction.
 func readDatabaseNodes(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int, visit func(*graph.Node) error) error {
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		scopedTx := tx.WithGraph(targetGraph)
@@ -261,6 +262,7 @@ func readDatabaseNodes(ctx context.Context, db graph.Database, targetGraph graph
 	return fmt.Errorf("read initial node batch: %w", err)
 }
 
+// readDatabaseRelationships reads a bounded relationship batch and retains the cursor needed for the next transaction.
 func readDatabaseRelationships(ctx context.Context, db graph.Database, targetGraph graph.Graph, afterID graph.ID, hasAfterID bool, batchSize int, visit func(*graph.Relationship) error) error {
 	err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		scopedTx := tx.WithGraph(targetGraph)

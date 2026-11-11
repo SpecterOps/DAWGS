@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestResultAliasTranslation checks that translated projections preserve caller-visible result aliases.
 func TestResultAliasTranslation(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		t.Run(string(mode), func(t *testing.T) {
@@ -17,11 +18,26 @@ func TestResultAliasTranslation(t *testing.T) {
 				// sql is the SQL statement or identifier spelling exercised by the case.
 				sql string
 			}{
-				{token: "objectId", sql: `"objectId"`},
-				{token: "`object id`", sql: `"object id"`},
-				{token: "`object``id`", sql: "\"object`id\""},
-				{token: "`object\"id`", sql: `"object""id"`},
-				{token: "`select`", sql: `"select"`},
+				{
+					token: "objectId",
+					sql:   `"objectId"`,
+				},
+				{
+					token: "`object id`",
+					sql:   `"object id"`,
+				},
+				{
+					token: "`object``id`",
+					sql:   "\"object`id\"",
+				},
+				{
+					token: "`object\"id`",
+					sql:   `"object""id"`,
+				},
+				{
+					token: "`select`",
+					sql:   `"select"`,
+				},
 			} {
 				for _, query := range []string{
 					"RETURN 7 AS " + tc.token,
@@ -32,7 +48,9 @@ func TestResultAliasTranslation(t *testing.T) {
 					t.Run(query, func(t *testing.T) {
 						parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
 						require.NoError(t, err)
-						result, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+						result, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{
+							OptimizerMode: mode,
+						})
 						require.NoError(t, err)
 						formatted, err := Translated(result)
 						require.NoError(t, err)

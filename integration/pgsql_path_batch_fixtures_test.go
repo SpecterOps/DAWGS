@@ -21,8 +21,31 @@ import (
 )
 
 const (
-	pathBatchNodeKind  = "PathBatchNode"
+	// pathBatchStudyEnv enables the optional path materialization timing study.
+	pathBatchStudyEnv = "PATH_BATCH_STUDY"
+
+	// pathBatchStudyEnabledValue selects explicit timing runs instead of ordinary correctness checks.
+	pathBatchStudyEnabledValue = "1"
+
+	// pathBatchReportDirectoryEnv overrides the default directory for study artifacts.
+	pathBatchReportDirectoryEnv = "PATH_BATCH_REPORT_DIR"
+
+	// pathBatchStudyWarmupRounds primes prepared queries before measured observations.
+	pathBatchStudyWarmupRounds = 6
+
+	// pathBatchStudySampleRounds records the warm observations used by each median.
+	pathBatchStudySampleRounds = 5
+
+	// pathBatchMemorySamplingInterval sets the client heap sampler's observation frequency.
+	pathBatchMemorySamplingInterval = time.Millisecond
+
+	// pathBatchNodeKind identifies nodes created by the path materialization experiment.
+	pathBatchNodeKind = "PathBatchNode"
+
+	// pathBatchEdgeKindA identifies the first relationship type used by the experiment's mixed paths.
 	pathBatchEdgeKindA = "PathBatchA"
+
+	// pathBatchEdgeKindB identifies the second relationship type used by the experiment's mixed paths.
 	pathBatchEdgeKindB = "PathBatchB"
 )
 
@@ -73,17 +96,27 @@ func pathBatchLowOverlapFixture(pathCount, propertyBytes int) (*opengraph.Graph,
 	return fixture, pathCount
 }
 
+// pathBatchAddNode appends a fixture node with the experiment's node kind and supplied properties.
 func pathBatchAddNode(fixture *opengraph.Graph, id string, propertyBytes int) {
-	fixture.Nodes = append(fixture.Nodes, opengraph.Node{ID: id, Kinds: []string{pathBatchNodeKind},
-		Properties: pathBatchProperties("node/"+id, len(fixture.Nodes), propertyBytes)})
+	fixture.Nodes = append(fixture.Nodes, opengraph.Node{
+		ID:         id,
+		Kinds:      []string{pathBatchNodeKind},
+		Properties: pathBatchProperties("node/"+id, len(fixture.Nodes), propertyBytes),
+	})
 }
 
+// pathBatchAddEdge appends a typed fixture relationship with the supplied endpoints and properties.
 func pathBatchAddEdge(fixture *opengraph.Graph, start, end, kind string, propertyBytes int) {
 	identity := fmt.Sprintf("edge/%d/%s/%s/%s", len(fixture.Edges), start, end, kind)
-	fixture.Edges = append(fixture.Edges, opengraph.Edge{StartID: start, EndID: end, Kind: kind,
-		Properties: pathBatchProperties(identity, len(fixture.Edges), propertyBytes)})
+	fixture.Edges = append(fixture.Edges, opengraph.Edge{
+		StartID:    start,
+		EndID:      end,
+		Kind:       kind,
+		Properties: pathBatchProperties(identity, len(fixture.Edges), propertyBytes),
+	})
 }
 
+// pathBatchProperties builds the deterministic property payload used by one fixture entity.
 func pathBatchProperties(identity string, ordinal, propertyBytes int) map[string]any {
 	properties := map[string]any{
 		"name": identity, "ordinal": int64(ordinal), "flag": ordinal%2 == 0,
@@ -101,6 +134,8 @@ func pathBatchProperties(identity string, ordinal, propertyBytes int) map[string
 	return properties
 }
 
+// pathBatchPayload generates entity-specific deterministic text that avoids compressible repeated filler.
+//
 // Hash-derived base64 text is deterministic, differs for every entity, and
 // avoids the misleading TOAST compression obtained from repeated filler text.
 func pathBatchPayload(identity string, size int) string {
@@ -113,38 +148,58 @@ func pathBatchPayload(identity string, size int) string {
 	return payload.String()[:size]
 }
 
-// A type-tagged value encoding retains integer precision, concrete numeric
+// pathBatchCanonicalValue retains integer precision, concrete numeric
 // types, nulls, and ordered arrays. It never round-trips properties through
 // float64, unlike marshaling followed by unmarshaling ordinary JSON.
 type pathBatchCanonicalValue struct {
-	Type  string `json:"type"`
-	Value any    `json:"value"`
+	// Type retains the property's concrete type for exact-value comparisons.
+	Type string `json:"type"`
+	// Value contains the normalized value without collapsing distinct numeric representations.
+	Value any `json:"value"`
 }
 
+// pathBatchCanonicalMapEntry retains a map key together with its type-preserving property value.
 type pathBatchCanonicalMapEntry struct {
-	Key   string                  `json:"key"`
+	// Key retains the property map key paired with its normalized value.
+	Key string `json:"key"`
+	// Value contains the property's type-preserving normalized representation.
 	Value pathBatchCanonicalValue `json:"value"`
 }
 
+// pathBatchCanonicalNode captures a path node's identity, kinds and complete normalized properties.
 type pathBatchCanonicalNode struct {
-	ID         graph.ID                `json:"id"`
-	Kinds      []string                `json:"kinds"`
+	// ID retains the node identity at its path position.
+	ID graph.ID `json:"id"`
+	// Kinds contains sorted kind names for order-independent label comparisons.
+	Kinds []string `json:"kinds"`
+	// Properties contains all normalized node properties.
 	Properties pathBatchCanonicalValue `json:"properties"`
 }
 
+// pathBatchCanonicalEdge captures a path relationship's identity, direction, type and complete properties.
 type pathBatchCanonicalEdge struct {
-	ID         graph.ID                `json:"id"`
-	StartID    graph.ID                `json:"start_id"`
-	EndID      graph.ID                `json:"end_id"`
-	Kind       string                  `json:"kind"`
+	// ID retains the relationship identity at its path position.
+	ID graph.ID `json:"id"`
+	// StartID retains the relationship's directed start endpoint.
+	StartID graph.ID `json:"start_id"`
+	// EndID retains the relationship's directed end endpoint.
+	EndID graph.ID `json:"end_id"`
+	// Kind retains the relationship type name.
+	Kind string `json:"kind"`
+	// Properties contains all normalized relationship properties.
 	Properties pathBatchCanonicalValue `json:"properties"`
 }
 
+// pathBatchCanonicalPath preserves ordered complete node and relationship values for exact comparisons.
 type pathBatchCanonicalPath struct {
+	// Nodes retains complete node values in path order, including nil positions.
 	Nodes []*pathBatchCanonicalNode `json:"nodes"`
+	// Edges retains complete relationship values in path order, including nil positions.
 	Edges []*pathBatchCanonicalEdge `json:"edges"`
 }
 
+// TestPathBatchCompleteValueCanonicalization checks that the equality oracle detects incorrect path hydration and property types.
+//
 // The experiment's equality oracle must reject missing or incorrectly hydrated
 // values even when every path retains the same identity sequence.
 func TestPathBatchCompleteValueCanonicalization(t *testing.T) {
@@ -161,20 +216,55 @@ func TestPathBatchCompleteValueCanonicalization(t *testing.T) {
 	}
 	want := pathBatchFullValue(t, newPath())
 	for _, test := range []struct {
-		name   string
+		// name identifies the complete-value corruption applied to the path fixture.
+		name string
+		// mutate changes one path value to verify that equality rejects incorrect hydration.
 		mutate func(*graph.Path)
 	}{
-		{"integer_precision", func(path *graph.Path) { path.Nodes[0].Properties.Map["exact"] = int64(9007199254740992) }},
-		{"integer_type", func(path *graph.Path) { path.Nodes[0].Properties.Map["exact"] = uint64(9007199254740993) }},
-		{"property_absence", func(path *graph.Path) { delete(path.Nodes[0].Properties.Map, "flag") }},
-		{"property_null", func(path *graph.Path) { path.Nodes[0].Properties.Map["absent"] = nil }},
-		{"array_order", func(path *graph.Path) { path.Nodes[0].Properties.Map["tags"] = []string{"two", "one"} }},
-		{"node_order", func(path *graph.Path) { path.Nodes[0], path.Nodes[1] = path.Nodes[1], path.Nodes[0] }},
-		{"node_kind", func(path *graph.Path) { path.Nodes[0].Kinds = graph.Kinds{graph.StringKind("A")} }},
-		{"edge_start", func(path *graph.Path) { path.Edges[0].StartID = 2 }},
-		{"edge_end", func(path *graph.Path) { path.Edges[0].EndID = 1 }},
-		{"edge_kind", func(path *graph.Path) { path.Edges[0].Kind = graph.StringKind("Other") }},
-		{"edge_property", func(path *graph.Path) { path.Edges[0].Properties.Map["weight"] = int64(5) }},
+		{
+			name:   "integer_precision",
+			mutate: func(path *graph.Path) { path.Nodes[0].Properties.Map["exact"] = int64(9007199254740992) },
+		},
+		{
+			name:   "integer_type",
+			mutate: func(path *graph.Path) { path.Nodes[0].Properties.Map["exact"] = uint64(9007199254740993) },
+		},
+		{
+			name:   "property_absence",
+			mutate: func(path *graph.Path) { delete(path.Nodes[0].Properties.Map, "flag") },
+		},
+		{
+			name:   "property_null",
+			mutate: func(path *graph.Path) { path.Nodes[0].Properties.Map["absent"] = nil },
+		},
+		{
+			name:   "array_order",
+			mutate: func(path *graph.Path) { path.Nodes[0].Properties.Map["tags"] = []string{"two", "one"} },
+		},
+		{
+			name:   "node_order",
+			mutate: func(path *graph.Path) { path.Nodes[0], path.Nodes[1] = path.Nodes[1], path.Nodes[0] },
+		},
+		{
+			name:   "node_kind",
+			mutate: func(path *graph.Path) { path.Nodes[0].Kinds = graph.Kinds{graph.StringKind("A")} },
+		},
+		{
+			name:   "edge_start",
+			mutate: func(path *graph.Path) { path.Edges[0].StartID = 2 },
+		},
+		{
+			name:   "edge_end",
+			mutate: func(path *graph.Path) { path.Edges[0].EndID = 1 },
+		},
+		{
+			name:   "edge_kind",
+			mutate: func(path *graph.Path) { path.Edges[0].Kind = graph.StringKind("Other") },
+		},
+		{
+			name:   "edge_property",
+			mutate: func(path *graph.Path) { path.Edges[0].Properties.Map["weight"] = int64(5) },
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			path := newPath()
@@ -228,16 +318,21 @@ func pathBatchFullValue(t *testing.T, value any) string {
 	default:
 		t.Fatalf("expected path or null, received %T", value)
 	}
-	canonical := pathBatchCanonicalPath{Nodes: make([]*pathBatchCanonicalNode, len(path.Nodes)),
-		Edges: make([]*pathBatchCanonicalEdge, len(path.Edges))}
+	canonical := pathBatchCanonicalPath{
+		Nodes: make([]*pathBatchCanonicalNode, len(path.Nodes)),
+		Edges: make([]*pathBatchCanonicalEdge, len(path.Edges)),
+	}
 	for index, node := range path.Nodes {
 		if node == nil {
 			continue
 		}
 		kinds := node.Kinds.Strings()
 		sort.Strings(kinds)
-		canonical.Nodes[index] = &pathBatchCanonicalNode{ID: node.ID, Kinds: kinds,
-			Properties: pathBatchCanonicalProperty(t, reflect.ValueOf(node.Properties.MapOrEmpty()))}
+		canonical.Nodes[index] = &pathBatchCanonicalNode{
+			ID:         node.ID,
+			Kinds:      kinds,
+			Properties: pathBatchCanonicalProperty(t, reflect.ValueOf(node.Properties.MapOrEmpty())),
+		}
 	}
 	for index, edge := range path.Edges {
 		if edge == nil {
@@ -247,14 +342,20 @@ func pathBatchFullValue(t *testing.T, value any) string {
 		if edge.Kind != nil {
 			kind = edge.Kind.String()
 		}
-		canonical.Edges[index] = &pathBatchCanonicalEdge{ID: edge.ID, StartID: edge.StartID, EndID: edge.EndID, Kind: kind,
-			Properties: pathBatchCanonicalProperty(t, reflect.ValueOf(edge.Properties.MapOrEmpty()))}
+		canonical.Edges[index] = &pathBatchCanonicalEdge{
+			ID:         edge.ID,
+			StartID:    edge.StartID,
+			EndID:      edge.EndID,
+			Kind:       kind,
+			Properties: pathBatchCanonicalProperty(t, reflect.ValueOf(edge.Properties.MapOrEmpty())),
+		}
 	}
 	encoded, err := json.Marshal(canonical)
 	require.NoError(t, err)
 	return string(encoded)
 }
 
+// pathBatchNull reports whether a reflected value represents an absent or typed-nil value.
 func pathBatchNull(value any) bool {
 	if value == nil {
 		return true
@@ -263,18 +364,25 @@ func pathBatchNull(value any) bool {
 	return (reflected.Kind() == reflect.Pointer || reflected.Kind() == reflect.Interface) && reflected.IsNil()
 }
 
+// pathBatchCanonicalProperty normalizes a property into a type-preserving value for complete-result comparisons.
 func pathBatchCanonicalProperty(t *testing.T, value reflect.Value) pathBatchCanonicalValue {
 	t.Helper()
 	if !value.IsValid() {
-		return pathBatchCanonicalValue{Type: "null"}
+		return pathBatchCanonicalValue{
+			Type: "null",
+		}
 	}
 	if value.Kind() == reflect.Interface {
 		if value.IsNil() {
-			return pathBatchCanonicalValue{Type: "null"}
+			return pathBatchCanonicalValue{
+				Type: "null",
+			}
 		}
 		return pathBatchCanonicalProperty(t, value.Elem())
 	}
-	canonical := pathBatchCanonicalValue{Type: value.Type().String()}
+	canonical := pathBatchCanonicalValue{
+		Type: value.Type().String(),
+	}
 	if timestamp, ok := value.Interface().(time.Time); ok {
 		canonical.Value = timestamp.Format(time.RFC3339Nano)
 		return canonical
@@ -301,7 +409,10 @@ func pathBatchCanonicalProperty(t *testing.T, value reflect.Value) pathBatchCano
 		sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
 		entries := make([]pathBatchCanonicalMapEntry, 0, len(keys))
 		for _, key := range keys {
-			entries = append(entries, pathBatchCanonicalMapEntry{Key: key.String(), Value: pathBatchCanonicalProperty(t, value.MapIndex(key))})
+			entries = append(entries, pathBatchCanonicalMapEntry{
+				Key:   key.String(),
+				Value: pathBatchCanonicalProperty(t, value.MapIndex(key)),
+			})
 		}
 		canonical.Value = entries
 	case reflect.Array, reflect.Slice:

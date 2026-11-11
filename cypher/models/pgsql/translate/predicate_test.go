@@ -354,6 +354,7 @@ func TestSelfReferentialPatternDoesNotPanic(t *testing.T) {
 	}
 }
 
+// TestExclusiveDisjunctionPreservesComparisonGrouping checks that XOR translation preserves comparison boundaries inside conjunctions.
 func TestExclusiveDisjunctionPreservesComparisonGrouping(t *testing.T) {
 	for _, tc := range []struct {
 		// name identifies this test case in subtest and benchmark output.
@@ -363,10 +364,26 @@ func TestExclusiveDisjunctionPreservesComparisonGrouping(t *testing.T) {
 		// expected is the SQL substring required for the predicate grouping.
 		expected string
 	}{
-		{name: "comparisons", predicate: "(true = false XOR false = false) AND true", expected: "((true = false) != (false = false))"},
-		{name: "three operands", predicate: "true XOR false XOR true", expected: "(true) != (((false) != (true)))"},
-		{name: "and operand", predicate: "(true AND false) XOR true", expected: "((true and false)) != (true)"},
-		{name: "null operand", predicate: "null XOR true", expected: "(null) != (true)"},
+		{
+			name:      "comparisons",
+			predicate: "(true = false XOR false = false) AND true",
+			expected:  "((true = false) != (false = false))",
+		},
+		{
+			name:      "three operands",
+			predicate: "true XOR false XOR true",
+			expected:  "(true) != (((false) != (true)))",
+		},
+		{
+			name:      "and operand",
+			predicate: "(true AND false) XOR true",
+			expected:  "((true and false)) != (true)",
+		},
+		{
+			name:      "null operand",
+			predicate: "null XOR true",
+			expected:  "(null) != (true)",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			formatted := translatePredicateQuery(t, "MATCH (n:NodeKind1) WHERE "+tc.predicate+" RETURN n", nil)

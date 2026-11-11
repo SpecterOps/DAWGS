@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// azureRoleDiagnosticBuilder constructs representative UserRoleAssignments query shapes without importing application code.
+//
 // These shapes mirror BHCE's UserRoleAssignments reads without importing BHCE.
 func azureRoleDiagnosticBuilder(shape string, id graph.ID) *query.Builder {
 	var (
@@ -56,8 +58,11 @@ func azureRoleDiagnosticBuilder(shape string, id graph.ID) *query.Builder {
 	return builder
 }
 
+// azureRoleDiagnosticManager creates the schema manager used by the role-query cache diagnostic.
 func azureRoleDiagnosticManager() *SchemaManager {
-	manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{TranslationCacheEntries: 256})
+	manager := NewSchemaManagerWithOptions(nil, 0, DriverOptions{
+		TranslationCacheEntries: 256,
+	})
 	kinds := map[graph.Kind]int16{}
 	for idx, name := range []string{"AZMemberOf", "AZHasRole", "AZContains", "AZUser", "AZRole", "Meta", "MetaDetail", "AZResetPassword", "AZGlobalAdmin", "AZPrivilegedRoleAdmin", "AZPrivilegedAuthAdmin", "AZAddMembers"} {
 		kinds[graph.StringKind(name)] = int16(idx + 1)
@@ -66,6 +71,7 @@ func azureRoleDiagnosticManager() *SchemaManager {
 	return manager
 }
 
+// TestAzureRoleDiagnosticCacheReuse checks reuse of compiled role query shapes across runtime parameter values.
 func TestAzureRoleDiagnosticCacheReuse(t *testing.T) {
 	previous := SetOptimizedTranslation(true)
 	t.Cleanup(func() { SetOptimizedTranslation(previous) })
@@ -93,6 +99,7 @@ func TestAzureRoleDiagnosticCacheReuse(t *testing.T) {
 	}
 }
 
+// BenchmarkAzureRoleDiagnostic measures preparation and cache reuse for representative role query shapes.
 func BenchmarkAzureRoleDiagnostic(b *testing.B) {
 	for _, shape := range []string{"group_members", "role_members", "tenant_roles", "tracker"} {
 		for _, mode := range []string{"cached", "uncached"} {
@@ -100,7 +107,9 @@ func BenchmarkAzureRoleDiagnostic(b *testing.B) {
 				manager := azureRoleDiagnosticManager()
 				if mode == "uncached" {
 					manager.compilationCache = newTranslationCache(0)
-					manager.compilationCacheProvider = sharedTranslationCacheProvider{cache: manager.compilationCache}
+					manager.compilationCacheProvider = sharedTranslationCacheProvider{
+						cache: manager.compilationCache,
+					}
 				}
 				b.ReportAllocs()
 				b.ResetTimer()
@@ -122,6 +131,7 @@ func BenchmarkAzureRoleDiagnostic(b *testing.B) {
 	}
 }
 
+// TestAzureRoleDiagnosticMissingKindPreventsReuse checks that an unresolved kind prevents unsafe role-query cache reuse.
 func TestAzureRoleDiagnosticMissingKindPreventsReuse(t *testing.T) {
 	var (
 		manager = azureRoleDiagnosticManager()
@@ -145,6 +155,7 @@ func TestAzureRoleDiagnosticMissingKindPreventsReuse(t *testing.T) {
 	require.Zero(t, stats.Insertions)
 }
 
+// BenchmarkAzureRoleDiagnosticIdentity measures structural identity encoding for role query shapes.
 func BenchmarkAzureRoleDiagnosticIdentity(b *testing.B) {
 	regular, err := azureRoleDiagnosticBuilder("group_members", 1).Build(false)
 	if err != nil {
@@ -159,13 +170,22 @@ func BenchmarkAzureRoleDiagnosticIdentity(b *testing.B) {
 	}
 }
 
+// BenchmarkAzureRoleDiagnosticJSON compares JSON decoding costs for representative role-analysis result values.
 func BenchmarkAzureRoleDiagnosticJSON(b *testing.B) {
 	for _, decoder := range []struct {
-		name      string
+		// name identifies the decoding strategy in benchmark output.
+		name string
+		// unmarshal decodes the representative result payload with the selected number policy.
 		unmarshal func([]byte, any) error
 	}{
-		{"standard", json.Unmarshal},
-		{"exact_numbers", unmarshalJSONNumbers},
+		{
+			name:      "standard",
+			unmarshal: json.Unmarshal,
+		},
+		{
+			name:      "exact_numbers",
+			unmarshal: unmarshalJSONNumbers,
+		},
 	} {
 		b.Run(decoder.name, func(b *testing.B) {
 			data := []byte(`{"objectid":"user-guid","name":"USER@TENANT","isassignabletorole":true,"enabled":true,"lastseen":1700000000,"values":[1,2,3]}`)

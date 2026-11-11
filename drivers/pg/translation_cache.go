@@ -114,6 +114,7 @@ func newTranslationCache(capacity int) *translationCache {
 	return newTranslationCacheWithPolicy(capacity, translationCachePolicy)
 }
 
+// newTranslationCacheWithPolicy creates a bounded compilation cache with the selected admission policy.
 func newTranslationCacheWithPolicy(capacity int, policy string) *translationCache {
 	boundedCapacity := capacity
 	cachePolicy := policy
@@ -137,6 +138,7 @@ func newTranslationCacheWithPolicy(capacity int, policy string) *translationCach
 	return cacheInstance
 }
 
+// Key constructs the cache key from the query shape and its compilation context.
 func (s *translationCache) Key(query string, graphID int32, parameters map[string]any) translationCacheKey {
 	trimmedQuery := strings.TrimSpace(query)
 
@@ -187,6 +189,7 @@ func (s *translationCache) GetOrBuild(key translationCacheKey, parameters map[st
 	return s.GetOrBuildContext(context.Background(), key, parameters, build)
 }
 
+// GetOrBuildContext returns a cached translation or coordinates its context-aware compilation.
 func (s *translationCache) GetOrBuildContext(ctx context.Context, key translationCacheKey, parameters map[string]any, build func() (string, translationCacheBuildResult, error)) (string, map[string]any, error) {
 	effectiveContext := ctx
 

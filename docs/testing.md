@@ -86,12 +86,23 @@ inputs. Shared templates cover Okta and AD types, bounds, directions, endpoint
 filters, cycles, self-loops, and exact mutation state with and without RETURN.
 PostgreSQL executes those templates in both compiler modes.
 
-The fan-out diagnostic measures both counts and fully consumed paths, rotates
-three query arms across rounds, and reports medians after warmup. It compares the
-combined pattern, exhaustive fixed components, and the smaller workload from two
-single-type queries. Timings include query processing and client consumption; separate
-component queries also include additional round trips. Timings are observations,
-not pass/fail thresholds or a guarantee for production graphs. PostgreSQL plan
+The fan-out correctness test executes each query once: 208 queries across all
+16 combinations of relationship domain, width, depth, and projection. It checks
+both counts and fully consumed paths for the combined pattern, exhaustive fixed
+components, and the smaller workload from two single-type queries.
+
+Enable repeated timing measurements explicitly:
+
+```bash
+MULTI_EXPANSION_STUDY=1 go test -tags 'manual_integration integration' ./integration -run '^TestMultiRelationshipExpansionFanout$' -count=1 -timeout=20m -v
+```
+
+The diagnostic rotates the same three query arms through one warmup and five
+measured rounds, executing 1,248 queries and reporting warm medians. The longer
+timeout applies only to this explicitly requested timing run. Timings include
+query processing and client consumption; separate component queries also include
+additional round trips. Timings are observations, not pass/fail thresholds or a
+guarantee for production graphs. PostgreSQL plan
 checks assert exact recursive frontier sizes with and without disconnected
 decoys; these row counts do not prove that physical scans never inspect rejected
 edges. Run `make test_all` separately for each backend for full validation.

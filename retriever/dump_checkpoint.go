@@ -293,6 +293,7 @@ func removeKnownDumpCheckpointTemps(outputDir string, value dumpCheckpoint) erro
 	return nil
 }
 
+// validateDumpCheckpointFiles checks that checkpoint shard files match the metadata required to resume an export.
 func validateDumpCheckpointFiles(outputDir string, value dumpCheckpoint) error {
 	expected := map[string]struct{}{dumpCheckpointFileName: {}}
 	for _, graphEntry := range value.Manifest.Graphs {

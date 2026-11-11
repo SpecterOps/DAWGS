@@ -1689,7 +1689,9 @@ func shortestPathSearchCTEFrom(functionName pgsql.Identifier, expansionModel *Ex
 			pgsql.CompoundIdentifier{functionName, pgsql.WildcardIdentifier},
 		}
 		selectBody.From = append([]pgsql.FromClause{{
-			Source: pgsql.TableReference{Name: validatedEndpoints.AsCompoundIdentifier()},
+			Source: pgsql.TableReference{
+				Name: validatedEndpoints.AsCompoundIdentifier(),
+			},
 		}}, selectBody.From...)
 		innerQuery.Body = selectBody
 	}
@@ -2088,10 +2090,22 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 				selectPairs.Where = pgsql.OptionalAnd(selectPairs.Where, pgsql.NewBinaryExpression(pgsql.Expression(selectPairs.Projection[0]), pgsql.OperatorNotEquals, pgsql.Expression(selectPairs.Projection[1])))
 				pairs.Source.Body = selectPairs
 			}
-			query.AddCTE(pgsql.CommonTableExpression{Alias: pgsql.TableAlias{Name: pairsAlias, Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionRootID, expansionTerminalID})}, Query: *pairs.Source})
+			query.AddCTE(pgsql.CommonTableExpression{
+				Alias: pgsql.TableAlias{
+					Name:  pairsAlias,
+					Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionRootID, expansionTerminalID}),
+				},
+				Query: *pairs.Source,
+			})
 			harnessParameters = append(harnessParameters[:3],
-				pgsql.ArrayLiteral{Values: []pgsql.Expression{pgsql.CompoundIdentifier{pairsAlias, expansionRootID}}, CastType: pgsql.Int8Array},
-				pgsql.ArrayLiteral{Values: []pgsql.Expression{pgsql.CompoundIdentifier{pairsAlias, expansionTerminalID}}, CastType: pgsql.Int8Array})
+				pgsql.ArrayLiteral{
+					Values:   []pgsql.Expression{pgsql.CompoundIdentifier{pairsAlias, expansionRootID}},
+					CastType: pgsql.Int8Array,
+				},
+				pgsql.ArrayLiteral{
+					Values:   []pgsql.Expression{pgsql.CompoundIdentifier{pairsAlias, expansionTerminalID}},
+					CastType: pgsql.Int8Array,
+				})
 		}
 		if !expansionModel.Options.MaxDepth.Set {
 			effectiveHarnessFunctionName = pgsql.Identifier(effectiveHarnessFunctionName.String() + "_v2")
@@ -2101,7 +2115,11 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 		if boundPairs {
 			body := search.Query.Body.(pgsql.Select)
 			body.Projection = pgsql.Projection{pgsql.CompoundIdentifier{effectiveHarnessFunctionName, pgsql.WildcardIdentifier}}
-			body.From = append([]pgsql.FromClause{{Source: pgsql.TableReference{Name: pairsAlias.AsCompoundIdentifier()}}}, body.From...)
+			body.From = append([]pgsql.FromClause{{
+				Source: pgsql.TableReference{
+					Name: pairsAlias.AsCompoundIdentifier(),
+				},
+			}}, body.From...)
 			search.Query.Body = body
 		}
 		if !expansionModel.Options.MaxDepth.Set && expansionAllowsZeroDepth(expansionModel) {
@@ -2122,7 +2140,12 @@ func (s *ExpansionBuilder) buildShortestPathsHarnessCall(harnessFunctionName pgs
 				zero.Where = pgsql.OptionalAnd(zero.Where, expansionModel.PrimerNodeConstraints)
 			}
 			zero.Where = pgsql.OptionalAnd(zero.Where, traversalAdmission(pgd.IntLiteral(0), pgsql.Expression(zero.Projection[0])))
-			search.Query.Body = pgsql.SetOperation{LOperand: frontPrimerQuery(seed, zero), ROperand: search.Query.Body, Operator: pgsql.OperatorUnion, All: true}
+			search.Query.Body = pgsql.SetOperation{
+				LOperand: frontPrimerQuery(seed, zero),
+				ROperand: search.Query.Body,
+				Operator: pgsql.OperatorUnion,
+				All:      true,
+			}
 		}
 		query.AddCTE(search)
 		return query, nil

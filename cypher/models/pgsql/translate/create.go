@@ -138,6 +138,7 @@ func (s *Translator) buildCreateSourceFrame(idAlias pgsql.Identifier, sequenceTa
 	return sourceFrame, carried, nil
 }
 
+// buildCreateProjectionFrame materializes the row stream and entity bindings needed by a CREATE stage.
 func (s *Translator) buildCreateProjectionFrame(sourceFrame, insertFrame *Frame, carried *pgsql.IdentifierSet, createdBinding *BoundIdentifier, idAlias pgsql.Identifier) (*Frame, error) {
 	carriedBindings := carried
 
@@ -300,6 +301,7 @@ func (s *Translator) buildKindIDsArray(nodeCreate *NodeCreate) (pgsql.SelectItem
 	return arrayLiteral, nil
 }
 
+// buildPropertiesObject assembles the PostgreSQL JSON object used to store created entity properties.
 func (s *Translator) buildPropertiesObject(properties TranslatedProperties) (pgsql.SelectItem, error) {
 	if properties.Parameter != nil {
 		if err := RewriteFrameBindings(s.scope, properties.Parameter); err != nil {

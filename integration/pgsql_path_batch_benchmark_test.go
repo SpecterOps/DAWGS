@@ -23,90 +23,203 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// pathBatchStudyQuery pairs one SQL arm with its bound values and expected result cardinality.
 type pathBatchStudyQuery struct {
-	name, sql string
-	params    map[string]any
-	rows      int
+	// name identifies the query arm in logs and study artifacts.
+	name string
+	// sql contains the SQL statement executed by this query arm.
+	sql string
+	// params supplies separately bound values for the SQL statement.
+	params map[string]any
+	// rows records the expected fully consumed result cardinality.
+	rows int
 }
 
+// pathBatchStudySample records first-decoded-row and complete-consumption latency for one replay.
 type pathBatchStudySample struct {
+	// FirstRowMS measures elapsed milliseconds until the first path is decoded.
 	FirstRowMS float64 `json:"first_decoded_row_ms"`
-	TotalMS    float64 `json:"total_ms"`
-	Rows       int     `json:"rows"`
+	// TotalMS measures elapsed milliseconds through complete result consumption.
+	TotalMS float64 `json:"total_ms"`
+	// Rows records the number of decoded paths in the sample.
+	Rows int `json:"rows"`
 }
 
+// pathBatchStudyMemory records client allocations and sampled heap growth from a separate query replay.
 type pathBatchStudyMemory struct {
-	TotalAllocBytes        uint64 `json:"client_total_alloc_bytes"`
-	SampledExtraHeapBytes  uint64 `json:"client_sampled_extra_heap_bytes"`
-	SamplingIntervalMicros int    `json:"sampling_interval_micros"`
+	// TotalAllocBytes records process allocation growth during a separate consumption replay.
+	TotalAllocBytes uint64 `json:"client_total_alloc_bytes"`
+	// SampledExtraHeapBytes records sampled heap growth above the replay's initial heap size.
+	SampledExtraHeapBytes uint64 `json:"client_sampled_extra_heap_bytes"`
+	// SamplingIntervalMicros records the heap sampler's interval in microseconds.
+	SamplingIntervalMicros int `json:"sampling_interval_micros"`
 }
 
+// pathBatchStudyPlan records the execution and resource observations exposed by PostgreSQL EXPLAIN.
 type pathBatchStudyPlan struct {
-	ExecutionMS       float64 `json:"execution_ms"`
-	PlanningMS        float64 `json:"planning_ms"`
-	PlanningUsedKB    int64   `json:"planning_used_kb"`
-	MaxVisibleNodeKB  *int64  `json:"max_visible_executor_node_kb"`
-	MaxDiskSortKB     int64   `json:"max_disk_sort_kb"`
-	MaxHashBatches    int64   `json:"max_hash_batches"`
-	TempReadBytes     int64   `json:"temp_read_bytes"`
-	TempWrittenBytes  int64   `json:"temp_written_bytes"`
-	MaterializedPaths *int64  `json:"materialized_path_rows"`
-	HydratedNodes     *int64  `json:"hydrated_node_rows"`
-	HydratedEdges     *int64  `json:"hydrated_edge_rows"`
-	FrontierRows      []int64 `json:"recursive_frontier_rows"`
+	// ExecutionMS records PostgreSQL's reported execution time in milliseconds.
+	ExecutionMS float64 `json:"execution_ms"`
+	// PlanningMS records PostgreSQL's reported planning time in milliseconds.
+	PlanningMS float64 `json:"planning_ms"`
+	// PlanningUsedKB records reported planning memory usage in kilobytes.
+	PlanningUsedKB int64 `json:"planning_used_kb"`
+	// MaxVisibleNodeKB records the largest visible executor-node memory observation, when available.
+	MaxVisibleNodeKB *int64 `json:"max_visible_executor_node_kb"`
+	// MaxDiskSortKB records the largest reported disk sort usage in kilobytes.
+	MaxDiskSortKB int64 `json:"max_disk_sort_kb"`
+	// MaxHashBatches records the largest reported hash batch count.
+	MaxHashBatches int64 `json:"max_hash_batches"`
+	// TempReadBytes records temporary block reads converted to bytes.
+	TempReadBytes int64 `json:"temp_read_bytes"`
+	// TempWrittenBytes records temporary block writes converted to bytes.
+	TempWrittenBytes int64 `json:"temp_written_bytes"`
+	// MaterializedPaths records identifiable path materialization rows, when available.
+	MaterializedPaths *int64 `json:"materialized_path_rows"`
+	// HydratedNodes records identifiable node hydration rows, when available.
+	HydratedNodes *int64 `json:"hydrated_node_rows"`
+	// HydratedEdges records identifiable relationship hydration rows, when available.
+	HydratedEdges *int64 `json:"hydrated_edge_rows"`
+	// FrontierRows retains the row counts reported by recursive traversal frontiers.
+	FrontierRows []int64 `json:"recursive_frontier_rows"`
 }
 
+// pathBatchStudyRecord combines timing and separate resource observations for one fixture and query arm.
 type pathBatchStudyRecord struct {
-	Fixture       string                 `json:"fixture"`
-	PropertyBytes int                    `json:"property_bytes_per_entity"`
-	Paths         int                    `json:"available_paths"`
-	Nodes         int                    `json:"fixture_nodes"`
-	Edges         int                    `json:"fixture_edges"`
-	Query         string                 `json:"query"`
-	Samples       []pathBatchStudySample `json:"samples"`
+	// Fixture identifies the generated graph topology used by the measurement.
+	Fixture string `json:"fixture"`
+	// PropertyBytes records the configured property payload bytes per entity.
+	PropertyBytes int `json:"property_bytes_per_entity"`
+	// Paths records the number of paths made available by the fixture.
+	Paths int `json:"available_paths"`
+	// Nodes records the fixture's node cardinality.
+	Nodes int `json:"fixture_nodes"`
+	// Edges records the fixture's relationship cardinality.
+	Edges int `json:"fixture_edges"`
+	// Query identifies the query arm measured by this record.
+	Query string `json:"query"`
+	// Samples retains the measured warm consumption observations.
+	Samples []pathBatchStudySample `json:"samples"`
+	// WarmupSamples retains the observations excluded from the warm median.
 	WarmupSamples []pathBatchStudySample `json:"warmup_samples"`
-	Median        pathBatchStudySample   `json:"median"`
-	Memory        pathBatchStudyMemory   `json:"memory"`
-	Plan          pathBatchStudyPlan     `json:"plan"`
-	LowWorkMem    pathBatchStudyPlan     `json:"work_mem_64kb_plan"`
+	// Median contains separate first-row and complete-consumption medians.
+	Median pathBatchStudySample `json:"median"`
+	// Memory records the separate replay's client allocation and sampled heap observations.
+	Memory pathBatchStudyMemory `json:"memory"`
+	// Plan records the normal-work-memory execution plan observations.
+	Plan pathBatchStudyPlan `json:"plan"`
+	// LowWorkMem records a separate replay with PostgreSQL work memory limited to 64 kilobytes.
+	LowWorkMem pathBatchStudyPlan `json:"work_mem_64kb_plan"`
 }
+
+// pathBatchStudyEnvironment records the stable capture settings shared by all query arms.
+type pathBatchStudyEnvironment struct {
+	// CapturedUTC records when the study captured its environment settings.
+	CapturedUTC time.Time `json:"captured_utc"`
+	// GoVersion identifies the Go runtime used for client consumption.
+	GoVersion string `json:"go_version"`
+	// GOMAXPROCS records the client's available Go execution parallelism.
+	GOMAXPROCS int `json:"gomaxprocs"`
+	// TimingRoundsAfterWarmup records how many observations contribute to warm medians.
+	TimingRoundsAfterWarmup int `json:"timing_rounds_after_warmup"`
+	// WarmupRounds records how many initial observations are retained outside the median.
+	WarmupRounds int `json:"warmup_rounds"`
+	// MemoryNote describes the limits of sampled client and visible server memory metrics.
+	MemoryNote string `json:"memory_note"`
+	// PostgresVersion records the server's version description.
+	PostgresVersion string `json:"postgres_version"`
+	// WorkMem records the PostgreSQL work-memory setting used by the normal replay.
+	WorkMem string `json:"work_mem"`
+	// HashMemMultiplier records the server's hash-operation memory multiplier.
+	HashMemMultiplier string `json:"hash_mem_multiplier"`
+	// BlockSize records the PostgreSQL block size used to convert I/O counters to bytes.
+	BlockSize string `json:"block_size"`
+	// PlanCacheMode records how PostgreSQL selects prepared statement plans.
+	PlanCacheMode string `json:"plan_cache_mode"`
+	// JIT records the PostgreSQL just-in-time compilation setting.
+	JIT string `json:"jit"`
+}
+
+// pathBatchStudyPhysicalLayout records storage occupied by the fixture's graph partitions.
+type pathBatchStudyPhysicalLayout struct {
+	// NodeHeapBytes records the node partition's heap size in bytes.
+	NodeHeapBytes int64 `json:"node_heap_bytes"`
+	// EdgeHeapBytes records the edge partition's heap size in bytes.
+	EdgeHeapBytes int64 `json:"edge_heap_bytes"`
+}
+
+const (
+	// pathBatchStudyServerSettingsQuery reads the server settings captured with timing observations.
+	pathBatchStudyServerSettingsQuery = `select version(),current_setting('work_mem'),current_setting('hash_mem_multiplier'),current_setting('block_size'),current_setting('plan_cache_mode'),current_setting('jit')`
+
+	// pathBatchStudyPhysicalLayoutQuery reads heap sizes for the driver's selected graph partitions.
+	pathBatchStudyPhysicalLayoutQuery = "select pg_relation_size('%s'::regclass)::int8, pg_relation_size('%s'::regclass)::int8"
+)
 
 // TestPostgreSQLPathBatchPerformance is an opt-in diagnostic, with correctness
 // assertions but no machine-dependent latency thresholds. Timings include Raw,
 // Next, driver decoding and graph.Path mapping, not fixture setup or comparison.
 // Memory sampling and EXPLAIN are separate replays of the same query/snapshot.
 func TestPostgreSQLPathBatchPerformance(t *testing.T) {
-	if os.Getenv("PATH_BATCH_STUDY") != "1" {
+	if os.Getenv(pathBatchStudyEnv) != pathBatchStudyEnabledValue {
 		t.Skip("set PATH_BATCH_STUDY=1 for the path materialization experiment")
 	}
-	session := Open(t, Options{RequireDriver: pg.DriverName, SkipIfNoConnection: true,
-		SkipIfDriverMismatch: true, CleanupMode: CloseOnly, GraphName: "path_batch_experiment",
-		ExtraNodeKinds: graph.Kinds{graph.StringKind(pathBatchNodeKind)},
-		ExtraEdgeKinds: graph.StringsToKinds([]string{pathBatchEdgeKindA, pathBatchEdgeKindB})})
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		CleanupMode:          CloseOnly,
+		GraphName:            "path_batch_experiment",
+		ExtraNodeKinds:       graph.Kinds{graph.StringKind(pathBatchNodeKind)},
+		ExtraEdgeKinds:       graph.StringsToKinds([]string{pathBatchEdgeKindA, pathBatchEdgeKindB}),
+	})
 	driver := session.DB.(*pg.Driver)
 	selected, ok := driver.DefaultGraph()
 	require.True(t, ok)
-	settings := map[string]any{"captured_utc": time.Now().UTC(), "go_version": runtime.Version(),
-		"gomaxprocs": runtime.GOMAXPROCS(0), "timing_rounds_after_warmup": 5,
-		"warmup_rounds": 6,
-		"memory_note":   "Client streaming/discard run; 1ms sampled process heap, not exact peak. PostgreSQL maximum visible node memory is partial; helper internals and whole-backend peak are unavailable."}
-	var serverVersion, workMem, hashMultiplier, blockSize, planCacheMode, jit string
-	require.NoError(t, session.PGPool.QueryRow(session.Ctx,
-		"select version(),current_setting('work_mem'),current_setting('hash_mem_multiplier'),current_setting('block_size'),current_setting('plan_cache_mode'),current_setting('jit')").
-		Scan(&serverVersion, &workMem, &hashMultiplier, &blockSize, &planCacheMode, &jit))
-	settings["postgres_version"], settings["work_mem"] = serverVersion, workMem
-	settings["hash_mem_multiplier"], settings["block_size"] = hashMultiplier, blockSize
-	settings["plan_cache_mode"], settings["jit"] = planCacheMode, jit
+	settings := pathBatchStudyEnvironment{
+		CapturedUTC:             time.Now().UTC(),
+		GoVersion:               runtime.Version(),
+		GOMAXPROCS:              runtime.GOMAXPROCS(0),
+		TimingRoundsAfterWarmup: pathBatchStudySampleRounds,
+		WarmupRounds:            pathBatchStudyWarmupRounds,
+		MemoryNote:              "Client streaming/discard run; 1ms sampled process heap, not exact peak. PostgreSQL maximum visible node memory is partial; helper internals and whole-backend peak are unavailable.",
+	}
+	require.NoError(t, session.PGPool.QueryRow(session.Ctx, pathBatchStudyServerSettingsQuery).
+		Scan(&settings.PostgresVersion, &settings.WorkMem, &settings.HashMemMultiplier,
+			&settings.BlockSize, &settings.PlanCacheMode, &settings.JIT))
+
 	pathBatchStudyWrite(t, "environment.json", settings)
 	var records []pathBatchStudyRecord
 	for _, scenario := range []struct {
-		name  string
+		// name identifies the generated fixture topology.
+		name string
+		// width controls the fixture branching width.
 		width int
+		// bytes sets the property payload bytes per entity.
 		bytes int
 	}{
-		{"shared", 4, 0}, {"low_overlap", 512, 0},
-		{"shared", 4, 2048}, {"low_overlap", 512, 2048},
-		{"shared_scale", 8, 0},
+		{
+			name:  "shared",
+			width: 4,
+			bytes: 0,
+		}, {
+			name:  "low_overlap",
+			width: 512,
+			bytes: 0,
+		},
+		{
+			name:  "shared",
+			width: 4,
+			bytes: 2048,
+		}, {
+			name:  "low_overlap",
+			width: 512,
+			bytes: 2048,
+		},
+		{
+			name:  "shared_scale",
+			width: 8,
+			bytes: 0,
+		},
 	} {
 		t.Run(fmt.Sprintf("%s/properties=%d", scenario.name, scenario.bytes), func(t *testing.T) {
 			// Rollbacks leave physical dead tuples. Reclaim this experiment's
@@ -128,11 +241,14 @@ func TestPostgreSQLPathBatchPerformance(t *testing.T) {
 				// fixture. Analyze only this experiment's graph partitions.
 				pathBatchStudyExec(t, tx, "ANALYZE "+selected.Partitions.Node.Name)
 				pathBatchStudyExec(t, tx, "ANALYZE "+selected.Partitions.Edge.Name)
-				physical := tx.Raw(fmt.Sprintf("select pg_relation_size('%s'::regclass)::int8, pg_relation_size('%s'::regclass)::int8",
+				physical := tx.Raw(fmt.Sprintf(pathBatchStudyPhysicalLayoutQuery,
 					selected.Partitions.Node.Name, selected.Partitions.Edge.Name), nil)
 				require.True(t, physical.Next())
+
+				var physicalLayout pathBatchStudyPhysicalLayout
+				require.NoError(t, physical.Scan(&physicalLayout.NodeHeapBytes, &physicalLayout.EdgeHeapBytes))
 				pathBatchStudyWrite(t, fmt.Sprintf("%s-%d-physical-layout.json", scenario.name, scenario.bytes),
-					map[string]any{"node_heap_bytes": physical.Values()[0], "edge_heap_bytes": physical.Values()[1]})
+					physicalLayout)
 				physical.Close()
 				require.NoError(t, physical.Error())
 				baseCypher := "MATCH p=(s:PathBatchNode)-[:PathBatchA|PathBatchB*3..3]->(e) WHERE id(s)=$root RETURN p"
@@ -141,7 +257,9 @@ func TestPostgreSQLPathBatchPerformance(t *testing.T) {
 					require.NoError(t, err)
 					translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(),
 						map[string]any{"root": ids["root"].Int64()}, selected.ID,
-						translate.Options{OptimizerMode: translate.OptimizerEnabled})
+						translate.Options{
+							OptimizerMode: translate.OptimizerEnabled,
+						})
 					require.NoError(t, err)
 					formatted, err := translate.Translated(translation)
 					require.NoError(t, err)
@@ -156,11 +274,36 @@ func TestPostgreSQLPathBatchPerformance(t *testing.T) {
 				_, limited, limitedParams := prepare(baseCypher + " LIMIT 1")
 				page := pathBatchSQL("select * from ("+skeleton+") page_source limit 1", selected.ID, graph.DirectionOutbound)
 				queries := []pathBatchStudyQuery{
-					{"current_full", baseline, parameters, count},
-					{"batch_full", batch, batchParams, count},
-					{"current_limit1", limited, limitedParams, 1},
-					{"batch_outer_limit1", batch + " limit 1", batchParams, 1},
-					{"batch_page_limit1", page + " limit 1", batchParams, 1},
+					{
+						name:   "current_full",
+						sql:    baseline,
+						params: parameters,
+						rows:   count,
+					},
+					{
+						name:   "batch_full",
+						sql:    batch,
+						params: batchParams,
+						rows:   count,
+					},
+					{
+						name:   "current_limit1",
+						sql:    limited,
+						params: limitedParams,
+						rows:   1,
+					},
+					{
+						name:   "batch_outer_limit1",
+						sql:    batch + " limit 1",
+						params: batchParams,
+						rows:   1,
+					},
+					{
+						name:   "batch_page_limit1",
+						sql:    page + " limit 1",
+						params: batchParams,
+						rows:   1,
+					},
 				}
 				// Without ORDER BY, any valid result occurrence may satisfy LIMIT 1.
 				// Compare its complete value against the full multiset, not an
@@ -181,11 +324,11 @@ func TestPostgreSQLPathBatchPerformance(t *testing.T) {
 				warmups := make([][]pathBatchStudySample, len(queries))
 				// Six warmup cycles cross PostgreSQL's initial custom-plan phase.
 				// Preserve warmup samples so transitions remain reviewable.
-				for round := range 11 {
+				for round := range pathBatchStudyWarmupRounds + pathBatchStudySampleRounds {
 					for offset := range len(queries) {
 						index := (round + offset) % len(queries)
 						sample := pathBatchStudyConsume(t, tx, queries[index])
-						if round >= 6 {
+						if round >= pathBatchStudyWarmupRounds {
 							samples[index] = append(samples[index], sample)
 						} else {
 							warmups[index] = append(warmups[index], sample)
@@ -193,14 +336,22 @@ func TestPostgreSQLPathBatchPerformance(t *testing.T) {
 					}
 				}
 				for index, query := range queries {
-					record := pathBatchStudyRecord{Fixture: scenario.name, PropertyBytes: scenario.bytes,
-						Paths: count, Nodes: len(fixture.Nodes), Edges: len(fixture.Edges), Query: query.name,
-						Samples: samples[index], WarmupSamples: warmups[index], Median: pathBatchStudyMedian(samples[index])}
+					record := pathBatchStudyRecord{
+						Fixture:       scenario.name,
+						PropertyBytes: scenario.bytes,
+						Paths:         count,
+						Nodes:         len(fixture.Nodes),
+						Edges:         len(fixture.Edges),
+						Query:         query.name,
+						Samples:       samples[index],
+						WarmupSamples: warmups[index],
+						Median:        pathBatchStudyMedian(samples[index]),
+					}
 					record.Memory = pathBatchStudyClientMemory(t, tx, query)
 					record.Plan = pathBatchStudyExplain(t, tx, query, scenario.name, scenario.bytes, "default")
 					pathBatchStudyExec(t, tx, "SET LOCAL work_mem='64kB'")
 					record.LowWorkMem = pathBatchStudyExplain(t, tx, query, scenario.name, scenario.bytes, "64kb")
-					pathBatchStudyExec(t, tx, "SET LOCAL work_mem='"+strings.ReplaceAll(workMem, "'", "''")+"'")
+					pathBatchStudyExec(t, tx, "SET LOCAL work_mem='"+strings.ReplaceAll(settings.WorkMem, "'", "''")+"'")
 					if strings.Contains(query.name, "batch_") {
 						require.NotNil(t, record.Plan.MaterializedPaths)
 						require.NotNil(t, record.Plan.HydratedNodes)
@@ -228,6 +379,7 @@ func TestPostgreSQLPathBatchPerformance(t *testing.T) {
 	pathBatchStudyWrite(t, "results.json", records)
 }
 
+// pathBatchStudyConsume fully decodes a path result while recording first-row and total consumption times.
 func pathBatchStudyConsume(t *testing.T, tx graph.Transaction, query pathBatchStudyQuery) pathBatchStudySample {
 	t.Helper()
 	start := time.Now()
@@ -249,6 +401,7 @@ func pathBatchStudyConsume(t *testing.T, tx graph.Transaction, query pathBatchSt
 	return sample
 }
 
+// pathBatchStudyMedian computes separate first-row and total-duration medians from equally sized result samples.
 func pathBatchStudyMedian(samples []pathBatchStudySample) pathBatchStudySample {
 	first, total := make([]float64, len(samples)), make([]float64, len(samples))
 	for index, sample := range samples {
@@ -256,9 +409,14 @@ func pathBatchStudyMedian(samples []pathBatchStudySample) pathBatchStudySample {
 	}
 	sort.Float64s(first)
 	sort.Float64s(total)
-	return pathBatchStudySample{FirstRowMS: first[len(first)/2], TotalMS: total[len(total)/2], Rows: samples[0].Rows}
+	return pathBatchStudySample{
+		FirstRowMS: first[len(first)/2],
+		TotalMS:    total[len(total)/2],
+		Rows:       samples[0].Rows,
+	}
 }
 
+// pathBatchStudyClientMemory replays consumption while sampling client heap growth and allocated bytes.
 func pathBatchStudyClientMemory(t *testing.T, tx graph.Transaction, query pathBatchStudyQuery) pathBatchStudyMemory {
 	t.Helper()
 	runtime.GC()
@@ -270,7 +428,7 @@ func pathBatchStudyClientMemory(t *testing.T, tx graph.Transaction, query pathBa
 	sampler.Add(1)
 	go func() {
 		defer sampler.Done()
-		ticker := time.NewTicker(time.Millisecond)
+		ticker := time.NewTicker(pathBatchMemorySamplingInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -290,10 +448,14 @@ func pathBatchStudyClientMemory(t *testing.T, tx graph.Transaction, query pathBa
 	sampler.Wait()
 	runtime.ReadMemStats(&after)
 	peak = max(peak, after.HeapAlloc)
-	return pathBatchStudyMemory{TotalAllocBytes: after.TotalAlloc - before.TotalAlloc,
-		SampledExtraHeapBytes: peak - before.HeapAlloc, SamplingIntervalMicros: 1000}
+	return pathBatchStudyMemory{
+		TotalAllocBytes:        after.TotalAlloc - before.TotalAlloc,
+		SampledExtraHeapBytes:  peak - before.HeapAlloc,
+		SamplingIntervalMicros: int(pathBatchMemorySamplingInterval / time.Microsecond),
+	}
 }
 
+// pathBatchStudyExec consumes a setup statement and checks its final result error.
 func pathBatchStudyExec(t *testing.T, tx graph.Transaction, statement string) {
 	t.Helper()
 	result := tx.Raw(statement, nil)
@@ -303,6 +465,7 @@ func pathBatchStudyExec(t *testing.T, tx graph.Transaction, statement string) {
 	require.NoError(t, result.Error())
 }
 
+// pathBatchStudyExplain captures execution plans and extracts the study's visible PostgreSQL resource metrics.
 func pathBatchStudyExplain(t *testing.T, tx graph.Transaction, query pathBatchStudyQuery, fixture string, bytes int, memory string) pathBatchStudyPlan {
 	t.Helper()
 	result := tx.Raw("EXPLAIN (ANALYZE, BUFFERS, MEMORY, TIMING OFF, SUMMARY, FORMAT JSON) "+query.sql, query.params)
@@ -326,7 +489,10 @@ func pathBatchStudyExplain(t *testing.T, tx graph.Transaction, query pathBatchSt
 		}
 	}
 	integer := func(value any) int64 { result, _ := asInt64(value); return result }
-	metrics := pathBatchStudyPlan{ExecutionMS: number(summary["Execution Time"]), PlanningMS: number(summary["Planning Time"])}
+	metrics := pathBatchStudyPlan{
+		ExecutionMS: number(summary["Execution Time"]),
+		PlanningMS:  number(summary["Planning Time"]),
+	}
 	if planning, ok := summary["Planning"].(map[string]any); ok {
 		metrics.PlanningUsedKB = integer(planning["Memory Used"])
 	}
@@ -373,9 +539,10 @@ func pathBatchStudyExplain(t *testing.T, tx graph.Transaction, query pathBatchSt
 	return metrics
 }
 
+// pathBatchStudyWrite writes an indented JSON artifact into the configured study report directory.
 func pathBatchStudyWrite(t *testing.T, name string, value any) {
 	t.Helper()
-	if directory := os.Getenv("PATH_BATCH_REPORT_DIR"); directory != "" {
+	if directory := os.Getenv(pathBatchReportDirectoryEnv); directory != "" {
 		require.NoError(t, os.MkdirAll(directory, 0o755))
 		data, err := json.MarshalIndent(value, "", "  ")
 		require.NoError(t, err)

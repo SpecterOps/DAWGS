@@ -16,23 +16,85 @@ func TestNormalizeNumbers(t *testing.T) {
 		// want is the normalized value, including the expected concrete numeric types.
 		want any
 	}{
-		{json.Number("0"), int64(0)},
-		{json.Number("-0"), int64(0)},
-		{json.Number("9007199254740993"), int64(9007199254740993)},
-		{json.Number("-9007199254740993"), int64(-9007199254740993)},
-		{json.Number("9223372036854775807"), int64(math.MaxInt64)},
-		{json.Number("-9223372036854775808"), int64(math.MinInt64)},
-		{json.Number("0.1"), 0.1},
-		{json.Number("1e3"), float64(1000)},
-		{json.Number("1E-3"), 0.001},
-		{json.Number("1.7976931348623157e308"), math.MaxFloat64},
-		{json.Number("5e-324"), math.SmallestNonzeroFloat64},
-		{"9007199254740993", "9007199254740993"},
-		{nil, nil}, {true, true}, {int64(8), int64(8)}, {1.25, 1.25},
-		{map[string]any(nil), map[string]any(nil)}, {[]any(nil), []any(nil)},
-		{map[string]any{}, map[string]any{}}, {[]any{}, []any{}},
-		{map[string]any{"list": []any{json.Number("9007199254740993"), map[string]any{"n": json.Number("1.25")}}},
-			map[string]any{"list": []any{int64(9007199254740993), map[string]any{"n": 1.25}}}},
+		{
+			input: json.Number("0"),
+			want:  int64(0),
+		},
+		{
+			input: json.Number("-0"),
+			want:  int64(0),
+		},
+		{
+			input: json.Number("9007199254740993"),
+			want:  int64(9007199254740993),
+		},
+		{
+			input: json.Number("-9007199254740993"),
+			want:  int64(-9007199254740993),
+		},
+		{
+			input: json.Number("9223372036854775807"),
+			want:  int64(math.MaxInt64),
+		},
+		{
+			input: json.Number("-9223372036854775808"),
+			want:  int64(math.MinInt64),
+		},
+		{
+			input: json.Number("0.1"),
+			want:  0.1,
+		},
+		{
+			input: json.Number("1e3"),
+			want:  float64(1000),
+		},
+		{
+			input: json.Number("1E-3"),
+			want:  0.001,
+		},
+		{
+			input: json.Number("1.7976931348623157e308"),
+			want:  math.MaxFloat64,
+		},
+		{
+			input: json.Number("5e-324"),
+			want:  math.SmallestNonzeroFloat64,
+		},
+		{
+			input: "9007199254740993",
+			want:  "9007199254740993",
+		},
+		{
+			input: nil,
+			want:  nil,
+		}, {
+			input: true,
+			want:  true,
+		}, {
+			input: int64(8),
+			want:  int64(8),
+		}, {
+			input: 1.25,
+			want:  1.25,
+		},
+		{
+			input: map[string]any(nil),
+			want:  map[string]any(nil),
+		}, {
+			input: []any(nil),
+			want:  []any(nil),
+		},
+		{
+			input: map[string]any{},
+			want:  map[string]any{},
+		}, {
+			input: []any{},
+			want:  []any{},
+		},
+		{
+			input: map[string]any{"list": []any{json.Number("9007199254740993"), map[string]any{"n": json.Number("1.25")}}},
+			want:  map[string]any{"list": []any{int64(9007199254740993), map[string]any{"n": 1.25}}},
+		},
 	} {
 		got, err := NormalizeNumbers(test.input)
 		require.NoError(t, err)

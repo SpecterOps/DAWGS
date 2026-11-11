@@ -179,6 +179,7 @@ func WriteCollectionArchiveFile(options ArchiveFileOptions) error {
 	return nil
 }
 
+// preflightArchiveOutputPath validates an unused archive destination and checks temporary-file creation beside it.
 func preflightArchiveOutputPath(archivePath string) error {
 	trimmedArchivePath := strings.TrimSpace(archivePath)
 	if trimmedArchivePath == "" {
@@ -348,6 +349,7 @@ func UnpackEncryptedCollectionArchiveWithOptions(reader io.Reader, outputDir str
 	return nil
 }
 
+// createUnpackStagingDirectory creates the temporary extraction directory used before publishing an unpacked collection.
 func createUnpackStagingDirectory(outputDir string, force bool) (string, error) {
 	trimmedOutputDir := strings.TrimSpace(outputDir)
 	if trimmedOutputDir == "" {
@@ -510,6 +512,7 @@ func newEncryptedArchiveWriter(writer io.Writer, recipient hpke.PublicKey) (*enc
 	}, nil
 }
 
+// Write encrypts plaintext in bounded authenticated archive frames.
 func (s *encryptedArchiveWriter) Write(p []byte) (int, error) {
 	remainingPlaintext := p
 

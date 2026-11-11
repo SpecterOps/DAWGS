@@ -26,6 +26,7 @@ import (
 	"github.com/cucumber/godog"
 )
 
+// InitializeScenario registers graph setup, query assertions and database cleanup for each BDD scenario.
 func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.Before(dbCtx.resetBeforeScenario)
 	ctx.Step(`^an empty graph$`, dbCtx.anEmptyGraph)
@@ -40,6 +41,7 @@ func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.After(dbCtx.closeDBSession)
 }
 
+// TestFeatures runs the TCK scenarios and evaluates enforced failures separately from compatibility reports.
 func TestFeatures(t *testing.T) {
 	if err := os.MkdirAll(bddReportDir, 0o755); err != nil {
 		t.Fatalf("failed to create BDD report directory: %v", err)

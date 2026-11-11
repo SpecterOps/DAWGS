@@ -442,18 +442,31 @@ func suffixReverseGuardTestArtifacts(split string, incumbentDuration, reverseDur
 	return incumbent, reverse, guarded
 }
 
+// stampSuffixReverseGuardSelections fills fixture selection receipts used by the suffix guard report checks.
 func stampSuffixReverseGuardSelections(artifacts ...[]CaseResult) {
 	declared := make([]DeclaredCaseBackend, 0, 2*len(suffixReverseGuardFeasibilityCases))
 	resolved := make([]ResolvedCaseSelector, 0, len(suffixReverseGuardFeasibilityCases))
 	for _, testCase := range suffixReverseGuardFeasibilityCases {
 		for _, backend := range []ExecutionMode{ModePostgresSQL, ModeNeo4j} {
-			declared = append(declared, DeclaredCaseBackend{Dataset: testCase.dataset, Name: testCase.name, Backend: backend})
+			declared = append(declared, DeclaredCaseBackend{
+				Dataset: testCase.dataset,
+				Name:    testCase.name,
+				Backend: backend,
+			})
 		}
-		resolved = append(resolved, ResolvedCaseSelector{Dataset: testCase.dataset, Name: testCase.name, Category: "generated_fixed_suffix_expansion"})
+		resolved = append(resolved, ResolvedCaseSelector{
+			Dataset:  testCase.dataset,
+			Name:     testCase.name,
+			Category: "generated_fixed_suffix_expansion",
+		})
 	}
 	selection := SelectionManifest{
-		Version: selectionManifestVersion, Resolved: resolved, DiagnosticOnly: true,
-		FullDeclarationCount: len(declared), SelectedDeclarationCount: len(declared), DeclarationSHA256: declarationSHA256(declared),
+		Version:                  selectionManifestVersion,
+		Resolved:                 resolved,
+		DiagnosticOnly:           true,
+		FullDeclarationCount:     len(declared),
+		SelectedDeclarationCount: len(declared),
+		DeclarationSHA256:        declarationSHA256(declared),
 	}
 	for _, records := range artifacts {
 		for index := range records {

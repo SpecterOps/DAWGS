@@ -278,8 +278,12 @@ func orientationCount(source pgsql.Identifier) pgsql.Subquery {
 // exact root relation.
 func buildExpansionOrientationRootProbe(rootFrame pgsql.Identifier, root *BoundIdentifier, ids expansionOrientationIdentifiers, probeLimit int64) pgsql.CommonTableExpression {
 	return pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: ids.rootProbe},
-		Materialized: &pgsql.Materialized{Materialized: true},
+		Alias: pgsql.TableAlias{
+			Name: ids.rootProbe,
+		},
+		Materialized: &pgsql.Materialized{
+			Materialized: true,
+		},
 		Query: pgsql.Query{
 			Body: pgsql.Select{
 				Projection: pgsql.Projection{&pgsql.AliasedExpression{
@@ -322,7 +326,9 @@ func buildExpansionOrientationDegreeProbe(
 		Body: pgsql.Select{
 			Projection: pgsql.Projection{pgsql.NewLiteral(true, pgsql.Boolean)},
 			From: []pgsql.FromClause{{
-				Source: pgsql.TableReference{Name: seedSource.AsCompoundIdentifier()},
+				Source: pgsql.TableReference{
+					Name: seedSource.AsCompoundIdentifier(),
+				},
 				Joins: []pgsql.Join{{
 					Table: expansionEdgeTableReference(edgeAlias),
 					JoinOperator: pgsql.JoinOperator{
@@ -340,22 +346,30 @@ func buildExpansionOrientationDegreeProbe(
 		Limit: pgsql.NewLiteral(probeLimit+1, pgsql.Int8),
 	}
 	return pgsql.CommonTableExpression{
-		Alias:        pgsql.TableAlias{Name: alias},
-		Materialized: &pgsql.Materialized{Materialized: true},
-		Query: pgsql.Query{Body: pgsql.Select{
-			Projection: pgsql.Projection{&pgsql.AliasedExpression{
-				Expression: pgsql.FunctionCall{
-					Function:   pgsql.FunctionCount,
-					Parameters: []pgsql.Expression{pgsql.Wildcard{}},
-					CastType:   pgsql.Int8,
-				},
-				Alias: models.OptionalValue(orientationDegreeSample),
-			}},
-			From: []pgsql.FromClause{{Source: pgsql.LateralSubquery{
-				Query:   samples,
-				Binding: models.OptionalValue(sampleRows),
-			}}},
-		}},
+		Alias: pgsql.TableAlias{
+			Name: alias,
+		},
+		Materialized: &pgsql.Materialized{
+			Materialized: true,
+		},
+		Query: pgsql.Query{
+			Body: pgsql.Select{
+				Projection: pgsql.Projection{&pgsql.AliasedExpression{
+					Expression: pgsql.FunctionCall{
+						Function:   pgsql.FunctionCount,
+						Parameters: []pgsql.Expression{pgsql.Wildcard{}},
+						CastType:   pgsql.Int8,
+					},
+					Alias: models.OptionalValue(orientationDegreeSample),
+				}},
+				From: []pgsql.FromClause{{
+					Source: pgsql.LateralSubquery{
+						Query:   samples,
+						Binding: models.OptionalValue(sampleRows),
+					},
+				}},
+			},
+		},
 	}
 }
 

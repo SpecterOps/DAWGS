@@ -12,6 +12,7 @@ import (
 	"github.com/specterops/dawgs/graph"
 )
 
+// BenchmarkReachabilityCache measures reachability queries across the configured graph and cache workloads.
 func BenchmarkReachabilityCache(b *testing.B) {
 	for _, shape := range []string{"chain", "diamonds"} {
 		builder := container.NewCSRDigraphBuilder()
@@ -133,6 +134,8 @@ func BenchmarkReachabilityCacheSharedTail(b *testing.B) {
 	}
 }
 
+// BenchmarkReachabilityCacheMemoEviction measures cold traversal work after the local memo exceeds its capacity.
+//
 // Keep a production-configured cold workload above the traversal memo floor.
 // Increasing diamond depth must not multiply expansion after memo eviction.
 func BenchmarkReachabilityCacheMemoEviction(b *testing.B) {

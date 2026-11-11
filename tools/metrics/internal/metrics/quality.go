@@ -1463,6 +1463,7 @@ func validateAssertion(path, contextName string, raw json.RawMessage) ([]Quality
 	return findings, false
 }
 
+// placeholderNames returns the sorted unique nonempty placeholders referenced by a case template.
 func placeholderNames(template string) []string {
 	remainingTemplate := template
 

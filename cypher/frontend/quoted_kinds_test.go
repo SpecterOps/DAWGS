@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestParsedKindNames checks that quoted kind spellings decode to the intended graph names.
 func TestParsedKindNames(t *testing.T) {
 	for _, name := range []struct {
 		// token is the Cypher spelling, including any backtick quoting.
@@ -18,8 +19,26 @@ func TestParsedKindNames(t *testing.T) {
 		// raw is the decoded kind name without Cypher quoting.
 		raw string
 	}{
-		{token: "Base", raw: "Base"}, {token: "`Base`", raw: "Base"}, {token: "`has space`", raw: "has space"},
-		{token: "`has``tick`", raw: "has`tick"}, {token: "```Base```", raw: "`Base`"}, {token: "``", raw: ""},
+		{
+			token: "Base",
+			raw:   "Base",
+		}, {
+			token: "`Base`",
+			raw:   "Base",
+		}, {
+			token: "`has space`",
+			raw:   "has space",
+		},
+		{
+			token: "`has``tick`",
+			raw:   "has`tick",
+		}, {
+			token: "```Base```",
+			raw:   "`Base`",
+		}, {
+			token: "``",
+			raw:   "",
+		},
 	} {
 		for _, source := range []string{
 			"MATCH (n:%s) RETURN n", "MATCH ()-[r:%s]->() RETURN r",

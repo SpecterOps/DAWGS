@@ -652,13 +652,19 @@ func prepareCollectExpression(scope *Scope, collectedExpression pgsql.Expression
 	if dataType.IsArrayType() {
 		// A list is one collected value. PostgreSQL multidimensional arrays
 		// cannot represent ragged or empty nested lists.
-		return pgsql.FunctionCall{Function: pgsql.FunctionToJSONB,
-			Parameters: []pgsql.Expression{normalizedCollectedExpression}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
+		return pgsql.FunctionCall{
+			Function:   pgsql.FunctionToJSONB,
+			Parameters: []pgsql.Expression{normalizedCollectedExpression},
+			CastType:   pgsql.JSONB,
+		}, pgsql.JSONBArray, nil
 	}
 	if dataType == pgsql.JSONB {
 		// WITH aliases may carry JSON null rather than SQL NULL.
-		return pgsql.FunctionCall{Function: pgsql.FunctionNullIf,
-			Parameters: []pgsql.Expression{normalizedCollectedExpression, jsonNullLiteral()}, CastType: pgsql.JSONB}, pgsql.JSONBArray, nil
+		return pgsql.FunctionCall{
+			Function:   pgsql.FunctionNullIf,
+			Parameters: []pgsql.Expression{normalizedCollectedExpression, jsonNullLiteral()},
+			CastType:   pgsql.JSONB,
+		}, pgsql.JSONBArray, nil
 	}
 	if arrayType, err := dataType.ToArrayType(); err == nil {
 		return normalizedCollectedExpression, arrayType, nil

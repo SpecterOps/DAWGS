@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestShardedSieve_PutGet checks that inserted values can be retrieved from their owning shards.
 func TestShardedSieve_PutGet(t *testing.T) {
 	sharded := cache.NewShardedSieve[int, string](10, 4, func(key int) uint64 { return uint64(key) })
 
@@ -19,6 +20,7 @@ func TestShardedSieve_PutGet(t *testing.T) {
 	require.Equal(t, "one", fetched)
 }
 
+// TestShardedSieve_MissingKeyCountsMiss checks that absent lookups contribute to aggregate miss statistics.
 func TestShardedSieve_MissingKeyCountsMiss(t *testing.T) {
 	sharded := cache.NewShardedSieve[int, string](10, 4, func(key int) uint64 { return uint64(key) })
 
@@ -32,24 +34,64 @@ func TestShardedSieve_MissingKeyCountsMiss(t *testing.T) {
 	require.Equal(t, int64(0), sharded.Stats().Hits())
 }
 
+// TestShardedSieve_CapacityIsNeverInflated checks that shard rounding preserves the effective total capacity.
 func TestShardedSieve_CapacityIsNeverInflated(t *testing.T) {
 	// Shard counts beyond the total capacity collapse so each shard keeps at
 	// least one entry without exceeding the requested capacity. Capacities at
 	// or below zero floor at one, matching NewSieve.
 	for _, tc := range []struct {
-		capacity  int
+		// capacity supplies the requested total cache capacity.
+		capacity int
+		// effective contains the expected capacity after minimum-capacity normalization.
 		effective int
-		shards    int
+		// shards contains the expected number of independently bounded cache shards.
+		shards int
 	}{
-		{capacity: 0, effective: 1, shards: 16},
-		{capacity: -3, effective: 1, shards: 8},
-		{capacity: 1, effective: 1, shards: 16},
-		{capacity: 2, effective: 2, shards: 16},
-		{capacity: 3, effective: 3, shards: 2},
-		{capacity: 3, effective: 3, shards: 16},
-		{capacity: 10, effective: 10, shards: 4},
-		{capacity: 10, effective: 10, shards: 1},
-		{capacity: 17, effective: 17, shards: 16},
+		{
+			capacity:  0,
+			effective: 1,
+			shards:    16,
+		},
+		{
+			capacity:  -3,
+			effective: 1,
+			shards:    8,
+		},
+		{
+			capacity:  1,
+			effective: 1,
+			shards:    16,
+		},
+		{
+			capacity:  2,
+			effective: 2,
+			shards:    16,
+		},
+		{
+			capacity:  3,
+			effective: 3,
+			shards:    2,
+		},
+		{
+			capacity:  3,
+			effective: 3,
+			shards:    16,
+		},
+		{
+			capacity:  10,
+			effective: 10,
+			shards:    4,
+		},
+		{
+			capacity:  10,
+			effective: 10,
+			shards:    1,
+		},
+		{
+			capacity:  17,
+			effective: 17,
+			shards:    16,
+		},
 	} {
 		t.Run(fmt.Sprintf("capacity_%d_shards_%d", tc.capacity, tc.shards), func(t *testing.T) {
 			sharded := cache.NewShardedSieve[uint64, uint64](tc.capacity, tc.shards, func(key uint64) uint64 { return key })
@@ -69,6 +111,7 @@ func TestShardedSieve_CapacityIsNeverInflated(t *testing.T) {
 	}
 }
 
+// TestShardedSieve_UpdateExistingKey checks that replacing an entry does not consume another capacity slot.
 func TestShardedSieve_UpdateExistingKey(t *testing.T) {
 	sharded := cache.NewShardedSieve[string, int](4, 4, func(key string) uint64 { return uint64(len(key)) })
 
@@ -81,6 +124,7 @@ func TestShardedSieve_UpdateExistingKey(t *testing.T) {
 	require.Equal(t, int64(1), sharded.Stats().Size())
 }
 
+// TestShardedSieve_Delete checks that deleting an entry removes it from subsequent lookups.
 func TestShardedSieve_Delete(t *testing.T) {
 	sharded := cache.NewShardedSieve[uint64, uint64](8, 4, func(key uint64) uint64 { return key })
 
@@ -92,6 +136,7 @@ func TestShardedSieve_Delete(t *testing.T) {
 	require.Equal(t, int64(0), sharded.Stats().Size())
 }
 
+// TestShardedSieve_NilShardFunction checks that a missing hash function safely routes keys to one shard.
 func TestShardedSieve_NilShardFunction(t *testing.T) {
 	sharded := cache.NewShardedSieve[uint64, uint64](8, 4, nil)
 
@@ -102,6 +147,7 @@ func TestShardedSieve_NilShardFunction(t *testing.T) {
 	require.Equal(t, uint64(1), fetched)
 }
 
+// TestShardedSieve_ConcurrentAccess checks concurrent operations through the cache's shared public interface.
 func TestShardedSieve_ConcurrentAccess(t *testing.T) {
 	sharded := cache.NewShardedSieve[uint64, uint64](64, 8, func(key uint64) uint64 { return key })
 

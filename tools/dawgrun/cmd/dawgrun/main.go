@@ -143,14 +143,17 @@ type handler struct {
 	appConfigBaseDir string
 }
 
+// Prompt returns the prompt used by the interactive database shell.
 func (s *handler) Prompt() string {
 	return "dawgrun > "
 }
 
+// Tab disables legacy tab insertion in favor of the structured completion hook.
 func (s *handler) Tab(buffer string) string {
 	return ""
 }
 
+// Complete returns completion candidates for the current interactive shell input.
 func (s *handler) Complete(buffer string) repl.Completion {
 	prefix, ok := commandCompletionPrefix(buffer)
 	if !ok {
@@ -174,10 +177,14 @@ func (s *handler) Complete(buffer string) repl.Completion {
 	if len(matches) == 1 {
 		match := matches[0]
 		if match == prefix {
-			return repl.Completion{Insert: " "}
+			return repl.Completion{
+				Insert: " ",
+			}
 		}
 
-		return repl.Completion{Insert: match[len(prefix):] + " "}
+		return repl.Completion{
+			Insert: match[len(prefix):] + " ",
+		}
 	}
 
 	return repl.Completion{
@@ -204,6 +211,7 @@ func commandCompletionPrefix(buffer string) (string, bool) {
 	return fields[0], true
 }
 
+// Eval evaluates one shell input through the registered command context.
 func (s *handler) Eval(line string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

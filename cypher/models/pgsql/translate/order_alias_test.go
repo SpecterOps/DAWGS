@@ -11,21 +11,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDomainObjectIDOrderByLimit checks ordering and pagination through a projected object ID alias.
 func TestDomainObjectIDOrderByLimit(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		for _, tc := range []struct {
+			// query supplies the source query containing the projected object ID alias.
 			query string
+			// order contains the expected SQL ordering expression.
 			order string
 		}{
-			{`MATCH (n:Domain) RETURN n LIMIT 10`, ``},
-			{`MATCH (n:Domain) RETURN n ORDER BY n.objectid LIMIT 10`, ` order by ((s0.n0).properties -> E'objectid') limit 10`},
-			{`MATCH (n:Domain) RETURN n ORDER BY n.objectid ASC LIMIT 10`, ` order by ((s0.n0).properties -> E'objectid') limit 10`},
-			{`MATCH (n:Domain) RETURN n ORDER BY n.objectid DESC LIMIT 10`, ` order by ((s0.n0).properties -> E'objectid') desc limit 10`},
+			{
+				query: `MATCH (n:Domain) RETURN n LIMIT 10`,
+				order: ``,
+			},
+			{
+				query: `MATCH (n:Domain) RETURN n ORDER BY n.objectid LIMIT 10`,
+				order: ` order by ((s0.n0).properties -> E'objectid') limit 10`,
+			},
+			{
+				query: `MATCH (n:Domain) RETURN n ORDER BY n.objectid ASC LIMIT 10`,
+				order: ` order by ((s0.n0).properties -> E'objectid') limit 10`,
+			},
+			{
+				query: `MATCH (n:Domain) RETURN n ORDER BY n.objectid DESC LIMIT 10`,
+				order: ` order by ((s0.n0).properties -> E'objectid') desc limit 10`,
+			},
 		} {
 			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
 				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
 				require.NoError(t, err)
-				translated, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				translated, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{
+					OptimizerMode: mode,
+				})
 				require.NoError(t, err)
 				formatted, err := Translated(translated)
 				require.NoError(t, err)
@@ -42,6 +59,7 @@ func TestDomainObjectIDOrderByLimit(t *testing.T) {
 	}
 }
 
+// TestTailOrderAliasExpressions checks alias resolution for expressions used by the final ORDER BY clause.
 func TestTailOrderAliasExpressions(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		for _, tc := range []struct {
@@ -50,19 +68,45 @@ func TestTailOrderAliasExpressions(t *testing.T) {
 			// order is the SQL substring expected in the ordering expression.
 			order string
 		}{
-			{query: `MATCH (n:User) RETURN n.k AS x ORDER BY x + 0`, order: `properties`},
-			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY x`, order: `i0.i0`},
-			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY ((x))`, order: `i0.i0`},
-			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY i0 + 0`, order: `10 - i0`},
-			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY -i0`, order: `(10 - i0)`},
-			{query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY toString(i0)`, order: `(10 - i0)`},
-			{query: `MATCH (n:User) RETURN sum(n.k) AS x ORDER BY x + 0`, order: `sum(`},
-			{query: `MATCH (n:User) RETURN n.k AS s0 ORDER BY coalesce(s0, 0)`, order: `properties`},
+			{
+				query: `MATCH (n:User) RETURN n.k AS x ORDER BY x + 0`,
+				order: `properties`,
+			},
+			{
+				query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY x`,
+				order: `i0.i0`,
+			},
+			{
+				query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY ((x))`,
+				order: `i0.i0`,
+			},
+			{
+				query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY i0 + 0`,
+				order: `10 - i0`,
+			},
+			{
+				query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY -i0`,
+				order: `(10 - i0)`,
+			},
+			{
+				query: `UNWIND [1,2,3] AS x RETURN 10-x AS i0 ORDER BY toString(i0)`,
+				order: `(10 - i0)`,
+			},
+			{
+				query: `MATCH (n:User) RETURN sum(n.k) AS x ORDER BY x + 0`,
+				order: `sum(`,
+			},
+			{
+				query: `MATCH (n:User) RETURN n.k AS s0 ORDER BY coalesce(s0, 0)`,
+				order: `properties`,
+			},
 		} {
 			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
 				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
 				require.NoError(t, err)
-				translated, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				translated, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{
+					OptimizerMode: mode,
+				})
 				require.NoError(t, err)
 				query := translated.Statement.(pgsql.Query)
 				require.Len(t, query.OrderBy, 1)

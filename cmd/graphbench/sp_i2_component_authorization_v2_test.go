@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestValidateSPI2V2ComponentAuthorization checks authorization requirements for the component experiment's capture modes.
 func TestValidateSPI2V2ComponentAuthorization(t *testing.T) {
 	protocolSHA256 := strings.Repeat("a", 64)
 	authorization := validSPI2V2ComponentAuthorization(protocolSHA256)

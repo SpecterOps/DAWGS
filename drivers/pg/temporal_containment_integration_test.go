@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestPostgreSQLTemporalComponentsReturnTranslationError checks that unsupported temporal component lookups fail without compiler panics.
+//
 // Temporal constructions with an argument panicked through the compiler before
 // containment; the driver must now surface an explicit translation error for
 // their unsupported component lookups, both on the first compilation and on a
@@ -26,9 +28,21 @@ func TestPostgreSQLTemporalComponentsReturnTranslationError(t *testing.T) {
 		// message is the diagnostic substring expected for the rejected query.
 		message string
 	}{
-		{name: "datetime literal epochmillis", query: `RETURN datetime('2020-01-01').epochmillis AS v`, message: "unsupported temporal type component epochmillis on cast type timestamp with time zone"},
-		{name: "date property year", query: `MATCH (n:PGV2IntegrationNode) RETURN date(n.name).year AS v`, message: "unsupported temporal type component year on cast type date"},
-		{name: "where datetime comparison", query: `MATCH (n:PGV2IntegrationNode) WHERE datetime('2020-01-01').epochmillis > 0 RETURN n`, message: "unsupported temporal type component epochmillis on cast type timestamp with time zone"},
+		{
+			name:    "datetime literal epochmillis",
+			query:   `RETURN datetime('2020-01-01').epochmillis AS v`,
+			message: "unsupported temporal type component epochmillis on cast type timestamp with time zone",
+		},
+		{
+			name:    "date property year",
+			query:   `MATCH (n:PGV2IntegrationNode) RETURN date(n.name).year AS v`,
+			message: "unsupported temporal type component year on cast type date",
+		},
+		{
+			name:    "where datetime comparison",
+			query:   `MATCH (n:PGV2IntegrationNode) WHERE datetime('2020-01-01').epochmillis > 0 RETURN n`,
+			message: "unsupported temporal type component epochmillis on cast type timestamp with time zone",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for attempt := range 2 {

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestKindCacheStableRefreshBeforeFirstQuery checks initial cache reconciliation within a stable transaction snapshot.
 func TestKindCacheStableRefreshBeforeFirstQuery(t *testing.T) {
 	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
 		t.Run(string(isolation), func(t *testing.T) {
@@ -19,8 +20,16 @@ func TestKindCacheStableRefreshBeforeFirstQuery(t *testing.T) {
 			kind := graph.StringKind("SnapshotKind")
 			cache := manager.kindCache
 			require.True(t, cache.replace(cache.current.Load(), cache.requested.Load(), map[graph.Kind]int16{kind: 1}, false, func() {}))
-			manager.setDefaultGraph(model.Graph{ID: 1}, graph.Graph{Name: "snapshot"})
-			cfg := &Config{Options: pgx.TxOptions{IsoLevel: isolation}}
+			manager.setDefaultGraph(model.Graph{
+				ID: 1,
+			}, graph.Graph{
+				Name: "snapshot",
+			})
+			cfg := &Config{
+				Options: pgx.TxOptions{
+					IsoLevel: isolation,
+				},
+			}
 			tx, err := newTransactionWrapper(context.Background(), nil, manager, cfg, false)
 			require.NoError(t, err)
 			mock, err := pgxmock.NewConn()
@@ -49,14 +58,23 @@ func TestKindCacheStableRefreshBeforeFirstQuery(t *testing.T) {
 	}
 }
 
+// TestKindMapperStableCatalogReconciliationFailure checks that stable-snapshot catalog errors propagate without partial adoption.
 func TestKindMapperStableCatalogReconciliationFailure(t *testing.T) {
 	manager := testKindManager(t)
 	known := graph.StringKind("Known")
 	require.True(t, manager.kindCache.merge(map[graph.Kind]int16{known: 1}, 0))
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
-	tx := &transaction{ctx: context.Background(), schemaManager: manager, tx: mock, isolation: pgx.RepeatableRead}
-	mapper := &transactionKindMapper{tx: tx, snapshot: manager.kindCache.current.Load()}
+	tx := &transaction{
+		ctx:           context.Background(),
+		schemaManager: manager,
+		tx:            mock,
+		isolation:     pgx.RepeatableRead,
+	}
+	mapper := &transactionKindMapper{
+		tx:       tx,
+		snapshot: manager.kindCache.current.Load(),
+	}
 	tx.kindMapper = mapper
 	mapper.learn(graph.StringKind("Learned"), 2)
 	before := mapper.snapshot

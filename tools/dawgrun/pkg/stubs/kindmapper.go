@@ -17,6 +17,7 @@ var (
 
 type KindMap map[int16]graph.Kind
 
+// Invert builds the reverse kind-to-ID lookup from an ID-to-kind map.
 func (s KindMap) Invert() map[graph.Kind]int16 {
 	inverse := make(map[graph.Kind]int16)
 	for kindID, kind := range s {
@@ -59,6 +60,7 @@ func MapperFromKindMap(kindMap KindMap) *DumbKindMapper {
 	}
 }
 
+// MapKinds maps known kinds to IDs and rejects the first unregistered kind.
 func (s *DumbKindMapper) MapKinds(ctx context.Context, kinds graph.Kinds) ([]int16, error) {
 	kindIDs := make([]int16, len(kinds))
 	for idx, kind := range kinds {
@@ -90,6 +92,7 @@ func (s *DumbKindMapper) AssertKinds(ctx context.Context, kinds graph.Kinds) ([]
 	return kindIDs, nil
 }
 
+// GetKindByID returns a registered kind or the missing-ID sentinel.
 func (s *DumbKindMapper) GetKindByID(id int16) (graph.Kind, error) {
 	if kind, ok := s.idToKind[id]; !ok {
 		return nil, fmt.Errorf("%w: %d", ErrNoSuchKindID, id)
@@ -98,6 +101,7 @@ func (s *DumbKindMapper) GetKindByID(id int16) (graph.Kind, error) {
 	}
 }
 
+// GetIDByKind returns a registered kind ID or the missing-kind sentinel.
 func (s *DumbKindMapper) GetIDByKind(kind graph.Kind) (int16, error) {
 	if kindID, ok := s.kindToID[kind]; !ok {
 		return -1, fmt.Errorf("%w: %v", ErrNoSuchKind, kind)

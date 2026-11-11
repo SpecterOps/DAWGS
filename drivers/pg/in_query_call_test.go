@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// inQueryCallCases lists unsupported in-query procedure calls and their expected diagnostics.
 func inQueryCallCases() []struct {
 	// source is the query text supplied to the parser or rewriter.
 	source string
@@ -37,7 +38,10 @@ func inQueryCallCases() []struct {
 				source string
 				// message is the diagnostic substring expected for the rejected query.
 				message string
-			}{source: fmt.Sprintf(template, invocation), message: "in-query CALL is not supported"})
+			}{
+				source:  fmt.Sprintf(template, invocation),
+				message: "in-query CALL is not supported",
+			})
 		}
 	}
 	return cases

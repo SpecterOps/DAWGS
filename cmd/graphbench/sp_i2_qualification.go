@@ -2188,6 +2188,8 @@ func selectedCorpusContainsSPI2Holdout(corpus ScaleCorpus) bool {
 	return false
 }
 
+// selectRunnableScaleCorpusWithSPI2Protection excludes the protected holdout unless its exact name or protocol tag is selected.
+//
 // selectRunnableScaleCorpus keeps the protected SP-I2 holdout out of ordinary
 // GraphBench selection. The holdout becomes selectable only through its exact
 // protocol tag or an exact case name; database capture then passes through the
@@ -2260,8 +2262,12 @@ func selectRunnableScaleCorpusWithSPI2Protection(corpus ScaleCorpus, selectors C
 	if err != nil {
 		return ScaleCorpus{}, SelectionManifest{}, err
 	}
-	filtered := ScaleCorpus{Cases: make([]ScaleCase, 0, len(selectedCorpus.Cases))}
-	protected := ScaleCorpus{Cases: make([]ScaleCase, 0, len(cohort.holdoutKeys))}
+	filtered := ScaleCorpus{
+		Cases: make([]ScaleCase, 0, len(selectedCorpus.Cases)),
+	}
+	protected := ScaleCorpus{
+		Cases: make([]ScaleCase, 0, len(cohort.holdoutKeys)),
+	}
 	formalV2, err := canonicalSPI2V2FormalCohort()
 	if err != nil {
 		return ScaleCorpus{}, SelectionManifest{}, err
@@ -2300,7 +2306,11 @@ func selectRunnableScaleCorpusWithSPI2Protection(corpus ScaleCorpus, selectors C
 			return ScaleCorpus{}, SelectionManifest{}, err
 		}
 		for _, testCase := range selectedCorpus.Cases {
-			key := performanceKey{dataset: testCase.Dataset, name: testCase.Name, backend: ModePostgresSQL}
+			key := performanceKey{
+				dataset: testCase.Dataset,
+				name:    testCase.Name,
+				backend: ModePostgresSQL,
+			}
 			if _, isProtected := spI1Cohort.holdoutKeys[key]; isProtected {
 				protected.Cases = append(protected.Cases, testCase)
 			}

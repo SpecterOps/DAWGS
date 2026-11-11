@@ -44,6 +44,7 @@ func TestPredicateTypeTranslation(t *testing.T) {
 	}
 }
 
+// TestUnwindStringPredicatesUseElementTypes checks string predicates against the element types produced by UNWIND.
 func TestUnwindStringPredicatesUseElementTypes(t *testing.T) {
 	for _, mode := range []OptimizerMode{OptimizerEnabled, OptimizerDisabled} {
 		for _, tc := range []struct {
@@ -52,13 +53,21 @@ func TestUnwindStringPredicatesUseElementTypes(t *testing.T) {
 			// fragment is the SQL substring required in the translation.
 			fragment string
 		}{
-			{query: `UNWIND [123] AS x RETURN x STARTS WITH '1' AS value`, fragment: "(null)::text like"},
-			{query: `UNWIND ['123'] AS x RETURN x =~ '1.*' AS value`, fragment: "(i0)::text ~"},
+			{
+				query:    `UNWIND [123] AS x RETURN x STARTS WITH '1' AS value`,
+				fragment: "(null)::text like",
+			},
+			{
+				query:    `UNWIND ['123'] AS x RETURN x =~ '1.*' AS value`,
+				fragment: "(i0)::text ~",
+			},
 		} {
 			t.Run(string(mode)+"/"+tc.query, func(t *testing.T) {
 				parsed, err := frontend.ParseCypher(frontend.NewContext(), tc.query)
 				require.NoError(t, err)
-				result, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{OptimizerMode: mode})
+				result, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{
+					OptimizerMode: mode,
+				})
 				require.NoError(t, err)
 				formatted, err := Translated(result)
 				require.NoError(t, err)

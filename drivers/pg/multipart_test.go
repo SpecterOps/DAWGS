@@ -61,15 +61,19 @@ var multipartSQLMatcher = pgxmock.QueryMatcherFunc(func(expected, actual string)
 // multipartObservedTx inspects arguments before pgxmock expands named bindings
 // and consumes execution options, preserving coverage of the caller's protocol.
 type multipartObservedTx struct {
+	// Tx provides transaction operations delegated by the observation wrapper.
 	pgx.Tx
+	// inspect checks the SQL statement and bound arguments before execution.
 	inspect func(string, []any)
 }
 
+// Exec observes the statement and arguments before delegating execution to the wrapped transaction.
 func (s multipartObservedTx) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
 	s.inspect(sql, arguments)
 	return s.Tx.Exec(ctx, sql, arguments...)
 }
 
+// Query observes the statement and arguments before delegating a row-producing query.
 func (s multipartObservedTx) Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error) {
 	s.inspect(sql, arguments)
 	return s.Tx.Query(ctx, sql, arguments...)
@@ -79,6 +83,7 @@ func (s multipartObservedTx) Query(ctx context.Context, sql string, arguments ..
 // parameters. Semantic values and map ownership are checked before rewriting.
 type multipartAnyBindings struct{}
 
+// RewriteQuery exercises the multipart test's query-rewriting protocol.
 func (s multipartAnyBindings) RewriteQuery(ctx context.Context, conn *pgx.Conn, sql string, arguments []any) (string, []any, error) {
 	rewrittenSQL, bindings, err := (pgx.NamedArgs{}).RewriteQuery(ctx, conn, sql, arguments)
 	for index := range bindings {
@@ -153,14 +158,26 @@ func TestMultipartWriteDetectionPreservesOrdinaryQueries(t *testing.T) {
 	}
 }
 
+// TestMultipartExecutesDistinctStageBindingsAndPreservesProtocol checks stage-specific parameters across the configured query protocols.
 func TestMultipartExecutesDistinctStageBindingsAndPreservesProtocol(t *testing.T) {
 	for _, protocol := range []struct {
-		name       string
+		// name identifies the protocol configuration in subtest output.
+		name string
+		// configured selects the query execution mode requested by the driver.
 		configured pgx.QueryExecMode
-		executed   pgx.QueryExecMode
+		// executed contains the execution mode expected at the underlying transaction.
+		executed pgx.QueryExecMode
 	}{
-		{"default_avoids_prepared_temp_relation_oids", pgx.QueryExecModeCacheStatement, pgx.QueryExecModeExec},
-		{"simple_protocol", pgx.QueryExecModeSimpleProtocol, pgx.QueryExecModeSimpleProtocol},
+		{
+			name:       "default_avoids_prepared_temp_relation_oids",
+			configured: pgx.QueryExecModeCacheStatement,
+			executed:   pgx.QueryExecModeExec,
+		},
+		{
+			name:       "simple_protocol",
+			configured: pgx.QueryExecModeSimpleProtocol,
+			executed:   pgx.QueryExecModeSimpleProtocol,
+		},
 	} {
 		t.Run(protocol.name, func(t *testing.T) {
 			owner, mock := newMultipartMockTransaction(t, multipartSQLMatcher)
@@ -171,7 +188,10 @@ func TestMultipartExecutesDistinctStageBindingsAndPreservesProtocol(t *testing.T
 			parameters := map[string]any{"value": "current-caller-value"}
 			var matchers []*multipartBindingMatcher
 			for _, literal := range []string{"stage-alpha", "stage-beta", "stage-final"} {
-				matcher := &multipartBindingMatcher{literal: literal, callerValue: parameters["value"].(string)}
+				matcher := &multipartBindingMatcher{
+					literal:     literal,
+					callerValue: parameters["value"].(string),
+				}
 				for _, other := range []string{"stage-alpha", "stage-beta", "stage-final"} {
 					if other != literal {
 						matcher.otherLiterals = append(matcher.otherLiterals, other)
@@ -180,22 +200,25 @@ func TestMultipartExecutesDistinctStageBindingsAndPreservesProtocol(t *testing.T
 				matchers = append(matchers, matcher)
 			}
 			stage := 0
-			owner.tx = multipartObservedTx{Tx: owner.tx, inspect: func(sql string, arguments []any) {
-				if strings.HasPrefix(sql, "drop table ") {
-					return
-				}
-				require.Less(t, stage, len(matchers))
-				require.NotEmpty(t, arguments)
-				require.Equal(t, protocol.executed, arguments[0])
-				if stage == len(matchers)-1 {
-					require.Len(t, arguments, 3)
-					require.Equal(t, owner.queryResultsFormat, arguments[1])
-				} else {
-					require.Len(t, arguments, 2)
-				}
-				require.True(t, matchers[stage].Match(arguments[len(arguments)-1]))
-				stage++
-			}}
+			owner.tx = multipartObservedTx{
+				Tx: owner.tx,
+				inspect: func(sql string, arguments []any) {
+					if strings.HasPrefix(sql, "drop table ") {
+						return
+					}
+					require.Less(t, stage, len(matchers))
+					require.NotEmpty(t, arguments)
+					require.Equal(t, protocol.executed, arguments[0])
+					if stage == len(matchers)-1 {
+						require.Len(t, arguments, 3)
+						require.Equal(t, owner.queryResultsFormat, arguments[1])
+					} else {
+						require.Len(t, arguments, 2)
+					}
+					require.True(t, matchers[stage].Match(arguments[len(arguments)-1]))
+					stage++
+				},
+			}
 			for range matchers[:2] {
 				mock.ExpectExec("materialize").WithArgs(multipartAnyBindings{}).WillReturnResult(pgxmock.NewResult("SELECT", 1))
 			}
@@ -226,6 +249,7 @@ func TestMultipartExecutesDistinctStageBindingsAndPreservesProtocol(t *testing.T
 	}
 }
 
+// TestMultipartExecutionFailuresPreventCommit checks that a failed multipart stage aborts the transaction.
 func TestMultipartExecutionFailuresPreventCommit(t *testing.T) {
 	for _, failingStage := range []string{"intermediate", "final"} {
 		t.Run(failingStage, func(t *testing.T) {

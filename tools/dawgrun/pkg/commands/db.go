@@ -60,6 +60,7 @@ func listConnectionsCmd() CommandDesc {
 	}
 }
 
+// openCmd defines the shell command that opens a configured database connection.
 func openCmd() CommandDesc {
 	flagSet := flag.NewFlagSet("open", flag.ContinueOnError)
 

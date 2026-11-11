@@ -213,18 +213,27 @@ func TestDBContextAnEmptyGraph(t *testing.T) {
 	}
 }
 
+// TestDBContextResetBeforeScenario checks that a scenario opens its session and clears prior result state.
 func TestDBContextResetBeforeScenario(t *testing.T) {
 	testContext := context.WithValue(context.Background(), struct{}{}, "scenario")
 	oldDatabase := &stubDatabase{}
 	nodeQuery := &stubNodeQuery{}
 	database := &stubDatabase{
-		transaction: &stubTransaction{nodeQuery: nodeQuery},
+		transaction: &stubTransaction{
+			nodeQuery: nodeQuery,
+		},
 	}
 	databaseContext := &dbContext{
 		db: oldDatabase,
 		openSession: func(opts integration.Options) (*integration.Session, error) {
-			require.Equal(t, &graph.Schema{DefaultGraph: graph.Graph{Name: "dawgs-bdd"}}, opts.Schema)
-			return &integration.Session{DB: database}, nil
+			require.Equal(t, &graph.Schema{
+				DefaultGraph: graph.Graph{
+					Name: "dawgs-bdd",
+				},
+			}, opts.Schema)
+			return &integration.Session{
+				DB: database,
+			}, nil
 		},
 		beforeExecution: graphSnapshot{
 			NodesCount:         2,
@@ -252,34 +261,58 @@ func TestDBContextResetBeforeScenario(t *testing.T) {
 	require.Nil(t, databaseContext.actualRows)
 }
 
+// TestDBContextResetBeforeScenarioReturnsCleanupError checks that graph reset failures propagate from scenario setup.
 func TestDBContextResetBeforeScenarioReturnsCleanupError(t *testing.T) {
 	deleteErr := errors.New("failed to delete nodes")
 	writeErr := errors.New("failed to open write transaction")
 	tests := []struct {
-		name         string
-		deleteErr    error
-		writeErr     error
-		expectedErr  error
+		// name identifies the graph cleanup failure scenario.
+		name string
+		// deleteErr injects a node-deletion failure into the transaction delegate.
+		deleteErr error
+		// writeErr injects a failure at the write-transaction boundary.
+		writeErr error
+		// expectedErr identifies the error that scenario setup must preserve.
+		expectedErr error
+		// expectDelete reports whether setup is expected to reach node deletion.
 		expectDelete bool
 	}{
-		{name: "node deletion error", deleteErr: deleteErr, expectedErr: deleteErr, expectDelete: true},
-		{name: "write transaction error", writeErr: writeErr, expectedErr: writeErr},
+		{
+			name:         "node deletion error",
+			deleteErr:    deleteErr,
+			expectedErr:  deleteErr,
+			expectDelete: true,
+		},
+		{
+			name:        "write transaction error",
+			writeErr:    writeErr,
+			expectedErr: writeErr,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testContext := context.WithValue(context.Background(), struct{}{}, test.name)
 			oldDatabase := &stubDatabase{}
-			nodeQuery := &stubNodeQuery{deleteErr: test.deleteErr}
+			nodeQuery := &stubNodeQuery{
+				deleteErr: test.deleteErr,
+			}
 			database := &stubDatabase{
-				transaction:         &stubTransaction{nodeQuery: nodeQuery},
+				transaction: &stubTransaction{
+					nodeQuery: nodeQuery,
+				},
 				writeTransactionErr: test.writeErr,
 			}
 			result := &stubResult{}
-			snapshot := graphSnapshot{NodesCount: 2, RelationshipsCount: 1}
+			snapshot := graphSnapshot{
+				NodesCount:         2,
+				RelationshipsCount: 1,
+			}
 			databaseContext := &dbContext{
 				db: oldDatabase,
 				openSession: func(integration.Options) (*integration.Session, error) {
-					return &integration.Session{DB: database}, nil
+					return &integration.Session{
+						DB: database,
+					}, nil
 				},
 				beforeExecution: snapshot,
 				actualResult:    result,
@@ -305,12 +338,16 @@ func TestDBContextResetBeforeScenarioReturnsCleanupError(t *testing.T) {
 	}
 }
 
+// TestDBContextResetBeforeScenarioReturnsSessionError checks that session creation failures stop scenario setup.
 func TestDBContextResetBeforeScenarioReturnsSessionError(t *testing.T) {
 	testContext := context.WithValue(context.Background(), struct{}{}, "scenario")
 	openErr := errors.New("failed to open session")
 	database := &stubDatabase{}
 	result := &stubResult{}
-	snapshot := graphSnapshot{NodesCount: 2, RelationshipsCount: 1}
+	snapshot := graphSnapshot{
+		NodesCount:         2,
+		RelationshipsCount: 1,
+	}
 	databaseContext := &dbContext{
 		db: database,
 		openSession: func(integration.Options) (*integration.Session, error) {
@@ -331,7 +368,10 @@ func TestDBContextResetBeforeScenarioReturnsSessionError(t *testing.T) {
 	require.Nil(t, databaseContext.db)
 	require.False(t, database.writeTransactionCalled)
 	require.Equal(t, []string{"existing fixture"}, databaseContext.testData)
-	require.Equal(t, graphSnapshot{NodesCount: 0, RelationshipsCount: 0}, databaseContext.beforeExecution)
+	require.Equal(t, graphSnapshot{
+		NodesCount:         0,
+		RelationshipsCount: 0,
+	}, databaseContext.beforeExecution)
 	require.Nil(t, databaseContext.actualResult)
 	require.Equal(t, 0, databaseContext.rowCount)
 	require.Nil(t, databaseContext.actualRows)

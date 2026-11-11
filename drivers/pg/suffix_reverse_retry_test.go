@@ -131,6 +131,7 @@ func TestSuffixReverseRetryFallbackResultDoesNotRecordCompletionAfterFailure(t *
 	require.Zero(t, completed)
 }
 
+// TestRawSuffixReverseRetryPublishesCompletedCandidate checks that a completed reverse candidate is published without fallback.
 func TestRawSuffixReverseRetryPublishesCompletedCandidate(t *testing.T) {
 	tx, mock := newSuffixRetryMockTransaction(t)
 	mock.ExpectExec("savepoint " + suffixReverseRetrySavepoint).WillReturnResult(pgxmock.NewResult("SAVEPOINT", 0))
@@ -143,13 +144,17 @@ func TestRawSuffixReverseRetryPublishesCompletedCandidate(t *testing.T) {
 	)
 	mock.ExpectExec("release savepoint " + suffixReverseRetrySavepoint).WillReturnResult(pgxmock.NewResult("RELEASE", 0))
 
-	result := tx.RawSuffixReverseRetry("candidate", "fallback", nil, nil, SuffixReverseRetryLimits{OutputRows: 2, OutputBytes: 64})
+	result := tx.RawSuffixReverseRetry("candidate", "fallback", nil, nil, SuffixReverseRetryLimits{
+		OutputRows:  2,
+		OutputBytes: 64,
+	})
 	require.NoError(t, result.Error())
 	require.True(t, result.Next())
 	require.Equal(t, []any{"candidate-row"}, result.Values())
 	require.False(t, result.Next())
 }
 
+// TestRawSuffixReverseRetryRollsBackCandidateBeforeExactForward checks rollback of rejected candidate work before exact forward execution.
 func TestRawSuffixReverseRetryRollsBackCandidateBeforeExactForward(t *testing.T) {
 	tx, mock := newSuffixRetryMockTransaction(t)
 	mock.ExpectExec("savepoint " + suffixReverseRetrySavepoint).WillReturnResult(pgxmock.NewResult("SAVEPOINT", 0))
@@ -170,7 +175,10 @@ func TestRawSuffixReverseRetryRollsBackCandidateBeforeExactForward(t *testing.T)
 		WithArgs("exact_forward_retry_complete", "EXPANSION-STEPWISE-FORWARD").
 		WillReturnResult(pgxmock.NewResult("SELECT", 1))
 
-	result := tx.RawSuffixReverseRetry("candidate", "fallback", nil, nil, SuffixReverseRetryLimits{OutputRows: 2, OutputBytes: 64})
+	result := tx.RawSuffixReverseRetry("candidate", "fallback", nil, nil, SuffixReverseRetryLimits{
+		OutputRows:  2,
+		OutputBytes: 64,
+	})
 	defer result.Close()
 	require.NoError(t, result.Error())
 	require.True(t, result.Next())

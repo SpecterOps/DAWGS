@@ -1615,6 +1615,7 @@ func TranslateForTool(ctx context.Context, cypherQuery *cypher.RegularQuery, kin
 	return translation, err
 }
 
+// translateWithOptions translates one Cypher tree using the supplied optimizer and graph settings.
 func translateWithOptions(ctx context.Context, cypherQuery *cypher.RegularQuery, kindMapper pgsql.KindMapper, parameters map[string]any, graphID int32, options Options, toolOptions ToolOptions, borrowQuery bool) (Result, map[string]string, error) {
 	normalizedOptions, err := options.normalized()
 	if err != nil {
@@ -2021,7 +2022,9 @@ func applyExpansionSuffixReverseRetryPolicy(plan *optimize.Plan, suffixRowLimit,
 		decision.SelectedStrategy = optimize.ExpansionSearchSuffixSeededReverse
 		decision.EmittedCandidates = []optimize.ExpansionSearchStrategy{optimize.ExpansionSearchSuffixSeededReverse}
 		decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryTransactionRetry
-		decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: effectiveSuffixRowLimit}
+		decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{
+			ReverseSeedRowLimit: effectiveSuffixRowLimit,
+		}
 		decision.Admission = optimize.ExpansionSearchAdmission{
 			StateLimit:             effectiveStateLimit,
 			OutputRowLimit:         effectiveOutputRowLimit,
@@ -2083,7 +2086,9 @@ func applyExpansionSuffixReverseGuardPolicy(plan *optimize.Plan, suffixRowLimit,
 		optimize.ExpansionSearchStepwiseForward,
 	}
 	decision.ExecutionBoundary = optimize.ExpansionSearchExecutionBoundaryGuardedDualArm
-	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{ReverseSeedRowLimit: effectiveSuffixRowLimit}
+	decision.ProbeCaps = optimize.ExpansionSearchProbeCaps{
+		ReverseSeedRowLimit: effectiveSuffixRowLimit,
+	}
 	decision.Admission = optimize.ExpansionSearchAdmission{
 		StateLimit:             effectiveStateLimit,
 		RequiresCompleteProbes: true,

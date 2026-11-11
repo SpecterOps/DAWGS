@@ -912,6 +912,7 @@ func (s Emitter) formatSet(output io.Writer, set *cypher.Set) error {
 	return nil
 }
 
+// formatDelete emits a DELETE clause while retaining its detached form and expression order.
 func (s Emitter) formatDelete(output io.Writer, deleteClause *cypher.Delete) error {
 	if deleteClause.Detach {
 		if _, err := io.WriteString(output, "detach delete "); err != nil {

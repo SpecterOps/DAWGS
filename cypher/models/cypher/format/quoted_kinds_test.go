@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestEmitRawKinds checks that emitted kind names preserve required backtick quoting and escapes.
 func TestEmitRawKinds(t *testing.T) {
 	for _, strip := range []bool{false, true} {
 		for _, tc := range []struct {
@@ -19,21 +20,52 @@ func TestEmitRawKinds(t *testing.T) {
 			// token is the Cypher spelling, including any backtick quoting.
 			token string
 		}{
-			{raw: "Base", token: "Base"}, {raw: "has space", token: "`has space`"},
-			{raw: "has`tick", token: "`has``tick`"}, {raw: "`Base`", token: "```Base```"},
+			{
+				raw:   "Base",
+				token: "Base",
+			}, {
+				raw:   "has space",
+				token: "`has space`",
+			},
+			{
+				raw:   "has`tick",
+				token: "`has``tick`",
+			}, {
+				raw:   "`Base`",
+				token: "```Base```",
+			},
 		} {
 			kind := graph.StringKind(tc.raw)
 			pattern := cypher.NewPatternPredicate()
-			pattern.AddElement(&cypher.NodePattern{Kinds: graph.Kinds{kind}})
-			pattern.AddElement(&cypher.RelationshipPattern{Kinds: graph.Kinds{kind}, Direction: graph.DirectionOutbound})
+			pattern.AddElement(&cypher.NodePattern{
+				Kinds: graph.Kinds{kind},
+			})
+			pattern.AddElement(&cypher.RelationshipPattern{
+				Kinds:     graph.Kinds{kind},
+				Direction: graph.DirectionOutbound,
+			})
 			pattern.AddElement(&cypher.NodePattern{})
 			for _, tc := range []struct {
+				// expr contains the kind expression whose spelling is being rendered.
 				expr cypher.Expression
+				// want contains the expected Cypher text including required quoting.
 				want string
 			}{
-				{kind, ":" + tc.token}, {graph.Kinds{kind}, ":" + tc.token},
-				{pattern, "(:" + tc.token + ")-[:" + tc.token + "]->()"},
-				{cypher.NewKindMatcher(cypher.NewVariableWithSymbol("n"), graph.Kinds{kind}, true), "n:" + tc.token},
+				{
+					expr: kind,
+					want: ":" + tc.token,
+				}, {
+					expr: graph.Kinds{kind},
+					want: ":" + tc.token,
+				},
+				{
+					expr: pattern,
+					want: "(:" + tc.token + ")-[:" + tc.token + "]->()",
+				},
+				{
+					expr: cypher.NewKindMatcher(cypher.NewVariableWithSymbol("n"), graph.Kinds{kind}, true),
+					want: "n:" + tc.token,
+				},
 			} {
 				var out bytes.Buffer
 				require.NoError(t, format.NewCypherEmitter(strip).WriteExpression(&out, tc.expr))

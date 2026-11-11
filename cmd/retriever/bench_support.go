@@ -24,6 +24,7 @@ func countGraphEntities(ctx context.Context, db graph.Database, targetGraph grap
 	return entitySnapshot.NodeCount, entitySnapshot.EdgeCount, nil
 }
 
+// countGraphEntitySnapshot counts nodes and relationships within the selected graph in one read transaction.
 func countGraphEntitySnapshot(ctx context.Context, db graph.Database, targetGraph graph.Graph) (graphEntitySnapshot, error) {
 	var entitySnapshot graphEntitySnapshot
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
@@ -66,6 +67,7 @@ func retrieverBatchLimit(remaining int64, batchSize int) int {
 	return batchSize
 }
 
+// retrieverNextProgressAt advances the progress checkpoint past processed entities or disables it at the end.
 func retrieverNextProgressAt(processed int64, planned int64, nextProgressAt int64) int64 {
 	nextCheckpoint := nextProgressAt
 

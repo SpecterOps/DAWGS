@@ -74,7 +74,9 @@ func stringPredicateOperand(operand pgsql.Expression) (pgsql.Expression, pgsql.E
 				return nil, nil, err
 			}
 		}
-		return pgsql.NewBinaryExpression(normalizedOperand, "#>>", pgsql.ArrayLiteral{CastType: pgsql.TextArray}),
+		return pgsql.NewBinaryExpression(normalizedOperand, "#>>", pgsql.ArrayLiteral{
+				CastType: pgsql.TextArray,
+			}),
 			pgsql.NewBinaryExpression(jsonbTypeof(normalizedOperand), pgsql.OperatorEquals, pgsql.NewLiteral("string", pgsql.Text)), nil
 	}
 	if dataType.IsKnown() && dataType != pgsql.Text {

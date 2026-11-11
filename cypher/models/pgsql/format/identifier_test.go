@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestIdentifierSpelling checks that SQL identifier formatting preserves the intended spelling and quoting.
 func TestIdentifierSpelling(t *testing.T) {
 	for _, tc := range []struct {
 		// input is the identifier spelling supplied to the SQL formatter.
@@ -15,22 +16,55 @@ func TestIdentifierSpelling(t *testing.T) {
 		// want is the expected formatted value or rewritten query fragment.
 		want string
 	}{
-		{input: "objectId", want: `"objectId"`},
-		{input: "object_id", want: "object_id"},
-		{input: "`a` + `b`", want: "\"`a` + `b`\""},
-		{input: "`object id`", want: `"object id"`},
-		{input: "`object``id`", want: "\"object`id\""},
-		{input: "`object\"id`", want: `"object""id"`},
-		{input: "`select`", want: `"select"`},
-		{input: "`*`", want: `"*"`},
-		{input: "*", want: "*"},
-		{input: "`étiquette`", want: `"étiquette"`},
+		{
+			input: "objectId",
+			want:  `"objectId"`,
+		},
+		{
+			input: "object_id",
+			want:  "object_id",
+		},
+		{
+			input: "`a` + `b`",
+			want:  "\"`a` + `b`\"",
+		},
+		{
+			input: "`object id`",
+			want:  `"object id"`,
+		},
+		{
+			input: "`object``id`",
+			want:  "\"object`id\"",
+		},
+		{
+			input: "`object\"id`",
+			want:  `"object""id"`,
+		},
+		{
+			input: "`select`",
+			want:  `"select"`,
+		},
+		{
+			input: "`*`",
+			want:  `"*"`,
+		},
+		{
+			input: "*",
+			want:  "*",
+		},
+		{
+			input: "`étiquette`",
+			want:  `"étiquette"`,
+		},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			got, err := format.Expression(pgsql.Identifier(tc.input), format.NewOutputBuilder())
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got.Statement)
-			aliased, err := format.Expression(pgsql.AliasedExpression{Expression: pgsql.NewLiteral(1, pgsql.Int), Alias: pgsql.AsOptionalIdentifier(pgsql.Identifier(tc.input))}, format.NewOutputBuilder())
+			aliased, err := format.Expression(pgsql.AliasedExpression{
+				Expression: pgsql.NewLiteral(1, pgsql.Int),
+				Alias:      pgsql.AsOptionalIdentifier(pgsql.Identifier(tc.input)),
+			}, format.NewOutputBuilder())
 			require.NoError(t, err)
 			require.Equal(t, "1 as "+tc.want, aliased.Statement)
 		})

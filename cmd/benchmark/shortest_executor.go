@@ -57,13 +57,20 @@ func benchmarkShortestPathExecutor(executor optimize.ShortestPathExecutor) bool 
 	}
 }
 
+// ReadTransaction applies repeatable-read isolation and benchmark planner settings before invoking the delegate.
 func (s *shortestExecutorBenchmarkDatabase) ReadTransaction(ctx context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 	transactionOptions := append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	return s.Database.ReadTransaction(ctx, func(tx graph.Transaction) error {
 		if err := applyPostgreSQLShortestPathBenchmarkSettings(tx, s.planCacheMode, s.jitEnabled); err != nil {
 			return err
 		}
-		return delegate(&shortestExecutorBenchmarkTransaction{Transaction: tx, ctx: ctx, mapper: s.mapper, graphID: s.graph.ID, executor: s.executor})
+		return delegate(&shortestExecutorBenchmarkTransaction{
+			Transaction: tx,
+			ctx:         ctx,
+			mapper:      s.mapper,
+			graphID:     s.graph.ID,
+			executor:    s.executor,
+		})
 	}, transactionOptions...)
 }
 
@@ -120,6 +127,7 @@ func newTraversalPolicyBenchmarkDatabase(database graph.Database, planCacheMode 
 	return &traversalPolicyBenchmarkDatabase{Database: database, planCacheMode: planCacheMode, jitEnabled: jitEnabled}, nil
 }
 
+// ReadTransaction applies repeatable-read isolation and benchmark planner settings before invoking the delegate.
 func (s *traversalPolicyBenchmarkDatabase) ReadTransaction(ctx context.Context, delegate graph.TransactionDelegate, options ...graph.TransactionOption) error {
 	transactionOptions := append(options, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
 	return s.Database.ReadTransaction(ctx, func(tx graph.Transaction) error {

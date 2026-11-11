@@ -39,15 +39,24 @@ type graphSnapshot struct {
 	RelationshipsCount int64
 }
 
+// dbContext owns the active database session and the state needed by BDD query assertions.
 type dbContext struct {
-	db              graph.Database
-	openSession     func(integration.Options) (*integration.Session, error)
-	testData        []string
+	// db owns the active scenario's database connection.
+	db graph.Database
+	// openSession overrides session creation in lifecycle tests; nil selects the normal opener.
+	openSession func(integration.Options) (*integration.Session, error)
+	// testData lists graph fixtures available to the scenario setup steps.
+	testData []string
+	// beforeExecution records graph cardinalities before the query under test.
 	beforeExecution graphSnapshot
-	afterExecution  graphSnapshot
-	actualResult    graph.Result
-	rowCount        int
-	actualRows      [][]string
+	// afterExecution records graph cardinalities used to compare query side effects.
+	afterExecution graphSnapshot
+	// actualResult retains the executed query's result metadata for scenario assertions.
+	actualResult graph.Result
+	// rowCount records the number of rows consumed from the query result.
+	rowCount int
+	// actualRows stores formatted result values for scenario table comparisons.
+	actualRows [][]string
 }
 
 // resetBeforeScenario clears persistent graph data and scenario-local result state.
@@ -81,6 +90,7 @@ func (s *dbContext) resetBeforeScenario(ctx context.Context, _ *godog.Scenario) 
 	return ctx, nil
 }
 
+// closeDBSession clears scenario data and closes the database, preserving both cleanup errors.
 func (s *dbContext) closeDBSession(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
 	if s.db == nil {
 		return ctx, nil
@@ -129,6 +139,7 @@ func (s *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
 	return nil
 }
 
+// anyGraph loads one of the configured graph fixtures into the scenario database.
 func (s *dbContext) anyGraph(ctx context.Context) error {
 	randomIndex := rand.Intn(len(s.testData))
 	file, err := os.Open(s.testData[randomIndex])
@@ -297,6 +308,7 @@ func (s *dbContext) theResultShouldBeInAnyOrder(expectedTable *godog.Table) erro
 	return nil
 }
 
+// theResultShouldBeEmpty rejects a scenario result that contains any rows.
 func (s *dbContext) theResultShouldBeEmpty() error {
 
 	if s.rowCount != 0 || len(s.actualRows) != 0 {
@@ -373,6 +385,7 @@ func (s *dbContext) noSideEffects(ctx context.Context) error {
 	return nil
 }
 
+// theSideEffectsShouldBe compares observed node and relationship changes with the scenario's expected effects.
 func (s *dbContext) theSideEffectsShouldBe(expectedTable *godog.Table) error {
 	actualRows := [][]string{}
 	if len(expectedTable.Rows) != 0 {

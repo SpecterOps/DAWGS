@@ -11,14 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestTransactionKindMapperOwnership checks that transactions retain their owned kind-mapping snapshots.
 func TestTransactionKindMapperOwnership(t *testing.T) {
 	ctx := context.Background()
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)
 	manager := NewSchemaManager(nil, 0)
 	t.Cleanup(func() { manager.parseCache.Close(); manager.compilationCache.Close() })
-	tx := &transaction{ctx: ctx, tx: mock, schemaManager: manager}
-	mapper := &transactionKindMapper{tx: tx}
+	tx := &transaction{
+		ctx:           ctx,
+		tx:            mock,
+		schemaManager: manager,
+	}
+	mapper := &transactionKindMapper{
+		tx: tx,
+	}
 	tx.kindMapper = mapper
 	known, fresh := graph.StringKind("Known"), graph.StringKind("Fresh")
 	mock.ExpectQuery("select id, name").WithArgs(pgxmock.AnyArg()).WillReturnRows(pgxmock.NewRows([]string{"id", "name"}).AddRow(int16(1), "Known"))
@@ -53,13 +60,19 @@ func TestTransactionKindMapperOwnership(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TestTransactionKindMapperErrors checks propagation of transaction-local kind mapping failures.
 func TestTransactionKindMapperErrors(t *testing.T) {
 	for _, op := range []string{"map", "assert", "retry"} {
 		t.Run(op, func(t *testing.T) {
 			mock, err := pgxmock.NewConn()
 			require.NoError(t, err)
-			tx := &transaction{ctx: context.Background(), tx: mock}
-			mapper := &transactionKindMapper{tx: tx}
+			tx := &transaction{
+				ctx: context.Background(),
+				tx:  mock,
+			}
+			mapper := &transactionKindMapper{
+				tx: tx,
+			}
 			tx.kindMapper = mapper
 			failure := errors.New("metadata failure")
 			if op == "retry" {
@@ -87,6 +100,7 @@ func TestTransactionKindMapperErrors(t *testing.T) {
 
 }
 
+// TestRawKindMappingUsesOwnedSnapshotWithoutNestedQuery checks that raw result mapping reuses the owned snapshot without another query.
 func TestRawKindMappingUsesOwnedSnapshotWithoutNestedQuery(t *testing.T) {
 	mock, err := pgxmock.NewConn()
 	require.NoError(t, err)

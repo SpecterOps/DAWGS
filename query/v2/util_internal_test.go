@@ -20,6 +20,7 @@ func TestIdentifierSetOrAndRemoveNilSafe(t *testing.T) {
 	require.True(t, set.Contains("kept"))
 }
 
+// TestValidateConstraintKindPredicatesPropagatesWalkErrors checks that invalid syntax trees retain their walker errors during validation.
 func TestValidateConstraintKindPredicatesPropagatesWalkErrors(t *testing.T) {
 	// Unsupported constraint roots fail the shared model walk before Build reaches
 	// kind-predicate validation; the validator still propagates the walk error.

@@ -52,43 +52,53 @@ type gatedDuplex struct {
 	release chan struct{}
 }
 
+// Clear removes all members from the wrapped bitmap.
 func (s gatedDuplex) Clear() {
 	s.inner.Clear()
 }
 
+// Add inserts values into the wrapped bitmap.
 func (s gatedDuplex) Add(values ...uint64) {
 	s.inner.Add(values...)
 }
 
+// Remove deletes a value from the wrapped bitmap.
 func (s gatedDuplex) Remove(value uint64) {
 	s.inner.Remove(value)
 }
 
+// Contains reports membership through the wrapped bitmap.
 func (s gatedDuplex) Contains(value uint64) bool {
 	return s.inner.Contains(value)
 }
 
+// CheckedAdd inserts a value and reports whether the wrapped bitmap changed.
 func (s gatedDuplex) CheckedAdd(value uint64) bool {
 	return s.inner.CheckedAdd(value)
 }
 
+// Cardinality returns the wrapped bitmap's member count.
 func (s gatedDuplex) Cardinality() uint64 {
 	return s.inner.Cardinality()
 }
 
+// Slice returns the wrapped bitmap's members as a slice.
 func (s gatedDuplex) Slice() []uint64 {
 	return s.inner.Slice()
 }
 
+// Each delegates member iteration to the wrapped bitmap.
 func (s gatedDuplex) Each(delegate func(value uint64) bool) {
 	s.inner.Each(delegate)
 }
 
+// Clone returns an ungated bitmap snapshot for lock-order checks.
 func (s gatedDuplex) Clone() Duplex[uint64] {
 	// Snapshots of this provider are ungated real bitmaps.
 	return s.inner.Clone()
 }
 
+// Or gates wrapper-to-wrapper unions to expose opposing lock acquisition.
 func (s gatedDuplex) Or(other Provider[uint64]) {
 	if _, isWrapper := other.(threadSafeDuplex[uint64]); isWrapper {
 		close(s.arrived)
@@ -103,14 +113,17 @@ func (s gatedDuplex) Or(other Provider[uint64]) {
 	}
 }
 
+// And intersects the wrapped bitmap with the supplied provider.
 func (s gatedDuplex) And(other Provider[uint64]) {
 	s.inner.And(other)
 }
 
+// AndNot removes the supplied provider's members from the wrapped bitmap.
 func (s gatedDuplex) AndNot(other Provider[uint64]) {
 	s.inner.AndNot(other)
 }
 
+// Xor applies symmetric difference to the wrapped bitmap.
 func (s gatedDuplex) Xor(other Provider[uint64]) {
 	s.inner.Xor(other)
 }

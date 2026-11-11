@@ -132,6 +132,7 @@ func NewSchemaManagerWithOptions(pool *pgxpool.Pool, graphQueryMemoryLimit size.
 	return newSchemaManagerWithOptionsAndProvider(pool, graphQueryMemoryLimit, options, nil)
 }
 
+// newSchemaManagerWithOptionsAndProvider binds schema operations to the configured transaction options and kind provider.
 func newSchemaManagerWithOptionsAndProvider(pool *pgxpool.Pool, graphQueryMemoryLimit size.Size, options DriverOptions, provider CypherTranslationCacheProvider) *SchemaManager {
 	normalizedOptions := normalizeDriverOptions(options)
 	compilationCache := newTranslationCache(normalizedOptions.TranslationCacheEntries)

@@ -37,6 +37,7 @@ func LoadConfig(configPath string) (Config, error) {
 	return config, nil
 }
 
+// Save persists the connection configuration at the requested file path.
 func (s Config) Save(configPath string) error {
 	if s.Connections == nil {
 		s.Connections = make(map[string]ConnectionConfig)

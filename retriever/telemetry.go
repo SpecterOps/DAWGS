@@ -61,6 +61,7 @@ func currentRSS() uint64 {
 	return residentPages * uint64(os.Getpagesize())
 }
 
+// logInfoWithRuntimeTelemetry adds the enabled process runtime observations to a structured progress log entry.
 func logInfoWithRuntimeTelemetry(message string, args ...any) {
 	telemetry := sampleRuntimeTelemetry()
 	telemetryArgs := append(args,

@@ -34,11 +34,16 @@ type ReachabilityCacheStats struct {
 // component/direction closure coordinate through it instead of duplicating
 // work during cold-start bursts.
 type ReachabilityCache struct {
-	components             ComponentGraph
-	inboundComponentReach  cache.Cache[uint64, cardinality.Duplex[uint64]]
+	// components stores the strongly connected component graph used for reachability queries.
+	components ComponentGraph
+	// inboundComponentReach retains bounded inbound component closures shared by traversals.
+	inboundComponentReach cache.Cache[uint64, cardinality.Duplex[uint64]]
+	// outboundComponentReach retains bounded outbound component closures shared by traversals.
 	outboundComponentReach cache.Cache[uint64, cardinality.Duplex[uint64]]
-	memoCapacity           int
-	inFlight               *reachFlight
+	// memoCapacity bounds traversal-local closure retention before bitmap eviction.
+	memoCapacity int
+	// inFlight coordinates concurrent computations of the same directional closure.
+	inFlight *reachFlight
 }
 
 // reachShardCount spreads shared-cache lock and statistics traffic across
@@ -60,6 +65,7 @@ func NewReachabilityCache(ctx context.Context, digraph container.DirectedGraph, 
 	return newReachabilityCache(NewComponentGraph(ctx, digraph), maxCacheSize)
 }
 
+// newReachabilityCache allocates bounded directional caches and flight coordination for an existing component graph.
 func newReachabilityCache(components ComponentGraph, maxCacheSize int) *ReachabilityCache {
 	shardFn := func(key uint64) uint64 { return key }
 
@@ -165,12 +171,18 @@ func (s *ReachabilityCache) cachedComponentReach(component uint64, direction gra
 // this traversal registered the component with the in-flight registry, the
 // registration to settle when the cursor completes.
 type reachCursor struct {
-	component   uint64
-	adjacent    []uint64
+	// component identifies the component whose adjacency is being expanded.
+	component uint64
+	// adjacent holds the borrowed or collected neighbor IDs for this expansion.
+	adjacent []uint64
+	// adjacentIdx tracks the next neighbor to visit within adjacent.
 	adjacentIdx int
-	reach       cardinality.Duplex[uint64]
-	parent      *reachCursor
-	lead        *reachLead
+	// reach accumulates the completed component closure for this cursor.
+	reach cardinality.Duplex[uint64]
+	// parent links to the cursor waiting for this expansion to finish.
+	parent *reachCursor
+	// lead records ownership of the corresponding in-flight closure, when acquired.
+	lead *reachLead
 }
 
 // NextAdjacent returns the next adjacent component identifier to be explored.
@@ -191,6 +203,7 @@ func (s *reachCursor) NextAdjacent() (uint64, bool) {
 // adjacency without copying, such as CSR-backed digraphs. The returned slice
 // aliases the digraph's storage and must never be mutated.
 type adjacencyProvider interface {
+	// AdjacentNodes returns adjacent IDs for the requested direction without callback iteration.
 	AdjacentNodes(node uint64, direction graph.Direction) []uint64
 }
 
@@ -209,13 +222,19 @@ func (s *ReachabilityCache) adjacencySlice(component uint64, direction graph.Dir
 // after their bitmaps are released, so losing a result cannot cause repeated
 // expansion of a completed subgraph. It retains IDs, not closure bitmaps.
 type reachMemo struct {
-	entries  map[uint64]cardinality.Duplex[uint64]
-	order    []uint64
-	head     int
+	// entries retains completed component closure bitmaps until FIFO eviction.
+	entries map[uint64]cardinality.Duplex[uint64]
+	// order records insertion order for bounded closure retention.
+	order []uint64
+	// head indexes the next candidate eviction slot in order.
+	head int
+	// capacity bounds retained closure bitmaps, with non-positive values leaving retention unbounded.
 	capacity int
-	evicted  cardinality.Duplex[uint64]
+	// evicted remembers completed component IDs after their closure bitmaps are released.
+	evicted cardinality.Duplex[uint64]
 }
 
+// newReachMemo creates a traversal-local FIFO without preallocating the full configured capacity.
 func newReachMemo(capacity int) reachMemo {
 	orderHint := capacity
 	if orderHint > 1024 {
@@ -229,11 +248,13 @@ func newReachMemo(capacity int) reachMemo {
 	}
 }
 
+// get returns a retained component closure and whether its bitmap is still available.
 func (s *reachMemo) get(component uint64) (cardinality.Duplex[uint64], bool) {
 	reach, known := s.entries[component]
 	return reach, known
 }
 
+// put retains a completed closure and records evicted component IDs to prevent repeated expansion.
 func (s *reachMemo) put(component uint64, reach cardinality.Duplex[uint64]) {
 	// Every call site puts only after a memo miss. Evicted results may be
 	// restored from the shared cache without expanding their subgraphs again.
@@ -266,6 +287,7 @@ func (s *reachMemo) put(component uint64, reach cardinality.Duplex[uint64]) {
 	}
 }
 
+// wasEvicted reports whether a completed component's closure bitmap has already been released.
 func (s *reachMemo) wasEvicted(component uint64) bool {
 	return s.evicted != nil && s.evicted.Contains(component)
 }
@@ -273,7 +295,9 @@ func (s *reachMemo) wasEvicted(component uint64) bool {
 // reachFlightKey identifies an in-progress closure computation. Direction is
 // part of the key because a component's inbound and outbound closures differ.
 type reachFlightKey struct {
+	// component identifies the component whose closure is being computed.
 	component uint64
+	// direction distinguishes inbound and outbound closures for the same component.
 	direction graph.Direction
 }
 
@@ -281,7 +305,9 @@ type reachFlightKey struct {
 // before done closes; a nil result means the leading traversal abandoned the
 // computation and waiters must compute the closure themselves.
 type reachFlightEntry struct {
-	done   chan struct{}
+	// done closes when the leader publishes a result or abandons its computation.
+	done chan struct{}
+	// result holds the published closure until waiting followers have observed settlement.
 	result cardinality.Duplex[uint64]
 }
 
@@ -294,7 +320,9 @@ type reachFlightEntry struct {
 // registrations of its own: leaders never wait, and pure followers lead
 // nothing, so no cycle of mutually waiting traversals can form.
 type reachFlight struct {
-	mu      sync.RWMutex
+	// mu protects access to the in-flight computation registry.
+	mu sync.RWMutex
+	// entries maps directional closure requests to their active leader entries.
 	entries map[reachFlightKey]*reachFlightEntry
 }
 
@@ -316,7 +344,9 @@ func (s *reachFlight) register(key reachFlightKey) (*reachFlightEntry, bool) {
 		return existing, false
 	}
 
-	entry := &reachFlightEntry{done: make(chan struct{})}
+	entry := &reachFlightEntry{
+		done: make(chan struct{}),
+	}
 	s.entries[key] = entry
 
 	return entry, true
@@ -339,8 +369,11 @@ func (s *reachFlight) complete(key reachFlightKey, entry *reachFlightEntry, resu
 // deferred cleanup can abandon registrations a panicked traversal never
 // completed.
 type reachLead struct {
-	key     reachFlightKey
-	entry   *reachFlightEntry
+	// key identifies the directional closure owned by this leader.
+	key reachFlightKey
+	// entry holds the completion signal and eventual shared result.
+	entry *reachFlightEntry
+	// settled prevents publishing or abandoning the same leadership twice.
 	settled bool
 }
 
@@ -355,6 +388,7 @@ func (s *ReachabilityCache) settleLead(lead *reachLead, result cardinality.Duple
 	lead.entry = nil
 }
 
+// abandonLeads settles unfinished flight leaders so waiting traversals can retry their work.
 func (s *ReachabilityCache) abandonLeads(leads []*reachLead) {
 	for _, lead := range leads {
 		if !lead.settled {
@@ -428,7 +462,10 @@ func (s *ReachabilityCache) componentReachMemoDFS(component uint64, direction gr
 
 	var rootLead *reachLead
 	if s.inFlight != nil {
-		rootKey := reachFlightKey{component: component, direction: direction}
+		rootKey := reachFlightKey{
+			component: component,
+			direction: direction,
+		}
 
 		if entry, leader := s.inFlight.register(rootKey); !leader {
 			// This traversal leads nothing yet, so waiting cannot deadlock.
@@ -441,7 +478,10 @@ func (s *ReachabilityCache) componentReachMemoDFS(component uint64, direction gr
 			// The leader abandoned the computation; fall through and compute
 			// locally without registering the root again.
 		} else {
-			rootLead = &reachLead{key: rootKey, entry: entry}
+			rootLead = &reachLead{
+				key:   rootKey,
+				entry: entry,
+			}
 			leads = append(leads, rootLead)
 			openLeads++
 		}
@@ -512,10 +552,16 @@ func (s *ReachabilityCache) componentReachMemoDFS(component uint64, direction gr
 
 			var lead *reachLead
 			if s.inFlight != nil {
-				adjacentKey := reachFlightKey{component: adjacentComponent, direction: direction}
+				adjacentKey := reachFlightKey{
+					component: adjacentComponent,
+					direction: direction,
+				}
 
 				if entry, leader := s.inFlight.register(adjacentKey); leader {
-					lead = &reachLead{key: adjacentKey, entry: entry}
+					lead = &reachLead{
+						key:   adjacentKey,
+						entry: entry,
+					}
 					leads = append(leads, lead)
 					openLeads++
 				} else if openLeads == 0 {

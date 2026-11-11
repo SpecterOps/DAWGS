@@ -89,6 +89,7 @@ func TestDecodeJSONValueExactInteger(t *testing.T) {
 	require.Equal(t, int64(4611686018427387905), value)
 }
 
+// BenchmarkJSONNumberDecoding compares decoding strategies while preserving exact JSON number representations.
 func BenchmarkJSONNumberDecoding(b *testing.B) {
 	for _, source := range []struct {
 		// name identifies this test case in subtest and benchmark output.
@@ -96,14 +97,28 @@ func BenchmarkJSONNumberDecoding(b *testing.B) {
 		// json is the JSON document supplied to the decoder.
 		json string
 	}{
-		{name: "scalar", json: "4611686018427387905"},
-		{name: "properties", json: `{"large":4611686018427387905,"name":"node","values":[1,2,3],"fraction":1.25}`},
+		{
+			name: "scalar",
+			json: "4611686018427387905",
+		},
+		{
+			name: "properties",
+			json: `{"large":4611686018427387905,"name":"node","values":[1,2,3],"fraction":1.25}`,
+		},
 	} {
 		for _, decoder := range []struct {
-			name      string
+			// name identifies the decoding strategy in benchmark output.
+			name string
+			// unmarshal decodes the representative payload with the selected number policy.
 			unmarshal func([]byte, any) error
 		}{
-			{"float64_reference", json.Unmarshal}, {"exact_numbers", unmarshalJSONNumbers},
+			{
+				name:      "float64_reference",
+				unmarshal: json.Unmarshal,
+			}, {
+				name:      "exact_numbers",
+				unmarshal: unmarshalJSONNumbers,
+			},
 		} {
 			b.Run(source.name+"/"+decoder.name, func(b *testing.B) {
 				data := []byte(source.json)

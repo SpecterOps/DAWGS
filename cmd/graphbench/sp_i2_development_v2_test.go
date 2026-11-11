@@ -64,6 +64,7 @@ func TestSPI2V2ReadinessOrderBalancesEveryArmAndPosition(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestValidateSPI2V2DevelopmentCaptureConfig checks development capture settings against the registered experiment protocol.
 func TestValidateSPI2V2DevelopmentCaptureConfig(t *testing.T) {
 	order, err := spI2V2DevelopmentOrder(4)
 	require.NoError(t, err)
@@ -116,6 +117,7 @@ func TestValidateSPI2V2DevelopmentCaptureConfig(t *testing.T) {
 	}
 }
 
+// TestValidateSPI2V2ReadinessCaptureConfig checks readiness capture settings against the required workload and mode restrictions.
 func TestValidateSPI2V2ReadinessCaptureConfig(t *testing.T) {
 	executor := optimize.ShortestPathExecutorS4CanonicalDistance
 	cfg := config{
@@ -160,6 +162,7 @@ func TestValidateSPI2V2ReadinessCaptureConfig(t *testing.T) {
 	}
 }
 
+// TestValidateSPI2V2ComponentCheckCaptureConfig checks the flags required to capture component verification evidence.
 func TestValidateSPI2V2ComponentCheckCaptureConfig(t *testing.T) {
 	executor := optimize.ShortestPathExecutorI2GuardedDistanceV2E1D
 	cfg := config{

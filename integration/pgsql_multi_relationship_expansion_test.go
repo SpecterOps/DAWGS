@@ -15,16 +15,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestPostgreSQLMultiRelationshipExpansionCompilerModes runs the shared relationship-disjunction templates in both compiler modes.
 func TestPostgreSQLMultiRelationshipExpansionCompilerModes(t *testing.T) {
 	runPostgreSQLTemplateCompilerModes(t, "multi_relationship_expansion_shapes")
 }
 
+// TestPostgreSQLMultiRelationshipExpansionPlan checks exact recursive frontier sizes while excluding wrong-type and disconnected decoys.
+//
 // Check admitted recursive rows, independently of wall-clock speed and chosen
 // indexes. Unrelated components and wrong types must never enter the frontier.
 func TestPostgreSQLMultiRelationshipExpansionPlan(t *testing.T) {
-	session := Open(t, Options{RequireDriver: pg.DriverName, SkipIfNoConnection: true, SkipIfDriverMismatch: true,
-		CleanupMode: CloseOnly, ExtraNodeKinds: graph.Kinds{graph.StringKind("MultiExpansionNode")},
-		ExtraEdgeKinds: graph.StringsToKinds([]string{"Okta_MemberOf", "Okta_HasRoleAssignment", "MultiExpansionOther"})})
+	session := Open(t, Options{
+		RequireDriver:        pg.DriverName,
+		SkipIfNoConnection:   true,
+		SkipIfDriverMismatch: true,
+		CleanupMode:          CloseOnly,
+		ExtraNodeKinds:       graph.Kinds{graph.StringKind("MultiExpansionNode")},
+		ExtraEdgeKinds:       graph.StringsToKinds([]string{"Okta_MemberOf", "Okta_HasRoleAssignment", "MultiExpansionOther"}),
+	})
 	driver := session.DB.(*pg.Driver)
 	defaultGraph, ok := driver.DefaultGraph()
 	require.True(t, ok)
@@ -37,7 +45,9 @@ func TestPostgreSQLMultiRelationshipExpansionPlan(t *testing.T) {
 						query := multiExpansionQuery([]string{fmt.Sprintf("Okta_MemberOf|Okta_HasRoleAssignment*1..%d", depth)}, false, "count(*)")
 						parsed, err := frontend.ParseCypher(frontend.NewContext(), query)
 						require.NoError(t, err)
-						translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), map[string]any{"root": ids["root"].Int64()}, defaultGraph.ID, translate.Options{OptimizerMode: mode})
+						translation, err := translate.TranslateWithOptions(session.Ctx, parsed, driver.KindMapper(), map[string]any{"root": ids["root"].Int64()}, defaultGraph.ID, translate.Options{
+							OptimizerMode: mode,
+						})
 						require.NoError(t, err)
 						sql, err := translate.Translated(translation)
 						require.NoError(t, err)

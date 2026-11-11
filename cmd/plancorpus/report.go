@@ -127,7 +127,9 @@ func buildSummary(records []PlanRecord, topN int) PlanSummary {
 		}
 		driver := driverCounts[record.Driver]
 		if driver == nil {
-			driver = &DriverSummary{Driver: record.Driver}
+			driver = &DriverSummary{
+				Driver: record.Driver,
+			}
 			driverCounts[record.Driver] = driver
 		}
 		driver.Records++

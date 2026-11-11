@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestOpenTraversalResourceFailureRollsBackWrites checks that traversal resource failures cannot commit preceding writes.
 func TestOpenTraversalResourceFailureRollsBackWrites(t *testing.T) {
 	driver := newDAWGS065Driver(t, 1)
 	setupDAWGS065Schema(t, driver)
@@ -44,8 +45,16 @@ func TestOpenTraversalResourceFailureRollsBackWrites(t *testing.T) {
 		// value is the input value supplied to the statement or setting.
 		value string
 	}{
-		{name: "states", setting: "dawgs.traversal_state_limit", value: "2"},
-		{name: "bytes", setting: "dawgs.traversal_byte_limit", value: "150"},
+		{
+			name:    "states",
+			setting: "dawgs.traversal_state_limit",
+			value:   "2",
+		},
+		{
+			name:    "bytes",
+			setting: "dawgs.traversal_byte_limit",
+			value:   "150",
+		},
 	} {
 		for _, query := range []string{
 			"MATCH (a:DAWGS065ResourceNode {i:0})-[:DAWGS065ResourceStep*]->(b) SET b.changed = true RETURN b",

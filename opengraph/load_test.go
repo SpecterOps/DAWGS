@@ -30,14 +30,23 @@ type recordingKindMapper struct {
 	err      error
 }
 
+// MapKindID returns an unused zero mapping for the graph-write test double.
 func (s *recordingKindMapper) MapKindID(context.Context, int16) (graph.Kind, error) { return nil, nil }
+
+// MapKindIDs returns an unused empty mapping for the graph-write test double.
 func (s *recordingKindMapper) MapKindIDs(context.Context, []int16) (graph.Kinds, error) {
 	return nil, nil
 }
+
+// MapKind returns an unused zero identifier for the graph-write test double.
 func (s *recordingKindMapper) MapKind(context.Context, graph.Kind) (int16, error) { return 0, nil }
+
+// MapKinds returns an unused empty identifier list for the graph-write test double.
 func (s *recordingKindMapper) MapKinds(context.Context, graph.Kinds) ([]int16, error) {
 	return nil, nil
 }
+
+// AssertKinds records requested kind registration and returns the configured assertion error.
 func (s *recordingKindMapper) AssertKinds(_ context.Context, kinds graph.Kinds) ([]int16, error) {
 	s.asserted = kinds
 	return nil, s.err
@@ -49,8 +58,10 @@ type kindMappedTestDatabase struct {
 	writeTransactionErr error
 }
 
+// KindMapper returns the mapper injected into the graph-write test database.
 func (s *kindMappedTestDatabase) KindMapper() pg.KindMapper { return s.mapper }
 
+// WriteTransaction returns the configured write failure without executing the graph-write delegate.
 func (s *kindMappedTestDatabase) WriteTransaction(context.Context, graph.TransactionDelegate, ...graph.TransactionOption) error {
 	return s.writeTransactionErr
 }

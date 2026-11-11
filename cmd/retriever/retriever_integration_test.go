@@ -38,6 +38,7 @@ import (
 	"github.com/specterops/dawgs/retriever"
 )
 
+// TestDumpLoadRoundTrip checks that exporting and importing a graph preserves the expected entities and properties.
 func TestDumpLoadRoundTrip(t *testing.T) {
 	connection := os.Getenv("CONNECTION_STRING")
 	if connection == "" {
@@ -140,8 +141,12 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected seeded graph counts: nodes=%d edges=%d", entitySnapshot.NodeCount, entitySnapshot.EdgeCount)
 	}
 
-	assertBoundedRetrieverScans(t, ctx, db, graph.Graph{Name: graphName}, entitySnapshot, batchSize)
-	assertSkipAndLimit(t, ctx, db, graph.Graph{Name: graphName}, seededNodeIDs, seededEdgeIDs)
+	assertBoundedRetrieverScans(t, ctx, db, graph.Graph{
+		Name: graphName,
+	}, entitySnapshot, batchSize)
+	assertSkipAndLimit(t, ctx, db, graph.Graph{
+		Name: graphName,
+	}, seededNodeIDs, seededEdgeIDs)
 
 	dumpDir := t.TempDir()
 	dumpResult, err := retriever.Dump(ctx, db, driverName, []retriever.GraphTarget{{
@@ -196,7 +201,10 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	archiveDumpDir := filepath.Join(archiveBase, "dumpdir")
 	archivePath := filepath.Join(archiveBase, "dump.tar")
 	var archiveOutput bytes.Buffer
-	runtime := commandRuntime{stdout: &archiveOutput, stderr: io.Discard}
+	runtime := commandRuntime{
+		stdout: &archiveOutput,
+		stderr: io.Discard,
+	}
 	if err := runtime.run(ctx, []string{
 		"dump", "-connection", connection, "-out", archiveDumpDir,
 		"-archive-out", archivePath,
@@ -262,7 +270,9 @@ func TestDumpLoadRoundTrip(t *testing.T) {
 	var loadedNodes []*graph.Node
 	var loadedEdges []*graph.Relationship
 	if err := db.ReadTransaction(ctx, func(tx graph.Transaction) error {
-		scopedTx := tx.WithGraph(graph.Graph{Name: graphName})
+		scopedTx := tx.WithGraph(graph.Graph{
+			Name: graphName,
+		})
 		var err error
 		if loadedNodes, err = ops.FetchNodes(scopedTx.Nodes()); err != nil {
 			return err
@@ -401,6 +411,7 @@ func assertStrictIDs(t *testing.T, entityName string, ids []graph.ID) {
 	}
 }
 
+// assertSkipAndLimit checks that an export's selection bounds produce the expected entity count.
 func assertSkipAndLimit(t *testing.T, ctx context.Context, db graph.Database, targetGraph graph.Graph, nodeIDs, edgeIDs []graph.ID) {
 	t.Helper()
 
