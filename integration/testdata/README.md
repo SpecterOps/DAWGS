@@ -523,12 +523,11 @@ Property-filtered open shortest searches additionally check that self-endpoint
 errors apply only to eligible roots, including terminals with outgoing edges,
 wrong-direction empty results, inbound searches and exact mutation targets.
 
-`all_shortest_path_pair_resolution.json` checks roots and terminals reached at
-different depths, relationship-distinct equal-length paths, longer alternatives
-to already resolved pairs, and unreachable endpoints. Label-filtered and
-prior-MATCH-bound roots share the same expectations on both backends. Mutations
-with and without RETURN verify the complete node state, including untouched
-unreachable targets. PostgreSQL driver-scoped tests exercise both unidirectional
-harness overloads and repeated calls on the same physical session. Open-ended
-shortestPath and allShortestPaths variants preserve prior-MATCH endpoint sets
-in reads and mutations, including multiple terminals.
+`shortest_paths_inline.json` executes the BED-9976 two-MATCH reproduction with
+`RETURN p,p2 LIMIT 500`, checking both named paths, their lengths and edge kinds.
+It also checks that open-ended and bounded (`1..4`) shortestPath searches
+preserve prior-MATCH endpoint sets, including roots and terminals reached at
+different depths and unreachable endpoints. Read and mutation variants share
+the same expectations on both backends. Mutation
+postconditions verify the complete node state, including untouched unreachable
+targets.
