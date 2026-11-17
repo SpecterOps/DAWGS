@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	// traversalStateLimitSetting names PostgreSQL's candidate trail admission budget.
+	// traversalStateLimitSetting names PostgreSQL's admitted traversal-work budget.
 	traversalStateLimitSetting = "dawgs.traversal_state_limit"
 
-	// traversalByteLimitSetting names PostgreSQL's cumulative estimated trail byte budget.
+	// traversalByteLimitSetting names PostgreSQL's cumulative estimated traversal-byte budget.
 	traversalByteLimitSetting = "dawgs.traversal_byte_limit"
 
 	// traversalLimitCleanupTimeout bounds restoration after the operation context is canceled.
@@ -30,10 +30,10 @@ const (
 
 // traversalLimits stores independent PostgreSQL constructor overrides; zero inherits the session value.
 type traversalLimits struct {
-	// stateLimit overrides the number of admitted candidate trail states.
+	// stateLimit overrides the number of admitted trail or compact-search records.
 	stateLimit int64
 
-	// byteLimit overrides the cumulative estimated trail bytes admitted by the query.
+	// byteLimit overrides the cumulative estimated traversal bytes admitted by the query.
 	byteLimit int64
 }
 

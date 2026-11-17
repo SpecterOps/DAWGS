@@ -35,6 +35,15 @@ to override traversal admission budgets for their database operations. Zero inhe
 the PostgreSQL session setting; see [traversal limits](docs/postgresql-driver.md#traversal-limits)
 for units, defaults, and examples.
 
+PostgreSQL automatically uses budgeted compact discovery for qualified directed
+`allShortestPaths` queries with property or ID endpoint predicates. Open ranges
+need no user-supplied hop limit. Direct endpoint-ID inequalities in the same
+`MATCH ... WHERE` can exclude self-pairs while retaining compact search.
+Normal Cypher reads and eligible
+`FetchAllShortestPaths` builder calls establish their search snapshot automatically;
+see [compact all-shortest search](docs/postgresql-driver.md#compact-all-shortest-search)
+for supported shapes and transaction behavior.
+
 To build and run unit tests from a checkout:
 
 ```bash
@@ -52,6 +61,7 @@ bounds repeated expansion after memo eviction, and releases settled in-flight re
 The [multi-relationship expansion regression checks](docs/testing.md#multi-relationship-expansion)
 compare bounded traversals with exhaustive fixed patterns on both backends,
 including path multiplicity, mutation state, fan-out timings, and PostgreSQL plans.
+PostgreSQL fan-out fixtures refresh planner statistics before preparing their queries.
 The [path materialization experiment](docs/testing.md#path-materialization-experiment)
 checks complete path values and measures batching, wide properties, memory,
 and time to first row, including `LIMIT 1`.

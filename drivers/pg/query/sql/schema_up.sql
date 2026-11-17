@@ -5944,6 +5944,8 @@ $$
   language plpgsql volatile
                    strict;
 
+
+
 create or replace function public.unidirectional_asp_harness(forward_primer text, forward_recursive text, max_depth int4,
                                                              root_filter text, terminal_filter text)
   returns table
@@ -7834,3 +7836,221 @@ end;
 $$
   language plpgsql volatile
                    strict;
+
+-- Versioned work admission shared by compact search and ordinary trail
+-- admission. Counters are cumulative for a driver query token, including all
+-- endpoint pairs and staged statements. Estimated bytes describe admitted
+-- records and arrays; they are not a PostgreSQL resident-memory limit.
+create or replace function public.dawgs_admit_traversal_work_v2(state_delta int8, byte_delta int8, phase text)
+returns bool as $$
+declare
+  token text := coalesce(nullif(current_setting('dawgs.traversal_token', true), ''), statement_timestamp()::text);
+  states int8 := 0;
+  bytes int8 := 0;
+  state_limit int8 := coalesce(nullif(current_setting('dawgs.traversal_state_limit', true), '')::int8, 100000);
+  byte_limit int8 := coalesce(nullif(current_setting('dawgs.traversal_byte_limit', true), '')::int8, 67108864);
+begin
+  if current_setting('dawgs.traversal_account_token', true) = token then
+    states := coalesce(nullif(current_setting('dawgs.traversal_states', true), '')::int8, 0);
+    bytes := coalesce(nullif(current_setting('dawgs.traversal_bytes', true), '')::int8, 0);
+  end if;
+  if state_delta < 0 or byte_delta < 0 or states < 0 or bytes < 0
+     or state_limit <= 0 or byte_limit <= 0 then
+    raise exception using errcode = '54000',
+      message = 'DAWGS traversal resource limit exceeded',
+      detail = format('phase=%s states=%s bytes=%s requested_states=%s requested_bytes=%s',
+                      phase, states, bytes, state_delta, byte_delta);
+  end if;
+  if state_delta > state_limit or byte_delta > byte_limit
+     or states > state_limit - state_delta or bytes > byte_limit - byte_delta then
+    raise exception using errcode = '54000',
+      message = 'DAWGS traversal resource limit exceeded',
+      detail = format('phase=%s states=%s bytes=%s requested_states=%s requested_bytes=%s',
+                      phase, states, bytes, state_delta, byte_delta);
+  end if;
+  perform set_config('dawgs.traversal_account_token', token, true);
+  perform set_config('dawgs.traversal_states', (states + state_delta)::text, true);
+  perform set_config('dawgs.traversal_bytes', (bytes + byte_delta)::text, true);
+  return true;
+end;
+$$ language plpgsql volatile strict;
+
+-- Discovery reuses the existing typed DAG workspace. Enumeration alternates
+-- two relations instead of materializing an uncontrolled recursive path tree.
+create or replace function public.ensure_all_shortest_dag_v2_workspace()
+returns void as $$
+begin
+  perform public.ensure_shortest_dag_workspace();
+  if to_regclass('pg_temp.asd_v2_enum_a') is not null
+     and to_regclass('pg_temp.asd_v2_enum_b') is not null then
+    return;
+  end if;
+  create temporary table if not exists asd_v2_enum_a (
+    node_id int8 not null,
+    path_depth int4 not null,
+    path int8[] not null
+  ) on commit preserve rows;
+  create temporary table if not exists asd_v2_enum_b (
+    node_id int8 not null,
+    path_depth int4 not null,
+    path int8[] not null
+  ) on commit preserve rows;
+end;
+$$ language plpgsql volatile;
+
+-- Open and explicitly bounded searches have the same compact algorithm.
+-- Only an explicit Cypher upper bound terminates discovery by depth. The
+-- complete target layer is admitted before enumerating any shortest witness.
+create or replace function public.all_shortest_paths_dag_v2(
+  target_graph_id int4, source_id int8, target_id int8,
+  min_depth int4, max_depth int8, max_is_bound bool,
+  edge_kind_ids int2[], inbound bool)
+returns table (
+  root_id int8, next_id int8, depth int4,
+  satisfied bool, is_cycle bool, path int8[]
+) as $$
+#variable_conflict use_column
+declare
+  search_depth int4 := 0;
+  target_depth int4;
+  enum_depth int4;
+  candidate record;
+  witness record;
+  new_nodes int8;
+  enum_from text := 'asd_v2_enum_a';
+  enum_to text := 'asd_v2_enum_b';
+  enum_swap text;
+  path_bytes int8;
+  readonly_workspace bool := current_setting('transaction_read_only')::bool;
+begin
+  if min_depth <> 1 then
+    raise exception using errcode = '22023', message = 'all_shortest_paths_dag_v2 requires min_depth = 1';
+  end if;
+  if max_is_bound and max_depth < 0 then
+    raise exception using errcode = '22023', message = 'all_shortest_paths_dag_v2 requires a nonnegative maximum';
+  end if;
+  if max_is_bound and max_depth = 0 then
+    return;
+  end if;
+  if source_id = target_id then
+    perform public.shortest_path_self_endpoint_error(source_id, target_id);
+  end if;
+  -- A VOLATILE PL/pgSQL function runs multiple SQL commands. Their reads must
+  -- share a graph snapshot, which the driver supplies for ordinary calls.
+  if current_setting('transaction_isolation') not in ('repeatable read', 'serializable') then
+    raise exception using errcode = '25001', message = 'all_shortest_paths_dag_v2 requires a stable transaction snapshot';
+  end if;
+
+  perform public.ensure_all_shortest_dag_v2_workspace();
+  if readonly_workspace then
+    -- PostgreSQL permits DML on existing temporary tables in READ ONLY, but
+    -- rejects CREATE and TRUNCATE. The driver initializes workspace before
+    -- BEGIN for an explicitly read-only stable transaction.
+    delete from pg_temp.spd_seen;
+    delete from pg_temp.spd_candidate;
+    delete from pg_temp.spd_predecessor;
+    delete from pg_temp.asd_v2_enum_a;
+    delete from pg_temp.asd_v2_enum_b;
+  else
+    perform public.reset_shortest_dag_workspace();
+    truncate table pg_temp.asd_v2_enum_a, pg_temp.asd_v2_enum_b;
+  end if;
+  perform public.dawgs_admit_traversal_work_v2(1, 32, 'asp_seen');
+  insert into pg_temp.spd_seen(node_id, depth) values (source_id, 0);
+
+  loop
+    exit when max_is_bound and search_depth >= max_depth;
+    if search_depth = 2147483647 then
+      raise exception using errcode = '54000', message = 'DAWGS traversal depth representation limit exceeded';
+    end if;
+    search_depth := search_depth + 1;
+    if readonly_workspace then
+      delete from pg_temp.spd_candidate;
+    else
+      truncate table pg_temp.spd_candidate;
+    end if;
+
+    -- PL/pgSQL's cursor fetches bounded row batches. Charge each candidate
+    -- before inserting either its current-layer record or retained predecessor.
+    -- Seen rows remain frozen until this complete layer has been discovered,
+    -- preserving every parallel edge and equal-depth alternative predecessor.
+    for candidate in
+      select case when inbound then e.start_id else e.end_id end as node_id,
+             f.node_id as predecessor_id, e.id as edge_id
+      from pg_temp.spd_seen f
+      join edge e on e.graph_id = target_graph_id
+        and ((not inbound and e.start_id = f.node_id) or (inbound and e.end_id = f.node_id))
+      where f.depth = search_depth - 1
+        and (cardinality(edge_kind_ids) = 0 or e.kind_id = any(edge_kind_ids))
+        and not exists (
+          select 1 from pg_temp.spd_seen s
+          where s.node_id = case when inbound then e.start_id else e.end_id end)
+    loop
+      perform public.dawgs_admit_traversal_work_v2(1, 64, 'asp_discovery');
+      insert into pg_temp.spd_candidate(node_id, depth, predecessor_id, edge_id)
+      values (candidate.node_id, search_depth, candidate.predecessor_id, candidate.edge_id);
+      perform public.dawgs_admit_traversal_work_v2(1, 64, 'asp_predecessor');
+      insert into pg_temp.spd_predecessor(node_id, depth, predecessor_id, edge_id)
+      values (candidate.node_id, search_depth, candidate.predecessor_id, candidate.edge_id);
+    end loop;
+
+    new_nodes := 0;
+    for candidate in select distinct node_id from pg_temp.spd_candidate loop
+      perform public.dawgs_admit_traversal_work_v2(1, 32, 'asp_seen');
+      insert into pg_temp.spd_seen(node_id, depth) values (candidate.node_id, search_depth);
+      new_nodes := new_nodes + 1;
+    end loop;
+    if new_nodes = 0 then
+      return;
+    end if;
+    if exists (select 1 from pg_temp.spd_candidate where node_id = target_id) then
+      target_depth := search_depth;
+      exit;
+    end if;
+  end loop;
+  if target_depth is null then
+    return;
+  end if;
+
+  perform public.dawgs_admit_traversal_work_v2(1, 128, 'asp_enumeration');
+  insert into pg_temp.asd_v2_enum_a(node_id, path_depth, path)
+  values (target_id, target_depth, array[]::int8[]);
+  enum_depth := target_depth;
+  while enum_depth > 0 loop
+    if readonly_workspace then
+      execute format('delete from pg_temp.%I', enum_to);
+    else
+      execute format('truncate table pg_temp.%I', enum_to);
+    end if;
+    for witness in execute format(
+      'select p.predecessor_id, p.edge_id, e.path
+       from pg_temp.%I e
+       join pg_temp.spd_predecessor p on p.node_id = e.node_id and p.depth = e.path_depth', enum_from)
+    loop
+      path_bytes := 128 + 8 * (cardinality(witness.path)::int8 + 1);
+      perform public.dawgs_admit_traversal_work_v2(1, path_bytes, 'asp_enumeration');
+      execute format('insert into pg_temp.%I(node_id, path_depth, path) values ($1, $2, $3)', enum_to)
+      using witness.predecessor_id, enum_depth - 1, array[witness.edge_id]::int8[] || witness.path;
+    end loop;
+    enum_depth := enum_depth - 1;
+    enum_swap := enum_from;
+    enum_from := enum_to;
+    enum_to := enum_swap;
+  end loop;
+
+  for witness in execute format(
+    'select e.path from pg_temp.%I e where e.node_id = $1 and e.path_depth = 0 order by e.path', enum_from)
+    using source_id
+  loop
+    path_bytes := 128 + 8 * cardinality(witness.path)::int8;
+    perform public.dawgs_admit_traversal_work_v2(1, path_bytes, 'asp_output');
+    root_id := source_id;
+    next_id := target_id;
+    depth := target_depth;
+    satisfied := true;
+    is_cycle := false;
+    path := witness.path;
+    return next;
+  end loop;
+end;
+$$ language plpgsql volatile strict cost 100 set recursive_worktable_factor = 1 rows 100;

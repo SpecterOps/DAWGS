@@ -7,6 +7,7 @@ import (
 	"maps"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
@@ -14,6 +15,36 @@ import (
 	"github.com/specterops/dawgs/opengraph"
 	"github.com/stretchr/testify/require"
 )
+
+// multiExpansionAnalyzeStatement refreshes the fixture's two graph partitions before planning query arms.
+const multiExpansionAnalyzeStatement = "analyze %s, %s"
+
+// prepareMultiExpansionFixtureStatistics gives PostgreSQL the current fixture's
+// cardinalities before any fanout query is prepared. Rollback fixtures are
+// invisible to autovacuum and can inherit empty or unrelated table statistics.
+func prepareMultiExpansionFixtureStatistics(session *Session, tx graph.Transaction) error {
+	if session.Driver != pg.DriverName {
+		return nil
+	}
+
+	selectedGraph, found := session.DB.(*pg.Driver).DefaultGraph()
+	if !found {
+		return fmt.Errorf("multi-expansion fixture has no selected PostgreSQL graph")
+	}
+
+	var (
+		nodeTable = pgx.Identifier{"public", selectedGraph.Partitions.Node.Name}.Sanitize()
+		edgeTable = pgx.Identifier{"public", selectedGraph.Partitions.Edge.Name}.Sanitize()
+		result    = tx.Raw(fmt.Sprintf(multiExpansionAnalyzeStatement, nodeTable, edgeTable), nil)
+	)
+	result.Close()
+
+	if err := result.Error(); err != nil {
+		return fmt.Errorf("analyzing multi-expansion fixture partitions: %w", err)
+	}
+
+	return nil
+}
 
 // TestPostgreSQLMultiRelationshipExpansionCompilerModes runs the shared relationship-disjunction templates in both compiler modes.
 func TestPostgreSQLMultiRelationshipExpansionCompilerModes(t *testing.T) {

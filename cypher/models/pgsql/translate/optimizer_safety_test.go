@@ -746,12 +746,12 @@ func TestAllShortestDAGIsAutomaticallySelectedAndUsesTypedStaticExecutor(t *test
 			StepIndex:      0,
 		})
 	require.Equal(t, "ASP", outcome.Family)
-	require.Equal(t, []string{"SP-S0", "ASP-A1-DAG", "ASP-I1-U-DAG+MAT-M0", "ASP-B1-DAG-ALT-NODE", "ASP-B2-DAG-MIN-LEVEL"}, outcome.PlannedCandidates)
+	require.Equal(t, []string{"ASP-A1-DAG-V2", "SP-S0", "ASP-A1-DAG", "ASP-I1-U-DAG+MAT-M0", "ASP-B1-DAG-ALT-NODE", "ASP-B2-DAG-MIN-LEVEL"}, outcome.PlannedCandidates)
 	require.Equal(t, string(optimize.ShortestPathSchedulerSingleEndedLevel), outcome.Scheduler)
 	require.Equal(t, string(optimize.ShortestPathObservationAllPaths), outcome.ObservationMode)
-	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAG), outcome.Selected)
-	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAG), outcome.Applied)
-	require.Equal(t, "asp-static-v1", outcome.SelectorVersion)
+	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAGV2), outcome.Selected)
+	require.Equal(t, string(optimize.ShortestPathExecutorASPA1DAGV2), outcome.Applied)
+	require.Equal(t, "asp-resolved-pairs-v2", outcome.SelectorVersion)
 	require.Empty(t, outcome.SkipReason)
 }
 
@@ -2922,11 +2922,16 @@ LIMIT 100
 func TestOptimizerSafetyShortestPathStrategyUsesPlannedBidirectionalSearch(t *testing.T) {
 	t.Parallel()
 
-	translation := optimizerSafetyTranslation(t, `
+	query, err := frontend.ParseCypher(frontend.NewContext(), `
 MATCH p = allShortestPaths((s)-[:MemberOf*1..15]->(e))
 WHERE s.name = 'source' AND e.name = 'target'
 RETURN p
 	`)
+	require.NoError(t, err)
+	translation, err := TranslateWithOptions(context.Background(), query, optimizerSafetyKindMapper(), nil, DefaultGraphID, Options{
+		DisableBudgetedAllShortestPaths: true,
+	})
+	require.NoError(t, err)
 
 	formattedQuery, err := Translated(translation)
 	require.NoError(t, err)

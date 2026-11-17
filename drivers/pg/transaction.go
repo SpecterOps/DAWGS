@@ -23,6 +23,9 @@ import (
 	"github.com/specterops/dawgs/util/size"
 )
 
+// compactSnapshotUnavailablePolicySuffix isolates legacy SQL when the caller owns a mutable snapshot.
+const compactSnapshotUnavailablePolicySuffix = ":compact-stable-snapshot-unavailable"
+
 // driver is the common execution surface implemented by pooled connections and explicit pgx transactions.
 type driver interface {
 	// Exec executes a statement and returns its PostgreSQL command tag.
@@ -106,6 +109,9 @@ type transaction struct {
 
 	// traversalLimits owns operation overrides and any autocommit settings requiring restoration.
 	traversalLimits traversalLimitScope
+
+	// compactSearch owns a stable snapshot for one otherwise-autocommit compact query.
+	compactSearch *compactSearchQueryScope
 }
 
 // newTransactionWrapper configures a graph transaction and optionally begins an explicit PostgreSQL transaction.
@@ -184,6 +190,10 @@ func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
 // Close rolls back an active transaction and restores overridden autocommit settings.
 // A connection whose settings cannot be restored is closed before its lease is released.
 func (s *transaction) Close() {
+	if s.compactSearch != nil {
+		s.compactSearch.closeResult(false)
+	}
+
 	s.invalidateTopologyRouteDecisions()
 	if s.tx != nil {
 		s.tx.Rollback(s.ctx)
@@ -402,7 +412,11 @@ func (s *transaction) query(query string, parameters map[string]any) (pgx.Rows, 
 }
 
 // Query parses and translates Cypher through the schema caches, returning translation failures as graph results.
-func (s *transaction) Query(query string, parameters map[string]any) graph.Result {
+func (s *transaction) Query(query string, parameters map[string]any) (result graph.Result) {
+	if s.compactSearch != nil {
+		return graph.NewErrorResult(fmt.Errorf("close the active compact-search result before executing another query"))
+	}
+
 	if cypherMayMutate(query) {
 		s.invalidateTopologyRouteDecisions()
 	}
@@ -422,12 +436,29 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 		s.recordSQLGenerationProfile(profile)
 		return graph.NewErrorResult(err)
 	}
+	// A query-owned snapshot must not independently authorize experimental
+	// policies that the caller's original isolation did not permit.
+	var (
+		policyIsolation        = s.isolation
+		budgetedCompact        = translate.UsesBudgetedAllShortestPaths(parsedQuery)
+		disableBudgetedCompact = budgetedCompact && s.tx != nil && !stableSnapshotIsolation(s.isolation)
+	)
+
+	if budgetedCompact && !disableBudgetedCompact {
+		scope, scopeErr := s.beginCompactSearchQuery()
+		if scopeErr != nil {
+			return graph.NewErrorResult(scopeErr)
+		}
+		if scope != nil {
+			defer func() { result = scope.wrapResult(result) }()
+		}
+	}
 	if s.kindMapper != nil {
 		if err := s.serviceKinds(); err != nil {
 			return graph.NewErrorResult(err)
 		}
 	}
-	if err := s.beginTraversalBudget(parsedQuery); err != nil {
+	if err := s.beginTraversalBudgetForQuery(parsedQuery, budgetedCompact && !disableBudgetedCompact); err != nil {
 		return graph.NewErrorResult(err)
 	}
 
@@ -446,8 +477,12 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	if s.schemaManager.shouldClassifyTraversal() {
 		shape, _ = s.schemaManager.classifyTraversalShape(query, parsedQuery)
 	}
-	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicyForShape(query, shape, s.isolation)
-	topologyPolicy, topologyPolicyIdentity := s.schemaManager.topologyFixedSuffixPolicyForShape(shape, s.isolation)
+	policy, policyIdentity := s.schemaManager.effectiveTraversalPolicyForShape(query, shape, policyIsolation)
+	topologyPolicy, topologyPolicyIdentity := s.schemaManager.topologyFixedSuffixPolicyForShape(shape, policyIsolation)
+	if disableBudgetedCompact {
+		policyIdentity += compactSnapshotUnavailablePolicySuffix
+		topologyPolicyIdentity += compactSnapshotUnavailablePolicySuffix
+	}
 	topologyEstimatorVersion := ""
 	maximumEdgeToNodeRatioPerMille := int64(0)
 	if topologyPolicy.enabled() {
@@ -473,7 +508,9 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 					translated, translateErr = translate.TranslateWithProductionOptions(s.ctx, parsedQuery, s.effectiveKindMapper(), parameters, graphTarget.ID, options)
 				}
 			} else {
-				translated, translateErr = translate.Translate(s.ctx, parsedQuery, s.effectiveKindMapper(), parameters, graphTarget.ID)
+				options := translate.DefaultOptions()
+				options.DisableBudgetedAllShortestPaths = disableBudgetedCompact
+				translated, translateErr = translate.TranslateWithOptions(s.ctx, parsedQuery, s.effectiveKindMapper(), parameters, graphTarget.ID, options)
 			}
 			profile.Translate += time.Since(translateStarted)
 			if translateErr != nil {
@@ -553,7 +590,7 @@ func (s *transaction) Query(query string, parameters map[string]any) graph.Resul
 	}
 	profile.Cache = time.Since(cacheStarted)
 	dispatchStarted := time.Now()
-	result := s.raw(sqlQuery, translatedParameters)
+	result = s.raw(sqlQuery, translatedParameters)
 	profile.Dispatch = time.Since(dispatchStarted)
 	s.recordSQLGenerationProfile(profile)
 	return result
@@ -610,6 +647,10 @@ func (s *transaction) raw(query string, parameters map[string]any) graph.Result 
 
 // Commit invalidates route observations and commits the active PostgreSQL transaction.
 func (s *transaction) Commit() error {
+	if s.compactSearch != nil {
+		return fmt.Errorf("consume or close the active compact-search result before committing")
+	}
+
 	s.invalidateTopologyRouteDecisions()
 	if s.stagedError != nil {
 		return s.stagedError
@@ -643,10 +684,24 @@ func queryHasOpenTraversal(query *cypher.RegularQuery) bool {
 	return open
 }
 
+// beginTraversalBudget resets query-wide admission for builder traversals with an open maximum.
 func (s *transaction) beginTraversalBudget(query *cypher.RegularQuery) error {
-	if !queryHasOpenTraversal(query) {
+	return s.beginTraversalBudgetForQuery(query, false)
+}
+
+// beginTraversalBudgetForQuery also resets counters for finite compact searches.
+func (s *transaction) beginTraversalBudgetForQuery(query *cypher.RegularQuery, budgetedCompact bool) error {
+	if !budgetedCompact && !queryHasOpenTraversal(query) {
 		return nil
 	}
-	_, err := s.driver().Exec(s.ctx, "select set_config('dawgs.traversal_token', $1, true)", fmt.Sprintf("%p/%d", s, time.Now().UnixNano()))
+	const (
+		// setTraversalBudgetTokenSQL gives every logical query its own cumulative admission scope.
+		setTraversalBudgetTokenSQL = "select set_config('dawgs.traversal_token', $1, true)"
+
+		// traversalBudgetTokenFormat separates transaction identity from the query's nanosecond nonce.
+		traversalBudgetTokenFormat = "%p/%d"
+	)
+
+	_, err := s.driver().Exec(s.ctx, setTraversalBudgetTokenSQL, fmt.Sprintf(traversalBudgetTokenFormat, s, time.Now().UnixNano()))
 	return err
 }

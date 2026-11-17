@@ -73,15 +73,31 @@ Current PostgreSQL optimization coverage includes:
   serializable isolation and a schema-v2 promotion manifest whose reports
   repeat its complete authorization identity. The ordinary production path
   remains unchanged.
-- Omitted shortest-path upper bounds retain Cypher's repository-defined
-  effective maximum of 15. The lowering decision records
-  `maximum_depth_source=policy_default` and uses selector
-  `sp-static-v7-contained`; explicit bounds retain `explicit` provenance.
-- Static `allShortestPaths` selection through `asp-static-v1` for a single directed, read-only endpoint pair with
-  minimum depth one. `ASP-A1-DAG` has exact one- and two-hop arms, discovers minimum node-depth layers, retains every
-  relationship-distinct predecessor at those layers, and enumerates the predecessor DAG. Its returned ordered edge IDs
-  are hydrated through the inline M0 relation rather than the generic per-row path helper. Open maximum ranges use the
-  documented depth cap of 15. Unsupported or ambiguous forms retain exact `SP-S0` with a machine-readable reason.
+- Omitted shortest-path upper bounds retain open semantics; explicit bounds
+  retain `explicit` provenance. Bounded candidate manifests cannot authorize open
+  execution or introduce an implicit depth maximum.
+- Automatic `ASP-A1-DAG-V2` selection through `asp-resolved-pairs-v2` resolves
+  property or ID anchors into budgeted endpoint-pair relations. Directed,
+  read-only all-shortest traversal with minimum depth one discovers complete
+  minimum node-depth layers and enumerates every relationship-distinct
+  predecessor path. Open maxima require no hop limit; finite maxima above 64
+  use the same algorithm. Discovery, predecessors, enumeration, output, and
+  endpoint resolution share the query budget. Ordered edge IDs use inline M0
+  hydration. Normal driver queries own a stable snapshot automatically; see
+  [transaction boundaries](postgresql-driver.md#compact-all-shortest-search).
+  Eligible all-shortest builder calls use the same selector. Pure positive
+  relationship-kind filters are normalized into the traversal's kind domain on
+  a copied AST before fresh eligibility analysis; intersections, unions, and
+  unsupported residual predicates retain their Boolean meaning. Builder cache
+  identities separate compact snapshot execution from the legacy route.
+  Direct conjunctive endpoint-ID inequalities in the same MATCH WHERE are
+  represented as validated pair filters for automatic V2 selection. Equal pairs
+  are excluded with CASE-gated admission in the materialized pair relation, so
+  they neither consume pair budget nor invoke the kernel. Other cross-endpoint
+  expressions, including negations and mixed OR groups, and later WITH filters
+  retain their existing placement and routing.
+  Existing forced/canary executors retain their separate qualification and SQL
+  identity. Unqualified semantic forms retain their existing exact executor.
 - Default-off `ASP-B1-DAG-ALT-NODE` and `ASP-B2-DAG-MIN-LEVEL` reuse compact
   two-sided search while retaining every same-minimum-depth predecessor. They
   enumerate at one canonical completed meeting cut and apply separate
@@ -485,18 +501,22 @@ database := pg.NewDriverWithOptions(0, pool, pg.DriverOptions{
 })
 ```
 
-For a process-wide rollback, disable optimized translation directly and restore the prior state when appropriate:
+For a process-wide builder-compiler rollback, disable optimized translation and
+restore the prior state when appropriate:
 
 ```go
 previous := pg.SetOptimizedTranslation(false)
 defer pg.SetOptimizedTranslation(previous)
 ```
 
-When disabled, newly started PostgreSQL compilations bypass cache lookup and retention and translate the original AST
+When disabled, newly started PostgreSQL builder compilations bypass cache lookup and retention and translate the original AST
 with no PostgreSQL rewrite rules or lowering decisions. The setting is atomic and applies to every PostgreSQL driver in
 the process; each compilation snapshots it at entry, so already-running compilations continue with their selected path.
 Cached optimized entries remain dormant and are reusable after re-enabling. A zero cache capacity still runs optimized
 translation without retaining entries. The default remains optimized translation with a 256-entry cache.
+Text Cypher through `tx.Query` retains its independent optimizer and
+connection-local cache; the builder switch does not disable automatic compact
+all-shortest execution for those queries.
 
 Concurrent cacheable misses for the same key share one translation. Waiters behind a failed, canceled, or non-cacheable
 build continue independently rather than serializing behind repeated failed work. Statistics are available through

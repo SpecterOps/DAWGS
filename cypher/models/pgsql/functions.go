@@ -16,6 +16,14 @@ const (
 	// FunctionAllShortestPathsDAG identifies the SQL helper that materializes every shortest path from a predecessor DAG.
 	FunctionAllShortestPathsDAG Identifier = "all_shortest_paths_dag"
 
+	// FunctionAllShortestPathsDAGV2 identifies budgeted open or bounded
+	// predecessor-DAG search for one resolved endpoint pair.
+	FunctionAllShortestPathsDAGV2 Identifier = "all_shortest_paths_dag_v2"
+
+	// FunctionAdmitTraversalWorkV2 charges a work record to the current
+	// query-wide traversal budget before the record is admitted.
+	FunctionAdmitTraversalWorkV2 Identifier = "dawgs_admit_traversal_work_v2"
+
 	// FunctionAllShortestPathsNoPathProbe identifies the bounded target-side
 	// reachability preflight. It returns an exact empty result only after the
 	// reverse component is exhausted; every positive or capped probe delegates

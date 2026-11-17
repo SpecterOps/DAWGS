@@ -275,9 +275,10 @@ func (s *SchemaManager) ReadTransaction(ctx context.Context, txDelegate graph.Tr
 		if stableSnapshotIsolation(cfg.Options.IsoLevel) && !cfg.skipStableSnapshotTraversalWorkspaces {
 			workspaceProvider, hasWorkspaceProvider := s.translationCacheProvider.(StableSnapshotTraversalWorkspaceProvider)
 			lazyProvider, deferWorkspace := s.translationCacheProvider.(LazyStableSnapshotTraversalWorkspaceProvider)
-			if deferWorkspace && lazyProvider.DeferStableSnapshotTraversalWorkspaces() {
+			if deferWorkspace && lazyProvider.DeferStableSnapshotTraversalWorkspaces() && cfg.Options.AccessMode != pgx.ReadOnly {
 				// V2 initializes only when transaction.Query observes a shortest-path
-				// operation. Ordinary repeatable-read work needs no temporary tables.
+				// operation. Read-only transactions must prepare before BEGIN because
+				// PostgreSQL rejects temporary table creation inside their snapshot.
 			} else if hasWorkspaceProvider {
 				err = workspaceProvider.EnsureStableSnapshotTraversalWorkspaces(ctx, conn)
 			} else {
@@ -318,14 +319,18 @@ func stableSnapshotIsolation(isolation pgx.TxIsoLevel) bool {
 // Drivers with connection-local lifecycle state may call this only when their
 // tracked physical connection is not already ready.
 func EnsureStableSnapshotTraversalWorkspaces(ctx context.Context, conn *pgxpool.Conn) error {
+	// initializeSQL prepares every reusable traversal relation before a read-only snapshot starts.
 	const initializeSQL = `select
 		public.ensure_shortest_dag_workspace(),
+		public.ensure_all_shortest_dag_v2_workspace(),
 		public.ensure_bidirectional_shortest_path_workspace(),
 		public.ensure_bidirectional_all_shortest_path_workspace(),
 		set_config('dawgs.shortest_dag_workspace_ready', 'v2', false)`
+
 	if _, err := conn.Exec(ctx, initializeSQL); err != nil {
 		return fmt.Errorf("initialize stable-snapshot traversal workspaces: %w", err)
 	}
+
 	return nil
 }
 

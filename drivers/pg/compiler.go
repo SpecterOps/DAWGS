@@ -13,8 +13,24 @@ import (
 	"github.com/specterops/dawgs/query"
 )
 
-const builderParameterPrefix = "__dawgs_builder_p"
+const (
+	// builderParameterPrefix namespaces generated builder bindings without retaining caller values.
+	builderParameterPrefix = "__dawgs_builder_p"
 
+	// compactBuilderCachePolicySuffix separates snapshot-backed SQL from legacy builder entries.
+	compactBuilderCachePolicySuffix = ":snapshot-owned-asp-v2"
+)
+
+// compiledBuilderQuery keeps a rendered builder statement and its execution bindings together.
+type compiledBuilderQuery struct {
+	// statement is the PostgreSQL statement generated for this compilation mode.
+	statement string
+
+	// bindings contains request-local values for the generated statement parameters.
+	bindings map[string]any
+}
+
+// builderCommentNewlines keeps rendered Cypher comments confined to SQL comment lines.
 var builderCommentNewlines = strings.NewReplacer("\r\n", "\n-- ", "\r", "\n-- ", "\n", "\n-- ")
 
 // preparedRegularQuery holds a canonical view of a builder query. The source
@@ -75,12 +91,28 @@ func (s *SchemaManager) compile(ctx context.Context, source string, parameters m
 	return s.compileWithMapper(ctx, source, parameters, graphID, identity, parse, s)
 }
 
+// compileWithMapper preserves legacy compilation for callers without compact snapshot ownership.
 func (s *SchemaManager) compileWithMapper(ctx context.Context, source string, parameters map[string]any, graphID int32, identity *builderCacheIdentity, parse func() (*cypher.RegularQuery, error), mapper KindMapper) (string, map[string]any, error) {
+	if compiled, err := s.compileWithMapperAndCompactSearch(ctx, source, parameters, graphID, identity, parse, mapper, false); err != nil {
+		return "", nil, err
+	} else {
+		return compiled.statement, compiled.bindings, nil
+	}
+}
+
+// compileWithMapperAndCompactSearch admits V2 only when the executing builder
+// has independently established its stable snapshot and query budget lifetime.
+func (s *SchemaManager) compileWithMapperAndCompactSearch(ctx context.Context, source string, parameters map[string]any, graphID int32, identity *builderCacheIdentity, parse func() (*cypher.RegularQuery, error), mapper KindMapper, compactSearch bool) (compiledBuilderQuery, error) {
 	var (
+		statement string
+		bindings  map[string]any
+		err       error
+
 		translationCache   = s.compilationCacheProvider.TranslationCache()
 		optimized          = OptimizedTranslationEnabled()
 		translationOptions = translate.Options{
-			OptimizerMode: translate.OptimizerDisabled,
+			OptimizerMode:                   translate.OptimizerDisabled,
+			DisableBudgetedAllShortestPaths: !compactSearch,
 		}
 	)
 	if optimized {
@@ -109,22 +141,32 @@ func (s *SchemaManager) compileWithMapper(ctx context.Context, source string, pa
 	}
 
 	if local, ok := mapper.(*transactionKindMapper); ok && local.bypassTranslations() {
-		return translationCache.buildUncached(build)
-	}
-	if !optimized {
-		return translationCache.BuildUnoptimized(build)
-	}
-	if identity != nil && !identity.valid {
+		statement, bindings, err = translationCache.buildUncached(build)
+	} else if !optimized {
+		statement, bindings, err = translationCache.BuildUnoptimized(build)
+	} else if identity != nil && !identity.valid {
 		translationCache.bypasses.Add(1)
-		return translationCache.buildUncached(build)
+		statement, bindings, err = translationCache.buildUncached(build)
+	} else {
+		key := translationCache.Key(source, graphID, parameters)
+		if compactSearch {
+			key.policy += compactBuilderCachePolicySuffix
+		}
+		if identity != nil {
+			key.builder = true
+			key.builderDigest = identity.digest
+		}
+
+		statement, bindings, err = translationCache.GetOrBuildContext(ctx, key, parameters, build)
+	}
+	if err != nil {
+		return compiledBuilderQuery{}, err
 	}
 
-	key := translationCache.Key(source, graphID, parameters)
-	if identity != nil {
-		key.builder = true
-		key.builderDigest = identity.digest
-	}
-	return translationCache.GetOrBuildContext(ctx, key, parameters, build)
+	return compiledBuilderQuery{
+		statement: statement,
+		bindings:  bindings,
+	}, nil
 }
 
 func commentRegularQuery(source, sql string) string {

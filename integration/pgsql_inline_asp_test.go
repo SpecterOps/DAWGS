@@ -42,6 +42,26 @@ const inlineASPCypher = `
 	RETURN p
 `
 
+// inlineASPDriverResult keeps observed rows with the runtime receipt used to qualify their executor.
+type inlineASPDriverResult struct {
+	// rows contains the sorted public row values returned by the driver.
+	rows []string
+
+	// receipt records the runtime branches reported on the same physical session.
+	receipt string
+}
+
+const (
+	// beginInlineASPRuntimeReceiptSQL arms execution telemetry for one query invocation.
+	beginInlineASPRuntimeReceiptSQL = "select public.begin_traversal_runtime_attestation_v1(@invocation, @requested)"
+
+	// readInlineASPRuntimeReceiptSQL retrieves the query's final executor evidence after consuming all rows.
+	readInlineASPRuntimeReceiptSQL = "select coalesce(public.read_traversal_runtime_attestation_v1(@invocation)::text, '')"
+
+	// clearInlineASPRuntimeReceiptSQL removes only the telemetry belonging to this invocation.
+	clearInlineASPRuntimeReceiptSQL = "select public.clear_traversal_runtime_attestation_v1(@invocation)"
+)
+
 // TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows exercises the
 // typed guarded statement at the real PostgreSQL boundary. A tiny state cap
 // must select exact A1 and return the same complete relationship-distinct bag.
@@ -55,7 +75,13 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		ExtraEdgeKinds:       graph.Kinds{inlineASPEdgeOne, inlineASPEdgeTwo},
 	})
 
-	var startID, endID, disconnectedID, deepStartID, deepEndID graph.ID
+	var (
+		startID        graph.ID
+		endID          graph.ID
+		disconnectedID graph.ID
+		deepStartID    graph.ID
+		deepEndID      graph.ID
+	)
 	if err := session.DB.WriteTransaction(session.Ctx, func(tx graph.Transaction) error {
 		start, err := tx.CreateNode(graph.NewProperties(), inlineASPNodeKind)
 		if err != nil {
@@ -97,22 +123,60 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		}
 		deepStartID, deepEndID = deepStart.ID, deepEnd.ID
 		for _, edge := range []struct {
-			// start retains the start while anonymous record is assembled or evaluated.
+			// start identifies the fixture relationship's physical source node.
 			start graph.ID
-			// end retains the end while anonymous record is assembled or evaluated.
+
+			// end identifies the fixture relationship's physical destination node.
 			end graph.ID
-			// kind retains the kind while anonymous record is assembled or evaluated.
+
+			// kind distinguishes parallel alternatives admitted by the traversal filter.
 			kind graph.Kind
 		}{
-			{start.ID, left.ID, inlineASPEdgeOne},
-			{left.ID, end.ID, inlineASPEdgeOne},
-			{start.ID, right.ID, inlineASPEdgeTwo},
-			{right.ID, end.ID, inlineASPEdgeTwo},
-			{left.ID, left.ID, inlineASPEdgeOne},
-			{left.ID, start.ID, inlineASPEdgeTwo},
-			{deepStart.ID, deepMiddleOne.ID, inlineASPEdgeOne},
-			{deepMiddleOne.ID, deepMiddleTwo.ID, inlineASPEdgeOne},
-			{deepMiddleTwo.ID, deepEnd.ID, inlineASPEdgeOne},
+			{
+				start: start.ID,
+				end:   left.ID,
+				kind:  inlineASPEdgeOne,
+			},
+			{
+				start: left.ID,
+				end:   end.ID,
+				kind:  inlineASPEdgeOne,
+			},
+			{
+				start: start.ID,
+				end:   right.ID,
+				kind:  inlineASPEdgeTwo,
+			},
+			{
+				start: right.ID,
+				end:   end.ID,
+				kind:  inlineASPEdgeTwo,
+			},
+			{
+				start: left.ID,
+				end:   left.ID,
+				kind:  inlineASPEdgeOne,
+			},
+			{
+				start: left.ID,
+				end:   start.ID,
+				kind:  inlineASPEdgeTwo,
+			},
+			{
+				start: deepStart.ID,
+				end:   deepMiddleOne.ID,
+				kind:  inlineASPEdgeOne,
+			},
+			{
+				start: deepMiddleOne.ID,
+				end:   deepMiddleTwo.ID,
+				kind:  inlineASPEdgeOne,
+			},
+			{
+				start: deepMiddleTwo.ID,
+				end:   deepEnd.ID,
+				kind:  inlineASPEdgeOne,
+			},
 		} {
 			if _, err := tx.CreateRelationshipByIDs(edge.start, edge.end, edge.kind, graph.NewProperties()); err != nil {
 				return err
@@ -137,7 +201,12 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	}
 	parameters := map[string]any{"start_id": int64(startID), "end_id": int64(endID)}
 
-	a1, err := translate.Translate(session.Ctx, regularQuery, pgDriver.KindMapper(), parameters, defaultGraph.ID)
+	// This suite qualifies the historical A1/I1 canary boundary. Pin A1 so a
+	// new automatic architecture cannot silently replace its reference SQL.
+	a1, err := translate.TranslateWithOptions(session.Ctx, regularQuery, pgDriver.KindMapper(), parameters, defaultGraph.ID,
+		translate.Options{
+			DisableBudgetedAllShortestPaths: true,
+		})
 	if err != nil {
 		t.Fatalf("translate A1: %v", err)
 	}
@@ -188,15 +257,15 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		t.Fatalf("fallback runtime receipt is incomplete: %s", fallbackReceipt)
 	}
 
-	// ASP-A1 reaches its spd_* predecessor workspace only beyond the two-hop
-	// preflight. Prove that a fresh stable-snapshot session can execute it.
+	// Ordinary, non-policy calls now select V2. Prove that a fresh stable
+	// session initializes the shared predecessor and enumeration workspaces.
 	session.PGPool.Reset()
-	freshA1Rows, freshA1Receipt := executeDriverCypherWithReceipt(t, session, inlineASPCypher,
+	freshV2Execution := executeDriverCypherWithReceipt(t, session, inlineASPCypher,
 		map[string]any{"start_id": int64(deepStartID), "end_id": int64(deepEndID)},
-		"inline-asp-fresh-repeatable-a1", optimize.ShortestPathExecutorASPA1DAG,
+		"inline-asp-fresh-repeatable-v2", optimize.ShortestPathExecutorASPA1DAGV2,
 		pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-	if len(freshA1Rows) != 1 || !containsAll(freshA1Receipt, "ASP-A1-DAG") {
-		t.Fatalf("fresh repeatable-read session did not execute recursive A1: rows=%v receipt=%s", freshA1Rows, freshA1Receipt)
+	if len(freshV2Execution.rows) != 1 {
+		t.Fatalf("fresh repeatable-read session did not execute recursive V2: rows=%v receipt=%s", freshV2Execution.rows, freshV2Execution.receipt)
 	}
 	candidatePlan := explainInlineASPTranslation(t, session, i1)
 	requireOrientationSubplanMetric(t, candidatePlan, "asp_i1_fallback_rows", "Actual Rows", 0)
@@ -204,11 +273,13 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 	requireOrientationSubplanMetric(t, fallbackPlan, "asp_i1_candidate_rows", "Actual Rows", 0)
 
 	for _, testCase := range []struct {
-		// name retains the name while anonymous record is assembled or evaluated.
+		// name describes the direction or reachability control exercised by this variant.
 		name string
-		// query retains the query while anonymous record is assembled or evaluated.
+
+		// query selects the Cypher shape whose candidate and incumbent results must match.
 		query string
-		// parameters retains the parameters while anonymous record is assembled or evaluated.
+
+		// parameters binds the fixture endpoints for this variant.
 		parameters map[string]any
 	}{
 		{
@@ -228,7 +299,10 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 			if err != nil {
 				t.Fatalf("parse query: %v", err)
 			}
-			a1Translation, err := translate.Translate(session.Ctx, query, pgDriver.KindMapper(), testCase.parameters, defaultGraph.ID)
+			a1Translation, err := translate.TranslateWithOptions(session.Ctx, query, pgDriver.KindMapper(), testCase.parameters, defaultGraph.ID,
+				translate.Options{
+					DisableBudgetedAllShortestPaths: true,
+				})
 			if err != nil {
 				t.Fatalf("translate A1: %v", err)
 			}
@@ -259,19 +333,19 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		}
 		t.Cleanup(func() { _ = pgDriver.SetTraversalPolicy(pg.TraversalPolicy{}) })
 
-		readCommittedRows, readCommittedReceipt := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
-			"inline-asp-policy-read-committed", optimize.ShortestPathExecutorASPA1DAG)
-		if fmt.Sprint(a1Rows) != fmt.Sprint(readCommittedRows) || !containsAll(readCommittedReceipt, "ASP-A1-DAG") {
-			t.Fatalf("read-committed policy did not preserve A1: rows=%v receipt=%s", readCommittedRows, readCommittedReceipt)
+		readCommittedExecution := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
+			"inline-asp-policy-read-committed", optimize.ShortestPathExecutorASPA1DAG, pg.OptionSetTransactionIsolation(pgx.ReadCommitted))
+		if fmt.Sprint(a1Rows) != fmt.Sprint(readCommittedExecution.rows) || !containsAll(readCommittedExecution.receipt, "ASP-A1-DAG") {
+			t.Fatalf("read-committed policy did not preserve A1: rows=%v receipt=%s", readCommittedExecution.rows, readCommittedExecution.receipt)
 		}
 
 		// Force the stable-snapshot execution onto a fresh PostgreSQL session.
 		// Its incumbent fallback workspace must be created before BEGIN READ ONLY.
 		session.PGPool.Reset()
-		repeatableRows, repeatableReceipt := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
+		repeatableExecution := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
 			"inline-asp-policy-repeatable", optimize.ShortestPathExecutorASPI1DAG, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-		if fmt.Sprint(a1Rows) != fmt.Sprint(repeatableRows) || !containsAll(repeatableReceipt, "ASP-I1-U-DAG+MAT-M0", "inline_predecessor_dag") {
-			t.Fatalf("repeatable-read policy did not execute I1: rows=%v receipt=%s", repeatableRows, repeatableReceipt)
+		if fmt.Sprint(a1Rows) != fmt.Sprint(repeatableExecution.rows) || !containsAll(repeatableExecution.receipt, "ASP-I1-U-DAG+MAT-M0", "inline_predecessor_dag") {
+			t.Fatalf("repeatable-read policy did not execute I1: rows=%v receipt=%s", repeatableExecution.rows, repeatableExecution.receipt)
 		}
 
 		if err := pgDriver.SetTraversalPolicy(pg.TraversalPolicy{
@@ -280,10 +354,10 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		}); err != nil {
 			t.Fatalf("activate inline ASP rollback: %v", err)
 		}
-		rollbackRows, rollbackReceipt := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
+		rollbackExecution := executeDriverCypherWithReceipt(t, session, inlineASPCypher, parameters,
 			"inline-asp-policy-rollback", optimize.ShortestPathExecutorASPA1DAG, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-		if fmt.Sprint(a1Rows) != fmt.Sprint(rollbackRows) || !containsAll(rollbackReceipt, "ASP-A1-DAG") || strings.Contains(rollbackReceipt, "ASP-I1-U-DAG+MAT-M0") {
-			t.Fatalf("rollback did not immediately restore A1: rows=%v receipt=%s", rollbackRows, rollbackReceipt)
+		if fmt.Sprint(a1Rows) != fmt.Sprint(rollbackExecution.rows) || !containsAll(rollbackExecution.receipt, "ASP-A1-DAG") || strings.Contains(rollbackExecution.receipt, "ASP-I1-U-DAG+MAT-M0") {
+			t.Fatalf("rollback did not immediately restore A1: rows=%v receipt=%s", rollbackExecution.rows, rollbackExecution.receipt)
 		}
 	})
 
@@ -340,23 +414,23 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		}
 		t.Cleanup(func() { _ = pgDriver.SetTraversalPolicy(pg.TraversalPolicy{}) })
 
-		incumbentRows, incumbentReceipt := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
+		incumbentExecution := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
 			"sp-i1-policy-read-committed", optimize.ShortestPathExecutorS4CanonicalWitness)
-		if len(incumbentRows) != 1 || !containsAll(incumbentReceipt, "SP-S4-C-WE+MAT-M0", "compact_workspace_witness") ||
-			strings.Contains(incumbentReceipt, "SP-I1-C-WE+MAT-M0") {
-			t.Fatalf("read-committed policy did not preserve the S4 incumbent: rows=%v receipt=%s", incumbentRows, incumbentReceipt)
+		if len(incumbentExecution.rows) != 1 || !containsAll(incumbentExecution.receipt, "SP-S4-C-WE+MAT-M0", "compact_workspace_witness") ||
+			strings.Contains(incumbentExecution.receipt, "SP-I1-C-WE+MAT-M0") {
+			t.Fatalf("read-committed policy did not preserve the S4 incumbent: rows=%v receipt=%s", incumbentExecution.rows, incumbentExecution.receipt)
 		}
 
 		// Exercise admission on a fresh connection so all session-local fallback
 		// workspace is initialized before the stable-snapshot transaction begins.
 		session.PGPool.Reset()
-		candidateRows, candidateReceipt := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
+		candidateExecution := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
 			"sp-i1-policy-repeatable", optimize.ShortestPathExecutorI1CanonicalPredecessorWitness,
 			pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-		if fmt.Sprint(incumbentRows) != fmt.Sprint(candidateRows) ||
-			!containsAll(candidateReceipt, "SP-I1-C-WE+MAT-M0", "inline_canonical_witness") ||
-			strings.Contains(candidateReceipt, "SP-S4-C-WE+MAT-M0") {
-			t.Fatalf("repeatable-read policy did not execute canonical I1: rows=%v receipt=%s", candidateRows, candidateReceipt)
+		if fmt.Sprint(incumbentExecution.rows) != fmt.Sprint(candidateExecution.rows) ||
+			!containsAll(candidateExecution.receipt, "SP-I1-C-WE+MAT-M0", "inline_canonical_witness") ||
+			strings.Contains(candidateExecution.receipt, "SP-S4-C-WE+MAT-M0") {
+			t.Fatalf("repeatable-read policy did not execute canonical I1: rows=%v receipt=%s", candidateExecution.rows, candidateExecution.receipt)
 		}
 
 		if err := pgDriver.SetTraversalPolicy(pg.TraversalPolicy{
@@ -365,13 +439,13 @@ func TestPostgreSQLInlineASPMatchesA1AndFallsBackWithoutPartialRows(t *testing.T
 		}); err != nil {
 			t.Fatalf("activate canonical SP rollback: %v", err)
 		}
-		rollbackRows, rollbackReceipt := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
+		rollbackExecution := executeDriverCypherWithReceipt(t, session, shortestCypher, parameters,
 			"sp-i1-policy-rollback", optimize.ShortestPathExecutorS4CanonicalWitness,
 			pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
-		if fmt.Sprint(incumbentRows) != fmt.Sprint(rollbackRows) ||
-			!containsAll(rollbackReceipt, "SP-S4-C-WE+MAT-M0", "compact_workspace_witness") ||
-			strings.Contains(rollbackReceipt, "SP-I1-C-WE+MAT-M0") {
-			t.Fatalf("canonical SP rollback did not immediately restore S4: rows=%v receipt=%s", rollbackRows, rollbackReceipt)
+		if fmt.Sprint(incumbentExecution.rows) != fmt.Sprint(rollbackExecution.rows) ||
+			!containsAll(rollbackExecution.receipt, "SP-S4-C-WE+MAT-M0", "compact_workspace_witness") ||
+			strings.Contains(rollbackExecution.receipt, "SP-I1-C-WE+MAT-M0") {
+			t.Fatalf("canonical SP rollback did not immediately restore S4: rows=%v receipt=%s", rollbackExecution.rows, rollbackExecution.receipt)
 		}
 	})
 }
@@ -604,14 +678,20 @@ func executeInlineASPTranslationWithReceipt(t *testing.T, session *Session, tran
 	return rows, receipt
 }
 
-// executeDriverCypherWithReceipt prepares or inspects test evidence for execute driver cypher with receipt.
+// executeDriverCypherWithReceipt consumes the driver query and returns its rows with executor evidence from the leased session.
 func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher string, parameters map[string]any, invocation string,
-	requested optimize.ShortestPathExecutor, options ...graph.TransactionOption) ([]string, string) {
+	requested optimize.ShortestPathExecutor, options ...graph.TransactionOption) inlineASPDriverResult {
 	t.Helper()
-	var rows []string
-	var receipt string
+
+	var (
+		rows               []string
+		receipt            string
+		transactionOptions = append([]graph.TransactionOption(nil), options...)
+	)
+	transactionOptions = append(transactionOptions, pg.OptionInitializeTraversalRuntimeAttestation())
+
 	if err := session.DB.ReadTransaction(session.Ctx, func(tx graph.Transaction) error {
-		arm := tx.Raw("select public.begin_traversal_runtime_attestation_v1(@invocation, @requested)", map[string]any{
+		arm := tx.Raw(beginInlineASPRuntimeReceiptSQL, map[string]any{
 			"invocation": invocation, "requested": string(requested),
 		})
 		for arm.Next() {
@@ -621,6 +701,11 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 			return err
 		}
 		arm.Close()
+
+		before, err := readCompactV2PreparedExecutions(tx)
+		if err != nil {
+			return err
+		}
 
 		result := tx.Query(cypher, parameters)
 		for result.Next() {
@@ -632,7 +717,22 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 		}
 		result.Close()
 
-		read := tx.Raw("select coalesce(public.read_traversal_runtime_attestation_v1(@invocation)::text, '')", map[string]any{"invocation": invocation})
+		after, err := readCompactV2PreparedExecutions(tx)
+		if err != nil {
+			return err
+		}
+
+		// The requested identity and retained prepared SQL cannot establish
+		// dispatch. Compare actual uses during this invocation instead.
+		var expectedCompactExecutions int64
+		if requested == optimize.ShortestPathExecutorASPA1DAGV2 {
+			expectedCompactExecutions = 1
+		}
+		if executions := compactV2PreparedExecutionDelta(before, after); executions != expectedCompactExecutions {
+			return fmt.Errorf("invocation %s executed %d compact statements; expected %d", invocation, executions, expectedCompactExecutions)
+		}
+
+		read := tx.Raw(readInlineASPRuntimeReceiptSQL, map[string]any{"invocation": invocation})
 		if read.Next() {
 			values := read.Values()
 			if len(values) > 0 {
@@ -644,17 +744,21 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 			return err
 		}
 		read.Close()
-		clearResult := tx.Raw("select public.clear_traversal_runtime_attestation_v1(@invocation)", map[string]any{"invocation": invocation})
+		clearResult := tx.Raw(clearInlineASPRuntimeReceiptSQL, map[string]any{"invocation": invocation})
 		for clearResult.Next() {
 		}
-		err := clearResult.Error()
+		err = clearResult.Error()
 		clearResult.Close()
 		return err
-	}, append(options, pg.OptionInitializeTraversalRuntimeAttestation())...); err != nil {
+	}, transactionOptions...); err != nil {
 		t.Fatalf("execute driver Cypher with receipt: %v", err)
 	}
 	sort.Strings(rows)
-	return rows, receipt
+
+	return inlineASPDriverResult{
+		rows:    rows,
+		receipt: receipt,
+	}
 }
 
 // containsAll reports whether every required fragment occurs in the inspected SQL text.

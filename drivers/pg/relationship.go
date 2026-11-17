@@ -92,8 +92,14 @@ func (s *relationshipQuery) Count() (int64, error) {
 	))
 }
 
+// FetchAllShortestPaths streams shortest paths while compact cursors retain exclusive result ownership.
 func (s *relationshipQuery) FetchAllShortestPaths(delegate func(cursor graph.Cursor[graph.Path]) error) error {
 	return s.QueryAllShortestPaths(func(results graph.Result) error {
+		if s.budgetedCompact {
+			cursor := newCompactPathCursor(s.ctx, results)
+			defer cursor.Close()
+			return delegate(cursor)
+		}
 		cursor := graph.NewResultIterator(s.ctx, results, func(result graph.Result) (graph.Path, error) {
 			var path graph.Path
 			return path, result.Scan(&path)
