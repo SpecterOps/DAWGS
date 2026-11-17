@@ -226,7 +226,7 @@ func TestCompactSearchResultPreservesDispatchScanAndCommitErrors(t *testing.T) {
 	}
 }
 
-// compactRollbackObserver records the cleanup context without altering mocked transaction behavior.
+// compactRollbackObserver records the cleanup context and optionally pauses mocked rollback.
 type compactRollbackObserver struct {
 	// Tx delegates rollback execution after its context is inspected.
 	pgx.Tx
@@ -236,12 +236,24 @@ type compactRollbackObserver struct {
 
 	// deadline records the independently bounded rollback timeout.
 	deadline time.Time
+
+	// started announces entry into rollback when a completion barrier is configured.
+	started chan struct{}
+
+	// release holds rollback open until the test permits snapshot release.
+	release chan struct{}
 }
 
 // Rollback captures the cleanup deadline and forwards rollback to the transaction mock.
 func (s *compactRollbackObserver) Rollback(ctx context.Context) error {
 	s.contextError = ctx.Err()
 	s.deadline, _ = ctx.Deadline()
+	if s.started != nil {
+		close(s.started)
+	}
+	if s.release != nil {
+		<-s.release
+	}
 	return s.Tx.Rollback(ctx)
 }
 

@@ -139,6 +139,16 @@
             "start_id": "decoy",
             "end_id": "a",
             "kind": "CompactA"
+          },
+          {
+            "start_id": "wrong",
+            "end_id": "t1",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "s1",
+            "end_id": "wrong",
+            "kind": "CompactA"
           }
         ]
       },
@@ -149,7 +159,7 @@
             "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
           },
           "assert": {
-            "row_count": 5,
+            "row_count": 6,
             "path_node_ids": [
               [
                 "s1",
@@ -175,6 +185,11 @@
                 "s2",
                 "d",
                 "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
               ]
             ],
             "path_lengths": [
@@ -182,6 +197,7 @@
               2,
               1,
               3,
+              2,
               2
             ]
           }
@@ -194,8 +210,8 @@
           "assert": {
             "ordered_row_values": [
               [
-                5,
-                10
+                6,
+                12
               ]
             ]
           }
@@ -206,7 +222,7 @@
             "query": "MATCH p=allShortestPaths((s)-[*1..128]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
           },
           "assert": {
-            "row_count": 5,
+            "row_count": 6,
             "path_node_ids": [
               [
                 "s1",
@@ -232,6 +248,11 @@
                 "s2",
                 "d",
                 "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
               ]
             ]
           }
@@ -242,7 +263,7 @@
             "query": "MATCH p=allShortestPaths((s)-[:CompactA|CompactB*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
           },
           "assert": {
-            "row_count": 5,
+            "row_count": 6,
             "path_node_ids": [
               [
                 "s1",
@@ -268,6 +289,11 @@
                 "s2",
                 "d",
                 "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
               ]
             ]
           }
@@ -278,7 +304,7 @@
             "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
           },
           "assert": {
-            "row_count": 3,
+            "row_count": 4,
             "path_node_ids": [
               [
                 "s1",
@@ -293,6 +319,11 @@
                 "s2",
                 "d",
                 "e",
+                "t1"
+              ],
+              [
+                "s1",
+                "wrong",
                 "t1"
               ]
             ]
@@ -344,7 +375,7 @@
             "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)=$source_id AND id(t)=$target_id RETURN p"
           },
           "assert": {
-            "row_count": 2,
+            "row_count": 3,
             "path_node_ids": [
               [
                 "s1",
@@ -354,6 +385,11 @@
               [
                 "s1",
                 "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "wrong",
                 "t1"
               ]
             ]
@@ -369,7 +405,7 @@
             "query": "MATCH p=allShortestPaths((t)<-[*1..]-(s)) WHERE s.name=$source AND t.objectid=$target RETURN p"
           },
           "assert": {
-            "row_count": 5,
+            "row_count": 6,
             "path_node_ids": [
               [
                 "t1",
@@ -395,6 +431,11 @@
                 "t2",
                 "d",
                 "s2"
+              ],
+              [
+                "t1",
+                "wrong",
+                "s1"
               ]
             ]
           }
@@ -405,7 +446,7 @@
             "query": "MATCH p=allShortestPaths((s {name:$source})-[*1..]->(t {objectid:$target})) RETURN p"
           },
           "assert": {
-            "row_count": 5,
+            "row_count": 6,
             "path_node_ids": [
               [
                 "s1",
@@ -431,6 +472,11 @@
                 "s2",
                 "d",
                 "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
               ]
             ]
           }
@@ -455,7 +501,7 @@
             "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target SET t.selected=true RETURN p"
           },
           "assert": {
-            "row_count": 5,
+            "row_count": 6,
             "path_node_ids": [
               [
                 "s1",
@@ -481,6 +527,11 @@
                 "s2",
                 "d",
                 "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
               ]
             ]
           },
@@ -542,7 +593,7 @@
           "assert": {
             "ordered_column_values": {
               "paths": [
-                5
+                6
               ]
             }
           },
@@ -552,7 +603,7 @@
               "assert": {
                 "ordered_column_values": {
                   "total": [
-                    5
+                    6
                   ]
                 }
               }
@@ -581,7 +632,7 @@
               "assert": {
                 "ordered_column_values": {
                   "total": [
-                    5
+                    6
                   ]
                 }
               }
@@ -630,6 +681,210 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "overlapping endpoint sets with explicit inequality",
+      "template": "{{query}}",
+      "params": {
+        "source": "overlap-source",
+        "target": "overlap-target"
+      },
+      "fixture": {
+        "nodes": [
+          {
+            "id": "o1",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "overlap-source",
+              "objectid": "overlap-target"
+            }
+          },
+          {
+            "id": "o2",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "overlap-source",
+              "objectid": "overlap-target"
+            }
+          },
+          {
+            "id": "o3",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "overlap-source",
+              "objectid": "overlap-target"
+            }
+          },
+          {
+            "id": "self",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "self-source",
+              "objectid": "self-target"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "o1",
+            "end_id": "o2",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "o2",
+            "end_id": "o3",
+            "kind": "CompactA"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "outgoing inequality excludes overlapping self pairs",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o1",
+                "o2"
+              ],
+              [
+                "o1",
+                "o2",
+                "o3"
+              ],
+              [
+                "o2",
+                "o3"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "outgoing inequality reversed operands",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(t)<>id(s) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o1",
+                "o2"
+              ],
+              [
+                "o1",
+                "o2",
+                "o3"
+              ],
+              [
+                "o2",
+                "o3"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "outgoing inequality excludes the only self pair",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) RETURN p"
+          },
+          "params": {
+            "source": "self-source",
+            "target": "self-target"
+          },
+          "assert": "empty"
+        },
+        {
+          "name": "incoming inequality excludes overlapping self pairs",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[:CompactA*1..]-(s)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "incoming inequality reversed operands",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[:CompactA*1..]-(s)) WHERE s.name=$source AND t.objectid=$target AND id(t)<>id(s) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "incoming inequality excludes the only self pair",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[:CompactA*1..]-(s)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) RETURN p"
+          },
+          "params": {
+            "source": "self-source",
+            "target": "self-target"
+          },
+          "assert": "empty"
         }
       ]
     },

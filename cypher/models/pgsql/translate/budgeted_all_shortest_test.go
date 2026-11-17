@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/specterops/dawgs/cypher/frontend"
+	"github.com/specterops/dawgs/cypher/models/cypher"
 	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/drivers/pg/pgutil"
 	"github.com/specterops/dawgs/graph"
@@ -102,6 +103,83 @@ func TestBudgetedAllShortestRetainsSemanticBoundaries(t *testing.T) {
 			require.False(t, UsesBudgetedAllShortestPaths(parsed))
 		})
 	}
+}
+
+// TestBudgetedAllShortestEndpointInequalityRetainsLegacyLowering verifies that
+// cross-endpoint filters cannot admit overlapping endpoint pairs to V2.
+func TestBudgetedAllShortestEndpointInequalityRetainsLegacyLowering(t *testing.T) {
+	for _, predicate := range []string{
+		"id(s)<>id(e)",
+		"id(e)<>id(s)",
+		"NOT(id(s)=id(e))",
+	} {
+		for _, relationship := range []string{"-[*1..]->", "<-[*1..]-"} {
+			t.Run(predicate+"/"+relationship, func(t *testing.T) {
+				source := fmt.Sprintf(
+					"MATCH p=allShortestPaths((s)%s(e)) WHERE s.name IN ['left','overlap'] AND e.name IN ['overlap','right'] AND %s RETURN p",
+					relationship,
+					predicate,
+				)
+
+				parsed, err := frontend.ParseCypher(frontend.NewContext(), source)
+				require.NoError(t, err)
+
+				original := cypher.Copy(parsed)
+				require.False(t, UsesBudgetedAllShortestPaths(parsed))
+				require.Equal(t, original, parsed)
+
+				automatic, err := Translate(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+				require.NoError(t, err)
+
+				legacy, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
+					Options{
+						DisableBudgetedAllShortestPaths: true,
+					})
+				require.NoError(t, err)
+
+				automaticSQL, err := Translated(automatic)
+				require.NoError(t, err)
+
+				legacySQL, err := Translated(legacy)
+				require.NoError(t, err)
+				require.Equal(t, legacySQL.Statement, automaticSQL.Statement)
+				require.Equal(t, legacy.Parameters, automatic.Parameters)
+				require.NotContains(t, automaticSQL.Statement, "all_shortest_paths_dag_v2")
+				require.Equal(t, optimize.EndpointResolutionFallbackCorrelatedPair,
+					automatic.Optimization.LoweringPlan.EndpointResolution[0].FallbackReason)
+				require.Equal(t, original, parsed)
+			})
+		}
+	}
+}
+
+// TestBudgetedAllShortestLaterEndpointFilterPreservesErrorBoundary verifies
+// that a later WITH filter cannot remove the traversal's self-endpoint check.
+func TestBudgetedAllShortestLaterEndpointFilterPreservesErrorBoundary(t *testing.T) {
+	parsed, err := frontend.ParseCypher(frontend.NewContext(),
+		"MATCH p=allShortestPaths((s)-[*1..]->(e)) WHERE s.name IN ['left','overlap'] AND e.name IN ['overlap','right'] WITH p,s,e WHERE id(s)<>id(e) RETURN p")
+	require.NoError(t, err)
+	require.True(t, UsesBudgetedAllShortestPaths(parsed))
+
+	automatic, err := Translate(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	require.NoError(t, err)
+
+	legacy, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
+		Options{
+			DisableBudgetedAllShortestPaths: true,
+		})
+	require.NoError(t, err)
+
+	automaticSQL, err := Translated(automatic)
+	require.NoError(t, err)
+
+	legacySQL, err := Translated(legacy)
+	require.NoError(t, err)
+	require.Contains(t, automaticSQL.Statement, "all_shortest_paths_dag_v2")
+	require.NotContains(t, automaticSQL.Statement, "asp_root_endpoints.root_id <> asp_terminal_endpoints.terminal_id")
+	require.Contains(t, legacySQL.Statement, "shortest_path_self_endpoint_error")
+	require.Contains(t, automaticSQL.Statement, "where ((s1.n0).id <> (s1.n1).id)")
+	require.Contains(t, legacySQL.Statement, "where ((s1.n0).id <> (s1.n1).id)")
 }
 
 // TestBudgetedAllShortestSnapshotCompatibilityControl verifies callers can retain legacy lowering

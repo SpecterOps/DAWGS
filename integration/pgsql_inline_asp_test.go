@@ -702,6 +702,11 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 		}
 		arm.Close()
 
+		before, err := readCompactV2PreparedExecutions(tx)
+		if err != nil {
+			return err
+		}
+
 		result := tx.Query(cypher, parameters)
 		for result.Next() {
 			rows = append(rows, fmt.Sprint(result.Values()))
@@ -712,28 +717,19 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 		}
 		result.Close()
 
+		after, err := readCompactV2PreparedExecutions(tx)
+		if err != nil {
+			return err
+		}
+
+		// The requested identity and retained prepared SQL cannot establish
+		// dispatch. Compare actual uses during this invocation instead.
+		var expectedCompactExecutions int64
 		if requested == optimize.ShortestPathExecutorASPA1DAGV2 {
-			// An armed requested-identity label alone is not execution proof.
-			// Check the statement actually dispatched on this physical session.
-			probe := tx.Raw(selectCompactV2PreparedStatementsSQL, nil)
-			if !probe.Next() {
-				probe.Close()
-				return errors.New("missing prepared-statement evidence for compact V2")
-			}
-			var count int64
-			if err := graph.ScanNextResult(probe, &count); err != nil {
-				probe.Close()
-				return err
-			}
-			probe.Close()
-
-			if err := probe.Error(); err != nil {
-				return err
-			}
-
-			if count == 0 {
-				return errors.New("fresh ordinary query did not dispatch compact V2 SQL")
-			}
+			expectedCompactExecutions = 1
+		}
+		if executions := compactV2PreparedExecutionDelta(before, after); executions != expectedCompactExecutions {
+			return fmt.Errorf("invocation %s executed %d compact statements; expected %d", invocation, executions, expectedCompactExecutions)
 		}
 
 		read := tx.Raw(readInlineASPRuntimeReceiptSQL, map[string]any{"invocation": invocation})
@@ -751,7 +747,7 @@ func executeDriverCypherWithReceipt(t *testing.T, session *Session, cypher strin
 		clearResult := tx.Raw(clearInlineASPRuntimeReceiptSQL, map[string]any{"invocation": invocation})
 		for clearResult.Next() {
 		}
-		err := clearResult.Error()
+		err = clearResult.Error()
 		clearResult.Close()
 		return err
 	}, transactionOptions...); err != nil {

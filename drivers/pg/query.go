@@ -108,8 +108,9 @@ func (s *liveQuery) QueryAllShortestPaths(delegate func(results graph.Result) er
 	} else {
 		defer result.Close()
 
+		budgetedCompact := s.budgetedCompact
 		delegateError := delegate(result)
-		if s.budgetedCompact {
+		if budgetedCompact {
 			result.Close()
 			return errors.Join(delegateError, result.Error())
 		}
