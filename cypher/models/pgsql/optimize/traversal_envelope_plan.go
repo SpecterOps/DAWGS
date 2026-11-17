@@ -282,7 +282,7 @@ func appendEndpointResolutionDecisions(
 						Eligible: classesSupported,
 					},
 					{
-						Name:     "within_static_endpoint_caps",
+						Name:     EndpointResolutionEligibilityStaticCaps,
 						Eligible: withinCaps,
 					},
 					{
@@ -313,7 +313,7 @@ func appendEndpointResolutionDecisions(
 				}
 				family := "SP"
 				if patternPart.AllShortestPathsPattern {
-					family = "ASP"
+					family = ShortestPathFamilyAll
 				}
 				plan.EndpointResolution = append(plan.EndpointResolution, EndpointResolutionDecision{
 					Target: PatternTarget{

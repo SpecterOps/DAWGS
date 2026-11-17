@@ -1,0 +1,3270 @@
+{
+  "node_kinds": [
+    "CompactPropertyAudit"
+  ],
+  "families": [
+    {
+      "name": "property endpoint resolution and multiplicity",
+      "template": "{{query}}",
+      "params": {
+        "source": "shared-source",
+        "target": "shared-target"
+      },
+      "fixture": {
+        "nodes": [
+          {
+            "id": "s1",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "shared-source"
+            }
+          },
+          {
+            "id": "s2",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "shared-source"
+            }
+          },
+          {
+            "id": "t1",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "objectid": "shared-target"
+            }
+          },
+          {
+            "id": "t2",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "objectid": "shared-target"
+            }
+          },
+          {
+            "id": "a",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "d",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "e",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {}
+          },
+          {
+            "id": "decoy",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "decoy"
+            }
+          },
+          {
+            "id": "wrong",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": false,
+              "objectid": 42
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "s1",
+            "end_id": "a",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "s1",
+            "end_id": "a",
+            "kind": "CompactB"
+          },
+          {
+            "start_id": "a",
+            "end_id": "t1",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "s1",
+            "end_id": "t2",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "s2",
+            "end_id": "d",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "d",
+            "end_id": "e",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "e",
+            "end_id": "t1",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "d",
+            "end_id": "t2",
+            "kind": "CompactB"
+          },
+          {
+            "start_id": "a",
+            "end_id": "decoy",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "decoy",
+            "end_id": "a",
+            "kind": "CompactA"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "all matching endpoint pairs retain pair-specific distance",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ]
+            ],
+            "path_lengths": [
+              2,
+              2,
+              1,
+              3,
+              2
+            ]
+          }
+        },
+        {
+          "name": "scalar path observations retain all shortest multiplicities",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN count(p) AS paths, sum(length(p)) AS hops"
+          },
+          "assert": {
+            "ordered_row_values": [
+              [
+                5,
+                10
+              ]
+            ]
+          }
+        },
+        {
+          "name": "explicit bound above 64",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..128]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "typed union retains parallel alternatives",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA|CompactB*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "single relationship kind changes qualifying path set",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "missing source",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": "empty",
+          "params": {
+            "source": "absent"
+          }
+        },
+        {
+          "name": "missing target",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": "empty",
+          "params": {
+            "target": "absent"
+          }
+        },
+        {
+          "name": "string predicate rejects JSON boolean",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": "empty",
+          "params": {
+            "source": "false"
+          }
+        },
+        {
+          "name": "string predicate rejects JSON number",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": "empty",
+          "params": {
+            "target": "42"
+          }
+        },
+        {
+          "name": "IDs and residual property predicates",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)=$source_id AND id(t)=$target_id RETURN p"
+          },
+          "assert": {
+            "row_count": 2,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ]
+            ]
+          },
+          "node_params": {
+            "source_id": "s1",
+            "target_id": "t1"
+          }
+        },
+        {
+          "name": "incoming search preserves logical path order",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[*1..]-(s)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [
+              [
+                "t1",
+                "a",
+                "s1"
+              ],
+              [
+                "t1",
+                "a",
+                "s1"
+              ],
+              [
+                "t2",
+                "s1"
+              ],
+              [
+                "t1",
+                "e",
+                "d",
+                "s2"
+              ],
+              [
+                "t2",
+                "d",
+                "s2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "inline property anchors",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s {name:$source})-[*1..]->(t {objectid:$target})) RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "property guards remain attached to ID anchors",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)=$source_id AND id(t)=$target_id RETURN p"
+          },
+          "assert": "empty",
+          "node_params": {
+            "source_id": "s1",
+            "target_id": "t1"
+          },
+          "params": {
+            "source": "decoy"
+          }
+        },
+        {
+          "name": "SET targets preserves result and post-state",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target SET t.selected=true RETURN p"
+          },
+          "assert": {
+            "row_count": 5,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ]
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) WHERE n.selected=true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "t1",
+                  "t2"
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    9
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET targets without RETURN",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target SET t.selected=true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) WHERE n.selected=true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "t1",
+                  "t2"
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    9
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE observes path multiplicity",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target WITH s, t CREATE (:CompactPropertyAudit) RETURN count(t) AS paths"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "paths": [
+                5
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    5
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    9
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE without RETURN",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target WITH s, t CREATE (:CompactPropertyAudit)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    5
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    9
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "staged WITH and SET preserve endpoint selection",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target WITH DISTINCT t SET t.selected=true RETURN t"
+          },
+          "assert": {
+            "node_ids": [
+              "t1",
+              "t2"
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) WHERE n.selected=true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "t1",
+                  "t2"
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    9
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "open property anchors have no policy hop ceiling",
+      "template": "{{query}}",
+      "fixture": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "chain-source",
+              "objectid": "target-0"
+            }
+          },
+          {
+            "id": "n1",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-1",
+              "objectid": "target-1"
+            }
+          },
+          {
+            "id": "n2",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-2",
+              "objectid": "target-2"
+            }
+          },
+          {
+            "id": "n3",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-3",
+              "objectid": "target-3"
+            }
+          },
+          {
+            "id": "n4",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-4",
+              "objectid": "target-4"
+            }
+          },
+          {
+            "id": "n5",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-5",
+              "objectid": "target-5"
+            }
+          },
+          {
+            "id": "n6",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-6",
+              "objectid": "target-6"
+            }
+          },
+          {
+            "id": "n7",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-7",
+              "objectid": "target-7"
+            }
+          },
+          {
+            "id": "n8",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-8",
+              "objectid": "target-8"
+            }
+          },
+          {
+            "id": "n9",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-9",
+              "objectid": "target-9"
+            }
+          },
+          {
+            "id": "n10",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-10",
+              "objectid": "target-10"
+            }
+          },
+          {
+            "id": "n11",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-11",
+              "objectid": "target-11"
+            }
+          },
+          {
+            "id": "n12",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-12",
+              "objectid": "target-12"
+            }
+          },
+          {
+            "id": "n13",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-13",
+              "objectid": "target-13"
+            }
+          },
+          {
+            "id": "n14",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-14",
+              "objectid": "target-14"
+            }
+          },
+          {
+            "id": "n15",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-15",
+              "objectid": "target-15"
+            }
+          },
+          {
+            "id": "n16",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-16",
+              "objectid": "target-16"
+            }
+          },
+          {
+            "id": "n17",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-17",
+              "objectid": "target-17"
+            }
+          },
+          {
+            "id": "n18",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-18",
+              "objectid": "target-18"
+            }
+          },
+          {
+            "id": "n19",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-19",
+              "objectid": "target-19"
+            }
+          },
+          {
+            "id": "n20",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-20",
+              "objectid": "target-20"
+            }
+          },
+          {
+            "id": "n21",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-21",
+              "objectid": "target-21"
+            }
+          },
+          {
+            "id": "n22",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-22",
+              "objectid": "target-22"
+            }
+          },
+          {
+            "id": "n23",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-23",
+              "objectid": "target-23"
+            }
+          },
+          {
+            "id": "n24",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-24",
+              "objectid": "target-24"
+            }
+          },
+          {
+            "id": "n25",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-25",
+              "objectid": "target-25"
+            }
+          },
+          {
+            "id": "n26",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-26",
+              "objectid": "target-26"
+            }
+          },
+          {
+            "id": "n27",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-27",
+              "objectid": "target-27"
+            }
+          },
+          {
+            "id": "n28",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-28",
+              "objectid": "target-28"
+            }
+          },
+          {
+            "id": "n29",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-29",
+              "objectid": "target-29"
+            }
+          },
+          {
+            "id": "n30",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-30",
+              "objectid": "target-30"
+            }
+          },
+          {
+            "id": "n31",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-31",
+              "objectid": "target-31"
+            }
+          },
+          {
+            "id": "n32",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-32",
+              "objectid": "target-32"
+            }
+          },
+          {
+            "id": "n33",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-33",
+              "objectid": "target-33"
+            }
+          },
+          {
+            "id": "n34",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-34",
+              "objectid": "target-34"
+            }
+          },
+          {
+            "id": "n35",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-35",
+              "objectid": "target-35"
+            }
+          },
+          {
+            "id": "n36",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-36",
+              "objectid": "target-36"
+            }
+          },
+          {
+            "id": "n37",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-37",
+              "objectid": "target-37"
+            }
+          },
+          {
+            "id": "n38",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-38",
+              "objectid": "target-38"
+            }
+          },
+          {
+            "id": "n39",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-39",
+              "objectid": "target-39"
+            }
+          },
+          {
+            "id": "n40",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-40",
+              "objectid": "target-40"
+            }
+          },
+          {
+            "id": "n41",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-41",
+              "objectid": "target-41"
+            }
+          },
+          {
+            "id": "n42",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-42",
+              "objectid": "target-42"
+            }
+          },
+          {
+            "id": "n43",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-43",
+              "objectid": "target-43"
+            }
+          },
+          {
+            "id": "n44",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-44",
+              "objectid": "target-44"
+            }
+          },
+          {
+            "id": "n45",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-45",
+              "objectid": "target-45"
+            }
+          },
+          {
+            "id": "n46",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-46",
+              "objectid": "target-46"
+            }
+          },
+          {
+            "id": "n47",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-47",
+              "objectid": "target-47"
+            }
+          },
+          {
+            "id": "n48",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-48",
+              "objectid": "target-48"
+            }
+          },
+          {
+            "id": "n49",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-49",
+              "objectid": "target-49"
+            }
+          },
+          {
+            "id": "n50",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-50",
+              "objectid": "target-50"
+            }
+          },
+          {
+            "id": "n51",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-51",
+              "objectid": "target-51"
+            }
+          },
+          {
+            "id": "n52",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-52",
+              "objectid": "target-52"
+            }
+          },
+          {
+            "id": "n53",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-53",
+              "objectid": "target-53"
+            }
+          },
+          {
+            "id": "n54",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-54",
+              "objectid": "target-54"
+            }
+          },
+          {
+            "id": "n55",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-55",
+              "objectid": "target-55"
+            }
+          },
+          {
+            "id": "n56",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-56",
+              "objectid": "target-56"
+            }
+          },
+          {
+            "id": "n57",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-57",
+              "objectid": "target-57"
+            }
+          },
+          {
+            "id": "n58",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-58",
+              "objectid": "target-58"
+            }
+          },
+          {
+            "id": "n59",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-59",
+              "objectid": "target-59"
+            }
+          },
+          {
+            "id": "n60",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-60",
+              "objectid": "target-60"
+            }
+          },
+          {
+            "id": "n61",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-61",
+              "objectid": "target-61"
+            }
+          },
+          {
+            "id": "n62",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-62",
+              "objectid": "target-62"
+            }
+          },
+          {
+            "id": "n63",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-63",
+              "objectid": "target-63"
+            }
+          },
+          {
+            "id": "n64",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-64",
+              "objectid": "target-64"
+            }
+          },
+          {
+            "id": "n65",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-65",
+              "objectid": "target-65"
+            }
+          },
+          {
+            "id": "n66",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-66",
+              "objectid": "target-66"
+            }
+          },
+          {
+            "id": "n67",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-67",
+              "objectid": "target-67"
+            }
+          },
+          {
+            "id": "n68",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-68",
+              "objectid": "target-68"
+            }
+          },
+          {
+            "id": "n69",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-69",
+              "objectid": "target-69"
+            }
+          },
+          {
+            "id": "n70",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-70",
+              "objectid": "target-70"
+            }
+          },
+          {
+            "id": "n71",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-71",
+              "objectid": "target-71"
+            }
+          },
+          {
+            "id": "n72",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-72",
+              "objectid": "target-72"
+            }
+          },
+          {
+            "id": "n73",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-73",
+              "objectid": "target-73"
+            }
+          },
+          {
+            "id": "n74",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-74",
+              "objectid": "target-74"
+            }
+          },
+          {
+            "id": "n75",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-75",
+              "objectid": "target-75"
+            }
+          },
+          {
+            "id": "n76",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-76",
+              "objectid": "target-76"
+            }
+          },
+          {
+            "id": "n77",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-77",
+              "objectid": "target-77"
+            }
+          },
+          {
+            "id": "n78",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-78",
+              "objectid": "target-78"
+            }
+          },
+          {
+            "id": "n79",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-79",
+              "objectid": "target-79"
+            }
+          },
+          {
+            "id": "n80",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-80",
+              "objectid": "target-80"
+            }
+          },
+          {
+            "id": "n81",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-81",
+              "objectid": "target-81"
+            }
+          },
+          {
+            "id": "n82",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-82",
+              "objectid": "target-82"
+            }
+          },
+          {
+            "id": "n83",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-83",
+              "objectid": "target-83"
+            }
+          },
+          {
+            "id": "n84",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-84",
+              "objectid": "target-84"
+            }
+          },
+          {
+            "id": "n85",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-85",
+              "objectid": "target-85"
+            }
+          },
+          {
+            "id": "n86",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-86",
+              "objectid": "target-86"
+            }
+          },
+          {
+            "id": "n87",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-87",
+              "objectid": "target-87"
+            }
+          },
+          {
+            "id": "n88",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-88",
+              "objectid": "target-88"
+            }
+          },
+          {
+            "id": "n89",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-89",
+              "objectid": "target-89"
+            }
+          },
+          {
+            "id": "n90",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-90",
+              "objectid": "target-90"
+            }
+          },
+          {
+            "id": "n91",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-91",
+              "objectid": "target-91"
+            }
+          },
+          {
+            "id": "n92",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-92",
+              "objectid": "target-92"
+            }
+          },
+          {
+            "id": "n93",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-93",
+              "objectid": "target-93"
+            }
+          },
+          {
+            "id": "n94",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-94",
+              "objectid": "target-94"
+            }
+          },
+          {
+            "id": "n95",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-95",
+              "objectid": "target-95"
+            }
+          },
+          {
+            "id": "n96",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-96",
+              "objectid": "target-96"
+            }
+          },
+          {
+            "id": "n97",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-97",
+              "objectid": "target-97"
+            }
+          },
+          {
+            "id": "n98",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-98",
+              "objectid": "target-98"
+            }
+          },
+          {
+            "id": "n99",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-99",
+              "objectid": "target-99"
+            }
+          },
+          {
+            "id": "n100",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-100",
+              "objectid": "target-100"
+            }
+          },
+          {
+            "id": "n101",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-101",
+              "objectid": "target-101"
+            }
+          },
+          {
+            "id": "n102",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-102",
+              "objectid": "target-102"
+            }
+          },
+          {
+            "id": "n103",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-103",
+              "objectid": "target-103"
+            }
+          },
+          {
+            "id": "n104",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-104",
+              "objectid": "target-104"
+            }
+          },
+          {
+            "id": "n105",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-105",
+              "objectid": "target-105"
+            }
+          },
+          {
+            "id": "n106",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-106",
+              "objectid": "target-106"
+            }
+          },
+          {
+            "id": "n107",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-107",
+              "objectid": "target-107"
+            }
+          },
+          {
+            "id": "n108",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-108",
+              "objectid": "target-108"
+            }
+          },
+          {
+            "id": "n109",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-109",
+              "objectid": "target-109"
+            }
+          },
+          {
+            "id": "n110",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-110",
+              "objectid": "target-110"
+            }
+          },
+          {
+            "id": "n111",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-111",
+              "objectid": "target-111"
+            }
+          },
+          {
+            "id": "n112",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-112",
+              "objectid": "target-112"
+            }
+          },
+          {
+            "id": "n113",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-113",
+              "objectid": "target-113"
+            }
+          },
+          {
+            "id": "n114",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-114",
+              "objectid": "target-114"
+            }
+          },
+          {
+            "id": "n115",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-115",
+              "objectid": "target-115"
+            }
+          },
+          {
+            "id": "n116",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-116",
+              "objectid": "target-116"
+            }
+          },
+          {
+            "id": "n117",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-117",
+              "objectid": "target-117"
+            }
+          },
+          {
+            "id": "n118",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-118",
+              "objectid": "target-118"
+            }
+          },
+          {
+            "id": "n119",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-119",
+              "objectid": "target-119"
+            }
+          },
+          {
+            "id": "n120",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-120",
+              "objectid": "target-120"
+            }
+          },
+          {
+            "id": "n121",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-121",
+              "objectid": "target-121"
+            }
+          },
+          {
+            "id": "n122",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-122",
+              "objectid": "target-122"
+            }
+          },
+          {
+            "id": "n123",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-123",
+              "objectid": "target-123"
+            }
+          },
+          {
+            "id": "n124",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-124",
+              "objectid": "target-124"
+            }
+          },
+          {
+            "id": "n125",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-125",
+              "objectid": "target-125"
+            }
+          },
+          {
+            "id": "n126",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-126",
+              "objectid": "target-126"
+            }
+          },
+          {
+            "id": "n127",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-127",
+              "objectid": "target-127"
+            }
+          },
+          {
+            "id": "n128",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-128",
+              "objectid": "target-128"
+            }
+          },
+          {
+            "id": "n129",
+            "kinds": [
+              "CompactPropertyNode"
+            ],
+            "properties": {
+              "name": "node-129",
+              "objectid": "target-129"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "start_id": "n0",
+            "end_id": "n1",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n1",
+            "end_id": "n2",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n2",
+            "end_id": "n3",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n3",
+            "end_id": "n4",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n4",
+            "end_id": "n5",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n5",
+            "end_id": "n6",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n6",
+            "end_id": "n7",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n7",
+            "end_id": "n8",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n8",
+            "end_id": "n9",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n9",
+            "end_id": "n10",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n10",
+            "end_id": "n11",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n11",
+            "end_id": "n12",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n12",
+            "end_id": "n13",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n13",
+            "end_id": "n14",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n14",
+            "end_id": "n15",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n15",
+            "end_id": "n16",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n16",
+            "end_id": "n17",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n17",
+            "end_id": "n18",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n18",
+            "end_id": "n19",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n19",
+            "end_id": "n20",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n20",
+            "end_id": "n21",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n21",
+            "end_id": "n22",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n22",
+            "end_id": "n23",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n23",
+            "end_id": "n24",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n24",
+            "end_id": "n25",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n25",
+            "end_id": "n26",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n26",
+            "end_id": "n27",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n27",
+            "end_id": "n28",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n28",
+            "end_id": "n29",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n29",
+            "end_id": "n30",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n30",
+            "end_id": "n31",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n31",
+            "end_id": "n32",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n32",
+            "end_id": "n33",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n33",
+            "end_id": "n34",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n34",
+            "end_id": "n35",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n35",
+            "end_id": "n36",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n36",
+            "end_id": "n37",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n37",
+            "end_id": "n38",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n38",
+            "end_id": "n39",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n39",
+            "end_id": "n40",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n40",
+            "end_id": "n41",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n41",
+            "end_id": "n42",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n42",
+            "end_id": "n43",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n43",
+            "end_id": "n44",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n44",
+            "end_id": "n45",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n45",
+            "end_id": "n46",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n46",
+            "end_id": "n47",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n47",
+            "end_id": "n48",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n48",
+            "end_id": "n49",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n49",
+            "end_id": "n50",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n50",
+            "end_id": "n51",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n51",
+            "end_id": "n52",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n52",
+            "end_id": "n53",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n53",
+            "end_id": "n54",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n54",
+            "end_id": "n55",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n55",
+            "end_id": "n56",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n56",
+            "end_id": "n57",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n57",
+            "end_id": "n58",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n58",
+            "end_id": "n59",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n59",
+            "end_id": "n60",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n60",
+            "end_id": "n61",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n61",
+            "end_id": "n62",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n62",
+            "end_id": "n63",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n63",
+            "end_id": "n64",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n64",
+            "end_id": "n65",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n65",
+            "end_id": "n66",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n66",
+            "end_id": "n67",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n67",
+            "end_id": "n68",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n68",
+            "end_id": "n69",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n69",
+            "end_id": "n70",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n70",
+            "end_id": "n71",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n71",
+            "end_id": "n72",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n72",
+            "end_id": "n73",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n73",
+            "end_id": "n74",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n74",
+            "end_id": "n75",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n75",
+            "end_id": "n76",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n76",
+            "end_id": "n77",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n77",
+            "end_id": "n78",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n78",
+            "end_id": "n79",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n79",
+            "end_id": "n80",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n80",
+            "end_id": "n81",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n81",
+            "end_id": "n82",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n82",
+            "end_id": "n83",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n83",
+            "end_id": "n84",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n84",
+            "end_id": "n85",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n85",
+            "end_id": "n86",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n86",
+            "end_id": "n87",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n87",
+            "end_id": "n88",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n88",
+            "end_id": "n89",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n89",
+            "end_id": "n90",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n90",
+            "end_id": "n91",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n91",
+            "end_id": "n92",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n92",
+            "end_id": "n93",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n93",
+            "end_id": "n94",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n94",
+            "end_id": "n95",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n95",
+            "end_id": "n96",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n96",
+            "end_id": "n97",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n97",
+            "end_id": "n98",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n98",
+            "end_id": "n99",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n99",
+            "end_id": "n100",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n100",
+            "end_id": "n101",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n101",
+            "end_id": "n102",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n102",
+            "end_id": "n103",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n103",
+            "end_id": "n104",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n104",
+            "end_id": "n105",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n105",
+            "end_id": "n106",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n106",
+            "end_id": "n107",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n107",
+            "end_id": "n108",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n108",
+            "end_id": "n109",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n109",
+            "end_id": "n110",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n110",
+            "end_id": "n111",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n111",
+            "end_id": "n112",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n112",
+            "end_id": "n113",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n113",
+            "end_id": "n114",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n114",
+            "end_id": "n115",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n115",
+            "end_id": "n116",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n116",
+            "end_id": "n117",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n117",
+            "end_id": "n118",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n118",
+            "end_id": "n119",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n119",
+            "end_id": "n120",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n120",
+            "end_id": "n121",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n121",
+            "end_id": "n122",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n122",
+            "end_id": "n123",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n123",
+            "end_id": "n124",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n124",
+            "end_id": "n125",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n125",
+            "end_id": "n126",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n126",
+            "end_id": "n127",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n127",
+            "end_id": "n128",
+            "kind": "CompactA"
+          },
+          {
+            "start_id": "n128",
+            "end_id": "n129",
+            "kind": "CompactA"
+          }
+        ]
+      },
+      "variants": [
+        {
+          "name": "open property anchors reach 15 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-15"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              15
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "open property anchors reach 16 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-16"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              16
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "open property anchors reach 17 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-17"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              17
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "open property anchors reach 63 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-63"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              63
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17",
+                "n18",
+                "n19",
+                "n20",
+                "n21",
+                "n22",
+                "n23",
+                "n24",
+                "n25",
+                "n26",
+                "n27",
+                "n28",
+                "n29",
+                "n30",
+                "n31",
+                "n32",
+                "n33",
+                "n34",
+                "n35",
+                "n36",
+                "n37",
+                "n38",
+                "n39",
+                "n40",
+                "n41",
+                "n42",
+                "n43",
+                "n44",
+                "n45",
+                "n46",
+                "n47",
+                "n48",
+                "n49",
+                "n50",
+                "n51",
+                "n52",
+                "n53",
+                "n54",
+                "n55",
+                "n56",
+                "n57",
+                "n58",
+                "n59",
+                "n60",
+                "n61",
+                "n62",
+                "n63"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "open property anchors reach 64 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-64"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              64
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17",
+                "n18",
+                "n19",
+                "n20",
+                "n21",
+                "n22",
+                "n23",
+                "n24",
+                "n25",
+                "n26",
+                "n27",
+                "n28",
+                "n29",
+                "n30",
+                "n31",
+                "n32",
+                "n33",
+                "n34",
+                "n35",
+                "n36",
+                "n37",
+                "n38",
+                "n39",
+                "n40",
+                "n41",
+                "n42",
+                "n43",
+                "n44",
+                "n45",
+                "n46",
+                "n47",
+                "n48",
+                "n49",
+                "n50",
+                "n51",
+                "n52",
+                "n53",
+                "n54",
+                "n55",
+                "n56",
+                "n57",
+                "n58",
+                "n59",
+                "n60",
+                "n61",
+                "n62",
+                "n63",
+                "n64"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "open property anchors reach 65 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-65"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              65
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17",
+                "n18",
+                "n19",
+                "n20",
+                "n21",
+                "n22",
+                "n23",
+                "n24",
+                "n25",
+                "n26",
+                "n27",
+                "n28",
+                "n29",
+                "n30",
+                "n31",
+                "n32",
+                "n33",
+                "n34",
+                "n35",
+                "n36",
+                "n37",
+                "n38",
+                "n39",
+                "n40",
+                "n41",
+                "n42",
+                "n43",
+                "n44",
+                "n45",
+                "n46",
+                "n47",
+                "n48",
+                "n49",
+                "n50",
+                "n51",
+                "n52",
+                "n53",
+                "n54",
+                "n55",
+                "n56",
+                "n57",
+                "n58",
+                "n59",
+                "n60",
+                "n61",
+                "n62",
+                "n63",
+                "n64",
+                "n65"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "open property anchors reach 128 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-128"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              128
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17",
+                "n18",
+                "n19",
+                "n20",
+                "n21",
+                "n22",
+                "n23",
+                "n24",
+                "n25",
+                "n26",
+                "n27",
+                "n28",
+                "n29",
+                "n30",
+                "n31",
+                "n32",
+                "n33",
+                "n34",
+                "n35",
+                "n36",
+                "n37",
+                "n38",
+                "n39",
+                "n40",
+                "n41",
+                "n42",
+                "n43",
+                "n44",
+                "n45",
+                "n46",
+                "n47",
+                "n48",
+                "n49",
+                "n50",
+                "n51",
+                "n52",
+                "n53",
+                "n54",
+                "n55",
+                "n56",
+                "n57",
+                "n58",
+                "n59",
+                "n60",
+                "n61",
+                "n62",
+                "n63",
+                "n64",
+                "n65",
+                "n66",
+                "n67",
+                "n68",
+                "n69",
+                "n70",
+                "n71",
+                "n72",
+                "n73",
+                "n74",
+                "n75",
+                "n76",
+                "n77",
+                "n78",
+                "n79",
+                "n80",
+                "n81",
+                "n82",
+                "n83",
+                "n84",
+                "n85",
+                "n86",
+                "n87",
+                "n88",
+                "n89",
+                "n90",
+                "n91",
+                "n92",
+                "n93",
+                "n94",
+                "n95",
+                "n96",
+                "n97",
+                "n98",
+                "n99",
+                "n100",
+                "n101",
+                "n102",
+                "n103",
+                "n104",
+                "n105",
+                "n106",
+                "n107",
+                "n108",
+                "n109",
+                "n110",
+                "n111",
+                "n112",
+                "n113",
+                "n114",
+                "n115",
+                "n116",
+                "n117",
+                "n118",
+                "n119",
+                "n120",
+                "n121",
+                "n122",
+                "n123",
+                "n124",
+                "n125",
+                "n126",
+                "n127",
+                "n128"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "open property anchors reach 129 hops",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-129"
+          },
+          "assert": {
+            "row_count": 1,
+            "path_lengths": [
+              129
+            ],
+            "path_node_ids": [
+              [
+                "n0",
+                "n1",
+                "n2",
+                "n3",
+                "n4",
+                "n5",
+                "n6",
+                "n7",
+                "n8",
+                "n9",
+                "n10",
+                "n11",
+                "n12",
+                "n13",
+                "n14",
+                "n15",
+                "n16",
+                "n17",
+                "n18",
+                "n19",
+                "n20",
+                "n21",
+                "n22",
+                "n23",
+                "n24",
+                "n25",
+                "n26",
+                "n27",
+                "n28",
+                "n29",
+                "n30",
+                "n31",
+                "n32",
+                "n33",
+                "n34",
+                "n35",
+                "n36",
+                "n37",
+                "n38",
+                "n39",
+                "n40",
+                "n41",
+                "n42",
+                "n43",
+                "n44",
+                "n45",
+                "n46",
+                "n47",
+                "n48",
+                "n49",
+                "n50",
+                "n51",
+                "n52",
+                "n53",
+                "n54",
+                "n55",
+                "n56",
+                "n57",
+                "n58",
+                "n59",
+                "n60",
+                "n61",
+                "n62",
+                "n63",
+                "n64",
+                "n65",
+                "n66",
+                "n67",
+                "n68",
+                "n69",
+                "n70",
+                "n71",
+                "n72",
+                "n73",
+                "n74",
+                "n75",
+                "n76",
+                "n77",
+                "n78",
+                "n79",
+                "n80",
+                "n81",
+                "n82",
+                "n83",
+                "n84",
+                "n85",
+                "n86",
+                "n87",
+                "n88",
+                "n89",
+                "n90",
+                "n91",
+                "n92",
+                "n93",
+                "n94",
+                "n95",
+                "n96",
+                "n97",
+                "n98",
+                "n99",
+                "n100",
+                "n101",
+                "n102",
+                "n103",
+                "n104",
+                "n105",
+                "n106",
+                "n107",
+                "n108",
+                "n109",
+                "n110",
+                "n111",
+                "n112",
+                "n113",
+                "n114",
+                "n115",
+                "n116",
+                "n117",
+                "n118",
+                "n119",
+                "n120",
+                "n121",
+                "n122",
+                "n123",
+                "n124",
+                "n125",
+                "n126",
+                "n127",
+                "n128",
+                "n129"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "explicit bound still excludes a deeper target",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..64]->(t)) WHERE s.name=$source AND t.objectid=$target RETURN p"
+          },
+          "params": {
+            "source": "chain-source",
+            "target": "target-65"
+          },
+          "assert": "empty"
+        }
+      ]
+    }
+  ]
+}

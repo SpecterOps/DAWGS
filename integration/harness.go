@@ -267,7 +267,9 @@ func (s *Session) LoadDataset(t *testing.T, path string) opengraph.IDMap {
 	return idMap
 }
 
-func (s *Session) WithRollbackFixture(t *testing.T, fixture *opengraph.Graph, clearGraph bool, delegate func(tx graph.Transaction, idMap opengraph.IDMap) error) error {
+// WithRollbackFixture loads fixture, runs delegate with its generated IDs, and
+// rolls back every change using the caller's requested transaction options.
+func (s *Session) WithRollbackFixture(t *testing.T, fixture *opengraph.Graph, clearGraph bool, delegate func(tx graph.Transaction, idMap opengraph.IDMap) error, options ...graph.TransactionOption) error {
 	t.Helper()
 
 	return s.withRollback(t, func(tx graph.Transaction) error {
@@ -287,7 +289,7 @@ func (s *Session) WithRollbackFixture(t *testing.T, fixture *opengraph.Graph, cl
 		}
 
 		return nil
-	})
+	}, options...)
 }
 
 func (s *Session) WithRollback(t *testing.T, delegate func(tx graph.Transaction) error) error {
@@ -296,7 +298,7 @@ func (s *Session) WithRollback(t *testing.T, delegate func(tx graph.Transaction)
 }
 
 // withRollback runs delegate in a write transaction and converts the fixture rollback sentinel into success.
-func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction) error) error {
+func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction) error, options ...graph.TransactionOption) error {
 	t.Helper()
 
 	err := s.DB.WriteTransaction(s.Ctx, func(tx graph.Transaction) error {
@@ -305,7 +307,7 @@ func (s *Session) withRollback(t *testing.T, delegate func(tx graph.Transaction)
 		}
 
 		return errFixtureRollback
-	})
+	}, options...)
 	if errors.Is(err, errFixtureRollback) {
 		return nil
 	}

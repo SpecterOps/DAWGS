@@ -601,7 +601,7 @@ func appendExpansionSearchStrategyDecisions(plan *LoweringPlan, queryPartIndex i
 						Eligible: directedExpansion,
 					},
 					{
-						Name:     "bounded_supported_depth",
+						Name:     ShortestPathEligibilityBoundedDepth,
 						Eligible: boundedDepth && maxDepth >= minDepth && maxDepth <= 64,
 					},
 					{
@@ -1114,7 +1114,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 						Eligible: directionSupported,
 					},
 					{
-						Name:     "bounded_supported_depth",
+						Name:     ShortestPathEligibilityBoundedDepth,
 						Eligible: supportedDepth,
 					},
 					{
@@ -1134,7 +1134,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 						Eligible: updatingClauses == 0,
 					},
 					{
-						Name:     "one_static_id_equality_per_endpoint",
+						Name:     ShortestPathEligibilityStaticEndpointIDs,
 						Eligible: singletonIDs,
 					},
 					{
@@ -1203,7 +1203,7 @@ func appendShortestPathExecutorDecisions(plan *LoweringPlan, queryPartIndex int,
 					ShortestPathExecutorB2SmallerCurrentLevelWitness,
 				}
 				if patternPart.AllShortestPathsPattern {
-					family = "ASP"
+					family = ShortestPathFamilyAll
 					plannedCandidates = []ShortestPathExecutor{
 						ShortestPathExecutorIncumbentWorkspace,
 						ShortestPathExecutorASPA1DAG,
@@ -1331,8 +1331,8 @@ func finalizeShortestPathExecutorDecisions(plan *LoweringPlan, query *cypher.Reg
 		structurallyEligible := shortestPathFactsEligible(decision.Eligibility)
 		qualifiedPhysicalDepth := decision.Direction != graph.DirectionInbound || decision.MaximumDepth <= 1
 		qualifiedPathKinds := decision.ObservationMode != ShortestPathObservationOnePath || (!decision.UntypedRelationship && decision.RelationshipKindCount == 1)
-		setShortestPathEligibilityFact(decision, "qualified_physical_expansion_depth", qualifiedPhysicalDepth)
-		setShortestPathEligibilityFact(decision, "qualified_one_path_kind_state", qualifiedPathKinds)
+		setShortestPathEligibilityFact(decision, ShortestPathEligibilityPhysicalDepth, qualifiedPhysicalDepth)
+		setShortestPathEligibilityFact(decision, ShortestPathEligibilityPathKindState, qualifiedPathKinds)
 		decision.StructurallyEligible = structurallyEligible
 		decision.StaticallyEligible = structurallyEligible && qualifiedPhysicalDepth && qualifiedPathKinds
 

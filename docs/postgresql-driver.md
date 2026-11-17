@@ -133,8 +133,54 @@ queries. Its default capacity is 256 entries; callers that need a different capa
 `pg.NewDriverWithOptions`. Builder identities include a bounded typed AST digest, so ASTs that render the same Cypher
 text cannot reuse one another's SQL. Runtime parameter values are rebound on each hit; unsupported fingerprint shapes
 compile without cache reuse. The process-wide `pg.SetOptimizedTranslation` switch selects baseline translation for
-newly started compilations across every PostgreSQL driver in the process. See
+newly started builder compilations across PostgreSQL drivers. Text Cypher through
+`tx.Query` retains its optimizer and connection-local cache independently. See
 [PostgreSQL translation](postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
+
+## Compact all-shortest search
+
+Qualified directed `allShortestPaths` queries resolve endpoint predicates once
+and search a predecessor DAG. Both property predicates and ID predicates select
+this path automatically; an omitted upper bound stays open:
+
+```cypher
+MATCH p = allShortestPaths((s)-[*1..]->(t))
+WHERE s.name = $source AND t.objectid = $target
+RETURN p
+```
+
+Discovery completes the first layer containing the target and retains every
+relationship-distinct predecessor at that distance. It enumerates the resulting
+shortest paths afterward. No matching endpoint yields no paths; multiple
+matches evaluate every endpoint pair at its own minimum distance. Endpoint and
+pair admission share the search budget, so matching properties need not be unique.
+There is no implicit 15- or 64-hop cutoff. Explicit Cypher maxima remain inclusive.
+
+The automatic envelope is one read-only, non-optional directed all-shortest
+traversal, minimum depth one, with independently resolvable endpoint filters.
+Path-dependent predicates, relationship property predicates, correlated inputs, mutations,
+minimum zero, and other unqualified shapes retain their existing execution.
+Property type guards, labels, parallel relationship kinds, and complete ordered
+path values are preserved.
+
+Eligible `tx.Relationships().Filter(...).FetchAllShortestPaths(...)` calls use the
+same compact search with optimized builder translation enabled. This includes
+the `StartID`, `EndID`, and positive `KindIn` filters used by BHE/BHCE pathfinding.
+Conjunctive kind filters intersect; pure positive OR groups union their kinds.
+The compiler preserves mixed Boolean predicates and other relationship
+observations on their existing route. Builder AST identity, parameter rebinding,
+and relationship-kind selection remain part of compilation and caching.
+
+Default `tx.Query` and eligible builder calls own a Repeatable Read transaction
+through result consumption. Existing Repeatable Read and Serializable
+transactions are reused. Caller-owned Read Committed transactions retain the
+previous traversal. For builders, earlier node lookups in the enclosing delegate
+keep their existing transaction semantics; the snapshot covers the path query,
+endpoint resolution, discovery, hydration, and cursor consumption. Closing a
+cursor early or canceling it rolls back an owned snapshot before the leased
+connection can be reused. Direct users of the new translated SQL must supply a
+stable transaction snapshot. Schema assertion installs the new versioned
+function and workspace before the compiler is used.
 
 ## Traversal limits
 
@@ -154,8 +200,8 @@ defer database.Close(ctx)
 
 | Configuration field | PostgreSQL setting | Unit | SQL fallback when unset |
 | --- | --- | --- | --- |
-| `TraversalStateLimit` | `dawgs.traversal_state_limit` | Candidate trail states | 100,000 |
-| `TraversalByteLimit` | `dawgs.traversal_byte_limit` | Cumulative estimated trail bytes | 67,108,864 (64 MiB) |
+| `TraversalStateLimit` | `dawgs.traversal_state_limit` | Admitted traversal work records | 100,000 |
+| `TraversalByteLimit` | `dawgs.traversal_byte_limit` | Cumulative estimated traversal bytes | 67,108,864 (64 MiB) |
 
 Both fields are `int64`. Set either independently to a positive value to override
 the corresponding PostgreSQL setting. Zero leaves that setting inherited from
@@ -183,6 +229,19 @@ process memory. They do not impose a maximum path depth. Accounting remains fres
 per query and shared across its multipart stages; exhausting a budget reports
 SQLSTATE `54000`. See [query semantics](query-semantics.md) and the
 [open-ended traversal policy](open_ended_traversal_policy.md).
+
+Compact all-shortest searches charge one state for each endpoint, pair, seen node,
+current-layer candidate, retained predecessor, enumeration record, and emitted
+path. Estimated bytes are 64 per endpoint/pair, 32 per seen node, 64 each for a
+candidate and its retained predecessor, and `128 + 8 * relationship_count` per
+enumeration/output array. Ordinary open trail admission retains its existing
+`128 + 8 * depth` estimate. These cumulative estimates do not measure PostgreSQL
+RSS, join/sort memory, or hydrated property payloads. Examining rejected adjacency
+edges can still consume CPU; query cancellation remains an independent control.
+Exact-limit completion succeeds; the next required admission raises `54000` with
+the phase and counters in the error detail. No fallback replenishes the budget.
+Compact execution can still need a raised budget on a large graph; defaults are
+unchanged.
 
 ## Storage maintenance
 

@@ -10,8 +10,10 @@ does not alter the Neo4j driver or claim downstream application validation.
 
 ## Runtime implementation — 2026-10-30
 
-Ordinary open recursion has no depth predicate. Open shortest searches select the
-forward breadth-first workspace and cross a `_v2` SQL boundary carrying an explicit
+Ordinary open recursion has no depth predicate. Qualified directed all-shortest
+reads now select budgeted predecessor-DAG discovery after resolving property/ID
+endpoint pairs. Other open shortest searches select the forward breadth-first
+workspace. Both cross a versioned SQL boundary carrying an explicit
 `max_is_bound` flag independently of the numeric depth. Qualified bounded executors
 remain available for explicit maxima; open ranges cannot inherit their old policy
 default through planning or cached SQL. The existing per-process caches are rebuilt
@@ -36,6 +38,17 @@ negative values fail PostgreSQL construction. Explicit transactions use local
 settings; autocommit operations restore their prior settings before releasing
 the pooled connection. See the [PostgreSQL driver guide](postgresql-driver.md#traversal-limits)
 for configuration and lifecycle details.
+
+Qualified all-shortest reads use `all_shortest_paths_dag_v2`, with open-bound
+presence carried separately from its numeric value. Property and ID anchors are
+resolved once, every matching pair is evaluated at its own shortest distance,
+and all pairs share the query token. Compact admission counts seen nodes,
+candidate/predecessor records, enumeration, emitted paths, and endpoint/pair
+resolution; [the driver guide](postgresql-driver.md#traversal-limits) specifies
+the estimated-byte units. Defaults remain unchanged. Ordinary driver queries
+establish Repeatable Read automatically for the complete compact-query/result
+lifetime. Caller-owned Read Committed transactions retain their existing route;
+the driver does not silently upgrade an already-active transaction.
 
 Correlated input endpoints cross the function boundary as individual ID pairs;
 dynamic SQL does not reference the enclosing CTE. A zero-depth branch preserves

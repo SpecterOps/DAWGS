@@ -28,11 +28,16 @@ gated until both probes finish, so overflow and cancellation cannot leak partial
 
 ## Selection boundaries
 
-`asp-static-v1` selects `ASP-A1-DAG` only for one read-only, non-optional, directed `allShortestPaths` traversal with one
-static ID equality per endpoint, minimum depth one, no path/relationship predicate, and no observed relationship value.
-An open maximum uses depth 15. A1's ordered edge IDs are hydrated inline at the outer statement boundary, avoiding a
-per-result generic path materializer. Minimum-depth-zero, self-endpoint, directionless, correlated, mutation, and predicate
-shapes retain the incumbent exact executor.
+`asp-resolved-pairs-v2` automatically selects `ASP-A1-DAG-V2` for a qualified
+read-only, non-optional directed `allShortestPaths` traversal with minimum depth
+one. Property and ID predicates resolve to endpoint-pair relations, including
+multiple matching nodes. Open maxima have no implicit hop bound; explicit bounds
+above 64 use the same budgeted algorithm. Admission covers endpoint pairs,
+discovery, retained predecessors, enumeration, and emitted arrays. Ordered edge
+IDs are hydrated inline at the statement boundary. See the
+[driver guide](postgresql-driver.md#compact-all-shortest-search) for snapshot and
+unsupported-shape boundaries. Historical forced and manifest-backed candidates
+retain their existing narrower contracts and SQL identities.
 
 `sp-static-v5-contained` retains `SP-S3-U-D` for qualified distance work, with
 `SP-S4-C-D` for deep physical-inbound distance searches. Already-qualified,
@@ -67,11 +72,11 @@ and driver admission all reject any other production values.
 `DisableInlineSPDistance`
 removes the candidate without requiring new evidence.
 
-When the query omits a maximum depth, the optimizer now carries the existing
-effective depth-15 policy into contained S3/S4 selection. Diagnostics identify
-the source as `policy_default` under `sp-static-v7-contained`, keeping it
-distinct from an explicit `..15` query even though emitted execution is
-equivalent.
+When the query omits a maximum depth, the compiler preserves its absence through
+planning, SQL formatting, and cache reuse. Qualified open all-shortest queries
+select the V2 compact function; other open shortest searches retain the complete
+budgeted workspace. Finite candidate qualifications do not substitute a depth
+default for an open query.
 
 `ASP-I1-U-DAG+MAT-M0` is also available through the production policy as a
 default-off exact-query canary. It is limited to a singleton directed endpoint

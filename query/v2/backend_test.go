@@ -362,12 +362,19 @@ func TestBackendParityPGTranslate(t *testing.T) {
 }
 
 // TestBackendParityPGTranslateShortestPaths verifies shortest-path controls select the expected PostgreSQL search harness.
+// TestBackendParityPGTranslateShortestPaths preserves each builder's open-depth
+// contract and verifies all-shortest paths use budgeted compact discovery.
 func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
-	edgeKind := graph.StringKind("MemberOf")
-	mapper := testKindMapper(edgeKind)
+	var (
+		edgeKind = graph.StringKind("MemberOf")
+		mapper   = testKindMapper(edgeKind)
+	)
 
 	cases := map[string]struct {
-		builder         v2.QueryBuilder
+		// builder constructs the shortest-path family being translated.
+		builder v2.QueryBuilder
+
+		// expectedHarness identifies the physical executor required for that family.
 		expectedHarness string
 	}{
 		"shortest path": {
@@ -388,7 +395,7 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			).Return(
 				v2.Path(),
 			),
-			expectedHarness: "unidirectional_asp_harness_v2",
+			expectedHarness: "all_shortest_paths_dag_v2",
 		},
 	}
 
@@ -405,7 +412,19 @@ func TestBackendParityPGTranslateShortestPaths(t *testing.T) {
 			require.Contains(t, sql.Statement, testCase.expectedHarness)
 			require.NotContains(t, sql.Statement, "singleton_endpoints")
 			require.Contains(t, sql.Statement, "false)", "open bound presence is explicit")
+
+			if name == "all shortest paths" {
+				require.Contains(t, sql.Statement, "asp_resolved_endpoints")
+				require.Contains(t, sql.Statement, "array [1]::int2[]")
+				require.Contains(t, sql.Statement, "1, 0, false,", "the compact call preserves an open maximum")
+				require.Contains(t, sql.Statement, "dawgs_admit_traversal_work_v2")
+				require.Contains(t, sql.Statement, "m0_hydrated", "ordered paths are hydrated after discovery")
+
+				return
+			}
+
 			require.Contains(t, sql.Statement, "ordered_edge_ids_to_path")
+
 			fragments := ""
 			for _, value := range translation.Parameters {
 				if fragment, ok := value.(string); ok {

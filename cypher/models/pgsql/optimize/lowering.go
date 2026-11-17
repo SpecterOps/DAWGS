@@ -267,6 +267,10 @@ const (
 	// ShortestPathExecutorASPA1DAG selects all-shortest-path enumeration from a predecessor DAG.
 	ShortestPathExecutorASPA1DAG ShortestPathExecutor = "ASP-A1-DAG"
 
+	// ShortestPathExecutorASPA1DAGV2 selects budgeted predecessor-DAG search
+	// over resolved endpoint pairs, including open-ended traversals.
+	ShortestPathExecutorASPA1DAGV2 ShortestPathExecutor = "ASP-A1-DAG-V2"
+
 	// ShortestPathExecutorASPN1NegativeExhaustion performs a bounded reverse
 	// reachability preflight for no-path results and otherwise delegates to A1.
 	// It is deliberately a distinct, default-off executor identity.
@@ -332,6 +336,23 @@ const (
 	ShortestPathExecutorASPB2SmallerCurrentLevelDAG ShortestPathExecutor = "ASP-B2-DAG-MIN-LEVEL"
 )
 
+const (
+	// ShortestPathFamilyAll identifies all-shortest-path planning decisions.
+	ShortestPathFamilyAll = "ASP"
+
+	// ShortestPathEligibilityStaticEndpointIDs names the static singleton-ID gate.
+	ShortestPathEligibilityStaticEndpointIDs = "one_static_id_equality_per_endpoint"
+
+	// ShortestPathEligibilityBoundedDepth names the legacy finite-depth gate.
+	ShortestPathEligibilityBoundedDepth = "bounded_supported_depth"
+
+	// ShortestPathEligibilityPhysicalDepth names an executor's physical depth gate.
+	ShortestPathEligibilityPhysicalDepth = "qualified_physical_expansion_depth"
+
+	// ShortestPathEligibilityPathKindState names an executor's path-kind state gate.
+	ShortestPathEligibilityPathKindState = "qualified_one_path_kind_state"
+)
+
 // ShortestPathScheduler identifies the frontier scheduling policy used by a
 // shortest-path executor independently of its result-observation contract.
 type ShortestPathScheduler string
@@ -355,6 +376,7 @@ func (s ShortestPathExecutor) Scheduler() ShortestPathScheduler {
 		ShortestPathExecutorS4CanonicalDistance,
 		ShortestPathExecutorS4CanonicalWitness,
 		ShortestPathExecutorASPA1DAG,
+		ShortestPathExecutorASPA1DAGV2,
 		ShortestPathExecutorASPN1NegativeExhaustion,
 		ShortestPathExecutorI1CanonicalDistance,
 		ShortestPathExecutorI2GuardedDistance,

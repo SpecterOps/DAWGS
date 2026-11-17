@@ -35,6 +35,13 @@ to override traversal admission budgets for their database operations. Zero inhe
 the PostgreSQL session setting; see [traversal limits](docs/postgresql-driver.md#traversal-limits)
 for units, defaults, and examples.
 
+PostgreSQL automatically uses budgeted compact discovery for qualified directed
+`allShortestPaths` queries with property or ID endpoint predicates. Open ranges
+need no user-supplied hop limit. Normal Cypher reads and eligible
+`FetchAllShortestPaths` builder calls establish their search snapshot automatically;
+see [compact all-shortest search](docs/postgresql-driver.md#compact-all-shortest-search)
+for supported shapes and transaction behavior.
+
 To build and run unit tests from a checkout:
 
 ```bash

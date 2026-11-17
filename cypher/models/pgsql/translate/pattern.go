@@ -161,6 +161,8 @@ func (s *Translator) buildShortestPathsExpansionPattern(traversalStepContext Tra
 					err                error
 				)
 				switch traversalStep.Expansion.ShortestPathExecutor {
+				case optimize.ShortestPathExecutorASPA1DAGV2:
+					traversalStepQuery, err = expansion.BuildBudgetedAllShortestPathsDAGRoot()
 				case optimize.ShortestPathExecutorASPA1DAG:
 					traversalStepQuery, err = expansion.BuildAllShortestPathsDAGRoot()
 				case optimize.ShortestPathExecutorASPN1NegativeExhaustion:

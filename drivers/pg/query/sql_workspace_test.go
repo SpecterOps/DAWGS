@@ -40,7 +40,7 @@ func TestBidirectionalShortestPathWarmWorkspaceUsesTruncate(t *testing.T) {
 	require.Contains(t, reset, "truncate table pg_temp.bsp_forward_front")
 	require.Contains(t, reset, "pg_temp.bsp_resolved_pairs")
 	require.NotContains(t, reset, "delete from pg_temp.bsp_")
-	require.NotContains(t, sqlSchemaUp, "current_setting('transaction_read_only')")
+	require.NotContains(t, reset, "current_setting('transaction_read_only')")
 }
 
 // TestBidirectionalShortestPathArrayModeSkipsGenericWorkspace verifies array-backed execution does not initialize table-backed workspace.

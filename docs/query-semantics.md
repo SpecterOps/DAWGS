@@ -8,8 +8,13 @@ Backend behavior, supported query forms, and compatibility notes. For the broade
 
 Legacy query-builder relationship-kind filters preserve Boolean scope: conjunctive
 filters intersect their allowed kinds, disjoint filters match no relationships, and
-OR, XOR and NOT keep their predicates in WHERE. This also prevents mutations from
+OR, XOR and NOT retain their Boolean scope. This also prevents mutations from
 affecting relationships selected only by an incorrect union of kinds.
+Eligible PostgreSQL all-shortest reads can move pure positive kind predicates
+into the compact traversal's kind domain: AND intersects and OR unions. Empty
+intersections, mixed OR groups, negation, relationship properties, and observed
+relationship bindings retain their existing route. See
+[compact all-shortest search](postgresql-driver.md#compact-all-shortest-search).
 Legacy builder Boolean filters also preserve XOR grouping inside AND, including
 negated groups. PostgreSQL groups both XOR comparison operands and the lowered
 Boolean result, so read and mutation predicates retain the same selection.
@@ -288,13 +293,20 @@ comments within ranges are accepted. The shared `exact_expansion_length_shapes` 
 paths and mutation selection on both backends and in both PostgreSQL compiler modes. Open-ended PostgreSQL
 traversals preserve an absent maximum, including paths beyond 15 hops. Ordinary
 traversals exhaust relationship-unique trails; open shortest searches use a
-budgeted breadth-first workspace. Explicit Cypher bounds remain inclusive semantic
+budgeted breadth-first workspace. Qualified directed all-shortest reads use
+budgeted predecessor-DAG discovery for either property or ID anchors, including
+open maxima. Their endpoint pairs are resolved at execution, preserving multiple
+matches and pair-specific minimum distances. Explicit Cypher bounds remain inclusive semantic
 limits. Open ranges do not select executors that require a finite upper bound.
 
 Run ordinary schema assertion before using the upgraded compiler: it installs the
 versioned open-search harnesses and admission helper. Open traversal admission
 allows 100,000 candidate trail states and 64 MiB of cumulative estimated trail
-state (128 bytes plus 8 bytes per relationship per admitted candidate). These are
+state (128 bytes plus 8 bytes per relationship per admitted trail candidate).
+Compact all-shortest search shares the same query-wide counters and additionally
+charges endpoint/pair resolution, seen nodes, predecessor storage, and path
+enumeration/output records; see the [accounting units](postgresql-driver.md#traversal-limits).
+These are
 execution budgets, not a maximum depth or a measurement of PostgreSQL process
 memory. Exhaustion raises SQLSTATE `54000`; results remain provisional until the
 stream is drained/closed and its error checked. A failed write cannot commit,

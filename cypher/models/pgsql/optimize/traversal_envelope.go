@@ -51,7 +51,14 @@ const (
 
 	// EndpointResolutionPlanBounded reserves the stable protocol value used to recognize endpoint resolution plan bounded across artifacts and executions.
 	EndpointResolutionPlanBounded EndpointResolutionPlan = "ENDPOINT-RESOLUTION-BOUNDED"
+
+	// EndpointResolutionPlanBudgeted resolves every matching endpoint and pair
+	// under the query-wide resource budget, without a semantic cardinality cap.
+	EndpointResolutionPlanBudgeted EndpointResolutionPlan = "ENDPOINT-RESOLUTION-BUDGETED"
 )
+
+// EndpointResolutionEligibilityStaticCaps names the legacy endpoint-set size gate.
+const EndpointResolutionEligibilityStaticCaps = "within_static_endpoint_caps"
 
 const (
 	// EndpointResolutionFallbackPlannedOnly reserves the stable protocol value used to recognize endpoint resolution fallback planned only across artifacts and executions.

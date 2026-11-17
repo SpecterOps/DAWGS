@@ -158,8 +158,21 @@ type Expansion struct {
 	SingletonRootID pgsql.Expression
 	// SingletonTerminalID holds the statically resolved terminal ID when exactly one terminal is known.
 	SingletonTerminalID pgsql.Expression
+
+	// ResolvedEndpointPairs selects graph-scoped endpoint relations admitted
+	// under the query budget instead of requiring statically singleton IDs.
+	ResolvedEndpointPairs bool
+
+	// ReversePathResult restores the source query's path order when optimizer
+	// or physical traversal planning reversed the resolved endpoint roles.
+	ReversePathResult bool
+
 	// RelationshipKindIDs contains the statically resolved relationship kinds admitted by the expansion.
 	RelationshipKindIDs []int16
+
+	// RelationshipKindsSpecified distinguishes an untyped wildcard from an
+	// explicitly typed pattern whose kinds are all absent from the graph.
+	RelationshipKindsSpecified bool
 
 	// EdgeStartIdentifier is the unqualified edge endpoint column from which the chosen direction advances.
 	EdgeStartIdentifier pgsql.Identifier

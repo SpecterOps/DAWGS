@@ -26,6 +26,9 @@ drop function if exists public.bump_graph_traversal_epoch_old;
 drop function if exists public.bump_all_graph_traversal_epochs;
 
 -- Drop functions
+drop function if exists all_shortest_paths_dag_v2(int4, int8, int8, int4, int8, bool, int2[], bool);
+drop function if exists ensure_all_shortest_dag_v2_workspace();
+drop function if exists dawgs_admit_traversal_work_v2(int8, int8, text);
 drop function if exists cypher_assert_node_deletable(int4, int8, int8[], int8[]);
 drop aggregate if exists cypher_min(jsonb);
 drop aggregate if exists cypher_max(jsonb);

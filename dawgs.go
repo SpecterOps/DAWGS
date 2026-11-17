@@ -38,12 +38,13 @@ type Config struct {
 	Pool *pgxpool.Pool
 
 	// TraversalStateLimit overrides PostgreSQL's dawgs.traversal_state_limit for
-	// each operation. Zero inherits the session setting; negative values are invalid.
+	// admitted trail or compact-search work records in each operation. Zero
+	// inherits the session setting; negative values are invalid.
 	// Other drivers ignore this setting.
 	TraversalStateLimit int64
 
 	// TraversalByteLimit overrides PostgreSQL's dawgs.traversal_byte_limit, in
-	// estimated trail bytes, for each operation. Zero inherits the session setting;
+	// estimated traversal bytes, for each operation. Zero inherits the session setting;
 	// negative values are invalid. Other drivers ignore this setting.
 	TraversalByteLimit int64
 }

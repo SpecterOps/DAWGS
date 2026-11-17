@@ -31,7 +31,12 @@ func (s OptimizerMode) Valid() bool {
 
 // Options configures a translation without changing the default Translate API.
 type Options struct {
+	// OptimizerMode selects optimized lowering or the semantic fallback route.
 	OptimizerMode OptimizerMode
+
+	// DisableBudgetedAllShortestPaths preserves legacy traversal lowering when
+	// the driver cannot establish the snapshot needed by compact discovery.
+	DisableBudgetedAllShortestPaths bool
 }
 
 func DefaultOptions() Options {
@@ -1590,6 +1595,9 @@ func TranslateWithProductionOptions(ctx context.Context, cypherQuery *cypher.Reg
 	if err := applyProductionShortestPathAuthorization(&optimizedPlan, options); err != nil {
 		return Result{}, err
 	}
+	// Explicit policy contexts preserve their qualified candidate/incumbent SQL,
+	// including rollback-only policies. Automatic V2 discovery belongs to the
+	// ordinary translation path and must not reinterpret frozen policy evidence.
 	for idx := range optimizedPlan.LoweringPlan.ShortestPathExecutor {
 		decision := &optimizedPlan.LoweringPlan.ShortestPathExecutor[idx]
 		if decision.SelectionMode == "forced_tool" {
@@ -1638,6 +1646,11 @@ func translateWithOptions(ctx context.Context, cypherQuery *cypher.RegularQuery,
 
 	if err := applyToolOptions(&optimizedPlan, toolOptions); err != nil {
 		return Result{}, nil, err
+	}
+	if normalizedOptions.OptimizerMode == OptimizerEnabled && !normalizedOptions.DisableBudgetedAllShortestPaths && toolOptions.ForceShortestPathExecutor == "" {
+		if _, err := selectAutomaticBudgetedAllShortestPaths(&optimizedPlan, cypherQuery); err != nil {
+			return Result{}, nil, err
+		}
 	}
 	return translateOptimized(ctx, optimizedPlan, kindMapper, parameters, graphID, toolOptions)
 }

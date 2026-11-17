@@ -127,30 +127,41 @@ func TestPostgreSQLCarriedNodeIntegerIDs(t *testing.T) {
 
 // runPostgreSQLTemplateCompilerModes executes a shared template corpus using
 // explicit compiler options; the raw query API does not honor the driver switch.
+// runPostgreSQLTemplateCompilerModes checks one shared fixture corpus against
+// enabled and disabled translation while preserving required SQL snapshots.
 func runPostgreSQLTemplateCompilerModes(t *testing.T, corpusName string) {
 	t.Helper()
+
 	var corpus cypherTemplateFile
+
 	for _, file := range loadCypherTemplateFiles(t) {
 		if strings.HasSuffix(file.path, "/"+corpusName+".json") {
 			corpus = file
 			break
 		}
 	}
+
 	if len(corpus.Families) == 0 {
 		t.Fatalf("template corpus %q is missing", corpusName)
 	}
-	nodeKinds, edgeKinds := cypherTemplateKinds([]cypherTemplateFile{corpus})
-	session := Open(t, Options{
-		RequireDriver:        pg.DriverName,
-		SkipIfNoConnection:   true,
-		SkipIfDriverMismatch: true,
-		CleanupMode:          CleanupGraph,
-		ExtraNodeKinds:       nodeKinds,
-		ExtraEdgeKinds:       edgeKinds,
-	})
+
+	var (
+		nodeKinds, edgeKinds = cypherTemplateKinds([]cypherTemplateFile{corpus})
+		session              = Open(t, Options{
+			RequireDriver:        pg.DriverName,
+			SkipIfNoConnection:   true,
+			SkipIfDriverMismatch: true,
+			CleanupMode:          CleanupGraph,
+			ExtraNodeKinds:       nodeKinds,
+			ExtraEdgeKinds:       edgeKinds,
+		})
+	)
 	ClearGraph(t, session.DB, session.Ctx)
-	pgDriver := session.DB.(*pg.Driver)
-	defaultGraph, ok := pgDriver.DefaultGraph()
+
+	var (
+		pgDriver         = session.DB.(*pg.Driver)
+		defaultGraph, ok = pgDriver.DefaultGraph()
+	)
 	if !ok {
 		t.Fatal("default graph is missing")
 	}
@@ -166,17 +177,25 @@ func runPostgreSQLTemplateCompilerModes(t *testing.T, corpusName string) {
 							if err != nil {
 								t.Fatal(err)
 							}
+
+							var transactionOptions []graph.TransactionOption
+							if mode == translate.OptimizerEnabled && translate.UsesBudgetedAllShortestPaths(parsed) {
+								transactionOptions = append(transactionOptions, pg.OptionSetTransactionIsolation(pgx.RepeatableRead))
+							}
+
 							if err := session.WithRollbackFixture(t, family.Fixture, false, func(tx graph.Transaction, idMap opengraph.IDMap) error {
 								params := resolveFixtureParams(t, mergeParams(family.Params, variant.Params), mergeStringMap(family.NodeParams, variant.NodeParams), mergeStringListMap(family.NodeListParams, variant.NodeListParams), idMap)
 								translation, err := translate.TranslateWithOptions(session.Ctx, parsed, pgDriver.KindMapper(), params, defaultGraph.ID, translate.Options{OptimizerMode: mode})
 								if err != nil {
 									t.Fatal(err)
 								}
+
 								result := executeTemplateTranslation(t, tx, translation)
 								parseAssertion(t, variant.Assert).checkResult(t, result, newAssertionContext(idMap))
 								result.Close()
+
 								return runStateAssertions(t, tx, idMap, variant.PostAssertions)
-							}); err != nil {
+							}, transactionOptions...); err != nil {
 								t.Fatal(err)
 							}
 						})

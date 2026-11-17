@@ -45,6 +45,7 @@ func (s *Translator) translateRelationshipPattern(relationshipPattern *cypher.Re
 					for _, step := range patternPart.TraversalSteps {
 						if step.Edge == edgeBinding && step.Expansion != nil {
 							step.Expansion.RelationshipKindIDs = append([]int16(nil), kindIDs...)
+							step.Expansion.RelationshipKindsSpecified = true
 						}
 					}
 					if err := s.treeTranslator.AddTranslationConstraint(pgsql.NewIdentifierSet().Add(edgeBinding.Identifier), pgsql.NewBinaryExpression(
