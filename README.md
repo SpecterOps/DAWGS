@@ -30,6 +30,10 @@ go get github.com/specterops/dawgs
 Use the Go toolchain specified in [go.mod](go.mod). The driver packages are
 [`drivers/pg`](drivers/pg) and [`drivers/neo4j`](drivers/neo4j).
 See the [PostgreSQL driver guide](docs/postgresql-driver.md) for pool setup and runtime configuration.
+PostgreSQL callers can set `dawgs.Config.TraversalStateLimit` and `TraversalByteLimit`
+to override traversal admission budgets for their database operations. Zero inherits
+the PostgreSQL session setting; see [traversal limits](docs/postgresql-driver.md#traversal-limits)
+for units, defaults, and examples.
 
 To build and run unit tests from a checkout:
 

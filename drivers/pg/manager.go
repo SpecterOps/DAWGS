@@ -100,6 +100,9 @@ type SchemaManager struct {
 	// graphQueryMemoryLimit caps memory available to a graph query transaction.
 	graphQueryMemoryLimit size.Size
 
+	// traversalLimits contains immutable constructor overrides applied on each leased operation.
+	traversalLimits traversalLimits
+
 	// traversalPolicyLock protects the versioned default-off production canary policy.
 	traversalPolicyLock sync.RWMutex
 

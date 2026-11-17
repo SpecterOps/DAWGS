@@ -26,14 +26,26 @@ func Register(driverName string, constructor DriverConstructor) {
 	availableDrivers[driverName] = constructor
 }
 
-// Config supplies connection and memory settings to the selected driver constructor.
+// Config supplies connection and resource settings to the selected driver constructor.
 type Config struct {
 	// GraphQueryMemoryLimit bounds in-memory query results for drivers that enforce it.
 	GraphQueryMemoryLimit size.Size
+
 	// ConnectionString supplies the backend URI when the driver creates its connection pool.
 	ConnectionString string
+
 	// Pool supplies an existing PostgreSQL pool when supported by the selected driver.
 	Pool *pgxpool.Pool
+
+	// TraversalStateLimit overrides PostgreSQL's dawgs.traversal_state_limit for
+	// each operation. Zero inherits the session setting; negative values are invalid.
+	// Other drivers ignore this setting.
+	TraversalStateLimit int64
+
+	// TraversalByteLimit overrides PostgreSQL's dawgs.traversal_byte_limit, in
+	// estimated trail bytes, for each operation. Zero inherits the session setting;
+	// negative values are invalid. Other drivers ignore this setting.
+	TraversalByteLimit int64
 }
 
 // Open invokes the registered driver constructor and returns ErrDriverMissing for an unknown name.

@@ -136,6 +136,54 @@ compile without cache reuse. The process-wide `pg.SetOptimizedTranslation` switc
 newly started compilations across every PostgreSQL driver in the process. See
 [PostgreSQL translation](postgresql_translation.md#translation-cache) for the cache contract and rollback controls.
 
+## Traversal limits
+
+Pass traversal budget overrides through the configuration supplied to `dawgs.Open`:
+
+```go
+database, err := dawgs.Open(ctx, pg.DriverName, dawgs.Config{
+	Pool:                pool,
+	TraversalStateLimit: 1_000_000,
+	TraversalByteLimit:  256 * 1024 * 1024,
+})
+if err != nil {
+	return err
+}
+defer database.Close(ctx)
+```
+
+| Configuration field | PostgreSQL setting | Unit | SQL fallback when unset |
+| --- | --- | --- | --- |
+| `TraversalStateLimit` | `dawgs.traversal_state_limit` | Candidate trail states | 100,000 |
+| `TraversalByteLimit` | `dawgs.traversal_byte_limit` | Cumulative estimated trail bytes | 67,108,864 (64 MiB) |
+
+Both fields are `int64`. Set either independently to a positive value to override
+the corresponding PostgreSQL setting. Zero leaves that setting inherited from
+the connection, including role, database, or connection-startup configuration.
+An unset or empty inherited setting uses the SQL fallback above. Negative values
+cause the PostgreSQL constructor to return an error. Other drivers ignore these
+PostgreSQL-specific fields. Increasing a budget permits more work and can increase
+execution time and storage use; the example values are illustrative.
+
+Overrides are defaults for each DAWGS operation, applied on its leased connection
+before the delegate runs. They cover Cypher and builder queries on both existing
+and newly created pooled connections. Explicit transactions use transaction-local
+settings. Autocommit operations temporarily change the session settings and restore
+the overridden values before returning the connection to the pool, including after
+delegate failures or cancellation. If restoration fails, DAWGS logs the error and
+closes the connection. Unconfigured settings are left untouched.
+
+Callers may still issue raw SQL settings inside the operation to override its
+defaults. Constructor configuration does not alter the pool's startup configuration
+or set database-wide defaults. Existing `pg.NewDriver` constructors continue to
+inherit their connection settings.
+
+Budgets count admitted traversal work rather than result rows or actual PostgreSQL
+process memory. They do not impose a maximum path depth. Accounting remains fresh
+per query and shared across its multipart stages; exhausting a budget reports
+SQLSTATE `54000`. See [query semantics](query-semantics.md) and the
+[open-ended traversal policy](open_ended_traversal_policy.md).
+
 ## Storage maintenance
 
 The PostgreSQL driver requires PostgreSQL 16 or newer; PostgreSQL 18 is recommended. `OptimizeStorage` performs
