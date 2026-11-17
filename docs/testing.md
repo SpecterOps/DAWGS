@@ -90,6 +90,11 @@ The fan-out correctness test executes each query once: 208 queries across all
 16 combinations of relationship domain, width, depth, and projection. It checks
 both counts and fully consumed paths for the combined pattern, exhaustive fixed
 components, and the smaller workload from two single-type queries.
+On PostgreSQL, each fixture refreshes statistics for its node and edge partitions
+inside the loading transaction before any query arm is prepared. Autovacuum
+cannot see these uncommitted fixtures; using empty or unrelated statistics can
+otherwise produce expensive plans for the fixed components. Statistics setup is
+excluded from the measured query-arm time.
 
 Enable repeated timing measurements explicitly:
 

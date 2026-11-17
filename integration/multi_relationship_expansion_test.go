@@ -99,6 +99,10 @@ func TestMultiRelationshipExpansionFanout(t *testing.T) {
 				for _, projection := range []string{"count(*)", "p"} {
 					t.Run(fmt.Sprintf("%s/width=%d/depth=%d/%s", kinds[0], width, depth, projection), func(t *testing.T) {
 						require.NoError(t, session.WithRollbackFixture(t, fixture, true, func(tx graph.Transaction, ids opengraph.IDMap) error {
+							if err := prepareMultiExpansionFixtureStatistics(session, tx); err != nil {
+								return err
+							}
+
 							var (
 								params   = map[string]any{"root": ids["root"].Int64()}
 								combined = []string{multiExpansionQuery([]string{fmt.Sprintf("%s|%s*1..%d", kinds[0], kinds[1], depth)}, false, projection)}

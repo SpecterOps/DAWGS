@@ -61,6 +61,7 @@ bounds repeated expansion after memo eviction, and releases settled in-flight re
 The [multi-relationship expansion regression checks](docs/testing.md#multi-relationship-expansion)
 compare bounded traversals with exhaustive fixed patterns on both backends,
 including path multiplicity, mutation state, fan-out timings, and PostgreSQL plans.
+PostgreSQL fan-out fixtures refresh planner statistics before preparing their queries.
 The [path materialization experiment](docs/testing.md#path-materialization-experiment)
 checks complete path values and measures batching, wide properties, memory,
 and time to first row, including `LIMIT 1`.
