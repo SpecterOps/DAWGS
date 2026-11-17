@@ -187,6 +187,35 @@ func TestBudgetedAllShortestBuilderKindDomains(t *testing.T) {
 	}
 }
 
+// TestBudgetedAllShortestBuilderKindsAndDistinctPairProofCompose verifies that
+// kind relocation and same-MATCH pair filtering share the automatic selector.
+func TestBudgetedAllShortestBuilderKindsAndDistinctPairProofCompose(t *testing.T) {
+	var (
+		kind   = graph.StringKind("CompactA")
+		filter = query.And(
+			query.KindIn(query.Relationship(), kind),
+			cypher.NewComparison(query.StartID(), cypher.OperatorNotEquals, query.EndID()),
+		)
+		builderQuery = budgetedBuilderKindQuery(t, filter, false, 0)
+		original     = cypher.Copy(builderQuery.Query)
+		mapper       = pgutil.NewInMemoryKindMapper()
+	)
+
+	mapper.Put(kind)
+	require.True(t, UsesBudgetedAllShortestPaths(builderQuery.Query))
+
+	translation, err := Translate(context.Background(), builderQuery.Query, mapper, builderQuery.Parameters, DefaultGraphID)
+	require.NoError(t, err)
+
+	formatted, err := Translated(translation)
+	require.NoError(t, err)
+	require.Contains(t, formatted.Statement, "all_shortest_paths_dag_v2")
+	require.Contains(t, formatted.Statement, "case when asp_root_endpoints.root_id != asp_terminal_endpoints.terminal_id then dawgs_admit_traversal_work_v2")
+	require.Equal(t, optimize.EndpointPairPredicateDistinctIDs,
+		translation.Optimization.LoweringPlan.ShortestPathExecutor[0].EndpointPairPredicate)
+	require.Equal(t, original, builderQuery.Query)
+}
+
 // TestBudgetedAllShortestBuilderRetainsUnsupportedPredicates verifies unsupported observations
 // preserve their legacy SQL or translation error.
 func TestBudgetedAllShortestBuilderRetainsUnsupportedPredicates(t *testing.T) {

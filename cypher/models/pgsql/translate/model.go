@@ -163,6 +163,10 @@ type Expansion struct {
 	// under the query budget instead of requiring statically singleton IDs.
 	ResolvedEndpointPairs bool
 
+	// EndpointPairPredicate carries the selected V2 proof that permits filtering
+	// endpoint pairs before their resource charge and kernel invocation.
+	EndpointPairPredicate optimize.EndpointPairPredicate
+
 	// ReversePathResult restores the source query's path order when optimizer
 	// or physical traversal planning reversed the resolved endpoint roles.
 	ReversePathResult bool

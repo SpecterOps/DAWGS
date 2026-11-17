@@ -3,6 +3,7 @@ package translate
 import (
 	"github.com/specterops/dawgs/cypher/models"
 	"github.com/specterops/dawgs/cypher/models/pgsql"
+	"github.com/specterops/dawgs/cypher/models/pgsql/optimize"
 	"github.com/specterops/dawgs/cypher/models/pgsql/pgd"
 )
 
@@ -98,13 +99,38 @@ func (s *ExpansionBuilder) budgetedEndpointPairCTEs() []pgsql.CommonTableExpress
 	var (
 		root     = budgetedEndpointCTE(budgetedRootEndpoints, expansionRootID, s.traversalStep.LeftNode, rootPredicate)
 		terminal = budgetedEndpointCTE(budgetedTerminalEndpoints, expansionTerminalID, s.traversalStep.RightNode, expansion.TerminalNodeConstraints)
+
+		pairMaterialization *pgsql.Materialized
+		pairAdmission       pgsql.Expression = budgetedEndpointAdmission(budgetedPairPhase)
 	)
+
+	if expansion.EndpointPairPredicate == optimize.EndpointPairPredicateDistinctIDs {
+		// CASE orders the effectful charge after the inequality: excluded
+		// self-pairs consume no pair budget and cannot reach the kernel.
+		pairAdmission = &pgsql.Case{
+			Conditions: []pgsql.Expression{
+				pgsql.NewBinaryExpression(
+					pgsql.CompoundIdentifier{budgetedRootEndpoints, expansionRootID},
+					pgsql.OperatorNotEquals,
+					pgsql.CompoundIdentifier{budgetedTerminalEndpoints, expansionTerminalID},
+				),
+			},
+			Then: []pgsql.Expression{
+				pairAdmission,
+			},
+			Else: pgsql.NewLiteral(false, pgsql.Boolean),
+		}
+		pairMaterialization = &pgsql.Materialized{
+			Materialized: true,
+		}
+	}
 
 	pairs := pgsql.CommonTableExpression{
 		Alias: pgsql.TableAlias{
 			Name:  budgetedResolvedEndpoints,
 			Shape: pgsql.NewRecordShape([]pgsql.Identifier{expansionRootID, expansionTerminalID}),
 		},
+		Materialized: pairMaterialization,
 		Query: pgsql.Query{
 			Body: pgsql.Select{
 				Projection: []pgsql.SelectItem{
@@ -125,7 +151,7 @@ func (s *ExpansionBuilder) budgetedEndpointPairCTEs() []pgsql.CommonTableExpress
 				},
 				Where: pgsql.OptionalAnd(
 					pgsql.CompoundIdentifier{budgetedRootEndpoints, budgetedAdmitted},
-					pgsql.OptionalAnd(pgsql.CompoundIdentifier{budgetedTerminalEndpoints, budgetedAdmitted}, budgetedEndpointAdmission(budgetedPairPhase)),
+					pgsql.OptionalAnd(pgsql.CompoundIdentifier{budgetedTerminalEndpoints, budgetedAdmitted}, pairAdmission),
 				),
 			},
 		},

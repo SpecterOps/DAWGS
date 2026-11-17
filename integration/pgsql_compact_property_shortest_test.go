@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/specterops/dawgs/cypher/frontend"
 	"github.com/specterops/dawgs/cypher/models/pgsql/translate"
 	"github.com/specterops/dawgs/drivers/pg"
@@ -28,11 +30,19 @@ const (
 		WHERE statement LIKE '%all_shortest_paths_dag_v2(%'
 		  AND statement NOT LIKE '%pg_prepared_statements%'`
 
+	// selectCompactPropertyShortestBudgetSQL reads cumulative admissions inside the caller-owned stable transaction.
+	selectCompactPropertyShortestBudgetSQL = `
+		SELECT current_setting('dawgs.traversal_states')::bigint,
+		       current_setting('dawgs.traversal_bytes')::bigint`
+
 	// compactPropertyShortestLegacyControlCypher preserves the same disjoint endpoint results while requiring correlated-pair fallback.
 	compactPropertyShortestLegacyControlCypher = `
 		MATCH p=allShortestPaths((s)-[*1..]->(t))
-		WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t)
+		WHERE s.name=$source AND t.objectid=$target AND s.name<>t.objectid
 		RETURN p`
+
+	// compactPropertyShortestSelfEndpointSQLState identifies the established PostgreSQL error for forbidden self-endpoint searches.
+	compactPropertyShortestSelfEndpointSQLState = "22023"
 )
 
 // loadCompactPropertyShortestCorpus retrieves the shared fixtures without depending on backend eligibility.
@@ -61,27 +71,43 @@ func requireCompactPropertyShortestInventory(t *testing.T, corpus cypherTemplate
 			"explicit bound above 64":                                     true,
 			"typed union retains parallel alternatives":                   true,
 			"single relationship kind changes qualifying path set":        true,
-			"missing source":                                  true,
-			"missing target":                                  true,
-			"string predicate rejects JSON boolean":           true,
-			"string predicate rejects JSON number":            true,
-			"IDs and residual property predicates":            true,
-			"incoming search preserves logical path order":    true,
-			"inline property anchors":                         true,
-			"property guards remain attached to ID anchors":   true,
-			"SET targets preserves result and post-state":     false,
-			"SET targets without RETURN":                      false,
-			"CREATE observes path multiplicity":               false,
-			"CREATE without RETURN":                           false,
-			"staged WITH and SET preserve endpoint selection": false,
+			"missing source":                                            true,
+			"missing target":                                            true,
+			"string predicate rejects JSON boolean":                     true,
+			"string predicate rejects JSON number":                      true,
+			"IDs and residual property predicates":                      true,
+			"incoming search preserves logical path order":              true,
+			"inline property anchors":                                   true,
+			"property guards remain attached to ID anchors":             true,
+			"SET targets preserves result and post-state":               false,
+			"SET targets without RETURN":                                false,
+			"CREATE observes path multiplicity":                         false,
+			"CREATE without RETURN":                                     false,
+			"staged WITH and SET preserve endpoint selection":           false,
+			"NOT endpoint equality retains fallback":                    false,
+			"mixed OR endpoint inequality retains fallback":             false,
+			"endpoint property correlation retains fallback":            false,
+			"later WITH endpoint inequality preserves disjoint results": true,
 		},
 		"overlapping endpoint sets with explicit inequality": {
-			"outgoing inequality excludes overlapping self pairs": false,
-			"outgoing inequality reversed operands":               false,
-			"outgoing inequality excludes the only self pair":     false,
-			"incoming inequality excludes overlapping self pairs": false,
-			"incoming inequality reversed operands":               false,
-			"incoming inequality excludes the only self pair":     false,
+			"outgoing inequality excludes overlapping self pairs":         true,
+			"outgoing inequality reversed operands":                       true,
+			"outgoing inequality excludes the only self pair":             true,
+			"incoming inequality excludes overlapping self pairs":         true,
+			"incoming inequality reversed operands":                       true,
+			"incoming inequality excludes the only self pair":             true,
+			"outgoing parenthesized inequality":                           true,
+			"outgoing parenthesized ID inequality":                        true,
+			"outgoing parenthesized reversed inequality":                  true,
+			"outgoing inequality preserves scalar multiplicity":           true,
+			"incoming parenthesized inequality":                           true,
+			"incoming parenthesized ID inequality":                        true,
+			"incoming parenthesized reversed inequality":                  true,
+			"incoming inequality preserves scalar multiplicity":           true,
+			"SET with endpoint inequality preserves paths and post-state": false,
+			"SET with endpoint inequality without RETURN":                 false,
+			"CREATE with endpoint inequality preserves multiplicity":      false,
+			"CREATE with endpoint inequality without RETURN":              false,
 		},
 		"open property anchors have no policy hop ceiling": {
 			"open property anchors reach 15 hops":           true,
@@ -173,6 +199,125 @@ func TestPostgreSQLCompactPropertyShortestCompilerModes(t *testing.T) {
 	runPostgreSQLTemplateCompilerModes(t, compactPropertyShortestCorpusName)
 }
 
+// TestPostgreSQLCompactPropertyShortestSelfPairErrors checks early self-pair exclusion and preserves existing errors for unsupported or later filters.
+func TestPostgreSQLCompactPropertyShortestSelfPairErrors(t *testing.T) {
+	var (
+		corpus = loadCompactPropertyShortestCorpus(t)
+		family cypherTemplateFamily
+	)
+	for _, candidate := range corpus.Families {
+		if candidate.Name == "overlapping endpoint sets with explicit inequality" {
+			family = candidate
+			break
+		}
+	}
+	require.NotNil(t, family.Fixture)
+
+	var (
+		nodeKinds, edgeKinds = cypherTemplateKinds([]cypherTemplateFile{corpus})
+		session              = Open(t, Options{
+			RequireDriver:        pg.DriverName,
+			SkipIfNoConnection:   true,
+			SkipIfDriverMismatch: true,
+			CleanupMode:          CleanupGraph,
+			ExtraNodeKinds:       nodeKinds,
+			ExtraEdgeKinds:       edgeKinds,
+		})
+		pgDriver         = session.DB.(*pg.Driver)
+		defaultGraph, ok = pgDriver.DefaultGraph()
+	)
+	require.True(t, ok)
+
+	for _, variant := range family.Variants {
+		if !strings.HasSuffix(variant.Name, "excludes the only self pair") {
+			continue
+		}
+
+		t.Run(variant.Name+" before pair admission", func(t *testing.T) {
+			require.NoError(t, session.WithRollbackFixture(t, family.Fixture, true, func(tx graph.Transaction, idMap opengraph.IDMap) error {
+				parameters := resolveFixtureParams(t, mergeParams(family.Params, variant.Params), nil, nil, idMap)
+				result := tx.Query(renderCypherTemplate(t, family.Template, variant.Vars), parameters)
+				parseAssertion(t, variant.Assert).checkResult(t, result, newAssertionContext(idMap))
+				result.Close()
+				if err := result.Error(); err != nil {
+					return err
+				}
+
+				budget := tx.Raw(selectCompactPropertyShortestBudgetSQL, nil)
+				require.True(t, budget.Next())
+
+				var (
+					states int64
+					bytes  int64
+				)
+				require.NoError(t, graph.ScanNextResult(budget, &states, &bytes))
+				budget.Close()
+				require.NoError(t, budget.Error())
+				require.Equal(t, int64(2), states, "excluded self pairs must not consume pair or search states")
+				require.Equal(t, int64(128), bytes, "only the two endpoint memberships are admitted")
+				return nil
+			}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+		})
+	}
+
+	for _, boundary := range []struct {
+		// name identifies the predicate placement whose error boundary must remain unchanged.
+		name string
+
+		// query retains overlapping endpoints until the established self-pair check executes.
+		query string
+
+		// compact records eligibility independently of the production selector.
+		compact bool
+	}{
+		{
+			name:    "NOT equality remains a fallback with the existing self-pair error",
+			query:   "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND NOT(id(s)=id(t)) RETURN p",
+			compact: false,
+		},
+		{
+			name:    "later WITH cannot remove the preceding self-pair error",
+			query:   "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target WITH p,s,t WHERE id(s)<>id(t) RETURN p",
+			compact: true,
+		},
+	} {
+		t.Run(boundary.name, func(t *testing.T) {
+			parsed, err := frontend.ParseCypher(frontend.NewContext(), boundary.query)
+			require.NoError(t, err)
+			require.Equal(t, boundary.compact, translate.UsesBudgetedAllShortestPaths(parsed))
+
+			for _, mode := range []translate.OptimizerMode{translate.OptimizerEnabled, translate.OptimizerDisabled} {
+				t.Run(string(mode), func(t *testing.T) {
+					require.NoError(t, session.WithRollbackFixture(t, family.Fixture, true, func(tx graph.Transaction, idMap opengraph.IDMap) error {
+						parameters := resolveFixtureParams(t, family.Params, family.NodeParams, family.NodeListParams, idMap)
+						translation, err := translate.TranslateWithOptions(session.Ctx, parsed, pgDriver.KindMapper(), parameters, defaultGraph.ID,
+							translate.Options{
+								OptimizerMode:                   mode,
+								DisableBudgetedAllShortestPaths: mode == translate.OptimizerDisabled,
+							})
+						require.NoError(t, err)
+
+						formatted, err := translate.Translated(translation)
+						require.NoError(t, err)
+						require.Equal(t, boundary.compact && mode == translate.OptimizerEnabled,
+							strings.Contains(formatted.Statement, "all_shortest_paths_dag_v2("))
+
+						result := executeTemplateTranslation(t, tx, translation)
+						for result.Next() {
+						}
+						result.Close()
+
+						var pgError *pgconn.PgError
+						require.ErrorAs(t, result.Error(), &pgError)
+						require.Equal(t, compactPropertyShortestSelfEndpointSQLState, pgError.Code)
+						return nil
+					}, pg.OptionSetTransactionIsolation(pgx.RepeatableRead)))
+				})
+			}
+		})
+	}
+}
+
 // TestPostgreSQLCompactPropertyShortestDefaultQueries exercises the public
 // query entry point without asking callers to set an isolation level. Fixtures
 // are committed before each read so the query can own its snapshot lifetime.
@@ -221,8 +366,11 @@ func TestPostgreSQLCompactPropertyShortestDefaultQueries(t *testing.T) {
 						return err
 					}
 
-					result := tx.Query(query, parameters)
-					parseAssertion(t, variant.Assert).checkResult(t, result, newAssertionContext(idMap))
+					var (
+						result    = tx.Query(query, parameters)
+						assertion = parseAssertion(t, variant.Assert)
+					)
+					assertion.checkResult(t, result, newAssertionContext(idMap))
 					result.Close()
 
 					if err := result.Error(); err != nil {

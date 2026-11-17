@@ -90,6 +90,12 @@ Current PostgreSQL optimization coverage includes:
   a copied AST before fresh eligibility analysis; intersections, unions, and
   unsupported residual predicates retain their Boolean meaning. Builder cache
   identities separate compact snapshot execution from the legacy route.
+  Direct conjunctive endpoint-ID inequalities in the same MATCH WHERE are
+  represented as validated pair filters for automatic V2 selection. Equal pairs
+  are excluded with CASE-gated admission in the materialized pair relation, so
+  they neither consume pair budget nor invoke the kernel. Other cross-endpoint
+  expressions, including negations and mixed OR groups, and later WITH filters
+  retain their existing placement and routing.
   Existing forced/canary executors retain their separate qualification and SQL
   identity. Unqualified semantic forms retain their existing exact executor.
 - Default-off `ASP-B1-DAG-ALT-NODE` and `ASP-B2-DAG-MIN-LEVEL` reuse compact

@@ -105,15 +105,17 @@ func TestBudgetedAllShortestRetainsSemanticBoundaries(t *testing.T) {
 	}
 }
 
-// TestBudgetedAllShortestEndpointInequalityRetainsLegacyLowering verifies that
-// cross-endpoint filters cannot admit overlapping endpoint pairs to V2.
-func TestBudgetedAllShortestEndpointInequalityRetainsLegacyLowering(t *testing.T) {
+// TestBudgetedAllShortestEndpointInequalityUsesBudgetedPairs verifies direct
+// same-MATCH inequalities select V2 without changing the cached source AST.
+func TestBudgetedAllShortestEndpointInequalityUsesBudgetedPairs(t *testing.T) {
 	for _, predicate := range []string{
 		"id(s)<>id(e)",
 		"id(e)<>id(s)",
-		"NOT(id(s)=id(e))",
+		"((id(s)) <> (id(e)))",
+		"((id(e)) <> (id(s)))",
+		"(id(s)<>id(e) AND (id(e)<>id(s)))",
 	} {
-		for _, relationship := range []string{"-[*1..]->", "<-[*1..]-"} {
+		for _, relationship := range []string{"-[*1..]->", "<-[*1..]-", "-[*1..128]->"} {
 			t.Run(predicate+"/"+relationship, func(t *testing.T) {
 				source := fmt.Sprintf(
 					"MATCH p=allShortestPaths((s)%s(e)) WHERE s.name IN ['left','overlap'] AND e.name IN ['overlap','right'] AND %s RETURN p",
@@ -125,32 +127,169 @@ func TestBudgetedAllShortestEndpointInequalityRetainsLegacyLowering(t *testing.T
 				require.NoError(t, err)
 
 				original := cypher.Copy(parsed)
-				require.False(t, UsesBudgetedAllShortestPaths(parsed))
+				require.True(t, UsesBudgetedAllShortestPaths(parsed))
 				require.Equal(t, original, parsed)
 
 				automatic, err := Translate(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID)
 				require.NoError(t, err)
 
-				legacy, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
-					Options{
-						DisableBudgetedAllShortestPaths: true,
-					})
-				require.NoError(t, err)
-
 				automaticSQL, err := Translated(automatic)
 				require.NoError(t, err)
+				require.Contains(t, automaticSQL.Statement, "all_shortest_paths_dag_v2")
+				require.Contains(t, automaticSQL.Statement, "asp_resolved_endpoints(root_id, terminal_id) as materialized")
+				require.Contains(t, automaticSQL.Statement, "case when asp_root_endpoints.root_id != asp_terminal_endpoints.terminal_id then dawgs_admit_traversal_work_v2(1, 64,")
+				require.Contains(t, automaticSQL.Statement, "else false end")
+				require.NotContains(t, automaticSQL.Statement, "shortest_path_self_endpoint_error")
 
-				legacySQL, err := Translated(legacy)
-				require.NoError(t, err)
-				require.Equal(t, legacySQL.Statement, automaticSQL.Statement)
-				require.Equal(t, legacy.Parameters, automatic.Parameters)
-				require.NotContains(t, automaticSQL.Statement, "all_shortest_paths_dag_v2")
-				require.Equal(t, optimize.EndpointResolutionFallbackCorrelatedPair,
-					automatic.Optimization.LoweringPlan.EndpointResolution[0].FallbackReason)
+				var (
+					executor = automatic.Optimization.LoweringPlan.ShortestPathExecutor[0]
+					endpoint = automatic.Optimization.LoweringPlan.EndpointResolution[0]
+				)
+
+				require.Equal(t, optimize.EndpointPairPredicateDistinctIDs, executor.EndpointPairPredicate)
+				require.Equal(t, optimize.ShortestPathExecutorASPA1DAGV2, executor.SelectedExecutor)
+				require.Equal(t, optimize.EndpointResolutionPlanBudgeted, endpoint.SelectedPlan)
+				require.Empty(t, endpoint.PairClass)
+				require.NotContains(t, endpoint.PlannedClasses, optimize.EndpointResolutionClassCorrelatedPair)
+				for _, fact := range endpoint.EligibilityFacts {
+					require.True(t, fact.Eligible, fact.Name)
+				}
+
 				require.Equal(t, original, parsed)
 			})
 		}
 	}
+}
+
+// TestBudgetedAllShortestUnsupportedPairFiltersRetainLegacyLowering verifies
+// that the distinct-ID proof cannot excuse other endpoint correlations.
+func TestBudgetedAllShortestUnsupportedPairFiltersRetainLegacyLowering(t *testing.T) {
+	for _, predicate := range []string{
+		"NOT(id(s)=id(e))",
+		"(id(s)<>id(e) OR true)",
+		"(id(s)<>id(e) OR s.enabled=true)",
+		"id(s)<>id(e) AND s.flag=e.flag",
+		"id(s)<>id(e) AND id(s)=id(e)",
+		"s.name<>e.name",
+		"id(s)+1<>id(e)",
+		"id(s)<>id(e)<>42",
+	} {
+		t.Run(predicate, func(t *testing.T) {
+			source := "MATCH p=allShortestPaths((s)-[*1..]->(e)) WHERE s.name IN ['left','overlap'] AND e.name IN ['overlap','right'] AND (" + predicate + ") RETURN p"
+			parsed, err := frontend.ParseCypher(frontend.NewContext(), source)
+			require.NoError(t, err)
+			require.False(t, UsesBudgetedAllShortestPaths(parsed))
+
+			automatic, err := Translate(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+			require.NoError(t, err)
+
+			legacy, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
+				Options{
+					DisableBudgetedAllShortestPaths: true,
+				})
+			require.NoError(t, err)
+
+			automaticSQL, err := Translated(automatic)
+			require.NoError(t, err)
+
+			legacySQL, err := Translated(legacy)
+			require.NoError(t, err)
+			require.Equal(t, legacySQL.Statement, automaticSQL.Statement)
+			require.Equal(t, legacy.Parameters, automatic.Parameters)
+			require.NotContains(t, automaticSQL.Statement, "all_shortest_paths_dag_v2")
+		})
+	}
+}
+
+// TestBudgetedAllShortestEndpointInequalityPreservesUnsupportedIdentitySyntax verifies
+// proof selection cannot introduce grammar or function-argument changes.
+func TestBudgetedAllShortestEndpointInequalityPreservesUnsupportedIdentitySyntax(t *testing.T) {
+	_, err := frontend.ParseCypher(frontend.NewContext(),
+		"MATCH p=allShortestPaths((s)-[*1..]->(e)) WHERE s.name='source' AND e.name='target' AND id(s)!=id(e) RETURN p")
+	require.ErrorContains(t, err, "token recognition error at: '!'")
+
+	parsed, err := frontend.ParseCypher(frontend.NewContext(),
+		"MATCH p=allShortestPaths((s)-[*1..]->(e)) WHERE s.name='source' AND e.name='target' AND id((s))<>id(e) RETURN p")
+	require.NoError(t, err)
+	require.False(t, UsesBudgetedAllShortestPaths(parsed))
+
+	_, automaticErr := Translate(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+	_, legacyErr := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
+		Options{
+			DisableBudgetedAllShortestPaths: true,
+		})
+	require.Error(t, legacyErr)
+	require.EqualError(t, automaticErr, legacyErr.Error())
+}
+
+// TestBudgetedAllShortestEndpointInequalitySurvivesReversalAndKindResolution verifies
+// pair filtering remains independent of physical path orientation and
+// preserves empty and partially known typed relationship domains.
+func TestBudgetedAllShortestEndpointInequalitySurvivesReversalAndKindResolution(t *testing.T) {
+	for _, kinds := range []string{"", ":MemberOf", ":MissingCompactStep", ":MemberOf|MissingCompactStep"} {
+		t.Run(kinds, func(t *testing.T) {
+			source := "MATCH p=allShortestPaths((s)<-[" + kinds + "*1..]-(e)) WHERE s.name IN ['left','overlap'] AND e.objectid='overlap' AND id(s)<>id(e) RETURN p"
+			parsed, err := frontend.ParseCypher(frontend.NewContext(), source)
+			require.NoError(t, err)
+			require.True(t, UsesBudgetedAllShortestPaths(parsed))
+
+			translation, err := Translate(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID)
+			require.NoError(t, err)
+
+			formatted, err := Translated(translation)
+			require.NoError(t, err)
+			require.Equal(t, optimize.EndpointPairPredicateDistinctIDs,
+				translation.Optimization.LoweringPlan.ShortestPathExecutor[0].EndpointPairPredicate)
+			require.Equal(t, strings.Contains(kinds, "Missing"), translation.HasMissingKinds)
+			require.Contains(t, formatted.Statement, "case when asp_root_endpoints.root_id != asp_terminal_endpoints.terminal_id then dawgs_admit_traversal_work_v2")
+			require.Contains(t, formatted.Statement, "order by m0_path_index desc")
+			if kinds == ":MissingCompactStep" {
+				require.Contains(t, formatted.Statement, "and false")
+			} else {
+				require.NotContains(t, formatted.Statement, "and false")
+			}
+		})
+	}
+}
+
+// TestBudgetedAllShortestEndpointInequalityPreservesProductionPolicies verifies
+// that V2's proof does not broaden historical production or forced qualification.
+func TestBudgetedAllShortestEndpointInequalityPreservesProductionPolicies(t *testing.T) {
+	parsed, err := frontend.ParseCypher(frontend.NewContext(),
+		"MATCH p=allShortestPaths((s)-[*1..]->(e)) WHERE s.name='source' AND e.name='target' AND id(s)<>id(e) RETURN p")
+	require.NoError(t, err)
+
+	original := cypher.Copy(parsed)
+	legacy, err := TranslateWithOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
+		Options{
+			DisableBudgetedAllShortestPaths: true,
+		})
+	require.NoError(t, err)
+
+	legacySQL, err := Translated(legacy)
+	require.NoError(t, err)
+
+	for _, rollback := range []bool{false, true} {
+		production, err := TranslateWithProductionOptions(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
+			ProductionOptions{
+				SelectorVersion:     "frozen-inequality-policy",
+				DisableInlineASPDAG: rollback,
+			})
+		require.NoError(t, err)
+
+		productionSQL, err := Translated(production)
+		require.NoError(t, err)
+		require.Equal(t, legacySQL.Statement, productionSQL.Statement)
+		require.Equal(t, legacy.Parameters, production.Parameters)
+		require.Empty(t, production.Optimization.LoweringPlan.ShortestPathExecutor[0].EndpointPairPredicate)
+	}
+
+	_, err = TranslateForTool(context.Background(), parsed, optimizerSafetyKindMapper(), nil, DefaultGraphID,
+		ToolOptions{
+			ForceShortestPathExecutor: optimize.ShortestPathExecutorASPA1DAG,
+		})
+	require.ErrorContains(t, err, "no structurally eligible")
+	require.Equal(t, original, parsed)
 }
 
 // TestBudgetedAllShortestLaterEndpointFilterPreservesErrorBoundary verifies
@@ -176,6 +315,7 @@ func TestBudgetedAllShortestLaterEndpointFilterPreservesErrorBoundary(t *testing
 	legacySQL, err := Translated(legacy)
 	require.NoError(t, err)
 	require.Contains(t, automaticSQL.Statement, "all_shortest_paths_dag_v2")
+	require.Empty(t, automatic.Optimization.LoweringPlan.ShortestPathExecutor[0].EndpointPairPredicate)
 	require.NotContains(t, automaticSQL.Statement, "asp_root_endpoints.root_id <> asp_terminal_endpoints.terminal_id")
 	require.Contains(t, legacySQL.Statement, "shortest_path_self_endpoint_error")
 	require.Contains(t, automaticSQL.Statement, "where ((s1.n0).id <> (s1.n1).id)")

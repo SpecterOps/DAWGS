@@ -286,7 +286,7 @@ func appendEndpointResolutionDecisions(
 						Eligible: withinCaps,
 					},
 					{
-						Name:     "uncorrelated_pair",
+						Name:     EndpointResolutionEligibilityUncorrelatedPair,
 						Eligible: !correlated,
 					},
 				}

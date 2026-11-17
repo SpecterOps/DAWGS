@@ -163,6 +163,27 @@ minimum zero, and other unqualified shapes retain their existing execution.
 Property type guards, labels, parallel relationship kinds, and complete ordered
 path values are preserved.
 
+Direct `id(s) <> id(t)` predicates in the traversal's `MATCH ... WHERE` also
+qualify, including reversed operands and parentheses around the comparison or
+ID invocations.
+They must be conjunctive terms. Endpoint inequalities under OR or NOT, and
+other cross-endpoint correlations, retain their existing execution. Equal
+endpoint pairs are removed before
+pair admission and search, while matching endpoint rows retain their normal
+membership charges:
+
+```cypher
+MATCH p = allShortestPaths((s)-[*1..]->(t))
+WHERE s.name IN $sources AND t.objectid IN $targets AND id(s) <> id(t)
+RETURN p
+```
+
+An overlapping endpoint set can therefore return paths between distinct nodes,
+and a guarded self-only pair returns no paths. Unguarded self-pairs retain their
+existing error. An inequality after a later `WITH` stays after the traversal and
+does not suppress an earlier self-endpoint error. The driver and compiler use
+the same eligibility analysis, including for these pair filters.
+
 Eligible `tx.Relationships().Filter(...).FetchAllShortestPaths(...)` calls use the
 same compact search with optimized builder translation enabled. This includes
 the `StartID`, `EndID`, and positive `KindIn` filters used by BHE/BHCE pathfinding.

@@ -60,6 +60,10 @@ const (
 // EndpointResolutionEligibilityStaticCaps names the legacy endpoint-set size gate.
 const EndpointResolutionEligibilityStaticCaps = "within_static_endpoint_caps"
 
+// EndpointResolutionEligibilityUncorrelatedPair names the independent endpoint
+// source and predicate gate shared by legacy analysis and V2 proof validation.
+const EndpointResolutionEligibilityUncorrelatedPair = "uncorrelated_pair"
+
 const (
 	// EndpointResolutionFallbackPlannedOnly reserves the stable protocol value used to recognize endpoint resolution fallback planned only across artifacts and executions.
 	EndpointResolutionFallbackPlannedOnly = "planned_only"

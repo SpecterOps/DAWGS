@@ -681,6 +681,202 @@
               }
             }
           ]
+        },
+        {
+          "name": "NOT endpoint equality retains fallback",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND NOT(id(s)=id(t)) RETURN p"
+          },
+          "assert": {
+            "row_count": 6,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
+              ]
+            ],
+            "path_lengths": [
+              2,
+              2,
+              1,
+              3,
+              2,
+              2
+            ]
+          }
+        },
+        {
+          "name": "mixed OR endpoint inequality retains fallback",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND (id(s)<>id(t) OR s.name=t.objectid) RETURN p"
+          },
+          "assert": {
+            "row_count": 6,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
+              ]
+            ],
+            "path_lengths": [
+              2,
+              2,
+              1,
+              3,
+              2,
+              2
+            ]
+          }
+        },
+        {
+          "name": "endpoint property correlation retains fallback",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND s.name<>t.objectid RETURN p"
+          },
+          "assert": {
+            "row_count": 6,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
+              ]
+            ],
+            "path_lengths": [
+              2,
+              2,
+              1,
+              3,
+              2,
+              2
+            ]
+          }
+        },
+        {
+          "name": "later WITH endpoint inequality preserves disjoint results",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[*1..]->(t)) WHERE s.name=$source AND t.objectid=$target WITH p,s,t WHERE id(s)<>id(t) RETURN p"
+          },
+          "assert": {
+            "row_count": 6,
+            "path_node_ids": [
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "a",
+                "t1"
+              ],
+              [
+                "s1",
+                "t2"
+              ],
+              [
+                "s2",
+                "d",
+                "e",
+                "t1"
+              ],
+              [
+                "s2",
+                "d",
+                "t2"
+              ],
+              [
+                "s1",
+                "wrong",
+                "t1"
+              ]
+            ],
+            "path_lengths": [
+              2,
+              2,
+              1,
+              3,
+              2,
+              2
+            ]
+          }
         }
       ]
     },
@@ -885,6 +1081,350 @@
             "target": "self-target"
           },
           "assert": "empty"
+        },
+        {
+          "name": "outgoing parenthesized inequality",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND ((id(s)<>id(t))) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o1",
+                "o2"
+              ],
+              [
+                "o1",
+                "o2",
+                "o3"
+              ],
+              [
+                "o2",
+                "o3"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "outgoing parenthesized ID inequality",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND ((id(s))<>(id(t))) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o1",
+                "o2"
+              ],
+              [
+                "o1",
+                "o2",
+                "o3"
+              ],
+              [
+                "o2",
+                "o3"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "outgoing parenthesized reversed inequality",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND ((id(t))<>(id(s))) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o1",
+                "o2"
+              ],
+              [
+                "o1",
+                "o2",
+                "o3"
+              ],
+              [
+                "o2",
+                "o3"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "outgoing inequality preserves scalar multiplicity",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) RETURN count(p) AS paths, sum(length(p)) AS hops"
+          },
+          "assert": {
+            "ordered_row_values": [
+              [
+                3,
+                4
+              ]
+            ]
+          }
+        },
+        {
+          "name": "incoming parenthesized inequality",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[:CompactA*1..]-(s)) WHERE s.name=$source AND t.objectid=$target AND ((id(s)<>id(t))) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "incoming parenthesized ID inequality",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[:CompactA*1..]-(s)) WHERE s.name=$source AND t.objectid=$target AND ((id(s))<>(id(t))) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "incoming parenthesized reversed inequality",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[:CompactA*1..]-(s)) WHERE s.name=$source AND t.objectid=$target AND ((id(t))<>(id(s))) RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2",
+                "o1"
+              ],
+              [
+                "o3",
+                "o2"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          }
+        },
+        {
+          "name": "incoming inequality preserves scalar multiplicity",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((t)<-[:CompactA*1..]-(s)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) RETURN count(p) AS paths, sum(length(p)) AS hops"
+          },
+          "assert": {
+            "ordered_row_values": [
+              [
+                3,
+                4
+              ]
+            ]
+          }
+        },
+        {
+          "name": "SET with endpoint inequality preserves paths and post-state",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) SET t.selected=true RETURN p"
+          },
+          "assert": {
+            "row_count": 3,
+            "path_node_ids": [
+              [
+                "o1",
+                "o2"
+              ],
+              [
+                "o1",
+                "o2",
+                "o3"
+              ],
+              [
+                "o2",
+                "o3"
+              ]
+            ],
+            "path_lengths": [
+              1,
+              2,
+              1
+            ]
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) WHERE n.selected=true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "o2",
+                  "o3"
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    4
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "SET with endpoint inequality without RETURN",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) SET t.selected=true"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) WHERE n.selected=true RETURN n",
+              "assert": {
+                "node_ids": [
+                  "o2",
+                  "o3"
+                ]
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    4
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE with endpoint inequality preserves multiplicity",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) WITH s,t CREATE (:CompactPropertyAudit) RETURN count(t) AS paths"
+          },
+          "assert": {
+            "ordered_column_values": {
+              "paths": [
+                3
+              ]
+            }
+          },
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    3
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    4
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "CREATE with endpoint inequality without RETURN",
+          "vars": {
+            "query": "MATCH p=allShortestPaths((s)-[:CompactA*1..]->(t)) WHERE s.name=$source AND t.objectid=$target AND id(s)<>id(t) WITH s,t CREATE (:CompactPropertyAudit)"
+          },
+          "assert": "no_error",
+          "post_assertions": [
+            {
+              "cypher": "MATCH (n:CompactPropertyAudit) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    3
+                  ]
+                }
+              }
+            },
+            {
+              "cypher": "MATCH (n:CompactPropertyNode) RETURN count(n) AS total",
+              "assert": {
+                "ordered_column_values": {
+                  "total": [
+                    4
+                  ]
+                }
+              }
+            }
+          ]
         }
       ]
     },

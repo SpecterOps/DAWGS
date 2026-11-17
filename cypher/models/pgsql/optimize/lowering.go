@@ -553,6 +553,11 @@ type ShortestPathExecutorDecision struct {
 	PlannedCandidates []ShortestPathExecutor `json:"planned_candidates"`
 	// SelectedExecutor is the executor chosen after qualification.
 	SelectedExecutor ShortestPathExecutor `json:"selected_executor"`
+
+	// EndpointPairPredicate is proven only for selected automatic V2 lowering;
+	// legacy correlation qualification and the source query remain unchanged.
+	EndpointPairPredicate EndpointPairPredicate `json:"endpoint_pair_predicate,omitempty"`
+
 	// ExecutionBoundary distinguishes inline statement SQL from stored helper
 	// execution. Promotion evidence must match this boundary exactly.
 	ExecutionBoundary string `json:"execution_boundary"`

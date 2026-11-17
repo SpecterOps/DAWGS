@@ -5004,6 +5004,7 @@ func (s *Translator) translateTraversalPatternPartWithExpansion(part *PatternPar
 	}
 	if decision, selected := s.shortestPathExecutorDecision(part, stepIndex); selected {
 		expansionModel.ShortestPathExecutor = decision.SelectedExecutor
+		expansionModel.EndpointPairPredicate = decision.EndpointPairPredicate
 		expansionModel.ShortestPathTarget = decision.Target
 		expansionModel.ShortestPathStateLimit = decision.StateLimit
 		expansionModel.ShortestPathFrontierLimit = decision.FrontierLimit
@@ -5207,6 +5208,7 @@ func (s *Translator) translateExpansionConstraints(part *PatternPart, stepIndex 
 func (s *Translator) translateShortestPathTraversal(part *PatternPart, stepIndex int, traversalStep *TraversalStep, expansionModel *Expansion) error {
 	if expansionModel.ShortestPathExecutor == optimize.ShortestPathExecutorASPA1DAGV2 {
 		expansionModel.ResolvedEndpointPairs = true
+		expansionModel.HasExplicitEndpointInequality = expansionModel.EndpointPairPredicate == optimize.EndpointPairPredicateDistinctIDs
 		expansionModel.ReversePathResult = part.PathDirectionReversed != traversalStep.PathReversed
 		s.recordLowering(optimize.LoweringEndpointResolution)
 		return nil

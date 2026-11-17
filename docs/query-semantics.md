@@ -299,6 +299,13 @@ open maxima. Their endpoint pairs are resolved at execution, preserving multiple
 matches and pair-specific minimum distances. Explicit Cypher bounds remain inclusive semantic
 limits. Open ranges do not select executors that require a finite upper bound.
 
+Conjunctive endpoint-ID inequalities (`id(s) <> id(t)`, in either operand
+order) in the same MATCH WHERE can use compact all-shortest search.
+Equal pairs are filtered before pair admission or kernel invocation; endpoint
+membership remains charged. Self-only guarded inputs return no paths. A later
+WITH filter retains its original execution boundary, and unguarded equal
+endpoints retain their existing error.
+
 Run ordinary schema assertion before using the upgraded compiler: it installs the
 versioned open-search harnesses and admission helper. Open traversal admission
 allows 100,000 candidate trail states and 64 MiB of cumulative estimated trail

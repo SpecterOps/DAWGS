@@ -25,6 +25,10 @@ const (
 	// budgetedMaximumDepthFact reports support for open and explicit maxima.
 	budgetedMaximumDepthFact = "open_or_explicit_maximum"
 
+	// budgetedDistinctPairFact records the safe replacement for a same-MATCH
+	// endpoint-ID inequality's historical correlated-pair classification.
+	budgetedDistinctPairFact = "distinct_endpoint_pair_predicate"
+
 	// budgetedMinimumDepth preserves the positive-length compact search contract.
 	budgetedMinimumDepth = 1
 )
@@ -76,7 +80,15 @@ func budgetedReplacesLegacyShortestFact(name string) bool {
 // original static-ID and finite-depth envelope and SQL identity. Selection
 // updates the supplied plan's endpoint and shortest-path lowering decisions.
 func selectBudgetedAllShortestPaths(plan *optimize.Plan) bool {
-	selected := false
+	if len(plan.LoweringPlan.ShortestPathExecutor) == 0 {
+		return false
+	}
+
+	var (
+		selected       bool
+		pairPredicates = optimize.BudgetedEndpointPairPredicates(plan.Query)
+	)
+
 	for index := range plan.LoweringPlan.ShortestPathExecutor {
 		decision := &plan.LoweringPlan.ShortestPathExecutor[index]
 		if decision.Family != optimize.ShortestPathFamilyAll || decision.MinimumDepth != budgetedMinimumDepth ||
@@ -97,6 +109,7 @@ func selectBudgetedAllShortestPaths(plan *optimize.Plan) bool {
 		}
 
 		endpointIndex := -1
+		pairPredicate := pairPredicates[decision.Target]
 		for candidateIndex, endpoint := range plan.LoweringPlan.EndpointResolution {
 			if endpoint.Target != decision.Target {
 				continue
@@ -106,7 +119,8 @@ func selectBudgetedAllShortestPaths(plan *optimize.Plan) bool {
 			for _, fact := range endpoint.EligibilityFacts {
 				// The old small-set cardinality cap is analysis metadata. V2
 				// admits every endpoint/pair through the query-wide budget.
-				if fact.Name != optimize.EndpointResolutionEligibilityStaticCaps {
+				if fact.Name != optimize.EndpointResolutionEligibilityStaticCaps &&
+					!(fact.Name == optimize.EndpointResolutionEligibilityUncorrelatedPair && pairPredicate == optimize.EndpointPairPredicateDistinctIDs) {
 					endpointEligible = endpointEligible && fact.Eligible
 				}
 			}
@@ -131,12 +145,33 @@ func selectBudgetedAllShortestPaths(plan *optimize.Plan) bool {
 		endpoint.Terminal.Limit, endpoint.Terminal.Sentinel = 0, 0
 		endpoint.Caps = optimize.EndpointResolutionCaps{}
 		for factIndex := range endpoint.EligibilityFacts {
-			if endpoint.EligibilityFacts[factIndex].Name == optimize.EndpointResolutionEligibilityStaticCaps {
+			switch endpoint.EligibilityFacts[factIndex].Name {
+			case optimize.EndpointResolutionEligibilityStaticCaps:
 				endpoint.EligibilityFacts[factIndex] = optimize.EndpointResolutionEligibilityFact{
 					Name:     budgetedEndpointAdmissionFact,
 					Eligible: true,
 				}
+
+			case optimize.EndpointResolutionEligibilityUncorrelatedPair:
+				if pairPredicate == optimize.EndpointPairPredicateDistinctIDs {
+					endpoint.EligibilityFacts[factIndex] = optimize.EndpointResolutionEligibilityFact{
+						Name:     budgetedDistinctPairFact,
+						Eligible: true,
+					}
+				}
 			}
+		}
+
+		if pairPredicate == optimize.EndpointPairPredicateDistinctIDs {
+			endpoint.PairClass = ""
+			classes := endpoint.PlannedClasses[:0]
+			for _, class := range endpoint.PlannedClasses {
+				if class != optimize.EndpointResolutionClassCorrelatedPair {
+					classes = append(classes, class)
+				}
+			}
+
+			endpoint.PlannedClasses = classes
 		}
 
 		endpoint.SelectionMode = budgetedSelectionMode
@@ -147,6 +182,7 @@ func selectBudgetedAllShortestPaths(plan *optimize.Plan) bool {
 
 		decision.PlannedCandidates = append([]optimize.ShortestPathExecutor{optimize.ShortestPathExecutorASPA1DAGV2}, decision.PlannedCandidates...)
 		decision.SelectedExecutor = optimize.ShortestPathExecutorASPA1DAGV2
+		decision.EndpointPairPredicate = pairPredicate
 		decision.Scheduler = decision.SelectedExecutor.Scheduler()
 		decision.ExecutionBoundary = decision.SelectedExecutor.ExecutionBoundary()
 		decision.SelectionMode = budgetedSelectionMode
