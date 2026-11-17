@@ -61,8 +61,20 @@ func NewPool(poolCfg *pgxpool.Config) (*pgxpool.Pool, error) {
 	return NewPoolWithRuntimeConfig(context.Background(), poolCfg, DefaultRuntimeConfig())
 }
 
+// init registers the PostgreSQL constructor and validates its traversal budget overrides.
 func init() {
 	dawgs.Register(DriverName, func(ctx context.Context, cfg dawgs.Config) (graph.Database, error) {
-		return NewDriver(cfg.GraphQueryMemoryLimit, cfg.Pool), nil
+		limits := traversalLimits{
+			stateLimit: cfg.TraversalStateLimit,
+			byteLimit:  cfg.TraversalByteLimit,
+		}
+
+		if err := limits.validate(); err != nil {
+			return nil, err
+		} else {
+			driver := NewDriver(cfg.GraphQueryMemoryLimit, cfg.Pool)
+			driver.traversalLimits = limits
+			return driver, nil
+		}
 	})
 }

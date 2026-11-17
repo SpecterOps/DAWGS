@@ -301,8 +301,13 @@ stream is drained/closed and its error checked. A failed write cannot commit,
 including preceding multipart stages. Context cancellation remains available.
 Operators may set positive PostgreSQL session/transaction settings
 `dawgs.traversal_state_limit` and `dawgs.traversal_byte_limit`; accounting is fresh
-for each driver query and shared by its multipart stages. Increasing budgets can
-increase execution time and temporary storage substantially. See the
+for each driver query and shared by its multipart stages. PostgreSQL callers can
+also supply positive `dawgs.Config.TraversalStateLimit` and `TraversalByteLimit`
+values to override those settings for each operation. Zero inherits each session
+setting independently; negative values fail construction. Overrides are scoped
+to the operation and restored before its pooled connection is released. See the
+[PostgreSQL configuration example](postgresql-driver.md#traversal-limits).
+Increasing budgets can increase execution time and temporary storage substantially. See the
 [open-ended traversal policy](open_ended_traversal_policy.md).
 
 This changes successful results and mutation targets: queries can now reach

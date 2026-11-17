@@ -2,7 +2,9 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 	"time"
@@ -101,6 +103,9 @@ type transaction struct {
 
 	// stagedError prevents publishing earlier stages after a later failure.
 	stagedError error
+
+	// traversalLimits owns operation overrides and any autocommit settings requiring restoration.
+	traversalLimits traversalLimitScope
 }
 
 // newTransactionWrapper configures a graph transaction and optionally begins an explicit PostgreSQL transaction.
@@ -119,6 +124,9 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 		conn:               conn,
 		isolation:          cfg.Options.IsoLevel,
 		targetSchemaSet:    false,
+		traversalLimits: traversalLimitScope{
+			limits: schemaManager.traversalLimits,
+		},
 	}
 
 	wrapper.kindMapper = &transactionKindMapper{tx: wrapper, snapshot: schemaManager.kindCache.current.Load()}
@@ -136,6 +144,11 @@ func newTransactionWrapper(ctx context.Context, conn *pgxpool.Conn, schemaManage
 	}
 	if wrapper.tx != nil && stableSnapshotIsolation(wrapper.isolation) {
 		wrapper.topologyRouteDecisions = newTopologyRouteDecisionCache()
+	}
+
+	if err := wrapper.traversalLimits.apply(ctx, wrapper.driver(), wrapper.tx != nil); err != nil {
+		wrapper.Close()
+		return nil, err
 	}
 
 	return wrapper, nil
@@ -168,12 +181,25 @@ func (s *transaction) WithGraph(schema graph.Graph) graph.Transaction {
 	return s
 }
 
-// Close rolls back an active PostgreSQL transaction and invalidates its route observations.
+// Close rolls back an active transaction and restores overridden autocommit settings.
+// A connection whose settings cannot be restored is closed before its lease is released.
 func (s *transaction) Close() {
 	s.invalidateTopologyRouteDecisions()
 	if s.tx != nil {
 		s.tx.Rollback(s.ctx)
 		s.tx = nil
+	}
+
+	if err := s.traversalLimits.restore(s.ctx, s.driver()); err != nil {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(s.ctx), traversalLimitCleanupTimeout)
+		defer cancel()
+
+		var closeError error
+		if s.conn != nil {
+			closeError = s.conn.Conn().Close(ctx)
+		}
+
+		slog.ErrorContext(s.ctx, "Failed to restore PostgreSQL traversal limits; connection discarded", "error", errors.Join(err, closeError))
 	}
 }
 

@@ -29,6 +29,14 @@ fresh execution token, shared across multipart stages; direct SQL without a driv
 timestamp. Both budget exhaustion and depth representation exhaustion raise
 SQLSTATE `54000`. Context cancellation provides an independent time limit.
 
+Callers of `dawgs.Open` can pass positive `TraversalStateLimit` and
+`TraversalByteLimit` values in `dawgs.Config` to override the corresponding
+PostgreSQL setting for each operation. Zero inherits the connection setting and
+negative values fail PostgreSQL construction. Explicit transactions use local
+settings; autocommit operations restore their prior settings before releasing
+the pooled connection. See the [PostgreSQL driver guide](postgresql-driver.md#traversal-limits)
+for configuration and lifecycle details.
+
 Correlated input endpoints cross the function boundary as individual ID pairs;
 dynamic SQL does not reference the enclosing CTE. A zero-depth branch preserves
 empty paths and duplicate input rows. All-shortest workspace discovery records resolved endpoint pairs without stopping
