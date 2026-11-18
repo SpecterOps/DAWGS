@@ -18,6 +18,7 @@ package bdd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/cucumber/godog"
@@ -133,6 +134,23 @@ func (s *stubResult) Close() {
 	s.closed = true
 }
 
+type stubCursor[T any] struct {
+	values chan T
+}
+
+func newStubCursor[T any](values []T) *stubCursor[T] {
+	cursor := &stubCursor[T]{values: make(chan T, len(values))}
+	for _, value := range values {
+		cursor.values <- value
+	}
+	close(cursor.values)
+	return cursor
+}
+
+func (s *stubCursor[T]) Chan() chan T { return s.values }
+func (s *stubCursor[T]) Error() error { return nil }
+func (s *stubCursor[T]) Close()       {}
+
 type stubNodeQuery struct {
 	graph.NodeQuery
 
@@ -140,6 +158,7 @@ type stubNodeQuery struct {
 	deleteCalled bool
 	count        int64
 	countErr     error
+	nodes        []*graph.Node
 }
 
 func (s *stubNodeQuery) Delete() error {
@@ -151,14 +170,27 @@ func (s *stubNodeQuery) Count() (int64, error) {
 	return s.count, s.countErr
 }
 
+func (s *stubNodeQuery) Fetch(delegate func(graph.Cursor[*graph.Node]) error, _ ...graph.Criteria) error {
+	cursor := newStubCursor(s.nodes)
+	defer cursor.Close()
+	return delegate(cursor)
+}
+
 type stubRelationshipQuery struct {
 	graph.RelationshipQuery
-	count    int64
-	countErr error
+	count         int64
+	countErr      error
+	relationships []*graph.Relationship
 }
 
 func (s *stubRelationshipQuery) Count() (int64, error) {
 	return s.count, s.countErr
+}
+
+func (s *stubRelationshipQuery) Fetch(delegate func(graph.Cursor[*graph.Relationship]) error) error {
+	cursor := newStubCursor(s.relationships)
+	defer cursor.Close()
+	return delegate(cursor)
 }
 
 func TestDBContextAnEmptyGraph(t *testing.T) {
@@ -422,9 +454,29 @@ func TestFormatGraphValueRelationship(t *testing.T) {
 }
 
 func TestFormatGraphValueRejectsUnsupportedValue(t *testing.T) {
-	_, err := formatGraphValue((&stubResult{}).Mapper(), float64(1.23))
+	tests := []struct {
+		name     string
+		value    any
+		expected string
+		err      error
+	}{
+		{
+			value:    int16(123),
+			expected: "",
+			err:      fmt.Errorf("unsupported returned value of type int16"),
+		},
+		{
+			value:    nil,
+			expected: "null",
+			err:      nil,
+		},
+	}
 
-	require.EqualError(t, err, "unsupported returned value of type float64")
+	for _, test := range tests {
+		actual, err := formatGraphValue((&stubResult{}).Mapper(), test.value)
+		require.Equal(t, err, test.err)
+		require.Equal(t, test.expected, actual)
+	}
 }
 
 func TestDBContextHavingExecuted(t *testing.T) {
@@ -567,30 +619,16 @@ func TestDBContextSideEffects(t *testing.T) {
 		{
 			name:          "detect graph change",
 			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
-			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 1},
-			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "1"}, {"+relationships", "1"}}),
+			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 0},
+			expectedTable: newResultTableNoHeader("+nodes", "1"),
 			expectedError: "",
 		},
 		{
-			name:          "detect changed graph node",
-			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
-			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 0},
-			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
-			expectedError: "side effect +nodes: expected 0 actual 1",
-		},
-		{
-			name:          "detect changed graph relationship",
-			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
-			after:         graphSnapshot{NodesCount: 0, RelationshipsCount: 1},
-			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
-			expectedError: "side effect +relationships: expected 0 actual 1",
-		},
-		{
-			name:          "detect changed graph wrapping errors",
-			before:        graphSnapshot{NodesCount: 0, RelationshipsCount: 0},
-			after:         graphSnapshot{NodesCount: 1, RelationshipsCount: 1},
-			expectedTable: newResultTableNoHeader([][]string{{"+nodes", "0"}, {"+relationships", "0"}}),
-			expectedError: "side effect +nodes: expected 0 actual 1\nside effect +relationships: expected 0 actual 1",
+			name:          "detect unchanged graph",
+			before:        graphSnapshot{NodesCount: 1},
+			after:         graphSnapshot{NodesCount: 1},
+			expectedTable: newResultTableNoHeader("+nodes", "0"),
+			expectedError: "",
 		},
 	}
 
@@ -620,21 +658,51 @@ func TestDBContextSideEffects(t *testing.T) {
 }
 
 func TestDBContextNoSideEffects(t *testing.T) {
+	nodeA := graph.NewNode(1, graph.NewProperties())
+	nodeB := graph.NewNode(2, graph.NewProperties())
+	nodeC := graph.NewNode(3, graph.NewProperties())
+	nodeWithProperty := graph.NewNode(1, graph.NewProperties().Set("name", "a"))
+	relationship := graph.NewRelationship(1, 1, 2, graph.NewProperties(), graph.StringKind("T"))
+	relationshipWithProperty := graph.NewRelationship(1, 1, 2, graph.NewProperties().Set("name", "r"), graph.StringKind("T"))
+
 	tests := []struct {
 		name          string
 		before        graphSnapshot
-		after         graphSnapshot
+		nodes         []*graph.Node
+		relationships []*graph.Relationship
 		expectedError string
 	}{
 		{
-			name:   "accepts unchanged graph",
-			before: graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
-			after:  graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
+			name:          "accepts unchanged graph",
+			before:        graphSnapshot{NodesCount: 2, RelationshipsCount: 1, PropertiesCount: 2},
+			nodes:         []*graph.Node{nodeWithProperty, nodeB},
+			relationships: []*graph.Relationship{relationshipWithProperty},
 		},
 		{
-			name:          "detects graph drift",
+			name:          "detects node count drift",
 			before:        graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
-			after:         graphSnapshot{NodesCount: 3, RelationshipsCount: 1},
+			nodes:         []*graph.Node{nodeA, nodeB, nodeC},
+			relationships: []*graph.Relationship{relationship},
+			expectedError: "Graph state drift detected",
+		},
+		{
+			name:          "detects relationship count drift",
+			before:        graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
+			nodes:         []*graph.Node{nodeA, nodeB},
+			expectedError: "Graph state drift detected",
+		},
+		{
+			name:          "detects node property count drift",
+			before:        graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
+			nodes:         []*graph.Node{nodeWithProperty, nodeB},
+			relationships: []*graph.Relationship{relationship},
+			expectedError: "Graph state drift detected",
+		},
+		{
+			name:          "detects relationship property count drift",
+			before:        graphSnapshot{NodesCount: 2, RelationshipsCount: 1},
+			nodes:         []*graph.Node{nodeA, nodeB},
+			relationships: []*graph.Relationship{relationshipWithProperty},
 			expectedError: "Graph state drift detected",
 		},
 	}
@@ -643,8 +711,8 @@ func TestDBContextNoSideEffects(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			database := &stubDatabase{
 				transaction: &stubTransaction{
-					nodeQuery:         &stubNodeQuery{count: test.after.NodesCount},
-					relationshipQuery: &stubRelationshipQuery{count: test.after.RelationshipsCount},
+					nodeQuery:         &stubNodeQuery{nodes: test.nodes},
+					relationshipQuery: &stubRelationshipQuery{relationships: test.relationships},
 				},
 			}
 			databaseContext := &dbContext{
@@ -663,11 +731,11 @@ func TestDBContextNoSideEffects(t *testing.T) {
 	}
 }
 
-func newResultTableNoHeader(data [][]string) *godog.Table {
+func newResultTableNoHeader(key string, values ...string) *godog.Table {
 	var rows []*messages.PickleTableRow
-	for _, value := range data {
+	for _, value := range values {
 		rows = append(rows, &messages.PickleTableRow{
-			Cells: []*messages.PickleTableCell{{Value: value[0]}, {Value: value[1]}},
+			Cells: []*messages.PickleTableCell{{Value: key}, {Value: value}},
 		})
 	}
 
