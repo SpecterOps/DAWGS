@@ -108,6 +108,191 @@
         ]
       },
       "assert": {"ordered_row_values": [["admins", 2], ["staff", 1]]}
+    },
+    {
+      "name": "shortest path uses endpoint bound by prior match",
+      "cypher": "MATCH p=(c:NodeKind1)-->(u:NodeKind2) MATCH p2=shortestPath((u)-[*1..]->(d:NodeKind3)) RETURN p,p2 LIMIT 500",
+      "fixture": {
+        "nodes": [
+          {"id": "a", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "b", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "c", "kinds": ["NodeKind2"], "properties": {}},
+          {"id": "d", "kinds": ["NodeKind3"], "properties": {}},
+          {"id": "x", "kinds": ["NodeKind1"], "properties": {}},
+          {"id": "y", "kinds": ["NodeKind2"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "a", "end_id": "b", "kind": "EdgeKind1"},
+          {"start_id": "b", "end_id": "c", "kind": "EdgeKind2"},
+          {"start_id": "c", "end_id": "d", "kind": "EdgeKind2"},
+          {"start_id": "x", "end_id": "y", "kind": "EdgeKind1"}
+        ]
+      },
+      "assert": {
+        "keys": ["p", "p2"],
+        "row_count": 1,
+        "path_node_ids": [["a", "b"], ["b", "c", "d"]],
+        "path_lengths": [1, 2],
+        "path_edge_kinds": [["EdgeKind1"], ["EdgeKind2", "EdgeKind2"]]
+      }
+    },
+    {
+      "name": "open shortest path preserves every prior match pair",
+      "cypher": "MATCH (:SPResolutionEntry)-[:SPResolutionBind]->(s:SPResolutionRoot) MATCH p=shortestPath((s)-[:SPResolutionStep|SPResolutionAlternate*1..]->(e:SPResolutionTarget)) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "entry", "kinds": ["SPResolutionEntry"], "properties": {}},
+          {"id": "r1", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r2", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r3", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "mid", "kinds": ["SPResolutionMiddle"], "properties": {}},
+          {"id": "near", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "far", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "unreachable", "kinds": ["SPResolutionTarget"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "entry", "end_id": "r1", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r2", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r3", "kind": "SPResolutionBind"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionAlternate"},
+          {"start_id": "r1", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "r2", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "far", "kind": "SPResolutionStep"}
+        ]
+      },
+      "assert": {
+        "row_count": 4,
+        "path_node_ids": [["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+      }
+    },
+    {
+      "name": "open shortest mutation updates every reachable terminal",
+      "cypher": "MATCH (:SPResolutionEntry)-[:SPResolutionBind]->(s:SPResolutionRoot) MATCH p=shortestPath((s)-[:SPResolutionStep|SPResolutionAlternate*1..]->(e:SPResolutionTarget)) SET e.selected=true RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "entry", "kinds": ["SPResolutionEntry"], "properties": {}},
+          {"id": "r1", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r2", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r3", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "mid", "kinds": ["SPResolutionMiddle"], "properties": {}},
+          {"id": "near", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "far", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "unreachable", "kinds": ["SPResolutionTarget"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "entry", "end_id": "r1", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r2", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r3", "kind": "SPResolutionBind"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionAlternate"},
+          {"start_id": "r1", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "r2", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "far", "kind": "SPResolutionStep"}
+        ]
+      },
+      "assert": {
+        "row_count": 4,
+        "path_node_ids": [["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+      },
+      "post_assertions": [
+        {
+          "cypher": "MATCH (n) RETURN n",
+          "assert": {
+            "node_records": [
+              {"id": "entry", "kinds": ["SPResolutionEntry"], "props": {}},
+              {"id": "r1", "kinds": ["SPResolutionRoot"], "props": {}},
+              {"id": "r2", "kinds": ["SPResolutionRoot"], "props": {}},
+              {"id": "r3", "kinds": ["SPResolutionRoot"], "props": {}},
+              {"id": "mid", "kinds": ["SPResolutionMiddle"], "props": {}},
+              {"id": "near", "kinds": ["SPResolutionTarget"], "props": {"selected": true}},
+              {"id": "far", "kinds": ["SPResolutionTarget"], "props": {"selected": true}},
+              {"id": "unreachable", "kinds": ["SPResolutionTarget"], "props": {}}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "bounded shortest path preserves every prior match pair",
+      "cypher": "MATCH (:SPResolutionEntry)-[:SPResolutionBind]->(s:SPResolutionRoot) MATCH p=shortestPath((s)-[:SPResolutionStep|SPResolutionAlternate*1..4]->(e:SPResolutionTarget)) RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "entry", "kinds": ["SPResolutionEntry"], "properties": {}},
+          {"id": "r1", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r2", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r3", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "mid", "kinds": ["SPResolutionMiddle"], "properties": {}},
+          {"id": "near", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "far", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "unreachable", "kinds": ["SPResolutionTarget"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "entry", "end_id": "r1", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r2", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r3", "kind": "SPResolutionBind"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionAlternate"},
+          {"start_id": "r1", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "r2", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "far", "kind": "SPResolutionStep"}
+        ]
+      },
+      "assert": {
+        "row_count": 4,
+        "path_node_ids": [["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+      }
+    },
+    {
+      "name": "bounded shortest mutation updates every reachable terminal",
+      "cypher": "MATCH (:SPResolutionEntry)-[:SPResolutionBind]->(s:SPResolutionRoot) MATCH p=shortestPath((s)-[:SPResolutionStep|SPResolutionAlternate*1..4]->(e:SPResolutionTarget)) SET e.selected=true RETURN p",
+      "fixture": {
+        "nodes": [
+          {"id": "entry", "kinds": ["SPResolutionEntry"], "properties": {}},
+          {"id": "r1", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r2", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "r3", "kinds": ["SPResolutionRoot"], "properties": {}},
+          {"id": "mid", "kinds": ["SPResolutionMiddle"], "properties": {}},
+          {"id": "near", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "far", "kinds": ["SPResolutionTarget"], "properties": {}},
+          {"id": "unreachable", "kinds": ["SPResolutionTarget"], "properties": {}}
+        ],
+        "edges": [
+          {"start_id": "entry", "end_id": "r1", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r2", "kind": "SPResolutionBind"},
+          {"start_id": "entry", "end_id": "r3", "kind": "SPResolutionBind"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "r1", "end_id": "near", "kind": "SPResolutionAlternate"},
+          {"start_id": "r1", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "r2", "end_id": "mid", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "near", "kind": "SPResolutionStep"},
+          {"start_id": "mid", "end_id": "far", "kind": "SPResolutionStep"}
+        ]
+      },
+      "assert": {
+        "row_count": 4,
+        "path_node_ids": [["r1", "near"], ["r1", "mid", "far"], ["r2", "mid", "near"], ["r2", "mid", "far"]]
+      },
+      "post_assertions": [
+        {
+          "cypher": "MATCH (n) RETURN n",
+          "assert": {
+            "node_records": [
+              {"id": "entry", "kinds": ["SPResolutionEntry"], "props": {}},
+              {"id": "r1", "kinds": ["SPResolutionRoot"], "props": {}},
+              {"id": "r2", "kinds": ["SPResolutionRoot"], "props": {}},
+              {"id": "r3", "kinds": ["SPResolutionRoot"], "props": {}},
+              {"id": "mid", "kinds": ["SPResolutionMiddle"], "props": {}},
+              {"id": "near", "kinds": ["SPResolutionTarget"], "props": {"selected": true}},
+              {"id": "far", "kinds": ["SPResolutionTarget"], "props": {"selected": true}},
+              {"id": "unreachable", "kinds": ["SPResolutionTarget"], "props": {}}
+            ]
+          }
+        }
+      ]
     }
   ]
 }

@@ -522,3 +522,12 @@ malformed SQL fragments that must not return or stop at unrelated endpoints.
 Property-filtered open shortest searches additionally check that self-endpoint
 errors apply only to eligible roots, including terminals with outgoing edges,
 wrong-direction empty results, inbound searches and exact mutation targets.
+
+`shortest_paths_inline.json` executes the BED-9976 two-MATCH reproduction with
+`RETURN p,p2 LIMIT 500`, checking both named paths, their lengths and edge kinds.
+It also checks that open-ended and bounded (`1..4`) shortestPath searches
+preserve prior-MATCH endpoint sets, including roots and terminals reached at
+different depths and unreachable endpoints. Read and mutation variants share
+the same expectations on both backends. Mutation
+postconditions verify the complete node state, including untouched unreachable
+targets.
