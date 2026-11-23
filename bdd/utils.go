@@ -140,6 +140,25 @@ func (s *dbContext) theBinarytreeGraph(ctx context.Context, num int) error {
 	return nil
 }
 
+// loadBEDGraph loads BED dataset
+func (s *dbContext) loadBEDGraph(ctx context.Context, num int) error {
+	fileName := fmt.Sprintf("testdata/bed-%d.json", num)
+
+	file, err := os.Open(fileName)
+	if err != nil {
+		return fmt.Errorf("failed to open %v\n error: %w", fileName, err)
+	}
+
+	defer file.Close()
+
+	_, err = opengraph.Load(ctx, s.db, file)
+	if err != nil {
+		return fmt.Errorf("failed to write graph data error: %w\n", err)
+	}
+
+	return nil
+}
+
 // anyGraph loads one of the configured graph fixtures into the scenario database.
 func (s *dbContext) anyGraph(ctx context.Context) error {
 	randomIndex := rand.Intn(len(s.testData))
@@ -320,6 +339,11 @@ func (s *dbContext) theResultShouldBeEmpty() error {
 
 // formatGraphValue formats a supported graph value as a deterministic string.
 func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
+	var path graph.Path
+	if mapper.Map(value, &path) {
+		return formatGraphPath(path)
+	}
+
 	var node graph.Node
 	if mapper.Map(value, &node) {
 		formatted, err := formatGraphResults([]graph.Node{node})
@@ -348,6 +372,51 @@ func formatGraphValue(mapper graph.ValueMapper, value any) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported returned value of type %T", value)
 	}
+}
+
+// formatGraphPath formats a single path in traversal order for BDD comparisons.
+func formatGraphPath(path graph.Path) (string, error) {
+	if len(path.Nodes) != len(path.Edges)+1 {
+		return "", fmt.Errorf("invalid graph path: %d nodes for %d relationships", len(path.Nodes), len(path.Edges))
+	}
+
+	var builder strings.Builder
+	for index, node := range path.Nodes {
+		if node == nil {
+			return "", fmt.Errorf("invalid graph path: missing node at index %d", index)
+		}
+		if index > 0 {
+			edge := path.Edges[index-1]
+			if edge == nil || edge.Kind == nil {
+				return "", fmt.Errorf("invalid graph path: missing relationship or relationship kind at index %d", index-1)
+			}
+
+			previousID := path.Nodes[index-1].ID
+			var prefix, suffix string
+			switch {
+			case edge.StartID == previousID && edge.EndID == node.ID:
+				prefix, suffix = "-", "->"
+			case edge.EndID == previousID && edge.StartID == node.ID:
+				prefix, suffix = "<-", "-"
+			default:
+				return "", fmt.Errorf("invalid graph path: relationship at index %d does not connect nodes %v and %v", index-1, previousID, node.ID)
+			}
+			builder.WriteString(prefix)
+			builder.WriteString(formatGraphRelationship(*edge))
+			builder.WriteString(suffix)
+		}
+
+		pathNode := *node
+		pathNode.Kinds = node.Kinds.Copy()
+		slices.SortFunc(pathNode.Kinds, func(left, right graph.Kind) int {
+			return strings.Compare(left.String(), right.String())
+		})
+		if err := writeGraphNode(&builder, pathNode); err != nil {
+			return "", err
+		}
+	}
+
+	return formatString(builder.String()), nil
 }
 
 // formatGraphRelationship formats a graph relationship as a deterministic string.
@@ -482,33 +551,10 @@ func countGraphProperties(properties *graph.Properties) int64 {
 func formatGraphResults(nodes []graph.Node) ([]string, error) {
 	sb := strings.Builder{}
 	for _, node := range nodes {
-		for _, kind := range node.Kinds {
-			sb.WriteString("(:")
-			sb.WriteString(kind.String())
+		if err := writeGraphNode(&sb, node); err != nil {
+			return nil, err
 		}
-		if len(node.Kinds) == 0 {
-			sb.WriteString("(")
-		}
-		props := node.Properties.MapOrEmpty()
-		if len(props) != 0 {
-			// TODO sort node properties of feature files
-			slices.Sort(node.Properties.Keys(nil))
-			sb.WriteString("{")
-			for index, key := range node.Properties.Keys(nil) {
-				if index > 0 {
-					sb.WriteString(", ")
-				}
-				value := node.Properties.Get(key)
-				sb.WriteString(key)
-				sb.WriteString(": ")
-				strValue, _ := value.String()
-				sb.WriteString("'")
-				sb.WriteString(strValue)
-				sb.WriteString("'")
-			}
-			sb.WriteString("}")
-		}
-		sb.WriteString(")\n")
+		sb.WriteByte('\n')
 	}
 
 	var result []string
@@ -520,6 +566,34 @@ func formatGraphResults(nodes []graph.Node) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func writeGraphNode(builder *strings.Builder, node graph.Node) error {
+	builder.WriteByte('(')
+	for _, kind := range node.Kinds {
+		builder.WriteByte(':')
+		builder.WriteString(kind.String())
+	}
+	if len(node.Properties.MapOrEmpty()) > 0 {
+		builder.WriteByte('{')
+		for index, key := range node.Properties.Keys(nil) {
+			if index > 0 {
+				builder.WriteString(", ")
+			}
+			value, err := node.Properties.Get(key).String()
+			if err != nil {
+				return err
+			}
+			builder.WriteString(key)
+			builder.WriteString(": '")
+			builder.WriteString(value)
+			builder.WriteByte('\'')
+		}
+		builder.WriteByte('}')
+	}
+	builder.WriteByte(')')
+
+	return nil
 }
 
 func hasReturnClause(query string) (bool, error) {

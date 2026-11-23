@@ -57,6 +57,8 @@ make test_bdd_integration
 
 The BDD run writes Cucumber results to `.coverage/opencypher-tck-results.json` and an HTML summary to `.coverage/opencypher-tck-report.html`.
 
+Write each expected path in one result table cell. List nodes and relationships in traversal order, as in `(:A)-[:R]->(:B)<-[:S]-(:C)`. List each node's labels and each entity's property keys in lexicographic order. A zero-hop path contains a single node.
+
 All untagged scenarios are enforced, including DAWGS features and upstream CREATE scenarios 1–2. Upstream scenarios 3–20 carry `@report-only` while their harness assertions or query semantics remain unsupported. They still execute and retain their failures in both reports, with the HTML identifying enforced and report-only scenarios separately. Remove the tag as each scenario becomes supported; new scenarios are enforced by default.
 
 Enforced failures, empty or invalid reports, runner errors, and ordinary Go-test failures fail the command. Report-only failures do not establish conformance or fail the gate. Run backend BDD checks sequentially because they share report paths.
