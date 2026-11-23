@@ -1,6 +1,6 @@
 module github.com/specterops/dawgs
 
-go 1.27.3
+go 1.27.4
 
 // Dawgrun requirements
 require (
