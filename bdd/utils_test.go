@@ -121,6 +121,12 @@ func (s *stubResult) Mapper() graph.ValueMapper {
 				*target = relationship
 			}
 			return ok
+		case *graph.Path:
+			path, ok := value.(graph.Path)
+			if ok {
+				*target = path
+			}
+			return ok
 		}
 		return false
 	})
@@ -442,6 +448,84 @@ func TestDBContextExecutingQuery(t *testing.T) {
 	require.True(t, result.closed)
 	require.Equal(t, 2, databaseContext.rowCount)
 	require.Equal(t, [][]string{{"(:A)", "(:B)"}, {"(:C)"}}, databaseContext.actualRows)
+}
+
+func TestDBContextExecutingQueryWithPaths(t *testing.T) {
+	nodeA := graph.NewNode(1, graph.AsProperties(map[string]any{
+		"objectid": "source-513",
+		"name":     "source-513",
+	}), graph.StringKind("Group"))
+	nodeB := graph.NewNode(2, graph.NewProperties(), graph.StringKind("Tag_Tier_Zero"), graph.StringKind("Computer"))
+	nodeC := graph.NewNode(3, graph.NewProperties(), graph.StringKind("Group"))
+	path := graph.Path{
+		Nodes: []*graph.Node{nodeA, nodeB, nodeC, nodeC},
+		Edges: []*graph.Relationship{
+			graph.NewRelationship(1, 1, 2, graph.NewProperties(), graph.StringKind("AdminTo")),
+			graph.NewRelationship(2, 3, 2, graph.AsProperties(map[string]any{
+				"source": "fixture",
+				"name":   "grant",
+			}), graph.StringKind("GenericAll")),
+			graph.NewRelationship(3, 3, 3, graph.NewProperties(), graph.StringKind("MemberOf")),
+		},
+	}
+	result := &stubResult{
+		rows:       [][]any{{path}, {graph.Path{Nodes: []*graph.Node{nodeB}}}},
+		currentRow: -1,
+	}
+	databaseContext := &dbContext{db: &stubDatabase{transaction: &stubTransaction{
+		result:            result,
+		nodeQuery:         &stubNodeQuery{count: 3},
+		relationshipQuery: &stubRelationshipQuery{count: 3},
+	}}}
+
+	require.NoError(t, databaseContext.executingQuery(context.Background(), &godog.DocString{Content: "MATCH p = ()-[*0..3]-() RETURN p"}))
+	require.Equal(t, [][]string{
+		{`(:Group{name:'source-513',objectid:'source-513'})-[:AdminTo]->(:Computer:Tag_Tier_Zero)<-[:GenericAll{name:'grant',source:'fixture'}]-(:Group)-[:MemberOf]->(:Group)`},
+		{`(:Computer:Tag_Tier_Zero)`},
+	}, databaseContext.actualRows)
+	require.NoError(t, databaseContext.theResultShouldBeInAnyOrder(newResultTable(
+		`(:Computer:Tag_Tier_Zero)`,
+		`(:Group {name: "source-513", objectid: "source-513"})-[:AdminTo]->(:Computer:Tag_Tier_Zero)<-[:GenericAll {name: "grant", source: "fixture"}]-(:Group)-[:MemberOf]->(:Group)`,
+	)))
+	require.Equal(t, []string{"Tag_Tier_Zero", "Computer"}, nodeB.Kinds.Strings())
+}
+
+func TestFormatGraphValueRejectsMalformedPaths(t *testing.T) {
+	nodeA := graph.NewNode(1, graph.NewProperties())
+	nodeB := graph.NewNode(2, graph.NewProperties())
+	for _, test := range []struct {
+		name string
+		path graph.Path
+		want string
+	}{
+		{
+			name: "empty path",
+			want: "0 nodes for 0 relationships",
+		},
+		{
+			name: "missing node",
+			path: graph.Path{Nodes: []*graph.Node{nil}},
+			want: "missing node at index 0",
+		},
+		{
+			name: "missing relationship",
+			path: graph.Path{Nodes: []*graph.Node{nodeA, nodeB}, Edges: []*graph.Relationship{nil}},
+			want: "missing relationship or relationship kind at index 0",
+		},
+		{
+			name: "disconnected relationship",
+			path: graph.Path{
+				Nodes: []*graph.Node{nodeA, nodeB},
+				Edges: []*graph.Relationship{graph.NewRelationship(1, 1, 3, graph.NewProperties(), graph.StringKind("R"))},
+			},
+			want: "relationship at index 0 does not connect nodes 1 and 2",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := formatGraphValue((&stubResult{}).Mapper(), test.path)
+			require.ErrorContains(t, err, test.want)
+		})
+	}
 }
 
 func TestFormatGraphValueRelationship(t *testing.T) {
@@ -778,11 +862,15 @@ func TestFormatGraphResults(t *testing.T) {
 				Map: map[string]any{"name": "c"},
 			},
 		},
+		{
+			ID:    4,
+			Kinds: graph.Kinds{graph.StringKind("B"), graph.StringKind("A")},
+		},
 	}
 	actualList, err := formatGraphResults(nodes)
 	require.Nil(t, err)
 
-	expectedList := []string{"(:A{name:'a'})", "(:B{name:'b'})", "({name:'c'})"}
+	expectedList := []string{"(:A{name:'a'})", "(:B{name:'b'})", "({name:'c'})", "(:B:A)"}
 
 	for i := range len(expectedList) {
 		require.Equal(t, expectedList[i], actualList[i])

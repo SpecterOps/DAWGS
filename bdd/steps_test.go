@@ -32,6 +32,7 @@ func InitializeScenario(ctx *godog.ScenarioContext, dbCtx *dbContext) {
 	ctx.Step(`^an empty graph$`, dbCtx.anEmptyGraph)
 	ctx.Step(`^any graph$`, dbCtx.anyGraph)
 	ctx.Step(`^the binary-tree-(\d+) graph$`, dbCtx.theBinarytreeGraph)
+	ctx.Step(`^BED-(\d+) graph$`, dbCtx.loadBEDGraph)
 	ctx.Step(`^having executed:$`, dbCtx.havingExecuted)
 	ctx.Step(`^executing query:$`, dbCtx.executingQuery)
 	ctx.Step(`^the result should be, in any order:$`, dbCtx.theResultShouldBeInAnyOrder)

@@ -1,0 +1,149 @@
+{
+  "graph": {
+    "nodes": [
+      {
+        "id": "0",
+        "kinds": [
+          "Group"
+        ],
+        "properties": {
+          "name": "source-513",
+          "objectid": "source-513"
+        }
+      },
+      {
+        "id": "1",
+        "kinds": [
+          "Group"
+        ],
+        "properties": {
+          "name": "source-two-513",
+          "objectid": "source-two-513"
+        }
+      },
+      {
+        "id": "2",
+        "kinds": [
+          "Group"
+        ],
+        "properties": {
+          "name": "bridge-a",
+          "objectid": "bridge-a"
+        }
+      },
+      {
+        "id": "3",
+        "kinds": [
+          "Group"
+        ],
+        "properties": {
+          "name": "bridge-b",
+          "objectid": "bridge-b"
+        }
+      },
+      {
+        "id": "4",
+        "kinds": [
+          "Group"
+        ],
+        "properties": {
+          "name": "bridge-c",
+          "objectid": "bridge-c"
+        }
+      },
+      {
+        "id": "5",
+        "kinds": [
+          "Computer"
+        ],
+        "properties": {
+          "name": "dead-end",
+          "objectid": "dead-end"
+        }
+      },
+      {
+        "id": "6",
+        "kinds": [
+          "Computer",
+          "Tag_Tier_Zero"
+        ],
+        "properties": {
+          "name": "tier-near",
+          "objectid": "tier-near",
+          "system_tags": "admin_tier_0"
+        }
+      },
+      {
+        "id": "7",
+        "kinds": [
+          "Group",
+          "Tag_Tier_Zero"
+        ],
+        "properties": {
+          "name": "tier-far",
+          "objectid": "tier-far",
+          "system_tags": "admin_tier_0"
+        }
+      },
+      {
+        "id": "8",
+        "kinds": [
+          "Computer",
+          "Tag_Tier_Zero"
+        ],
+        "properties": {
+          "name": "tier-disconnected",
+          "objectid": "tier-disconnected",
+          "system_tags": "admin_tier_0"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "start_id": "0",
+        "end_id": "3",
+        "kind": "MemberOf"
+      },
+      {
+        "start_id": "0",
+        "end_id": "2",
+        "kind": "MemberOf"
+      },
+      {
+        "start_id": "0",
+        "end_id": "5",
+        "kind": "AdminTo"
+      },
+      {
+        "start_id": "1",
+        "end_id": "7",
+        "kind": "GenericAll"
+      },
+      {
+        "start_id": "2",
+        "end_id": "6",
+        "kind": "AdminTo"
+      },
+      {
+        "start_id": "3",
+        "end_id": "4",
+        "kind": "MemberOf"
+      },
+      {
+        "start_id": "3",
+        "end_id": "6",
+        "kind": "AdminTo"
+      },
+      {
+        "start_id": "4",
+        "end_id": "3",
+        "kind": "MemberOf"
+      },
+      {
+        "start_id": "4",
+        "end_id": "7",
+        "kind": "GenericAll"
+      }
+    ]
+  }
+}
